@@ -12,39 +12,72 @@ wrangler secret put SECRET_NAME
 
 You'll be prompted to enter the value securely.
 
+## Environment Variables
+
+| Variable | Description | Required |
+|----------|-------------|----------|
+| `ENVIRONMENT` | Set to `development` to bypass auth | No |
+
+## All Secrets Reference
+
+| Secret | Purpose |
+|--------|---------|
+| `TWILIO_SID` | Twilio Account SID |
+| `TWILIO_TOKEN` | Twilio Auth Token |
+| `TWILIO_FROM_SMS` | SMS sender number (e.g., `+15551234567`) |
+| `TWILIO_FROM_WHATSAPP` | WhatsApp sender (e.g., `whatsapp:+15551234567`) |
+| `TWILIO_FROM_EMAIL` | Email sender address for Twilio/SendGrid |
+| `SENDGRID_API_KEY` | SendGrid API key (for Twilio email) |
+| `WHATSAPP_ACCESS_TOKEN` | WhatsApp Business API access token |
+| `WHATSAPP_PHONE_NUMBER_ID` | WhatsApp Business API phone number ID |
+| `RESEND_API_KEY` | Resend API key |
+| `RESEND_FROM` | Resend sender address |
+| `GOOGLE_SERVICE_ACCOUNT_JSON` | Google service account JSON (for Sheets) |
+| `ENCRYPTION_KEY` | Token encryption key (for Instagram) |
+| `INSTAGRAM_APP_ID` | Meta/Instagram app ID |
+| `INSTAGRAM_APP_SECRET` | Meta/Instagram app secret |
+
 ## Notification Channels
 
 > **Important:** The Responders and Digest tabs in the admin UI are only visible when at least one notification channel is configured.
 
-### Twilio (SMS & WhatsApp)
-
-Required for SMS and WhatsApp notifications:
+### Twilio SMS
 
 ```bash
-wrangler secret put TWILIO_ACCOUNT_SID
-wrangler secret put TWILIO_AUTH_TOKEN
-wrangler secret put TWILIO_FROM_SMS        # e.g., +15551234567
-wrangler secret put TWILIO_FROM_WHATSAPP   # e.g., whatsapp:+15551234567
+wrangler secret put TWILIO_SID
+wrangler secret put TWILIO_TOKEN
+wrangler secret put TWILIO_FROM_SMS
+```
+
+### Twilio WhatsApp
+
+```bash
+wrangler secret put TWILIO_SID
+wrangler secret put TWILIO_TOKEN
+wrangler secret put TWILIO_FROM_WHATSAPP
+```
+
+### WhatsApp Business API (Meta)
+
+For direct WhatsApp Business API integration:
+
+```bash
+wrangler secret put WHATSAPP_ACCESS_TOKEN
+wrangler secret put WHATSAPP_PHONE_NUMBER_ID
 ```
 
 ### Twilio Email (via SendGrid)
 
-Required for email via Twilio/SendGrid:
-
 ```bash
-wrangler secret put TWILIO_ACCOUNT_SID     # same as above
-wrangler secret put TWILIO_AUTH_TOKEN      # same as above
 wrangler secret put SENDGRID_API_KEY
-wrangler secret put TWILIO_FROM_EMAIL      # e.g., noreply@yourdomain.com
+wrangler secret put TWILIO_FROM_EMAIL
 ```
 
 ### Resend Email
 
-Alternative email provider:
-
 ```bash
 wrangler secret put RESEND_API_KEY
-wrangler secret put RESEND_FROM            # e.g., noreply@yourdomain.com
+wrangler secret put RESEND_FROM
 ```
 
 ## Channel Detection
@@ -53,10 +86,20 @@ The admin UI automatically detects which channels are available:
 
 | Channel | Required Secrets |
 |---------|------------------|
-| Twilio SMS | `TWILIO_ACCOUNT_SID` + `TWILIO_AUTH_TOKEN` |
-| Twilio WhatsApp | `TWILIO_ACCOUNT_SID` + `TWILIO_AUTH_TOKEN` |
-| Twilio Email | `TWILIO_ACCOUNT_SID` + `TWILIO_AUTH_TOKEN` + `SENDGRID_API_KEY` |
-| Resend Email | `RESEND_API_KEY` |
+| Twilio SMS | `TWILIO_SID` + `TWILIO_FROM_SMS` |
+| Twilio WhatsApp | `TWILIO_SID` + `TWILIO_FROM_WHATSAPP` |
+| Twilio Email | `SENDGRID_API_KEY` + `TWILIO_FROM_EMAIL` |
+| Resend Email | `RESEND_API_KEY` + `RESEND_FROM` |
+
+## Google Sheets Integration
+
+For syncing form submissions to Google Sheets:
+
+```bash
+wrangler secret put GOOGLE_SERVICE_ACCOUNT_JSON
+```
+
+The value should be the entire JSON content of your Google Cloud service account key file.
 
 ## Instagram Integration
 
@@ -76,32 +119,3 @@ wrangler secret put INSTAGRAM_APP_SECRET
 2. Create an app with **Instagram Basic Display** product
 3. Configure OAuth redirect URI: `https://your-worker.workers.dev/instagram/callback`
 4. Add test users while in development mode
-
-## Google Sheets Integration
-
-For syncing form submissions to Google Sheets:
-
-```bash
-wrangler secret put GOOGLE_SERVICE_ACCOUNT_EMAIL
-wrangler secret put GOOGLE_SERVICE_ACCOUNT_KEY
-```
-
-The service account key should be the private key from your Google Cloud service account JSON file.
-
-## All Secrets Reference
-
-| Secret | Purpose | Required |
-|--------|---------|----------|
-| `TWILIO_ACCOUNT_SID` | Twilio account SID | For Twilio channels |
-| `TWILIO_AUTH_TOKEN` | Twilio auth token | For Twilio channels |
-| `TWILIO_FROM_SMS` | SMS sender number | For SMS |
-| `TWILIO_FROM_WHATSAPP` | WhatsApp sender | For WhatsApp |
-| `TWILIO_FROM_EMAIL` | Email sender address | For Twilio email |
-| `SENDGRID_API_KEY` | SendGrid API key | For Twilio email |
-| `RESEND_API_KEY` | Resend API key | For Resend email |
-| `RESEND_FROM` | Resend sender address | For Resend email |
-| `ENCRYPTION_KEY` | Token encryption | For Instagram |
-| `INSTAGRAM_APP_ID` | Meta app ID | For Instagram |
-| `INSTAGRAM_APP_SECRET` | Meta app secret | For Instagram |
-| `GOOGLE_SERVICE_ACCOUNT_EMAIL` | GCP service account | For Sheets |
-| `GOOGLE_SERVICE_ACCOUNT_KEY` | GCP private key | For Sheets |

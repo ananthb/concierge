@@ -105,6 +105,5 @@ For local development, set `ENVIRONMENT = "development"` in `wrangler.toml` to b
 | Variable | Description | Required |
 |----------|-------------|----------|
 | `ENVIRONMENT` | Set to `development` to bypass auth | No |
-| `ADMIN_EMAIL` | Default admin email for digests | No |
 
 See [Configuration](./configuration.md) for secrets setup.
