@@ -75,21 +75,45 @@ pub fn form_editor_html(form: Option<&FormConfig>, admin_email: &str, channels: 
     <link rel="icon" type="image/svg+xml" href="/logo.svg">
     <style>
         * {{ box-sizing: border-box; }}
-        body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; margin: 0; padding: 1rem; background: #f5f5f5; line-height: 1.5; }}
+        :root {{
+            --bg: #f5f5f5;
+            --bg-card: white;
+            --bg-muted: #f8f9fa;
+            --text: #333;
+            --text-muted: #666;
+            --border: #ddd;
+            --border-light: #eee;
+            --primary: #0070f3;
+            --code-bg: #e9ecef;
+        }}
+        @media (prefers-color-scheme: dark) {{
+            :root {{
+                --bg: #1a1a1a;
+                --bg-card: #2d2d2d;
+                --bg-muted: #3a3a3a;
+                --text: #e0e0e0;
+                --text-muted: #999;
+                --border: #444;
+                --border-light: #3a3a3a;
+                --primary: #3b9eff;
+                --code-bg: #3a3a3a;
+            }}
+        }}
+        body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; margin: 0; padding: 1rem; background: var(--bg); color: var(--text); line-height: 1.5; }}
         .container {{ max-width: 1200px; margin: 0 auto; }}
-        h1, h2, h3 {{ color: #333; }}
-        a {{ color: #0070f3; }}
-        .card {{ background: white; padding: 1.5rem; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 1.5rem; }}
+        h1, h2, h3 {{ color: var(--text); }}
+        a {{ color: var(--primary); }}
+        .card {{ background: var(--bg-card); padding: 1.5rem; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 1.5rem; }}
         .form-group {{ margin-bottom: 1rem; }}
         .form-group label {{ display: block; margin-bottom: 0.25rem; font-weight: 500; }}
-        .form-group input, .form-group textarea, .form-group select {{ width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px; font-size: 1rem; }}
-        .form-group input:focus, .form-group textarea:focus, .form-group select:focus {{ outline: none; border-color: #0070f3; }}
-        .btn {{ display: inline-block; padding: 0.5rem 1rem; background: #0070f3; color: white; text-decoration: none; border: none; border-radius: 4px; cursor: pointer; font-size: 0.875rem; font-family: inherit; line-height: 1.2; vertical-align: middle; }}
+        .form-group input, .form-group textarea, .form-group select {{ width: 100%; padding: 0.5rem; border: 1px solid var(--border); border-radius: 4px; font-size: 1rem; background: var(--bg-card); color: var(--text); }}
+        .form-group input:focus, .form-group textarea:focus, .form-group select:focus {{ outline: none; border-color: var(--primary); }}
+        .btn {{ display: inline-block; padding: 0.5rem 1rem; background: var(--primary); color: white; text-decoration: none; border: none; border-radius: 4px; cursor: pointer; font-size: 0.875rem; font-family: inherit; line-height: 1.2; vertical-align: middle; }}
         .btn:hover {{ opacity: 0.9; }}
         .btn-secondary {{ background: #6c757d; }}
         .btn-danger {{ background: #dc3545; }}
         .btn-sm {{ padding: 0.25rem 0.5rem; font-size: 0.75rem; }}
-        .field-item {{ background: #f8f9fa; padding: 1rem; border-radius: 4px; margin-bottom: 0.5rem; display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; }}
+        .field-item {{ background: var(--bg-muted); padding: 1rem; border-radius: 4px; margin-bottom: 0.5rem; display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; }}
         .field-item > input[type="text"] {{ flex: 1; min-width: 120px; }}
         .field-item > select {{ flex: 0 0 auto; min-width: 100px; }}
         .field-item > label {{ flex: 0 0 auto; white-space: nowrap; display: flex; align-items: center; gap: 0.25rem; }}
@@ -98,17 +122,17 @@ pub fn form_editor_html(form: Option<&FormConfig>, admin_email: &str, channels: 
         .color-input {{ display: flex; gap: 0.5rem; align-items: center; }}
         .color-input input[type="color"] {{ width: 50px; height: 38px; padding: 2px; }}
         .color-input input[type="text"] {{ flex: 1; }}
-        code {{ background: #e9ecef; padding: 0.2rem 0.4rem; border-radius: 3px; }}
-        small {{ color: #666; }}
+        code {{ background: var(--code-bg); padding: 0.2rem 0.4rem; border-radius: 3px; }}
+        small, .text-muted {{ color: var(--text-muted); }}
         .tabs {{ display: flex; gap: 0.5rem; margin-bottom: 1.5rem; flex-wrap: wrap; }}
-        .tab {{ padding: 0.5rem 1rem; background: #e9ecef; border-radius: 4px; cursor: pointer; border: none; font-size: 1rem; font-family: inherit; }}
-        .tab.active {{ background: #0070f3; color: white; }}
+        .tab {{ padding: 0.5rem 1rem; background: var(--bg-muted); border-radius: 4px; cursor: pointer; border: none; font-size: 1rem; font-family: inherit; text-decoration: none; color: var(--text); }}
+        .tab.active {{ background: var(--primary); color: white; }}
         .tab-content {{ display: none; }}
         .tab-content.active {{ display: block; }}
-        .preview-frame {{ border: 1px solid #ddd; border-radius: 4px; min-height: 400px; background: white; }}
+        .preview-frame {{ border: 1px solid var(--border); border-radius: 4px; min-height: 400px; background: white; }}
         table {{ width: 100%; border-collapse: collapse; }}
-        th, td {{ padding: 0.5rem; text-align: left; border-bottom: 1px solid #eee; }}
-        th {{ background: #f8f9fa; font-weight: 600; }}
+        th, td {{ padding: 0.5rem; text-align: left; border-bottom: 1px solid var(--border-light); }}
+        th {{ background: var(--bg-muted); font-weight: 600; }}
     </style>
 </head>
 <body>
@@ -118,12 +142,12 @@ pub fn form_editor_html(form: Option<&FormConfig>, admin_email: &str, channels: 
         {archived_notice}
 
         <div class="tabs">
-            <button class="tab active" onclick="showTab('basic')">Basic Settings</button>
-            <button class="tab" onclick="showTab('fields')">Fields</button>
+            <a href="#basic" class="tab active" onclick="showTab('basic', this)">Basic Settings</a>
+            <a href="#fields" class="tab" onclick="showTab('fields', this)">Fields</a>
             {responders_tab}
             {digest_tab}
-            <button class="tab" onclick="showTab('style')">Styling</button>
-            <button class="tab" onclick="showTab('preview')">Preview</button>
+            <a href="#style" class="tab" onclick="showTab('style', this)">Styling</a>
+            <a href="#preview" class="tab" onclick="showTab('preview', this)">Preview</a>
         </div>
 
         <form id="formEditor" onsubmit="saveForm(event); return false;">
@@ -138,7 +162,7 @@ pub fn form_editor_html(form: Option<&FormConfig>, admin_email: &str, channels: 
                         <label>Slug (URL path)</label>
                         <input type="text" name="slug" value="{slug}" required pattern="[a-z0-9_]+(-[a-z0-9_]+)*" title="Lowercase letters, numbers, hyphens, underscores only"
                             oninput="document.getElementById('slug-preview').textContent=this.value">
-                        <small style="color:#666;">Form will be at: <code>/f/<span id="slug-preview">{slug}</span></code></small>
+                        <small class="text-muted">Form will be at: <code>/f/<span id="slug-preview">{slug}</span></code></small>
                     </div>
                     <div class="form-group">
                         <label>Form Title (displayed to users)</label>
@@ -155,12 +179,12 @@ pub fn form_editor_html(form: Option<&FormConfig>, admin_email: &str, channels: 
                     <div class="form-group">
                         <label>Allowed Origins (one per line)</label>
                         <textarea name="allowed_origins" rows="3" placeholder="https://example.com&#10;https://www.example.com">{allowed_origins}</textarea>
-                        <small style="color:#666;">Leave empty to allow all origins (not recommended for production)</small>
+                        <small class="text-muted">Leave empty to allow all origins (not recommended for production)</small>
                     </div>
                     <div class="form-group">
                         <label>Google Sheet URL (optional)</label>
                         <input type="text" name="google_sheet_url" value="{google_sheet_url}" placeholder="https://docs.google.com/spreadsheets/d/...">
-                        <small style="color:#666;">Submissions will be appended as rows. Share the sheet with your service account email.</small>
+                        <small class="text-muted">Submissions will be appended as rows. Share the sheet with your service account email.</small>
                     </div>
                 </div>
             </div>
@@ -185,17 +209,17 @@ pub fn form_editor_html(form: Option<&FormConfig>, admin_email: &str, channels: 
                             <input type="checkbox" id="show-title" onchange="style.show_title=this.checked" style="width:auto;">
                             Show form title
                         </label>
-                        <small style="color:#666;">Uncheck to hide the title when embedding the form</small>
+                        <small class="text-muted">Uncheck to hide the title when embedding the form</small>
                     </div>
                 </div>
                 <div class="card">
                     <h3>CSS Variables</h3>
-                    <p style="color:#666;margin-bottom:1rem;">Customize the form appearance using CSS variables.</p>
+                    <p class="text-muted" style="margin-bottom:1rem;">Customize the form appearance using CSS variables.</p>
                     <div class="style-grid" id="style-inputs"></div>
                 </div>
                 <div class="card">
                     <h3>Custom CSS</h3>
-                    <p style="color:#666;margin-bottom:0.5rem;">Add custom CSS rules. Available classes: <code>.contact-form</code>, <code>.form-group</code>, <code>label</code>, <code>input</code>, <code>textarea</code>, <code>button</code>, <code>.success</code>, <code>.error</code></p>
+                    <p class="text-muted" style="margin-bottom:0.5rem;">Add custom CSS rules. Available classes: <code>.contact-form</code>, <code>.form-group</code>, <code>label</code>, <code>input</code>, <code>textarea</code>, <code>button</code>, <code>.success</code>, <code>.error</code></p>
                     <div class="form-group" style="margin-bottom:0;">
                         <textarea id="custom-css" rows="8" style="font-family:monospace;font-size:0.9rem;" placeholder="/* Example */
 .contact-form {{ max-width: 500px; }}
@@ -257,13 +281,28 @@ button {{ text-transform: uppercase; }}" onchange="style.custom_css=this.value">
             document.getElementById('slug-preview').textContent = slug;
         }}
 
-        function showTab(name) {{
+        function showTab(name, el) {{
             document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
             document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
-            document.querySelector(`.tab-content#tab-${{name}}`).classList.add('active');
-            event.target.classList.add('active');
+            const content = document.querySelector(`.tab-content#tab-${{name}}`);
+            if (content) content.classList.add('active');
+            if (el) el.classList.add('active');
             if (name === 'preview') updatePreview();
         }}
+
+        (function() {{
+            const hash = window.location.hash.slice(1);
+            if (hash && document.getElementById('tab-' + hash)) {{
+                showTab(hash, document.querySelector('a[href="#' + hash + '"]'));
+            }}
+        }})();
+
+        window.addEventListener('hashchange', function() {{
+            const hash = window.location.hash.slice(1);
+            if (hash && document.getElementById('tab-' + hash)) {{
+                showTab(hash, document.querySelector('a[href="#' + hash + '"]'));
+            }}
+        }});
 
         function renderFields() {{
             const list = document.getElementById('fields-list');
@@ -338,7 +377,7 @@ button {{ text-transform: uppercase; }}" onchange="style.custom_css=this.value">
             }}).join('');
 
             if (responders.length === 0) {{
-                list.innerHTML = '<p style="color:#666;text-align:center;">No responders configured.</p>';
+                list.innerHTML = '<p class="text-muted" style="text-align:center;">No responders configured.</p>';
             }}
         }}
 
@@ -371,7 +410,7 @@ button {{ text-transform: uppercase; }}" onchange="style.custom_css=this.value">
             list.innerHTML = digest.responders.map((r, i) => {{
                 const isEmail = r.channel === 'twilio_email' || r.channel === 'resend_email';
                 const targetPlaceholder = isEmail ? 'admin@example.com' : '+1234567890';
-                return `<div class="card" style="margin-bottom:0.5rem;padding:0.75rem;background:#f8f9fa;">
+                return `<div class="card" style="margin-bottom:0.5rem;padding:0.75rem;background:var(--bg-muted);">
                     <div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;">
                         <input type="text" value="${{r.name||''}}" onchange="digest.responders[${{i}}].name=this.value" placeholder="Name" style="flex:1;min-width:100px;">
                         <select onchange="digest.responders[${{i}}].channel=this.value;renderDigestResponders();">
@@ -593,12 +632,12 @@ ${{s.show_title?`<h1>${{data.title}}</h1>`:''}}
             String::new()
         },
         responders_tab = if has_channels {
-            r#"<button class="tab" onclick="showTab('responders')">Responders</button>"#
+            r##"<a href="#responders" class="tab" onclick="showTab('responders', this)">Responders</a>"##
         } else {
             ""
         },
         digest_tab = if channels.twilio_email || channels.resend_email {
-            r#"<button class="tab" onclick="showTab('digest')">Digest</button>"#
+            r##"<a href="#digest" class="tab" onclick="showTab('digest', this)">Digest</a>"##
         } else {
             ""
         },
@@ -606,7 +645,7 @@ ${{s.show_title?`<h1>${{data.title}}</h1>`:''}}
             r#"<div id="tab-responders" class="tab-content">
                 <div class="card">
                     <h3>Auto-Responders</h3>
-                    <p style="color:#666;margin-bottom:1rem;">Send automatic acknowledgement messages when forms are submitted.</p>
+                    <p class="text-muted" style="margin-bottom:1rem;">Send automatic acknowledgement messages when forms are submitted.</p>
                     <div id="responders-list"></div>
                     <button type="button" class="btn btn-secondary" onclick="addResponder()">+ Add Responder</button>
                 </div>
@@ -618,7 +657,7 @@ ${{s.show_title?`<h1>${{data.title}}</h1>`:''}}
             r#"<div id="tab-digest" class="tab-content">
                 <div class="card">
                     <h3>Response Digest</h3>
-                    <p style="color:#666;margin-bottom:1rem;">Receive periodic summaries of new form submissions.</p>
+                    <p class="text-muted" style="margin-bottom:1rem;">Receive periodic summaries of new form submissions.</p>
                     <div class="form-group">
                         <label>Frequency</label>
                         <select id="digest-frequency" onchange="digest.frequency=this.value">
@@ -643,7 +682,7 @@ ${{s.show_title?`<h1>${{data.title}}</h1>`:''}}
 pub fn responses_view_html(form: &FormConfig, submissions: &[Submission]) -> String {
     let rows: String = if submissions.is_empty() {
         format!(
-            r#"<tr><td colspan="{}" style="text-align:center;color:#666;padding:2rem;">No submissions yet.</td></tr>"#,
+            r#"<tr><td colspan="{}" class="text-muted" style="text-align:center;padding:2rem;">No submissions yet.</td></tr>"#,
             form.fields.len() + 2
         )
     } else {
@@ -691,16 +730,38 @@ pub fn responses_view_html(form: &FormConfig, submissions: &[Submission]) -> Str
     <link rel="icon" type="image/svg+xml" href="/logo.svg">
     <style>
         * {{ box-sizing: border-box; }}
-        body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; margin: 0; padding: 2rem; background: #f5f5f5; }}
+        :root {{
+            --bg: #f5f5f5;
+            --bg-card: white;
+            --bg-muted: #f8f9fa;
+            --text: #333;
+            --text-muted: #666;
+            --border: #eee;
+            --primary: #0070f3;
+        }}
+        @media (prefers-color-scheme: dark) {{
+            :root {{
+                --bg: #1a1a1a;
+                --bg-card: #2d2d2d;
+                --bg-muted: #3a3a3a;
+                --text: #e0e0e0;
+                --text-muted: #999;
+                --border: #444;
+                --primary: #3b9eff;
+            }}
+        }}
+        body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; margin: 0; padding: 2rem; background: var(--bg); color: var(--text); }}
         .container {{ max-width: 1400px; margin: 0 auto; }}
-        h1 {{ color: #333; margin: 0; }}
-        .btn {{ display: inline-block; padding: 0.5rem 1rem; background: #0070f3; color: white; text-decoration: none; border: none; border-radius: 4px; cursor: pointer; font-size: 0.9rem; }}
-        .btn:hover {{ background: #0060df; }}
+        h1 {{ color: var(--text); margin: 0; }}
+        a {{ color: var(--primary); }}
+        .btn {{ display: inline-block; padding: 0.5rem 1rem; background: var(--primary); color: white; text-decoration: none; border: none; border-radius: 4px; cursor: pointer; font-size: 0.9rem; }}
+        .btn:hover {{ opacity: 0.9; }}
         .btn-secondary {{ background: #6c757d; }}
         .header {{ display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }}
-        table {{ width: 100%; border-collapse: collapse; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }}
-        th, td {{ padding: 0.75rem 1rem; text-align: left; border-bottom: 1px solid #eee; }}
-        th {{ background: #f8f9fa; font-weight: 600; }}
+        table {{ width: 100%; border-collapse: collapse; background: var(--bg-card); border-radius: 8px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }}
+        th, td {{ padding: 0.75rem 1rem; text-align: left; border-bottom: 1px solid var(--border); }}
+        th {{ background: var(--bg-muted); font-weight: 600; }}
+        .text-muted {{ color: var(--text-muted); }}
     </style>
 </head>
 <body>

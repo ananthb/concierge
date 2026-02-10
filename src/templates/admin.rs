@@ -58,7 +58,7 @@ pub fn admin_dashboard_html(
             let count = response_counts.get(&f.slug).unwrap_or(&0);
             format!(
                 "<tr>
-                    <td>{name} <span style=\"color:#666;font-size:0.85em;\">(archived)</span></td>
+                    <td>{name} <span class=\"text-muted\" style=\"font-size:0.85em;\">(archived)</span></td>
                     <td><code>/f/{slug}</code></td>
                     <td>{count}</td>
                     <td>
@@ -119,7 +119,7 @@ pub fn admin_dashboard_html(
             let vc = cal.view_links.len();
             format!(
                 "<tr>
-                    <td>{name} <span style=\"color:#666;font-size:0.85em;\">(archived)</span></td>
+                    <td>{name} <span class=\"text-muted\" style=\"font-size:0.85em;\">(archived)</span></td>
                     <td>{bc} booking {bc_s}</td>
                     <td>{vc} view {vc_s}</td>
                     <td>{updated}</td>
@@ -149,7 +149,7 @@ pub fn admin_dashboard_html(
     } else {
         format!(
             "<details style=\"margin-top: 1rem;\">
-                <summary style=\"cursor: pointer; color: #666;\">Archived Forms ({count})</summary>
+                <summary class=\"text-muted\" style=\"cursor: pointer;\">Archived Forms ({count})</summary>
                 <table style=\"margin-top: 0.5rem;\">
                     <thead>
                         <tr>
@@ -172,7 +172,7 @@ pub fn admin_dashboard_html(
     } else {
         format!(
             "<details style=\"margin-top: 1rem;\">
-                <summary style=\"cursor: pointer; color: #666;\">Archived Calendars ({count})</summary>
+                <summary class=\"text-muted\" style=\"cursor: pointer;\">Archived Calendars ({count})</summary>
                 <table style=\"margin-top: 0.5rem;\">
                     <thead>
                         <tr>
@@ -253,12 +253,12 @@ pub fn admin_dashboard_html(
         </script>",
         base_url = base_url,
         form_rows = if form_rows.is_empty() {
-            "<tr><td colspan=\"4\" style=\"text-align:center;color:#666;\">No forms yet.</td></tr>".to_string()
+            "<tr><td colspan=\"4\" class=\"text-muted\" style=\"text-align:center;\">No forms yet.</td></tr>".to_string()
         } else {
             form_rows
         },
         calendar_rows = if calendar_rows.is_empty() {
-            "<tr><td colspan=\"5\" style=\"text-align:center;color:#666;\">No calendars yet.</td></tr>".to_string()
+            "<tr><td colspan=\"5\" class=\"text-muted\" style=\"text-align:center;\">No calendars yet.</td></tr>".to_string()
         } else {
             calendar_rows
         },
@@ -278,7 +278,7 @@ pub fn admin_calendar_html(
 ) -> String {
     // Build time slots summary
     let time_slots_summary = if time_slots.is_empty() {
-        "<p style=\"color: #666;\">No time slots configured. Bookings won't be available until you configure availability.</p>".to_string()
+        "<p class=\"text-muted\">No time slots configured. Bookings won't be available until you configure availability.</p>".to_string()
     } else {
         let days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
         let mut summary_html = String::from("<table style=\"width: 100%; margin-top: 0.5rem;\"><thead><tr><th>Day</th><th>Hours</th><th>Duration</th><th>Capacity</th></tr></thead><tbody>");
@@ -484,11 +484,12 @@ pub fn admin_calendar_html(
     let content = format!(
         "<style>
             .tabs {{ display: flex; gap: 0.5rem; margin-bottom: 1.5rem; flex-wrap: wrap; }}
-            .tab {{ padding: 0.5rem 1rem; background: #e9ecef; border-radius: 4px; cursor: pointer; border: none; font-size: 1rem; text-decoration: none; color: inherit; }}
-            .tab.active {{ background: #0070f3; color: white; }}
+            .tab {{ padding: 0.5rem 1rem; background: var(--bg-muted); border-radius: 4px; cursor: pointer; border: none; font-size: 1rem; text-decoration: none; color: var(--cal-text); }}
+            .tab.active {{ background: var(--cal-primary); color: white; }}
             .tab-content {{ display: none; }}
             .tab-content.active {{ display: block; }}
             .form-actions {{ display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem; }}
+            .warning {{ background: var(--warning-bg); border-color: var(--warning-border); color: var(--warning-text); }}
         </style>
 
         <p><a href=\"{base_url}/admin\">&larr; Back to Dashboard</a></p>
@@ -523,12 +524,12 @@ pub fn admin_calendar_html(
                     <div class=\"form-group\">
                         <label>Allowed Domains (for embedding)</label>
                         <textarea name=\"allowed_origins\" rows=\"3\" placeholder=\"https://example.com&#10;https://another-site.com&#10;(leave empty to allow all)\">{allowed_origins}</textarea>
-                        <small style=\"color: #666;\">One domain per line. Leave empty to allow embedding from any domain.</small>
+                        <small class=\"text-muted\">One domain per line. Leave empty to allow embedding from any domain.</small>
                     </div>
                     <div class=\"form-group\">
                         <label>Custom CSS</label>
                         <textarea name=\"custom_css\" rows=\"5\" style=\"font-family: monospace; font-size: 0.9rem;\" placeholder=\"/* Custom styles */&#10;.booking-container {{ max-width: 500px; }}\">{custom_css}</textarea>
-                        <small style=\"color: #666;\">CSS variables: <code>--cal-primary</code>, <code>--cal-text</code>, <code>--cal-bg</code>, <code>--cal-border-radius</code>, <code>--cal-font</code></small>
+                        <small class=\"text-muted\">CSS variables: <code>--cal-primary</code>, <code>--cal-text</code>, <code>--cal-bg</code>, <code>--cal-border-radius</code>, <code>--cal-font</code></small>
                     </div>
                     <div class=\"form-actions\">
                         <button type=\"submit\" class=\"btn\">Save Settings</button>
@@ -538,7 +539,7 @@ pub fn admin_calendar_html(
 
             <div class=\"card\">
                 <h2>View Links</h2>
-                <p style=\"margin-bottom: 1rem; color: #666;\">Public calendar views that can be embedded or shared.</p>
+                <p class=\"text-muted\" style=\"margin-bottom: 1rem;\">Public calendar views that can be embedded or shared.</p>
                 <button class=\"btn\" hx-post=\"{base_url}/admin/calendars/{id}/view\"
                         hx-target=\"{hash}view-links tbody\" hx-swap=\"beforeend\">+ Add View Link</button>
                 <table id=\"view-links\" style=\"margin-top: 1rem;\">
@@ -549,7 +550,7 @@ pub fn admin_calendar_html(
 
             <div class=\"card\">
                 <h2>Feed Links (iCal)</h2>
-                <p style=\"margin-bottom: 1rem; color: #666;\">Subscribe to this calendar from other apps.</p>
+                <p class=\"text-muted\" style=\"margin-bottom: 1rem;\">Subscribe to this calendar from other apps.</p>
                 <button class=\"btn\" hx-post=\"{base_url}/admin/calendars/{id}/feed\"
                         hx-target=\"{hash}feed-links tbody\" hx-swap=\"beforeend\"{readonly_disabled}>+ Add Feed Link</button>
                 <table id=\"feed-links\" style=\"margin-top: 1rem;\">
@@ -560,7 +561,7 @@ pub fn admin_calendar_html(
 
             <div class=\"card\" style=\"border-color: #dc3545;\">
                 <h2 style=\"color: #dc3545;\">Danger Zone</h2>
-                <p style=\"margin-bottom: 1rem; color: #666;\">Permanently delete this calendar and all its data.</p>
+                <p class=\"text-muted\" style=\"margin-bottom: 1rem;\">Permanently delete this calendar and all its data.</p>
                 <button class=\"btn btn-danger\"
                         hx-delete=\"{base_url}/admin/calendars/{id}\"
                         hx-confirm=\"Are you sure you want to permanently delete this calendar? This action cannot be undone.\"
@@ -576,7 +577,7 @@ pub fn admin_calendar_html(
 
             <div class=\"card\">
                 <h2>Instagram Sources</h2>
-                <p style=\"margin-bottom: 1rem; color: #666;\">Connect Instagram accounts to automatically import events from posts using AI.</p>
+                <p class=\"text-muted\" style=\"margin-bottom: 1rem;\">Connect Instagram accounts to automatically import events from posts using AI.</p>
                 <a href=\"{base_url}/instagram/auth/{id}\" class=\"btn\">Connect Instagram Account</a>
                 <table id=\"instagram-sources\" style=\"margin-top: 1rem;\">
                     <thead><tr><th>Account</th><th>Last Synced</th><th>Status</th><th>Actions</th></tr></thead>
@@ -594,7 +595,7 @@ pub fn admin_calendar_html(
 
             <div class=\"card\">
                 <h2>Booking Links</h2>
-                <p style=\"margin-bottom: 1rem; color: #666;\">Public booking pages that customers can use to schedule appointments.</p>
+                <p class=\"text-muted\" style=\"margin-bottom: 1rem;\">Public booking pages that customers can use to schedule appointments.</p>
                 <button class=\"btn\" hx-post=\"{base_url}/admin/calendars/{id}/booking\"
                         hx-target=\"{hash}booking-links tbody\" hx-swap=\"beforeend\">+ Add Booking Link</button>
                 <table id=\"booking-links\" style=\"margin-top: 1rem;\">
@@ -648,8 +649,8 @@ pub fn admin_calendar_html(
         instagram_sources_html = instagram_sources_html,
         time_slots_summary = time_slots_summary,
         archived_notice = if calendar.archived {
-            "<div class=\"card\" style=\"background: #fff3cd; border-color: #ffc107; margin-bottom: 1rem;\">
-                <p style=\"margin: 0; color: #856404;\"><strong>This calendar is archived.</strong> It is read-only. Unarchive from the dashboard to make changes.</p>
+            "<div class=\"card warning\" style=\"margin-bottom: 1rem;\">
+                <p style=\"margin: 0;\"><strong>This calendar is archived.</strong> It is read-only. Unarchive from the dashboard to make changes.</p>
             </div>"
         } else { "" },
         readonly_disabled = if calendar.archived { " disabled" } else { "" },
@@ -661,7 +662,7 @@ pub fn admin_calendar_html(
             format!(r#"<div id="tab-digest" class="tab-content">
             <div class="card">
                 <h2>Booking Digest</h2>
-                <p style="color:#666;margin-bottom:1rem;">Receive periodic summaries of new bookings.</p>
+                <p class="text-muted" style="margin-bottom:1rem;">Receive periodic summaries of new bookings.</p>
                 <form hx-put="{base_url}/admin/calendars/{id}/digest" hx-swap="none" hx-on::before-request="updateDigestField();this.querySelector('button[type=submit]').disabled=true;this.querySelector('button[type=submit]').textContent='Saving...'" hx-on::after-request="this.querySelector('button[type=submit]').disabled=false;this.querySelector('button[type=submit]').textContent='Save Digest Settings'">
                     <div class="form-group">
                         <label>Frequency</label>
@@ -699,7 +700,7 @@ pub fn admin_calendar_html(
                 list.innerHTML = digest.responders.map((r, i) => {{
                     const isEmail = r.channel === 'twilio_email' || r.channel === 'resend_email';
                     const targetPlaceholder = isEmail ? 'admin@example.com' : '+1234567890';
-                    return `<div class="card" style="margin-bottom:0.5rem;padding:0.75rem;background:#f8f9fa;">
+                    return `<div class="card" style="margin-bottom:0.5rem;padding:0.75rem;background:var(--bg-muted);">
                         <div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;">
                             <input type="text" value="${{r.name||''}}" onchange="digest.responders[${{i}}].name=this.value" placeholder="Name" style="flex:1;min-width:100px;">
                             <select onchange="digest.responders[${{i}}].channel=this.value;renderDigestResponders();">
@@ -1034,7 +1035,7 @@ pub fn admin_booking_link_html(
 
     let responders_section = if has_channels {
         r#"<h3 style="margin-top: 1.5rem; margin-bottom: 1rem;">Customer Notifications</h3>
-                <p style="color: #666; margin-bottom: 1rem;">Send automatic confirmation messages to customers when bookings are confirmed. Use {{{{name}}}}, {{{{email}}}}, {{{{date}}}}, {{{{time}}}} placeholders.</p>
+                <p class="text-muted" style="margin-bottom: 1rem;">Send automatic confirmation messages to customers when bookings are confirmed. Use {{{{name}}}}, {{{{email}}}}, {{{{date}}}}, {{{{time}}}} placeholders.</p>
                 <div id="responders-list"></div>
                 <button type="button" class="btn btn-secondary" onclick="addResponder()" style="margin-bottom: 1rem;">+ Add Responder</button>
                 <input type="hidden" name="responders_json" id="responders-json">"#.to_string()
@@ -1046,7 +1047,7 @@ pub fn admin_booking_link_html(
 
     let admin_responders_section = if has_channels {
         r#"<h3 style="margin-top: 1.5rem; margin-bottom: 1rem;">Admin Notifications</h3>
-                <p style="color: #666; margin-bottom: 1rem;">Receive notifications when bookings need approval (when auto-accept is disabled). Use {{{{name}}}}, {{{{email}}}}, {{{{date}}}}, {{{{time}}}}, {{{{approve_url}}}} placeholders.</p>
+                <p class="text-muted" style="margin-bottom: 1rem;">Receive notifications when bookings need approval (when auto-accept is disabled). Use {{{{name}}}}, {{{{email}}}}, {{{{date}}}}, {{{{time}}}}, {{{{approve_url}}}} placeholders.</p>
                 <div id="admin-responders-list"></div>
                 <button type="button" class="btn btn-secondary" onclick="addAdminResponder()" style="margin-bottom: 1rem;">+ Add Admin Responder</button>
                 <input type="hidden" name="admin_responders_json" id="admin-responders-json">"#.to_string()
@@ -1072,7 +1073,7 @@ pub fn admin_booking_link_html(
                     const removeFn = isAdmin ? 'removeAdminResponder' : 'removeResponder';
                     const targetPlaceholder = isEmail ? 'admin@example.com' : '+1234567890';
                     const targetLabel = isEmail ? 'Email' : 'Phone';
-                    return `<div class="card" style="margin-bottom:1rem;padding:1rem;background:#f8f9fa;">
+                    return `<div class="card" style="margin-bottom:1rem;padding:1rem;background:var(--bg-muted);">
                         <div style="display:flex;gap:0.5rem;margin-bottom:0.5rem;align-items:center;flex-wrap:wrap;">
                             <input type="text" value="${{r.name||''}}" onchange="${{listName}}[${{i}}].name=this.value" placeholder="Responder Name" style="flex:1;min-width:150px;">
                             <select onchange="${{listName}}[${{i}}].channel=this.value;${{renderFn}}();">
@@ -1083,7 +1084,7 @@ pub fn admin_booking_link_html(
                         </div>
                         ${{isAdmin ? `<div class="form-group" style="margin-bottom:0.5rem;">
                             <input type="${{isEmail ? 'email' : 'tel'}}" value="${{r.target_field||''}}" onchange="${{listName}}[${{i}}].target_field=this.value" placeholder="${{targetPlaceholder}}" style="width:100%;">
-                            <small style="color:#666;">Your ${{targetLabel.toLowerCase()}} address for notifications</small>
+                            <small class="text-muted">Your ${{targetLabel.toLowerCase()}} address for notifications</small>
                         </div>` : ''}}
                         ${{isEmail ? `<div class="form-group" style="margin-bottom:0.5rem;">
                             <input type="text" value="${{r.subject||''}}" onchange="${{listName}}[${{i}}].subject=this.value" placeholder="Email Subject">
@@ -1209,7 +1210,7 @@ pub fn admin_booking_link_html(
                         <input type=\"checkbox\" name=\"hide_title\" {hide_title_checked} style=\"width: auto;\">
                         Hide title when embedded
                     </label>
-                    <small style=\"color: #666;\">Hide the booking link name when embedding in another page</small>
+                    <small class=\"text-muted\">Hide the booking link name when embedding in another page</small>
                 </div>
 
                 <h3 style=\"margin-top: 1.5rem; margin-bottom: 1rem;\">Approval Settings</h3>
@@ -1218,7 +1219,7 @@ pub fn admin_booking_link_html(
                         <input type=\"checkbox\" name=\"auto_accept\" {auto_accept_checked} style=\"width: auto;\" onchange=\"document.getElementById('admin-responders-section').style.display = this.checked ? 'none' : 'block'\">
                         Auto-accept bookings
                     </label>
-                    <small style=\"color: #666;\">When unchecked, bookings require manual approval</small>
+                    <small class=\"text-muted\">When unchecked, bookings require manual approval</small>
                 </div>
                 <div id=\"admin-responders-section\" style=\"{admin_responders_display}\">
                     {admin_responders_section}
@@ -1298,7 +1299,7 @@ pub fn admin_view_link_html(calendar: &CalendarConfig, link: &ViewLink, base_url
                         <input type=\"checkbox\" name=\"show_event_details\" {event_details_checked}>
                         Show Event Details (titles, times)
                     </label>
-                    <small style=\"color: #666; display: block; margin-top: 0.25rem;\">When unchecked, shows \"busy\" instead of details</small>
+                    <small style=\"display: block; margin-top: 0.25rem;\">When unchecked, shows \"busy\" instead of details</small>
                 </div>
 
                 <h3 style=\"margin-top: 1.5rem; margin-bottom: 1rem;\">Bookings</h3>
@@ -1313,7 +1314,7 @@ pub fn admin_view_link_html(calendar: &CalendarConfig, link: &ViewLink, base_url
                         <input type=\"checkbox\" name=\"show_booking_details\" {booking_details_checked}>
                         Show Booking Details (names, times)
                     </label>
-                    <small style=\"color: #666; display: block; margin-top: 0.25rem;\">When unchecked, shows \"busy\" instead of details</small>
+                    <small style=\"display: block; margin-top: 0.25rem;\">When unchecked, shows \"busy\" instead of details</small>
                 </div>
                 <div class=\"form-group\">
                     <label>

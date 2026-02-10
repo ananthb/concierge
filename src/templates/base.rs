@@ -168,6 +168,37 @@ pub fn base_html(title: &str, content: &str, style: &CalendarStyle) -> String {
             --cal-bg: {bg};
             --cal-border-radius: {radius};
             --cal-font: {font};
+            --bg-card: white;
+            --bg-muted: {hash}f8f9fa;
+            --border: {hash}ddd;
+            --text-muted: {hash}666;
+            --success-bg: {hash}d4edda;
+            --success-text: {hash}155724;
+            --error-bg: {hash}f8d7da;
+            --error-text: {hash}721c24;
+            --warning-bg: {hash}fff3cd;
+            --warning-text: {hash}856404;
+            --warning-border: {hash}ffc107;
+            --code-bg: {hash}e9ecef;
+        }}
+        @media (prefers-color-scheme: dark) {{
+            :root {{
+                --cal-bg: {hash}1a1a1a;
+                --cal-text: {hash}e0e0e0;
+                --cal-primary: {hash}3b9eff;
+                --bg-card: {hash}2d2d2d;
+                --bg-muted: {hash}3a3a3a;
+                --border: {hash}444;
+                --text-muted: {hash}999;
+                --success-bg: {hash}1e3a2f;
+                --success-text: {hash}6fcf97;
+                --error-bg: {hash}3a1e1e;
+                --error-text: {hash}f5a5a5;
+                --warning-bg: {hash}3a351e;
+                --warning-text: {hash}f5d56f;
+                --warning-border: {hash}7a6a20;
+                --code-bg: {hash}3a3a3a;
+            }}
         }}
         * {{ box-sizing: border-box; margin: 0; padding: 0; }}
         body {{
@@ -177,6 +208,7 @@ pub fn base_html(title: &str, content: &str, style: &CalendarStyle) -> String {
             line-height: 1.5;
         }}
         .container {{ max-width: 1200px; margin: 0 auto; padding: 1rem; }}
+        a {{ color: var(--cal-primary); }}
         .btn {{
             display: inline-block;
             padding: 0.5rem 1rem;
@@ -216,9 +248,11 @@ pub fn base_html(title: &str, content: &str, style: &CalendarStyle) -> String {
         .form-group textarea {{
             width: 100%;
             padding: 0.5rem;
-            border: 1px solid {hash}ddd;
+            border: 1px solid var(--border);
             border-radius: var(--cal-border-radius);
             font-size: 1rem;
+            background: var(--bg-card);
+            color: var(--cal-text);
         }}
         .form-group input:focus,
         .form-group select:focus,
@@ -227,22 +261,22 @@ pub fn base_html(title: &str, content: &str, style: &CalendarStyle) -> String {
             border-color: var(--cal-primary);
         }}
         .card {{
-            background: white;
-            border: 1px solid {hash}ddd;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
             border-radius: var(--cal-border-radius);
             padding: 1rem;
             margin-bottom: 1rem;
         }}
         .success {{
-            background: {hash}d4edda;
-            color: {hash}155724;
+            background: var(--success-bg);
+            color: var(--success-text);
             padding: 1rem;
             border-radius: var(--cal-border-radius);
             margin-bottom: 1rem;
         }}
         .error {{
-            background: {hash}f8d7da;
-            color: {hash}721c24;
+            background: var(--error-bg);
+            color: var(--error-text);
             padding: 1rem;
             border-radius: var(--cal-border-radius);
             margin-bottom: 1rem;
@@ -260,10 +294,18 @@ pub fn base_html(title: &str, content: &str, style: &CalendarStyle) -> String {
         th, td {{
             padding: 0.5rem;
             text-align: left;
-            border-bottom: 1px solid {hash}ddd;
+            border-bottom: 1px solid var(--border);
         }}
         th {{
-            background: {hash}f8f9fa;
+            background: var(--bg-muted);
+        }}
+        code {{
+            background: var(--code-bg);
+            padding: 0.2rem 0.4rem;
+            border-radius: 3px;
+        }}
+        small, .text-muted {{
+            color: var(--text-muted);
         }}
         .url-cell {{
             display: flex;
