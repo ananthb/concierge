@@ -270,7 +270,12 @@ pub fn admin_dashboard_html(
     base_html("Concierge Admin", &content, &CalendarStyle::default())
 }
 
-pub fn admin_calendar_html(calendar: &CalendarConfig, time_slots: &[TimeSlot], base_url: &str) -> String {
+pub fn admin_calendar_html(
+    calendar: &CalendarConfig,
+    time_slots: &[TimeSlot],
+    base_url: &str,
+    channels: &super::base::AvailableChannels,
+) -> String {
     // Build time slots summary
     let time_slots_summary = if time_slots.is_empty() {
         "<p style=\"color: #666;\">No time slots configured. Bookings won't be available until you configure availability.</p>".to_string()
@@ -318,6 +323,40 @@ pub fn admin_calendar_html(calendar: &CalendarConfig, time_slots: &[TimeSlot], b
         summary_html.push_str("</tbody></table>");
         summary_html
     };
+
+    // Build channel options for digest responders
+    let mut channel_options = Vec::new();
+    if channels.twilio_sms {
+        channel_options.push(("twilio_sms", "Twilio SMS"));
+    }
+    if channels.twilio_whatsapp {
+        channel_options.push(("twilio_whatsapp", "Twilio WhatsApp"));
+    }
+    if channels.twilio_email {
+        channel_options.push(("twilio_email", "Twilio Email"));
+    }
+    if channels.resend_email {
+        channel_options.push(("resend_email", "Resend Email"));
+    }
+    let has_channels = !channel_options.is_empty();
+    let default_channel = channel_options
+        .first()
+        .map(|(c, _)| *c)
+        .unwrap_or("resend_email");
+
+    let js_channel_options: String = channel_options
+        .iter()
+        .map(|(value, label)| {
+            format!(
+                "<option value=\"{}\" ${{r.channel==='{}'?'selected':''}}>{}</option>",
+                value, value, label
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\\n                                ");
+
+    let digest_json =
+        serde_json::to_string(&calendar.digest).unwrap_or_else(|_| r#"{"frequency":"none","responders":[]}"#.into());
 
     let booking_links_html: String = calendar
         .booking_links
@@ -460,6 +499,7 @@ pub fn admin_calendar_html(calendar: &CalendarConfig, time_slots: &[TimeSlot], b
             <a href=\"#settings\" class=\"tab active\" onclick=\"showTab('settings', this)\">Settings</a>
             <a href=\"#events\" class=\"tab\" onclick=\"showTab('events', this)\">Events</a>
             <a href=\"#bookings\" class=\"tab\" onclick=\"showTab('bookings', this)\">Bookings</a>
+            {digest_tab}
         </div>
 
         <div id=\"tab-settings\" class=\"tab-content active\">
@@ -569,6 +609,8 @@ pub fn admin_calendar_html(calendar: &CalendarConfig, time_slots: &[TimeSlot], b
             </div>
         </div>
 
+        {digest_content}
+
         <script>
             function showTab(name, el) {{
                 document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
@@ -590,6 +632,8 @@ pub fn admin_calendar_html(calendar: &CalendarConfig, time_slots: &[TimeSlot], b
                     showTab(hash, document.querySelector('a[href=\"#' + hash + '\"]'));
                 }}
             }});
+
+            {digest_script}
         </script>",
         base_url = base_url,
         id = html_escape(&calendar.id),
@@ -610,6 +654,91 @@ pub fn admin_calendar_html(calendar: &CalendarConfig, time_slots: &[TimeSlot], b
         } else { "" },
         readonly_disabled = if calendar.archived { " disabled" } else { "" },
         hash = HASH,
+        digest_tab = if has_channels {
+            r##"<a href="#digest" class="tab" onclick="showTab('digest', this)">Digest</a>"##
+        } else { "" },
+        digest_content = if has_channels {
+            format!(r#"<div id="tab-digest" class="tab-content">
+            <div class="card">
+                <h2>Booking Digest</h2>
+                <p style="color:#666;margin-bottom:1rem;">Receive periodic summaries of new bookings.</p>
+                <form hx-put="{base_url}/admin/calendars/{id}/digest" hx-swap="none" hx-on::before-request="updateDigestField();this.querySelector('button[type=submit]').disabled=true;this.querySelector('button[type=submit]').textContent='Saving...'" hx-on::after-request="this.querySelector('button[type=submit]').disabled=false;this.querySelector('button[type=submit]').textContent='Save Digest Settings'">
+                    <div class="form-group">
+                        <label>Frequency</label>
+                        <select id="digest-frequency" onchange="digest.frequency=this.value">
+                            <option value="none">Disabled</option>
+                            <option value="daily">Daily</option>
+                            <option value="weekly">Weekly</option>
+                        </select>
+                    </div>
+                    <h4 style="margin-top:1rem;margin-bottom:0.5rem;">Digest Recipients</h4>
+                    <div id="digest-responders-list"></div>
+                    <button type="button" class="btn btn-secondary" onclick="addDigestResponder()" style="margin-bottom:1rem;">+ Add Recipient</button>
+                    <input type="hidden" name="digest_json" id="digest-json">
+                    <div class="form-actions">
+                        <button type="submit" class="btn">Save Digest Settings</button>
+                    </div>
+                </form>
+            </div>
+        </div>"#, base_url = base_url, id = html_escape(&calendar.id))
+        } else { String::new() },
+        digest_script = if has_channels {
+            format!(r#"
+            let digest = {digest_json};
+            if (!digest.responders) digest.responders = [];
+
+            function renderDigest() {{
+                const freqEl = document.getElementById('digest-frequency');
+                if (freqEl) freqEl.value = digest.frequency || 'none';
+                renderDigestResponders();
+            }}
+
+            function renderDigestResponders() {{
+                const list = document.getElementById('digest-responders-list');
+                if (!list) return;
+                list.innerHTML = digest.responders.map((r, i) => {{
+                    const isEmail = r.channel === 'twilio_email' || r.channel === 'resend_email';
+                    const targetPlaceholder = isEmail ? 'admin@example.com' : '+1234567890';
+                    return `<div class="card" style="margin-bottom:0.5rem;padding:0.75rem;background:#f8f9fa;">
+                        <div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;">
+                            <input type="text" value="${{r.name||''}}" onchange="digest.responders[${{i}}].name=this.value" placeholder="Name" style="flex:1;min-width:100px;">
+                            <select onchange="digest.responders[${{i}}].channel=this.value;renderDigestResponders();">
+                                {js_channel_options}
+                            </select>
+                            <input type="${{isEmail ? 'email' : 'tel'}}" value="${{r.target_field||''}}" onchange="digest.responders[${{i}}].target_field=this.value" placeholder="${{targetPlaceholder}}" style="flex:1;min-width:150px;">
+                            <label style="white-space:nowrap;"><input type="checkbox" ${{r.enabled?'checked':''}} onchange="digest.responders[${{i}}].enabled=this.checked" style="width:auto;"> On</label>
+                            <button type="button" class="btn btn-sm btn-danger" onclick="removeDigestResponder(${{i}})">×</button>
+                        </div>
+                    </div>`;
+                }}).join('');
+            }}
+
+            function addDigestResponder() {{
+                digest.responders.push({{
+                    id: 'digest_' + Date.now(),
+                    name: 'Digest',
+                    channel: '{default_channel}',
+                    target_field: '',
+                    subject: '',
+                    body: '',
+                    enabled: true,
+                    use_ai: false
+                }});
+                renderDigestResponders();
+            }}
+
+            function removeDigestResponder(i) {{
+                digest.responders.splice(i, 1);
+                renderDigestResponders();
+            }}
+
+            function updateDigestField() {{
+                document.getElementById('digest-json').value = JSON.stringify(digest);
+            }}
+
+            renderDigest();
+            "#, digest_json = digest_json, js_channel_options = js_channel_options, default_channel = default_channel)
+        } else { String::new() },
     );
 
     let title = if calendar.archived {

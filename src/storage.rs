@@ -403,6 +403,34 @@ pub async fn get_booking(db: &D1Database, id: &str) -> Result<Option<Booking>> {
     }
 }
 
+pub async fn get_bookings_since(
+    db: &D1Database,
+    calendar_id: &str,
+    since: &str,
+) -> Result<Vec<Booking>> {
+    let stmt = db.prepare(
+        "SELECT id, calendar_id, booking_link_id, slot_date, slot_time, duration,
+                name, email, phone, notes, fields_data, status, confirmation_token,
+                created_at, updated_at
+         FROM bookings
+         WHERE calendar_id = ? AND created_at > ?
+         ORDER BY created_at ASC",
+    );
+
+    let results = stmt
+        .bind(&[calendar_id.into(), since.into()])?
+        .all()
+        .await?;
+
+    let mut bookings = Vec::new();
+    for row in results.results::<serde_json::Value>()? {
+        if let Ok(booking) = serde_json::from_value::<Booking>(row) {
+            bookings.push(booking);
+        }
+    }
+    Ok(bookings)
+}
+
 pub async fn save_booking(db: &D1Database, booking: &Booking) -> Result<()> {
     let status_str = match booking.status {
         BookingStatus::Pending => "pending",

@@ -360,11 +360,49 @@ button {{ text-transform: uppercase; }}" onchange="style.custom_css=this.value">
 
         function renderDigest() {{
             const freqEl = document.getElementById('digest-frequency');
-            const chanEl = document.getElementById('digest-channel');
-            const recEl = document.getElementById('digest-recipients');
             if (freqEl) freqEl.value = digest.frequency || 'none';
-            if (chanEl) chanEl.value = digest.channel || '';
-            if (recEl) recEl.value = (digest.recipients || []).join('\\n');
+            renderDigestResponders();
+        }}
+
+        function renderDigestResponders() {{
+            const list = document.getElementById('digest-responders-list');
+            if (!list) return;
+            if (!digest.responders) digest.responders = [];
+            list.innerHTML = digest.responders.map((r, i) => {{
+                const isEmail = r.channel === 'twilio_email' || r.channel === 'resend_email';
+                const targetPlaceholder = isEmail ? 'admin@example.com' : '+1234567890';
+                return `<div class="card" style="margin-bottom:0.5rem;padding:0.75rem;background:#f8f9fa;">
+                    <div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;">
+                        <input type="text" value="${{r.name||''}}" onchange="digest.responders[${{i}}].name=this.value" placeholder="Name" style="flex:1;min-width:100px;">
+                        <select onchange="digest.responders[${{i}}].channel=this.value;renderDigestResponders();">
+                            {js_channel_options}
+                        </select>
+                        <input type="${{isEmail ? 'email' : 'tel'}}" value="${{r.target_field||''}}" onchange="digest.responders[${{i}}].target_field=this.value" placeholder="${{targetPlaceholder}}" style="flex:1;min-width:150px;">
+                        <label style="white-space:nowrap;"><input type="checkbox" ${{r.enabled?'checked':''}} onchange="digest.responders[${{i}}].enabled=this.checked" style="width:auto;"> On</label>
+                        <button type="button" class="btn btn-sm btn-danger" onclick="removeDigestResponder(${{i}})">×</button>
+                    </div>
+                </div>`;
+            }}).join('');
+        }}
+
+        function addDigestResponder() {{
+            if (!digest.responders) digest.responders = [];
+            digest.responders.push({{
+                id: 'digest_' + Date.now(),
+                name: 'Digest',
+                channel: '{default_channel}',
+                target_field: '',
+                subject: '',
+                body: '',
+                enabled: true,
+                use_ai: false
+            }});
+            renderDigestResponders();
+        }}
+
+        function removeDigestResponder(i) {{
+            digest.responders.splice(i, 1);
+            renderDigestResponders();
         }}
 
         function renderStyleInputs() {{
@@ -576,21 +614,11 @@ ${{s.show_title?`<h1>${{data.title}}</h1>`:''}}
         } else {
             String::new()
         },
-        digest_content = if channels.twilio_email || channels.resend_email {
-            let digest_channel_options = {
-                let mut opts = vec![r#"<option value="">Select channel...</option>"#.to_string()];
-                if channels.twilio_email {
-                    opts.push(r#"<option value="twilio_email">Twilio Email (SendGrid)</option>"#.to_string());
-                }
-                if channels.resend_email {
-                    opts.push(r#"<option value="resend_email">Resend Email</option>"#.to_string());
-                }
-                opts.join("\n                            ")
-            };
-            format!(r#"<div id="tab-digest" class="tab-content">
+        digest_content = if has_channels {
+            r#"<div id="tab-digest" class="tab-content">
                 <div class="card">
                     <h3>Response Digest</h3>
-                    <p style="color:#666;margin-bottom:1rem;">Receive periodic email summaries of new form submissions.</p>
+                    <p style="color:#666;margin-bottom:1rem;">Receive periodic summaries of new form submissions.</p>
                     <div class="form-group">
                         <label>Frequency</label>
                         <select id="digest-frequency" onchange="digest.frequency=this.value">
@@ -599,20 +627,11 @@ ${{s.show_title?`<h1>${{data.title}}</h1>`:''}}
                             <option value="weekly">Weekly</option>
                         </select>
                     </div>
-                    <div class="form-group">
-                        <label>Email Channel</label>
-                        <select id="digest-channel" onchange="digest.channel=this.value||null">
-                            {digest_channel_options}
-                        </select>
-                        <small style="color:#666;">Configure email credentials in wrangler secrets</small>
-                    </div>
-                    <div class="form-group">
-                        <label>Recipients (one email per line)</label>
-                        <textarea id="digest-recipients" rows="3" onchange="digest.recipients=this.value.split('\n').map(s=>s.trim()).filter(s=>s)" placeholder="admin@example.com"></textarea>
-                        <small style="color:#666;">Leave empty to use your login email ({admin_email})</small>
-                    </div>
+                    <h4 style="margin-top:1rem;margin-bottom:0.5rem;">Digest Recipients</h4>
+                    <div id="digest-responders-list"></div>
+                    <button type="button" class="btn btn-secondary" onclick="addDigestResponder()">+ Add Recipient</button>
                 </div>
-            </div>"#, digest_channel_options = digest_channel_options, admin_email = html_escape(admin_email))
+            </div>"#.to_string()
         } else {
             String::new()
         },
@@ -997,6 +1016,50 @@ pub fn format_digest_email(form: &FormConfig, submissions: &[Submission]) -> Str
                 })
                 .unwrap_or_else(|| "-".to_string());
             body.push_str(&format!("{}: {}\n", field.label, value));
+        }
+        body.push('\n');
+    }
+
+    body
+}
+
+pub fn format_booking_digest(calendar: &CalendarConfig, bookings: &[Booking]) -> String {
+    use crate::helpers::format_time;
+
+    let mut body = format!(
+        "New bookings for calendar: {}\n\nYou have {} new booking(s) since the last digest.\n\n",
+        calendar.name,
+        bookings.len()
+    );
+
+    for (i, booking) in bookings.iter().enumerate() {
+        let status = match booking.status {
+            BookingStatus::Pending => "Pending",
+            BookingStatus::Confirmed => "Confirmed",
+            BookingStatus::Cancelled => "Cancelled",
+            BookingStatus::Completed => "Completed",
+        };
+
+        body.push_str(&format!(
+            "--- Booking #{} ({}) ---\n",
+            i + 1,
+            booking.created_at
+        ));
+        body.push_str(&format!("Name: {}\n", booking.name));
+        body.push_str(&format!("Email: {}\n", booking.email));
+        if let Some(phone) = &booking.phone {
+            if !phone.is_empty() {
+                body.push_str(&format!("Phone: {}\n", phone));
+            }
+        }
+        body.push_str(&format!("Date: {}\n", booking.slot_date));
+        body.push_str(&format!("Time: {}\n", format_time(&booking.slot_time)));
+        body.push_str(&format!("Duration: {} minutes\n", booking.duration));
+        body.push_str(&format!("Status: {}\n", status));
+        if let Some(notes) = &booking.notes {
+            if !notes.is_empty() {
+                body.push_str(&format!("Notes: {}\n", notes));
+            }
         }
         body.push('\n');
     }

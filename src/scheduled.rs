@@ -4,9 +4,9 @@ use crate::ai;
 use crate::crypto;
 use crate::helpers::{generate_id, now_iso, today_date};
 use crate::instagram::{self, InstagramClient};
-use crate::responders::{send_resend_email, send_twilio_email};
+use crate::responders::{send_resend_email, send_twilio_email, send_twilio_message};
 use crate::storage::*;
-use crate::templates::format_digest_email;
+use crate::templates::{format_booking_digest, format_digest_email};
 use crate::types::*;
 
 pub async fn handle_scheduled(_event: ScheduledEvent, env: Env, _ctx: ScheduleContext) {
@@ -15,6 +15,11 @@ pub async fn handle_scheduled(_event: ScheduledEvent, env: Env, _ctx: ScheduleCo
     // Run form digests
     if let Err(e) = send_form_digests(&env).await {
         console_log!("Form digest error: {:?}", e);
+    }
+
+    // Run booking digests
+    if let Err(e) = send_booking_digests(&env).await {
+        console_log!("Booking digest error: {:?}", e);
     }
 
     // Run Instagram sync for calendars
@@ -49,8 +54,8 @@ async fn send_form_digests(env: &Env) -> Result<()> {
             continue;
         }
 
-        // Skip if no channel configured
-        if form.digest.channel.is_none() {
+        // Skip if no responders configured
+        if form.digest.responders.is_empty() {
             continue;
         }
 
@@ -64,14 +69,6 @@ async fn send_form_digests(env: &Env) -> Result<()> {
         if !should_send {
             continue;
         }
-
-        // Determine recipients
-        let recipients = if form.digest.recipients.is_empty() {
-            console_log!("Form {} has no digest recipients configured", form.slug);
-            continue;
-        } else {
-            form.digest.recipients.clone()
-        };
 
         // Query new submissions since last digest
         let since = form
@@ -87,10 +84,70 @@ async fn send_form_digests(env: &Env) -> Result<()> {
             continue;
         }
 
-        // Send digest
-        if let Err(e) = send_digest_email(env, &form, &recipients, &submissions).await {
-            console_log!("Failed to send digest for {}: {:?}", form.slug, e);
-            continue;
+        // Format the digest content
+        let subject = format!(
+            "Form Digest: {} - {} new response(s)",
+            form.name,
+            submissions.len()
+        );
+        let body = format_digest_email(&form, &submissions);
+
+        // Send to all configured responders
+        for responder in &form.digest.responders {
+            if !responder.enabled {
+                continue;
+            }
+
+            let target = &responder.target_field;
+            if target.is_empty() {
+                continue;
+            }
+
+            let result = match responder.channel {
+                ResponderChannel::TwilioSms => {
+                    if let Ok(from) = env.secret("TWILIO_FROM_SMS") {
+                        send_twilio_message(env, target, &from.to_string(), &body).await
+                    } else {
+                        continue;
+                    }
+                }
+                ResponderChannel::TwilioWhatsapp => {
+                    if let Ok(from) = env.secret("TWILIO_FROM_WHATSAPP") {
+                        send_twilio_message(
+                            env,
+                            &format!("whatsapp:{}", target),
+                            &from.to_string(),
+                            &body,
+                        )
+                        .await
+                    } else {
+                        continue;
+                    }
+                }
+                ResponderChannel::TwilioEmail => {
+                    if let Ok(from) = env.secret("TWILIO_FROM_EMAIL") {
+                        send_twilio_email(env, target, &from.to_string(), &subject, &body).await
+                    } else {
+                        continue;
+                    }
+                }
+                ResponderChannel::ResendEmail => {
+                    if let Ok(from) = env.secret("RESEND_FROM") {
+                        send_resend_email(env, target, &from.to_string(), &subject, &body).await
+                    } else {
+                        continue;
+                    }
+                }
+                _ => continue,
+            };
+
+            if let Err(e) = result {
+                console_log!(
+                    "Form digest responder error for {}: {:?}",
+                    responder.name,
+                    e
+                );
+            }
         }
 
         // Update last_sent_at
@@ -109,40 +166,138 @@ async fn send_form_digests(env: &Env) -> Result<()> {
     Ok(())
 }
 
-async fn send_digest_email(
-    env: &Env,
-    form: &FormConfig,
-    recipients: &[String],
-    submissions: &[Submission],
-) -> Result<()> {
-    let channel = form
-        .digest
-        .channel
-        .as_ref()
-        .ok_or_else(|| Error::from("No digest channel configured"))?;
-    let subject = format!(
-        "Form Digest: {} - {} new response(s)",
-        form.name,
-        submissions.len()
-    );
-    let body = format_digest_email(form, submissions);
+// ============================================================================
+// Booking Digests
+// ============================================================================
 
-    for recipient in recipients {
-        match channel {
-            ResponderChannel::TwilioEmail => {
-                let from = env.secret("TWILIO_FROM_EMAIL")?.to_string();
-                send_twilio_email(env, recipient, &from, &subject, &body).await?;
-            }
-            ResponderChannel::ResendEmail => {
-                let from = env.secret("RESEND_FROM")?.to_string();
-                send_resend_email(env, recipient, &from, &subject, &body).await?;
-            }
-            _ => {
-                // Skip non-email channels for digest
+async fn send_booking_digests(env: &Env) -> Result<()> {
+    let kv = env.kv("CALENDARS_KV")?;
+    let db = env.d1("DB")?;
+    let calendars = list_calendars(&kv).await?;
+
+    let now = now_iso();
+    let now_date = js_sys::Date::new_0();
+    let day_of_week = now_date.get_utc_day(); // 0 = Sunday
+
+    for mut calendar in calendars {
+        // Skip if digest not enabled
+        if calendar.digest.frequency == DigestFrequency::None {
+            continue;
+        }
+
+        // Skip if no responders configured
+        if calendar.digest.responders.is_empty() {
+            continue;
+        }
+
+        // Check frequency
+        let should_send = match calendar.digest.frequency {
+            DigestFrequency::Daily => true,
+            DigestFrequency::Weekly => day_of_week == 1, // Monday
+            DigestFrequency::None => false,
+        };
+
+        if !should_send {
+            continue;
+        }
+
+        // Query new bookings since last digest
+        let since = calendar
+            .digest
+            .last_sent_at
+            .as_deref()
+            .unwrap_or("1970-01-01T00:00:00Z");
+
+        let bookings = get_bookings_since(&db, &calendar.id, since).await?;
+
+        // Skip if no new bookings
+        if bookings.is_empty() {
+            continue;
+        }
+
+        // Format the digest content
+        let subject = format!(
+            "Booking Digest: {} - {} new booking(s)",
+            calendar.name,
+            bookings.len()
+        );
+        let body = format_booking_digest(&calendar, &bookings);
+
+        // Send to all configured responders
+        for responder in &calendar.digest.responders {
+            if !responder.enabled {
                 continue;
             }
+
+            let target = &responder.target_field;
+            if target.is_empty() {
+                continue;
+            }
+
+            let result = match responder.channel {
+                ResponderChannel::TwilioSms => {
+                    if let Ok(from) = env.secret("TWILIO_FROM_SMS") {
+                        send_twilio_message(env, target, &from.to_string(), &body).await
+                    } else {
+                        continue;
+                    }
+                }
+                ResponderChannel::TwilioWhatsapp => {
+                    if let Ok(from) = env.secret("TWILIO_FROM_WHATSAPP") {
+                        send_twilio_message(
+                            env,
+                            &format!("whatsapp:{}", target),
+                            &from.to_string(),
+                            &body,
+                        )
+                        .await
+                    } else {
+                        continue;
+                    }
+                }
+                ResponderChannel::TwilioEmail => {
+                    if let Ok(from) = env.secret("TWILIO_FROM_EMAIL") {
+                        send_twilio_email(env, target, &from.to_string(), &subject, &body).await
+                    } else {
+                        continue;
+                    }
+                }
+                ResponderChannel::ResendEmail => {
+                    if let Ok(from) = env.secret("RESEND_FROM") {
+                        send_resend_email(env, target, &from.to_string(), &subject, &body).await
+                    } else {
+                        continue;
+                    }
+                }
+                _ => continue,
+            };
+
+            if let Err(e) = result {
+                console_log!(
+                    "Booking digest responder error for {}: {:?}",
+                    responder.name,
+                    e
+                );
+            }
         }
+
+        // Update last_sent_at
+        calendar.digest.last_sent_at = Some(now.clone());
+        if let Err(e) = save_calendar(&kv, &calendar).await {
+            console_log!(
+                "Failed to update last_sent_at for {}: {:?}",
+                calendar.id,
+                e
+            );
+        }
+
+        console_log!(
+            "Sent booking digest for {} with {} bookings",
+            calendar.name,
+            bookings.len()
+        );
     }
+
     Ok(())
 }
 

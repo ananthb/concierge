@@ -345,6 +345,7 @@ async fn handle_calendars_admin(
                 instagram_sources: Vec::new(),
                 style: CalendarStyle::default(),
                 allowed_origins: Vec::new(),
+                digest: DigestConfig::default(),
                 archived: false,
                 created_at: now.clone(),
                 updated_at: now,
@@ -378,7 +379,17 @@ async fn handle_calendars_admin(
                 None => return Response::error("Calendar not found", 404),
             };
             let time_slots = get_time_slots(&db, id).await?;
-            Response::from_html(admin_calendar_html(&calendar, &time_slots, base_url))
+            let channels = crate::templates::AvailableChannels {
+                twilio_sms: env.secret("TWILIO_SID").is_ok()
+                    && env.secret("TWILIO_FROM_SMS").is_ok(),
+                twilio_whatsapp: env.secret("TWILIO_SID").is_ok()
+                    && env.secret("TWILIO_FROM_WHATSAPP").is_ok(),
+                twilio_email: env.secret("SENDGRID_API_KEY").is_ok()
+                    && env.secret("TWILIO_FROM_EMAIL").is_ok(),
+                resend_email: env.secret("RESEND_API_KEY").is_ok()
+                    && env.secret("RESEND_FROM").is_ok(),
+            };
+            Response::from_html(admin_calendar_html(&calendar, &time_slots, base_url, &channels))
         }
 
         (Method::Put, [id]) => {
@@ -438,6 +449,24 @@ async fn handle_calendars_admin(
             calendar.updated_at = now_iso();
             save_calendar(&kv, &calendar).await?;
             Response::empty()
+        }
+
+        (Method::Put, [id, "digest"]) => {
+            let mut calendar = match get_calendar(&kv, id).await? {
+                Some(c) => c,
+                None => return Response::error("Calendar not found", 404),
+            };
+
+            let form = req.form_data().await?;
+            if let Some(FormEntry::Field(digest_json)) = form.get("digest_json") {
+                if let Ok(digest) = serde_json::from_str(&digest_json) {
+                    calendar.digest = digest;
+                }
+            }
+            calendar.updated_at = now_iso();
+
+            save_calendar(&kv, &calendar).await?;
+            Response::from_html(calendar_success_html("Digest settings updated"))
         }
 
         (Method::Get, [id, "events"]) => {

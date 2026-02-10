@@ -40,9 +40,8 @@ pub enum DigestFrequency {
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct DigestConfig {
     pub frequency: DigestFrequency,
-    pub recipients: Vec<String>,
     #[serde(default)]
-    pub channel: Option<ResponderChannel>,
+    pub responders: Vec<FormResponder>,
     #[serde(default)]
     pub last_sent_at: Option<String>,
 }
@@ -201,6 +200,8 @@ pub struct CalendarConfig {
     pub style: CalendarStyle,
     pub allowed_origins: Vec<String>,
     #[serde(default)]
+    pub digest: DigestConfig,
+    #[serde(default)]
     pub archived: bool,
     pub created_at: String,
     pub updated_at: String,
@@ -219,6 +220,7 @@ impl Default for CalendarConfig {
             instagram_sources: Vec::new(),
             style: CalendarStyle::default(),
             allowed_origins: Vec::new(),
+            digest: DigestConfig::default(),
             archived: false,
             created_at: String::new(),
             updated_at: String::new(),
