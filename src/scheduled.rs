@@ -259,6 +259,7 @@ async fn sync_calendar_instagram_sources(env: &Env) -> Result<()> {
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn process_calendar_instagram_post(
     env: &Env,
     db: &D1Database,
@@ -603,6 +604,7 @@ async fn sync_form_instagram_sources(env: &Env) -> Result<()> {
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn process_form_instagram_post(
     env: &Env,
     db: &D1Database,

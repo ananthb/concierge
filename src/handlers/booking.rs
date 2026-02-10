@@ -29,16 +29,28 @@ pub async fn handle_booking(
         .filter(|s| !s.is_empty())
         .collect();
 
-    let calendar_id = match path_parts.first() {
-        Some(id) => *id,
-        None => return Response::error("Calendar ID required", 400),
-    };
-    let slug = match path_parts.get(1) {
-        Some(s) => *s,
-        None => return Response::error("Booking link required", 400),
-    };
+    let calendar_id = path_parts.first().copied().unwrap_or("");
+    let slug = path_parts.get(1).copied().unwrap_or("");
     let action = path_parts.get(2).unwrap_or(&"");
     let booking_id = path_parts.get(3).unwrap_or(&"");
+
+    // Handle CORS preflight early - try to load calendar for allowed_origins
+    if method == Method::Options {
+        if !calendar_id.is_empty() {
+            if let Ok(Some(calendar)) = get_calendar(&kv, calendar_id).await {
+                return cors_preflight(origin.as_deref(), &calendar.allowed_origins);
+            }
+        }
+        // Calendar not found or invalid path - return permissive CORS for preflight
+        return cors_preflight(origin.as_deref(), &[]);
+    }
+
+    if calendar_id.is_empty() {
+        return Response::error("Calendar ID required", 400);
+    }
+    if slug.is_empty() {
+        return Response::error("Booking link required", 400);
+    }
 
     let calendar = match get_calendar(&kv, calendar_id).await? {
         Some(c) => c,
@@ -53,10 +65,6 @@ pub async fn handle_booking(
         Some(l) => l.clone(),
         None => return Response::error("Booking link not found", 404),
     };
-
-    if method == Method::Options {
-        return cors_preflight(origin.as_deref(), &calendar.allowed_origins);
-    }
 
     let url = req.url()?;
     let query_pairs: std::collections::HashMap<_, _> = url.query_pairs().collect();

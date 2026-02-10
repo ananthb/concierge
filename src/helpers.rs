@@ -311,6 +311,7 @@ pub fn day_name(day: u32) -> &'static str {
 }
 
 /// Get short day name
+#[allow(dead_code)]
 pub fn day_name_short(day: u32) -> &'static str {
     match day {
         0 => "Sun",

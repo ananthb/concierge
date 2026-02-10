@@ -22,23 +22,31 @@ pub async fn handle_view(req: Request, env: Env, path: &str, method: Method) -> 
         .filter(|s| !s.is_empty())
         .collect();
 
-    let calendar_id = match path_parts.first() {
-        Some(id) => *id,
-        None => return Response::error("Calendar ID required", 400),
-    };
-    let slug = match path_parts.get(1) {
-        Some(s) => *s,
-        None => return Response::error("View link required", 400),
-    };
+    let calendar_id = path_parts.first().copied().unwrap_or("");
+    let slug = path_parts.get(1).copied().unwrap_or("");
+
+    // Handle CORS preflight early - try to load calendar for allowed_origins
+    if method == Method::Options {
+        if !calendar_id.is_empty() {
+            if let Ok(Some(calendar)) = get_calendar(&kv, calendar_id).await {
+                return cors_preflight(origin.as_deref(), &calendar.allowed_origins);
+            }
+        }
+        // Calendar not found or invalid path - return permissive CORS for preflight
+        return cors_preflight(origin.as_deref(), &[]);
+    }
+
+    if calendar_id.is_empty() {
+        return Response::error("Calendar ID required", 400);
+    }
+    if slug.is_empty() {
+        return Response::error("View link required", 400);
+    }
 
     let calendar = match get_calendar(&kv, calendar_id).await? {
         Some(c) => c,
         None => return Response::error("Calendar not found", 404),
     };
-
-    if method == Method::Options {
-        return cors_preflight(origin.as_deref(), &calendar.allowed_origins);
-    }
 
     if method != Method::Get {
         return Response::error("Method not allowed", 405);

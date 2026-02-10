@@ -20,8 +20,21 @@ pub async fn handle_form_routes(
     let kv = env.kv("FORMS_KV")?;
 
     let path_parts: Vec<&str> = path.strip_prefix("/f/").unwrap_or("").split('/').collect();
-    let slug = path_parts.first().unwrap_or(&"");
+    let slug = path_parts.first().copied().unwrap_or("");
     let action = path_parts.get(1).unwrap_or(&"");
+
+    let origin = req.headers().get("Origin").ok().flatten();
+
+    // Handle CORS preflight early - try to load form for allowed_origins
+    if method == Method::Options {
+        if !slug.is_empty() {
+            if let Ok(Some(form)) = get_form(&kv, slug).await {
+                return cors_preflight(origin.as_deref(), &form.allowed_origins);
+            }
+        }
+        // Form not found or invalid path - return permissive CORS for preflight
+        return cors_preflight(origin.as_deref(), &[]);
+    }
 
     if slug.is_empty() {
         return Response::error("Form slug required", 400);
@@ -31,27 +44,6 @@ pub async fn handle_form_routes(
         Some(f) => f,
         None => return Response::error("Form not found", 404),
     };
-
-    let origin = req.headers().get("Origin").ok().flatten();
-
-    // CORS preflight
-    if method == Method::Options {
-        if let Some(ref origin) = origin {
-            if form.allowed_origins.is_empty() || is_origin_allowed(origin, &form.allowed_origins) {
-                let headers = Headers::new();
-                headers.set("Access-Control-Allow-Origin", origin)?;
-                headers.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")?;
-                headers.set(
-                    "Access-Control-Allow-Headers",
-                    "Content-Type, HX-Request, HX-Target, HX-Current-URL, HX-Trigger",
-                )?;
-                headers.set("Access-Control-Max-Age", "86400")?;
-                headers.set("Vary", "Origin")?;
-                return Ok(Response::empty()?.with_headers(headers));
-            }
-        }
-        return Response::error("Origin not allowed", 403);
-    }
 
     // Check origin for non-GET requests
     let self_origin = req.url()?.origin().ascii_serialization();

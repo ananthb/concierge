@@ -264,6 +264,7 @@ pub async fn get_events(
     Ok(events)
 }
 
+#[allow(dead_code)]
 pub async fn get_event(db: &D1Database, id: &str) -> Result<Option<CalendarEvent>> {
     let stmt = db.prepare(
         "SELECT id, calendar_id, title, description, start_time, end_time,
@@ -420,6 +421,7 @@ pub async fn get_booking(db: &D1Database, id: &str) -> Result<Option<Booking>> {
     }
 }
 
+#[allow(dead_code)]
 pub async fn get_booking_by_token(db: &D1Database, token: &str) -> Result<Option<Booking>> {
     let stmt = db.prepare(
         "SELECT id, calendar_id, booking_link_id, slot_date, slot_time, duration,
@@ -603,6 +605,7 @@ pub async fn save_instagram_post(db: &D1Database, post: &ProcessedPost) -> Resul
 // D1 Operations (Event Sources)
 // ============================================================================
 
+#[allow(dead_code)]
 pub async fn get_event_source_by_event_id(
     db: &D1Database,
     event_id: &str,
@@ -622,6 +625,7 @@ pub async fn get_event_source_by_event_id(
     }
 }
 
+#[allow(dead_code)]
 pub async fn get_event_source_by_contact_id(
     db: &D1Database,
     contact_id: i64,
@@ -641,6 +645,7 @@ pub async fn get_event_source_by_contact_id(
     }
 }
 
+#[allow(dead_code)]
 pub async fn get_event_source_by_external_id(
     db: &D1Database,
     source_type: &str,

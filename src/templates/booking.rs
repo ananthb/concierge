@@ -6,6 +6,7 @@ use crate::types::*;
 use super::base::{wrap_html, CssOptions};
 use super::HASH;
 
+#[allow(clippy::too_many_arguments)]
 pub fn booking_form_html(
     calendar: &CalendarConfig,
     link: &BookingLink,
