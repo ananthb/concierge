@@ -3,7 +3,9 @@
 use crate::helpers::*;
 use crate::types::*;
 
-pub fn form_editor_html(form: Option<&FormConfig>, admin_email: &str) -> String {
+use super::base::AvailableChannels;
+
+pub fn form_editor_html(form: Option<&FormConfig>, admin_email: &str, channels: &AvailableChannels) -> String {
     let is_new = form.is_none();
     let form = form.cloned().unwrap_or_else(|| FormConfig {
         slug: generate_slug(),
@@ -29,6 +31,30 @@ pub fn form_editor_html(form: Option<&FormConfig>, admin_email: &str) -> String 
     let digest_json = serde_json::to_string(&form.digest)
         .unwrap_or_else(|_| r#"{"frequency":"none","recipients":[]}"#.into());
     let google_sheet_url = form.google_sheet_url.as_deref().unwrap_or("");
+
+    // Build channel options based on availability
+    let mut channel_options = Vec::new();
+    if channels.twilio_sms {
+        channel_options.push(("twilio_sms", "Twilio SMS"));
+    }
+    if channels.twilio_whatsapp {
+        channel_options.push(("twilio_whatsapp", "Twilio WhatsApp"));
+    }
+    if channels.twilio_email {
+        channel_options.push(("twilio_email", "Twilio Email"));
+    }
+    if channels.resend_email {
+        channel_options.push(("resend_email", "Resend Email"));
+    }
+    let has_channels = !channel_options.is_empty();
+    let default_channel = channel_options.first().map(|(c, _)| *c).unwrap_or("resend_email");
+
+    // Build JS channel options
+    let js_channel_options: String = channel_options
+        .iter()
+        .map(|(value, label)| format!("<option value=\"{}\" ${{r.channel==='{}'?'selected':''}}>{}</option>", value, value, label))
+        .collect::<Vec<_>>()
+        .join("\\n                            ");
 
     let js_escape = |s: &str| {
         s.replace('\\', "\\\\")
@@ -94,8 +120,8 @@ pub fn form_editor_html(form: Option<&FormConfig>, admin_email: &str) -> String 
         <div class="tabs">
             <button class="tab active" onclick="showTab('basic')">Basic Settings</button>
             <button class="tab" onclick="showTab('fields')">Fields</button>
-            <button class="tab" onclick="showTab('responders')">Responders</button>
-            <button class="tab" onclick="showTab('digest')">Digest</button>
+            {responders_tab}
+            {digest_tab}
             <button class="tab" onclick="showTab('style')">Styling</button>
             <button class="tab" onclick="showTab('preview')">Preview</button>
         </div>
@@ -147,43 +173,9 @@ pub fn form_editor_html(form: Option<&FormConfig>, admin_email: &str) -> String 
                 </div>
             </div>
 
-            <div id="tab-responders" class="tab-content">
-                <div class="card">
-                    <h3>Auto-Responders</h3>
-                    <p style="color:#666;margin-bottom:1rem;">Send automatic acknowledgement messages when forms are submitted.</p>
-                    <div id="responders-list"></div>
-                    <button type="button" class="btn btn-secondary" onclick="addResponder()">+ Add Responder</button>
-                </div>
-            </div>
+            {responders_content}
 
-            <div id="tab-digest" class="tab-content">
-                <div class="card">
-                    <h3>Response Digest</h3>
-                    <p style="color:#666;margin-bottom:1rem;">Receive periodic email summaries of new form submissions.</p>
-                    <div class="form-group">
-                        <label>Frequency</label>
-                        <select id="digest-frequency" onchange="digest.frequency=this.value">
-                            <option value="none">Disabled</option>
-                            <option value="daily">Daily</option>
-                            <option value="weekly">Weekly</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label>Email Channel</label>
-                        <select id="digest-channel" onchange="digest.channel=this.value||null">
-                            <option value="">Select channel...</option>
-                            <option value="twilio_email">Twilio Email (SendGrid)</option>
-                            <option value="resend_email">Resend Email</option>
-                        </select>
-                        <small style="color:#666;">Configure email credentials in wrangler secrets</small>
-                    </div>
-                    <div class="form-group">
-                        <label>Recipients (one email per line)</label>
-                        <textarea id="digest-recipients" rows="3" onchange="digest.recipients=this.value.split('\\n').map(s=>s.trim()).filter(s=>s)" placeholder="admin@example.com"></textarea>
-                        <small style="color:#666;">Leave empty to use your login email ({admin_email})</small>
-                    </div>
-                </div>
-            </div>
+            {digest_content}
 
             <div id="tab-style" class="tab-content">
                 <div class="card">
@@ -312,6 +304,7 @@ button {{ text-transform: uppercase; }}" onchange="style.custom_css=this.value">
 
         function renderResponders() {{
             const list = document.getElementById('responders-list');
+            if (!list) return;
             list.innerHTML = responders.map((r, i) => {{
                 const isEmail = r.channel === 'twilio_email' || r.channel === 'resend_email';
                 const isMetaWhatsapp = r.channel === 'meta_whatsapp';
@@ -323,12 +316,7 @@ button {{ text-transform: uppercase; }}" onchange="style.custom_css=this.value">
                     <div style="display:flex;gap:1rem;margin-bottom:0.5rem;align-items:center;flex-wrap:wrap;">
                         <input type="text" value="${{r.name}}" onchange="responders[${{i}}].name=this.value" placeholder="Responder Name" style="flex:1;min-width:150px;">
                         <select onchange="responders[${{i}}].channel=this.value;renderResponders();">
-                            <option value="twilio_sms" ${{r.channel==='twilio_sms'?'selected':''}}>Twilio SMS</option>
-                            <option value="twilio_rcs" ${{r.channel==='twilio_rcs'?'selected':''}}>Twilio RCS</option>
-                            <option value="twilio_whatsapp" ${{r.channel==='twilio_whatsapp'?'selected':''}}>Twilio WhatsApp</option>
-                            <option value="twilio_email" ${{r.channel==='twilio_email'?'selected':''}}>Twilio Email</option>
-                            <option value="resend_email" ${{r.channel==='resend_email'?'selected':''}}>Resend Email</option>
-                            <option value="meta_whatsapp" ${{r.channel==='meta_whatsapp'?'selected':''}}>Meta WhatsApp</option>
+                            {js_channel_options}
                         </select>
                         ${{!isMetaWhatsapp ? `<select onchange="responders[${{i}}].target_field=this.value" style="flex:0.8;">
                             ${{targetOptions || '<option value="">(No matching fields)</option>'}}
@@ -358,7 +346,7 @@ button {{ text-transform: uppercase; }}" onchange="style.custom_css=this.value">
             responders.push({{
                 id: 'resp_' + Date.now(),
                 name: 'New Responder',
-                channel: 'resend_email',
+                channel: '{default_channel}',
                 target_field: fields.find(f => f.field_type === 'email')?.id || '',
                 subject: 'Thank you for your submission',
                 body: "Hi {{{{name}}}},\\n\\nThank you for contacting us.",
@@ -371,9 +359,12 @@ button {{ text-transform: uppercase; }}" onchange="style.custom_css=this.value">
         function removeResponder(i) {{ responders.splice(i, 1); renderResponders(); }}
 
         function renderDigest() {{
-            document.getElementById('digest-frequency').value = digest.frequency || 'none';
-            document.getElementById('digest-channel').value = digest.channel || '';
-            document.getElementById('digest-recipients').value = (digest.recipients || []).join('\\n');
+            const freqEl = document.getElementById('digest-frequency');
+            const chanEl = document.getElementById('digest-channel');
+            const recEl = document.getElementById('digest-recipients');
+            if (freqEl) freqEl.value = digest.frequency || 'none';
+            if (chanEl) chanEl.value = digest.channel || '';
+            if (recEl) recEl.value = (digest.recipients || []).join('\\n');
         }}
 
         function renderStyleInputs() {{
@@ -535,7 +526,6 @@ ${{s.show_title?`<h1>${{data.title}}</h1>`:''}}
         success_message = html_escape(&form.success_message),
         allowed_origins = form.allowed_origins.join("\n"),
         google_sheet_url = html_escape(google_sheet_url),
-        admin_email = html_escape(admin_email),
         fields_json = fields_json,
         style_json = style_json,
         responders_json = responders_json,
@@ -563,7 +553,71 @@ ${{s.show_title?`<h1>${{data.title}}</h1>`:''}}
             </div>"#.to_string()
         } else {
             String::new()
-        }
+        },
+        responders_tab = if has_channels {
+            r#"<button class="tab" onclick="showTab('responders')">Responders</button>"#
+        } else {
+            ""
+        },
+        digest_tab = if channels.twilio_email || channels.resend_email {
+            r#"<button class="tab" onclick="showTab('digest')">Digest</button>"#
+        } else {
+            ""
+        },
+        responders_content = if has_channels {
+            r#"<div id="tab-responders" class="tab-content">
+                <div class="card">
+                    <h3>Auto-Responders</h3>
+                    <p style="color:#666;margin-bottom:1rem;">Send automatic acknowledgement messages when forms are submitted.</p>
+                    <div id="responders-list"></div>
+                    <button type="button" class="btn btn-secondary" onclick="addResponder()">+ Add Responder</button>
+                </div>
+            </div>"#.to_string()
+        } else {
+            String::new()
+        },
+        digest_content = if channels.twilio_email || channels.resend_email {
+            let digest_channel_options = {
+                let mut opts = vec![r#"<option value="">Select channel...</option>"#.to_string()];
+                if channels.twilio_email {
+                    opts.push(r#"<option value="twilio_email">Twilio Email (SendGrid)</option>"#.to_string());
+                }
+                if channels.resend_email {
+                    opts.push(r#"<option value="resend_email">Resend Email</option>"#.to_string());
+                }
+                opts.join("\n                            ")
+            };
+            format!(r#"<div id="tab-digest" class="tab-content">
+                <div class="card">
+                    <h3>Response Digest</h3>
+                    <p style="color:#666;margin-bottom:1rem;">Receive periodic email summaries of new form submissions.</p>
+                    <div class="form-group">
+                        <label>Frequency</label>
+                        <select id="digest-frequency" onchange="digest.frequency=this.value">
+                            <option value="none">Disabled</option>
+                            <option value="daily">Daily</option>
+                            <option value="weekly">Weekly</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Email Channel</label>
+                        <select id="digest-channel" onchange="digest.channel=this.value||null">
+                            {digest_channel_options}
+                        </select>
+                        <small style="color:#666;">Configure email credentials in wrangler secrets</small>
+                    </div>
+                    <div class="form-group">
+                        <label>Recipients (one email per line)</label>
+                        <textarea id="digest-recipients" rows="3" onchange="digest.recipients=this.value.split('\n').map(s=>s.trim()).filter(s=>s)" placeholder="admin@example.com"></textarea>
+                        <small style="color:#666;">Leave empty to use your login email ({admin_email})</small>
+                    </div>
+                </div>
+            </div>"#, digest_channel_options = digest_channel_options, admin_email = html_escape(admin_email))
+        } else {
+            String::new()
+        },
+        js_channel_options = js_channel_options,
+        default_channel = default_channel
     )
 }
 

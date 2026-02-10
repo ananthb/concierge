@@ -82,11 +82,13 @@ pub fn admin_dashboard_html(
     let calendar_rows: String = active_calendars
         .iter()
         .map(|cal| {
+            let bc = cal.booking_links.len();
+            let vc = cal.view_links.len();
             format!(
                 "<tr>
                     <td><a href=\"{base_url}/admin/calendars/{id}\">{name}</a></td>
-                    <td>{booking_count} booking links</td>
-                    <td>{view_count} view links</td>
+                    <td>{bc} booking {bc_s}</td>
+                    <td>{vc} view {vc_s}</td>
                     <td>{updated}</td>
                     <td>
                         <a href=\"{base_url}/admin/calendars/{id}\" class=\"btn btn-sm\">Edit</a>
@@ -100,8 +102,10 @@ pub fn admin_dashboard_html(
                 base_url = base_url,
                 id = html_escape(&cal.id),
                 name = html_escape(&cal.name),
-                booking_count = cal.booking_links.len(),
-                view_count = cal.view_links.len(),
+                bc = bc,
+                bc_s = if bc == 1 { "link" } else { "links" },
+                vc = vc,
+                vc_s = if vc == 1 { "link" } else { "links" },
                 updated = html_escape(cal.updated_at.split('T').next().unwrap_or("")),
             )
         })
@@ -111,11 +115,13 @@ pub fn admin_dashboard_html(
     let archived_calendar_rows: String = archived_calendars
         .iter()
         .map(|cal| {
+            let bc = cal.booking_links.len();
+            let vc = cal.view_links.len();
             format!(
                 "<tr>
                     <td>{name} <span style=\"color:#666;font-size:0.85em;\">(archived)</span></td>
-                    <td>{booking_count} booking links</td>
-                    <td>{view_count} view links</td>
+                    <td>{bc} booking {bc_s}</td>
+                    <td>{vc} view {vc_s}</td>
                     <td>{updated}</td>
                     <td>
                         <a href=\"{base_url}/admin/calendars/{id}\" class=\"btn btn-sm\">View</a>
@@ -128,8 +134,10 @@ pub fn admin_dashboard_html(
                 base_url = base_url,
                 id = html_escape(&cal.id),
                 name = html_escape(&cal.name),
-                booking_count = cal.booking_links.len(),
-                view_count = cal.view_links.len(),
+                bc = bc,
+                bc_s = if bc == 1 { "link" } else { "links" },
+                vc = vc,
+                vc_s = if vc == 1 { "link" } else { "links" },
                 updated = html_escape(cal.updated_at.split('T').next().unwrap_or("")),
             )
         })
@@ -262,7 +270,55 @@ pub fn admin_dashboard_html(
     base_html("Concierge Admin", &content, &CalendarStyle::default())
 }
 
-pub fn admin_calendar_html(calendar: &CalendarConfig, base_url: &str) -> String {
+pub fn admin_calendar_html(calendar: &CalendarConfig, time_slots: &[TimeSlot], base_url: &str) -> String {
+    // Build time slots summary
+    let time_slots_summary = if time_slots.is_empty() {
+        "<p style=\"color: #666;\">No time slots configured. Bookings won't be available until you configure availability.</p>".to_string()
+    } else {
+        let days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+        let mut summary_html = String::from("<table style=\"width: 100%; margin-top: 0.5rem;\"><thead><tr><th>Day</th><th>Hours</th><th>Duration</th><th>Capacity</th></tr></thead><tbody>");
+
+        // Group slots by day of week
+        for (dow, day_name) in days.iter().enumerate() {
+            let day_slots: Vec<_> = time_slots.iter()
+                .filter(|s| s.day_of_week == Some(dow as i32))
+                .collect();
+
+            if !day_slots.is_empty() {
+                for slot in day_slots {
+                    summary_html.push_str(&format!(
+                        "<tr><td>{}</td><td>{} - {}</td><td>{} min</td><td>{}</td></tr>",
+                        day_name,
+                        format_time(&slot.start_time),
+                        format_time(&slot.end_time),
+                        slot.slot_duration,
+                        slot.max_bookings
+                    ));
+                }
+            }
+        }
+
+        // Add specific date slots
+        let date_slots: Vec<_> = time_slots.iter()
+            .filter(|s| s.specific_date.is_some())
+            .collect();
+        for slot in date_slots {
+            if let Some(date) = &slot.specific_date {
+                summary_html.push_str(&format!(
+                    "<tr><td>{}</td><td>{} - {}</td><td>{} min</td><td>{}</td></tr>",
+                    html_escape(date),
+                    format_time(&slot.start_time),
+                    format_time(&slot.end_time),
+                    slot.slot_duration,
+                    slot.max_bookings
+                ));
+            }
+        }
+
+        summary_html.push_str("</tbody></table>");
+        summary_html
+    };
+
     let booking_links_html: String = calendar
         .booking_links
         .iter()
@@ -389,10 +445,11 @@ pub fn admin_calendar_html(calendar: &CalendarConfig, base_url: &str) -> String 
     let content = format!(
         "<style>
             .tabs {{ display: flex; gap: 0.5rem; margin-bottom: 1.5rem; flex-wrap: wrap; }}
-            .tab {{ padding: 0.5rem 1rem; background: #e9ecef; border-radius: 4px; cursor: pointer; border: none; font-size: 1rem; }}
+            .tab {{ padding: 0.5rem 1rem; background: #e9ecef; border-radius: 4px; cursor: pointer; border: none; font-size: 1rem; text-decoration: none; color: inherit; }}
             .tab.active {{ background: #0070f3; color: white; }}
             .tab-content {{ display: none; }}
             .tab-content.active {{ display: block; }}
+            .form-actions {{ display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem; }}
         </style>
 
         <p><a href=\"{base_url}/admin\">&larr; Back to Dashboard</a></p>
@@ -400,9 +457,9 @@ pub fn admin_calendar_html(calendar: &CalendarConfig, base_url: &str) -> String 
         {archived_notice}
 
         <div class=\"tabs\">
-            <button class=\"tab active\" onclick=\"showTab('settings')\">Settings</button>
-            <button class=\"tab\" onclick=\"showTab('events')\">Events</button>
-            <button class=\"tab\" onclick=\"showTab('bookings')\">Bookings</button>
+            <a href=\"#settings\" class=\"tab active\" onclick=\"showTab('settings', this)\">Settings</a>
+            <a href=\"#events\" class=\"tab\" onclick=\"showTab('events', this)\">Events</a>
+            <a href=\"#bookings\" class=\"tab\" onclick=\"showTab('bookings', this)\">Bookings</a>
         </div>
 
         <div id=\"tab-settings\" class=\"tab-content active\">
@@ -433,7 +490,9 @@ pub fn admin_calendar_html(calendar: &CalendarConfig, base_url: &str) -> String 
                         <textarea name=\"custom_css\" rows=\"5\" style=\"font-family: monospace; font-size: 0.9rem;\" placeholder=\"/* Custom styles */&#10;.booking-container {{ max-width: 500px; }}\">{custom_css}</textarea>
                         <small style=\"color: #666;\">CSS variables: <code>--cal-primary</code>, <code>--cal-text</code>, <code>--cal-bg</code>, <code>--cal-border-radius</code>, <code>--cal-font</code></small>
                     </div>
-                    <button type=\"submit\" class=\"btn\">Save Settings</button>
+                    <div class=\"form-actions\">
+                        <button type=\"submit\" class=\"btn\">Save Settings</button>
+                    </div>
                 </form>
             </div>
 
@@ -489,8 +548,8 @@ pub fn admin_calendar_html(calendar: &CalendarConfig, base_url: &str) -> String 
         <div id=\"tab-bookings\" class=\"tab-content\">
             <div class=\"card\">
                 <h2>Time Slots</h2>
-                <p style=\"margin-bottom: 1rem; color: #666;\">Configure when bookings are available.</p>
-                <p><a href=\"{base_url}/admin/calendars/{id}/slots\" class=\"btn\">Configure Available Slots</a></p>
+                {time_slots_summary}
+                <p style=\"margin-top: 1rem;\"><a href=\"{base_url}/admin/calendars/{id}/slots\" class=\"btn\">Configure Available Slots</a></p>
             </div>
 
             <div class=\"card\">
@@ -511,12 +570,26 @@ pub fn admin_calendar_html(calendar: &CalendarConfig, base_url: &str) -> String 
         </div>
 
         <script>
-            function showTab(name) {{
+            function showTab(name, el) {{
                 document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
                 document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
                 document.getElementById('tab-' + name).classList.add('active');
-                event.target.classList.add('active');
+                if (el) el.classList.add('active');
             }}
+            // Handle initial hash on page load
+            (function() {{
+                const hash = window.location.hash.slice(1);
+                if (hash && document.getElementById('tab-' + hash)) {{
+                    showTab(hash, document.querySelector('a[href=\"#' + hash + '\"]'));
+                }}
+            }})();
+            // Handle browser back/forward
+            window.addEventListener('hashchange', function() {{
+                const hash = window.location.hash.slice(1);
+                if (hash && document.getElementById('tab-' + hash)) {{
+                    showTab(hash, document.querySelector('a[href=\"#' + hash + '\"]'));
+                }}
+            }});
         </script>",
         base_url = base_url,
         id = html_escape(&calendar.id),
@@ -529,6 +602,7 @@ pub fn admin_calendar_html(calendar: &CalendarConfig, base_url: &str) -> String 
         view_links_html = view_links_html,
         feed_links_html = feed_links_html,
         instagram_sources_html = instagram_sources_html,
+        time_slots_summary = time_slots_summary,
         archived_notice = if calendar.archived {
             "<div class=\"card\" style=\"background: #fff3cd; border-color: #ffc107; margin-bottom: 1rem;\">
                 <p style=\"margin: 0; color: #856404;\"><strong>This calendar is archived.</strong> It is read-only. Unarchive from the dashboard to make changes.</p>
@@ -787,6 +861,8 @@ pub fn admin_booking_link_html(
     channels: &super::base::AvailableChannels,
 ) -> String {
     let responders_json = serde_json::to_string(&link.responders).unwrap_or_else(|_| "[]".into());
+    let admin_responders_json =
+        serde_json::to_string(&link.admin_responders).unwrap_or_else(|_| "[]".into());
     let js_escape = |s: &str| {
         s.replace('\\', "\\\\")
             .replace('\'', "\\'")
@@ -828,8 +904,8 @@ pub fn admin_booking_link_html(
         .join("\\n                                ");
 
     let responders_section = if has_channels {
-        r#"<h3 style="margin-top: 1.5rem; margin-bottom: 1rem;">Auto-Responders</h3>
-                <p style="color: #666; margin-bottom: 1rem;">Send automatic confirmation messages when bookings are confirmed. Use {{{{name}}}}, {{{{email}}}}, {{{{date}}}}, {{{{time}}}} placeholders.</p>
+        r#"<h3 style="margin-top: 1.5rem; margin-bottom: 1rem;">Customer Notifications</h3>
+                <p style="color: #666; margin-bottom: 1rem;">Send automatic confirmation messages to customers when bookings are confirmed. Use {{{{name}}}}, {{{{email}}}}, {{{{date}}}}, {{{{time}}}} placeholders.</p>
                 <div id="responders-list"></div>
                 <button type="button" class="btn btn-secondary" onclick="addResponder()" style="margin-bottom: 1rem;">+ Add Responder</button>
                 <input type="hidden" name="responders_json" id="responders-json">"#.to_string()
@@ -839,36 +915,68 @@ pub fn admin_booking_link_html(
         )
     };
 
+    let admin_responders_section = if has_channels {
+        r#"<h3 style="margin-top: 1.5rem; margin-bottom: 1rem;">Admin Notifications</h3>
+                <p style="color: #666; margin-bottom: 1rem;">Receive notifications when bookings need approval (when auto-accept is disabled). Use {{{{name}}}}, {{{{email}}}}, {{{{date}}}}, {{{{time}}}}, {{{{approve_url}}}} placeholders.</p>
+                <div id="admin-responders-list"></div>
+                <button type="button" class="btn btn-secondary" onclick="addAdminResponder()" style="margin-bottom: 1rem;">+ Add Admin Responder</button>
+                <input type="hidden" name="admin_responders_json" id="admin-responders-json">"#.to_string()
+    } else {
+        String::from(
+            r#"<input type="hidden" name="admin_responders_json" id="admin-responders-json" value="[]">"#,
+        )
+    };
+
     let responders_script = if has_channels {
         format!(
             r#"<script>
             let responders = {responders_json};
+            let adminResponders = {admin_responders_json};
 
-            function renderResponders() {{
-                const list = document.getElementById('responders-list');
-                list.innerHTML = responders.map((r, i) => {{
+            function renderResponderList(list, containerId, isAdmin) {{
+                const container = document.getElementById(containerId);
+                container.innerHTML = list.map((r, i) => {{
                     const isEmail = r.channel === 'twilio_email' || r.channel === 'resend_email';
+                    const isSms = r.channel === 'twilio_sms' || r.channel === 'twilio_whatsapp';
+                    const listName = isAdmin ? 'adminResponders' : 'responders';
+                    const renderFn = isAdmin ? 'renderAdminResponders' : 'renderResponders';
+                    const removeFn = isAdmin ? 'removeAdminResponder' : 'removeResponder';
+                    const targetPlaceholder = isEmail ? 'admin@example.com' : '+1234567890';
+                    const targetLabel = isEmail ? 'Email' : 'Phone';
                     return `<div class="card" style="margin-bottom:1rem;padding:1rem;background:#f8f9fa;">
                         <div style="display:flex;gap:0.5rem;margin-bottom:0.5rem;align-items:center;flex-wrap:wrap;">
-                            <input type="text" value="${{r.name||''}}" onchange="responders[${{i}}].name=this.value" placeholder="Responder Name" style="flex:1;min-width:150px;">
-                            <select onchange="responders[${{i}}].channel=this.value;renderResponders();">
+                            <input type="text" value="${{r.name||''}}" onchange="${{listName}}[${{i}}].name=this.value" placeholder="Responder Name" style="flex:1;min-width:150px;">
+                            <select onchange="${{listName}}[${{i}}].channel=this.value;${{renderFn}}();">
                                 {js_channel_options}
                             </select>
-                            <label style="white-space:nowrap;"><input type="checkbox" ${{r.enabled?'checked':''}} onchange="responders[${{i}}].enabled=this.checked" style="width:auto;"> Enabled</label>
-                            <button type="button" class="btn btn-sm btn-danger" onclick="removeResponder(${{i}})">Delete</button>
+                            <label style="white-space:nowrap;"><input type="checkbox" ${{r.enabled?'checked':''}} onchange="${{listName}}[${{i}}].enabled=this.checked" style="width:auto;"> Enabled</label>
+                            <button type="button" class="btn btn-sm btn-danger" onclick="${{removeFn}}(${{i}})">Delete</button>
                         </div>
+                        ${{isAdmin ? `<div class="form-group" style="margin-bottom:0.5rem;">
+                            <input type="${{isEmail ? 'email' : 'tel'}}" value="${{r.target_field||''}}" onchange="${{listName}}[${{i}}].target_field=this.value" placeholder="${{targetPlaceholder}}" style="width:100%;">
+                            <small style="color:#666;">Your ${{targetLabel.toLowerCase()}} address for notifications</small>
+                        </div>` : ''}}
                         ${{isEmail ? `<div class="form-group" style="margin-bottom:0.5rem;">
-                            <input type="text" value="${{r.subject||''}}" onchange="responders[${{i}}].subject=this.value" placeholder="Email Subject">
+                            <input type="text" value="${{r.subject||''}}" onchange="${{listName}}[${{i}}].subject=this.value" placeholder="Email Subject">
                         </div>` : ''}}
                         <div class="form-group" style="margin-bottom:0;">
-                            <textarea rows="3" onchange="responders[${{i}}].body=this.value" placeholder="Message body. Use {{{{{{{{name}}}}}}}}, {{{{{{{{email}}}}}}}}, {{{{{{{{date}}}}}}}}, {{{{{{{{time}}}}}}}} placeholders.">${{r.body||''}}</textarea>
+                            <textarea rows="3" onchange="${{listName}}[${{i}}].body=this.value" placeholder="${{isAdmin ? 'Message body. Use {{{{{{{{name}}}}}}}}, {{{{{{{{email}}}}}}}}, {{{{{{{{date}}}}}}}}, {{{{{{{{time}}}}}}}}, {{{{{{{{approve_url}}}}}}}} placeholders.' : 'Message body. Use {{{{{{{{name}}}}}}}}, {{{{{{{{email}}}}}}}}, {{{{{{{{date}}}}}}}}, {{{{{{{{time}}}}}}}} placeholders.'}}">${{r.body||''}}</textarea>
                         </div>
                     </div>`;
                 }}).join('');
             }}
 
+            function renderResponders() {{
+                renderResponderList(responders, 'responders-list', false);
+            }}
+
+            function renderAdminResponders() {{
+                renderResponderList(adminResponders, 'admin-responders-list', true);
+            }}
+
             function addResponder() {{
                 responders.push({{
+                    id: 'resp_' + Date.now(),
                     name: 'Booking Confirmation',
                     channel: '{default_channel}',
                     target_field: 'email',
@@ -880,18 +988,40 @@ pub fn admin_booking_link_html(
                 renderResponders();
             }}
 
+            function addAdminResponder() {{
+                adminResponders.push({{
+                    id: 'admin_' + Date.now(),
+                    name: 'Approval Request',
+                    channel: '{default_channel}',
+                    target_field: '',
+                    subject: {admin_default_subject},
+                    body: 'New booking request from {{{{{{{{name}}}}}}}} ({{{{{{{{email}}}}}}}}) for {{{{{{{{date}}}}}}}} at {{{{{{{{time}}}}}}}}.\\n\\nApprove: {{{{{{{{approve_url}}}}}}}}',
+                    enabled: true,
+                    use_ai: false
+                }});
+                renderAdminResponders();
+            }}
+
             function removeResponder(i) {{
                 responders.splice(i, 1);
                 renderResponders();
             }}
 
+            function removeAdminResponder(i) {{
+                adminResponders.splice(i, 1);
+                renderAdminResponders();
+            }}
+
             function updateRespondersField() {{
                 document.getElementById('responders-json').value = JSON.stringify(responders);
+                document.getElementById('admin-responders-json').value = JSON.stringify(adminResponders);
             }}
 
             renderResponders();
+            renderAdminResponders();
         </script>"#,
             responders_json = js_escape(&responders_json),
+            admin_responders_json = js_escape(&admin_responders_json),
             js_channel_options = js_channel_options,
             default_channel = default_channel,
             default_subject = if is_default_email {
@@ -899,9 +1029,14 @@ pub fn admin_booking_link_html(
             } else {
                 "''"
             },
+            admin_default_subject = if is_default_email {
+                "'New booking requires approval'"
+            } else {
+                "''"
+            },
         )
     } else {
-        String::from("<script>function updateRespondersField() { document.getElementById('responders-json').value = '[]'; }</script>")
+        String::from("<script>function updateRespondersField() { document.getElementById('responders-json').value = '[]'; document.getElementById('admin-responders-json').value = '[]'; }</script>")
     };
 
     let content = format!(
@@ -939,18 +1074,25 @@ pub fn admin_booking_link_html(
                     <textarea name=\"confirmation_message\" rows=\"2\">{confirmation}</textarea>
                 </div>
 
+                <h3 style=\"margin-top: 1.5rem; margin-bottom: 1rem;\">Display Settings</h3>
+                <div class=\"form-group\">
+                    <label style=\"display: flex; align-items: center; gap: 0.5rem; cursor: pointer;\">
+                        <input type=\"checkbox\" name=\"hide_title\" {hide_title_checked} style=\"width: auto;\">
+                        Hide title when embedded
+                    </label>
+                    <small style=\"color: #666;\">Hide the booking link name when embedding in another page</small>
+                </div>
+
                 <h3 style=\"margin-top: 1.5rem; margin-bottom: 1rem;\">Approval Settings</h3>
                 <div class=\"form-group\">
                     <label style=\"display: flex; align-items: center; gap: 0.5rem; cursor: pointer;\">
-                        <input type=\"checkbox\" name=\"auto_accept\" {auto_accept_checked} style=\"width: auto;\" onchange=\"document.getElementById('admin-email-group').style.display = this.checked ? 'none' : 'block'\">
+                        <input type=\"checkbox\" name=\"auto_accept\" {auto_accept_checked} style=\"width: auto;\" onchange=\"document.getElementById('admin-responders-section').style.display = this.checked ? 'none' : 'block'\">
                         Auto-accept bookings
                     </label>
                     <small style=\"color: #666;\">When unchecked, bookings require manual approval</small>
                 </div>
-                <div class=\"form-group\" id=\"admin-email-group\" style=\"{admin_email_display}\">
-                    <label>Admin Email for Approval Notifications</label>
-                    <input type=\"email\" name=\"admin_email\" value=\"{admin_email}\">
-                    <small style=\"color: #666;\">Receives approval requests when auto-accept is disabled</small>
+                <div id=\"admin-responders-section\" style=\"{admin_responders_display}\">
+                    {admin_responders_section}
                 </div>
 
                 {responders_section}
@@ -961,7 +1103,9 @@ pub fn admin_booking_link_html(
                         Enabled
                     </label>
                 </div>
-                <button type=\"submit\" class=\"btn\">Save Changes</button>
+                <div class=\"form-actions\">
+                    <button type=\"submit\" class=\"btn\">Save Changes</button>
+                </div>
             </form>
         </div>
 
@@ -977,9 +1121,10 @@ pub fn admin_booking_link_html(
         min_notice = link.min_notice,
         max_advance = link.max_advance,
         confirmation = html_escape(&link.confirmation_message),
+        hide_title_checked = if link.hide_title { "checked" } else { "" },
         auto_accept_checked = if link.auto_accept { "checked" } else { "" },
-        admin_email = html_escape(link.admin_email.as_deref().unwrap_or("")),
-        admin_email_display = if link.auto_accept { "display: none;" } else { "" },
+        admin_responders_section = admin_responders_section,
+        admin_responders_display = if link.auto_accept { "display: none;" } else { "" },
         enabled_checked = if link.enabled { "checked" } else { "" },
         responders_section = responders_section,
         responders_script = responders_script,
@@ -1047,7 +1192,9 @@ pub fn admin_view_link_html(calendar: &CalendarConfig, link: &ViewLink, base_url
                         Enabled
                     </label>
                 </div>
-                <button type=\"submit\" class=\"btn\">Save Changes</button>
+                <div class=\"form-actions\">
+                    <button type=\"submit\" class=\"btn\">Save Changes</button>
+                </div>
             </form>
         </div>",
         base_url = base_url,

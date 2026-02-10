@@ -74,10 +74,11 @@ pub async fn handle_booking(
         inline_css: inline_css.as_deref(),
         css_url: css_url.as_deref(),
     };
+    // Use link's hide_title setting, with query param override
     let hide_title = query_pairs
         .get("notitle")
         .map(|v| v == "1" || v == "true")
-        .unwrap_or(false);
+        .unwrap_or(link.hide_title);
 
     match (method, *action) {
         (Method::Get, "") => {
@@ -617,7 +618,7 @@ async fn trigger_denial_responders(
     }
 }
 
-/// Send approval notification email to admin
+/// Send approval notification to admin responders
 async fn send_admin_approval_notification(
     env: &Env,
     link: &BookingLink,
@@ -625,13 +626,13 @@ async fn send_admin_approval_notification(
     booking: &Booking,
     base_url: &str,
 ) {
-    let admin_email = match &link.admin_email {
-        Some(email) if !email.is_empty() => email.clone(),
-        _ => {
-            console_log!("No admin email configured for booking link: {}", link.name);
-            return;
-        }
-    };
+    if link.admin_responders.is_empty() {
+        console_log!(
+            "No admin responders configured for booking link: {}",
+            link.name
+        );
+        return;
+    }
 
     let token = booking.confirmation_token.as_deref().unwrap_or("");
     let approval_url = format!(
@@ -643,45 +644,77 @@ async fn send_admin_approval_notification(
         base_url, calendar.id, link.slug, booking.id, token
     );
 
-    let subject = format!(
-        "Booking Approval Required: {} on {}",
-        booking.name, booking.slot_date
+    // Build the data map for template interpolation
+    let mut admin_data = serde_json::Map::new();
+    admin_data.insert("name".to_string(), serde_json::json!(booking.name));
+    admin_data.insert("email".to_string(), serde_json::json!(booking.email));
+    admin_data.insert("date".to_string(), serde_json::json!(booking.slot_date));
+    admin_data.insert(
+        "time".to_string(),
+        serde_json::json!(format_time(&booking.slot_time)),
     );
-    let body = format!(
-        "A new booking request requires your approval.\n\n\
-         Booking Details:\n\
-         - Name: {}\n\
-         - Email: {}\n\
-         - Date: {}\n\
-         - Time: {}\n\
-         - Duration: {} minutes\n\
-         - Event: {}\n\n\
-         To APPROVE this booking:\n\
-         {}\n\n\
-         To DENY this booking:\n\
-         {}\n\n\
-         If you take no action, the booking will remain pending.",
-        booking.name,
-        booking.email,
-        booking.slot_date,
-        format_time(&booking.slot_time),
-        booking.duration,
-        link.name,
-        approval_url,
-        denial_url
-    );
+    admin_data.insert("duration".to_string(), serde_json::json!(booking.duration));
+    admin_data.insert("event".to_string(), serde_json::json!(link.name));
+    admin_data.insert("approve_url".to_string(), serde_json::json!(approval_url));
+    admin_data.insert("deny_url".to_string(), serde_json::json!(denial_url));
 
-    // Try Resend first, then Twilio
-    let result = if let Ok(from) = env.secret("RESEND_FROM") {
-        send_resend_email(env, &admin_email, &from.to_string(), &subject, &body).await
-    } else if let Ok(from) = env.secret("TWILIO_FROM_EMAIL") {
-        send_twilio_email(env, &admin_email, &from.to_string(), &subject, &body).await
-    } else {
-        console_log!("No email provider configured for admin approval notifications");
-        return;
-    };
+    for responder in &link.admin_responders {
+        if !responder.enabled {
+            continue;
+        }
 
-    if let Err(e) = result {
-        console_log!("Failed to send admin approval notification: {:?}", e);
+        // For admin responders, target_field contains the direct recipient address
+        let target = &responder.target_field;
+        if target.is_empty() {
+            console_log!(
+                "Admin responder '{}' has no target configured",
+                responder.name
+            );
+            continue;
+        }
+
+        let body = interpolate_template(&responder.body, &admin_data);
+
+        let result = match responder.channel {
+            ResponderChannel::TwilioSms => {
+                if let Ok(from) = env.secret("TWILIO_FROM_SMS") {
+                    send_twilio_message(env, target, &from.to_string(), &body).await
+                } else {
+                    continue;
+                }
+            }
+            ResponderChannel::TwilioWhatsapp => {
+                if let Ok(from) = env.secret("TWILIO_FROM_WHATSAPP") {
+                    send_twilio_message(env, &format!("whatsapp:{}", target), &from.to_string(), &body).await
+                } else {
+                    continue;
+                }
+            }
+            ResponderChannel::TwilioEmail => {
+                if let Ok(from) = env.secret("TWILIO_FROM_EMAIL") {
+                    let subject = interpolate_template(&responder.subject, &admin_data);
+                    send_twilio_email(env, target, &from.to_string(), &subject, &body).await
+                } else {
+                    continue;
+                }
+            }
+            ResponderChannel::ResendEmail => {
+                if let Ok(from) = env.secret("RESEND_FROM") {
+                    let subject = interpolate_template(&responder.subject, &admin_data);
+                    send_resend_email(env, target, &from.to_string(), &subject, &body).await
+                } else {
+                    continue;
+                }
+            }
+            _ => continue,
+        };
+
+        if let Err(e) = result {
+            console_log!(
+                "Admin approval responder error for {}: {:?}",
+                responder.name,
+                e
+            );
+        }
     }
 }

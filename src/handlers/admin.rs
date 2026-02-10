@@ -79,7 +79,17 @@ async fn handle_forms_admin(
 
     match (method, path) {
         (Method::Get, "/admin/forms/new") => {
-            Response::from_html(form_editor_html(None, access_user.unwrap_or("")))
+            let channels = crate::templates::AvailableChannels {
+                twilio_sms: env.secret("TWILIO_SID").is_ok()
+                    && env.secret("TWILIO_FROM_SMS").is_ok(),
+                twilio_whatsapp: env.secret("TWILIO_SID").is_ok()
+                    && env.secret("TWILIO_FROM_WHATSAPP").is_ok(),
+                twilio_email: env.secret("SENDGRID_API_KEY").is_ok()
+                    && env.secret("TWILIO_FROM_EMAIL").is_ok(),
+                resend_email: env.secret("RESEND_API_KEY").is_ok()
+                    && env.secret("RESEND_FROM").is_ok(),
+            };
+            Response::from_html(form_editor_html(None, access_user.unwrap_or(""), &channels))
         }
 
         (Method::Get, p) if p.starts_with("/admin/forms/") && p.ends_with("/responses") => {
@@ -107,7 +117,17 @@ async fn handle_forms_admin(
             }
             match get_form(&kv, slug).await? {
                 Some(form) => {
-                    Response::from_html(form_editor_html(Some(&form), access_user.unwrap_or("")))
+                    let channels = crate::templates::AvailableChannels {
+                        twilio_sms: env.secret("TWILIO_SID").is_ok()
+                            && env.secret("TWILIO_FROM_SMS").is_ok(),
+                        twilio_whatsapp: env.secret("TWILIO_SID").is_ok()
+                            && env.secret("TWILIO_FROM_WHATSAPP").is_ok(),
+                        twilio_email: env.secret("SENDGRID_API_KEY").is_ok()
+                            && env.secret("TWILIO_FROM_EMAIL").is_ok(),
+                        resend_email: env.secret("RESEND_API_KEY").is_ok()
+                            && env.secret("RESEND_FROM").is_ok(),
+                    };
+                    Response::from_html(form_editor_html(Some(&form), access_user.unwrap_or(""), &channels))
                 }
                 None => Response::error("Form not found", 404),
             }
@@ -357,7 +377,8 @@ async fn handle_calendars_admin(
                 Some(c) => c,
                 None => return Response::error("Calendar not found", 404),
             };
-            Response::from_html(admin_calendar_html(&calendar, base_url))
+            let time_slots = get_time_slots(&db, id).await?;
+            Response::from_html(admin_calendar_html(&calendar, &time_slots, base_url))
         }
 
         (Method::Put, [id]) => {
@@ -665,12 +686,17 @@ async fn handle_calendars_admin(
                 }
                 link.enabled = form.get("enabled").is_some();
                 link.auto_accept = form.get("auto_accept").is_some();
-                if let Some(FormEntry::Field(email)) = form.get("admin_email") {
-                    link.admin_email = if email.is_empty() { None } else { Some(email) };
-                }
+                link.hide_title = form.get("hide_title").is_some();
                 if let Some(FormEntry::Field(responders_json)) = form.get("responders_json") {
                     if let Ok(responders) = serde_json::from_str(&responders_json) {
                         link.responders = responders;
+                    }
+                }
+                if let Some(FormEntry::Field(admin_responders_json)) =
+                    form.get("admin_responders_json")
+                {
+                    if let Ok(admin_responders) = serde_json::from_str(&admin_responders_json) {
+                        link.admin_responders = admin_responders;
                     }
                 }
             }

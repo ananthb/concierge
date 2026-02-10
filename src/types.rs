@@ -245,7 +245,9 @@ pub struct BookingLink {
     #[serde(default = "default_true")]
     pub auto_accept: bool,
     #[serde(default)]
-    pub admin_email: Option<String>,
+    pub admin_responders: Vec<FormResponder>,
+    #[serde(default)]
+    pub hide_title: bool,
 }
 
 impl Default for BookingLink {
@@ -280,7 +282,8 @@ impl Default for BookingLink {
             enabled: true,
             responders: Vec::new(),
             auto_accept: true,
-            admin_email: None,
+            admin_responders: Vec::new(),
+            hide_title: false,
         }
     }
 }
