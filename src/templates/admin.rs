@@ -14,8 +14,16 @@ pub fn admin_dashboard_html(
     response_counts: &HashMap<String, i64>,
     base_url: &str,
 ) -> String {
-    // Forms section
-    let form_rows: String = forms
+    // Split forms into active and archived
+    let active_forms: Vec<_> = forms.iter().filter(|f| !f.archived).collect();
+    let archived_forms: Vec<_> = forms.iter().filter(|f| f.archived).collect();
+
+    // Split calendars into active and archived
+    let active_calendars: Vec<_> = calendars.iter().filter(|c| !c.archived).collect();
+    let archived_calendars: Vec<_> = calendars.iter().filter(|c| c.archived).collect();
+
+    // Active forms section
+    let form_rows: String = active_forms
         .iter()
         .map(|f| {
             let count = response_counts.get(&f.slug).unwrap_or(&0);
@@ -28,6 +36,11 @@ pub fn admin_dashboard_html(
                         <button onclick=\"copyLink('/f/{slug}', this)\" class=\"btn btn-sm\">Copy Link</button>
                         <a href=\"{base_url}/admin/forms/{slug}/responses\" class=\"btn btn-sm\">Responses</a>
                         <a href=\"{base_url}/admin/forms/{slug}\" class=\"btn btn-sm\">Edit</a>
+                        <button class=\"btn btn-sm btn-secondary\"
+                                hx-post=\"{base_url}/admin/forms/{slug}/archive\"
+                                hx-confirm=\"Archive this form? It will become read-only.\"
+                                hx-target=\"closest tr\"
+                                hx-swap=\"outerHTML\">Archive</button>
                     </td>
                 </tr>",
                 base_url = base_url,
@@ -38,8 +51,35 @@ pub fn admin_dashboard_html(
         })
         .collect();
 
-    // Calendars section
-    let calendar_rows: String = calendars
+    // Archived forms section
+    let archived_form_rows: String = archived_forms
+        .iter()
+        .map(|f| {
+            let count = response_counts.get(&f.slug).unwrap_or(&0);
+            format!(
+                "<tr>
+                    <td>{name} <span style=\"color:#666;font-size:0.85em;\">(archived)</span></td>
+                    <td><code>/f/{slug}</code></td>
+                    <td>{count}</td>
+                    <td>
+                        <a href=\"{base_url}/admin/forms/{slug}/responses\" class=\"btn btn-sm\">Responses</a>
+                        <a href=\"{base_url}/admin/forms/{slug}\" class=\"btn btn-sm\">View</a>
+                        <button class=\"btn btn-sm\"
+                                hx-post=\"{base_url}/admin/forms/{slug}/unarchive\"
+                                hx-target=\"closest tr\"
+                                hx-swap=\"outerHTML\">Unarchive</button>
+                    </td>
+                </tr>",
+                base_url = base_url,
+                name = html_escape(&f.name),
+                slug = html_escape(&f.slug),
+                count = count
+            )
+        })
+        .collect();
+
+    // Active calendars section
+    let calendar_rows: String = active_calendars
         .iter()
         .map(|cal| {
             format!(
@@ -50,11 +90,11 @@ pub fn admin_dashboard_html(
                     <td>{updated}</td>
                     <td>
                         <a href=\"{base_url}/admin/calendars/{id}\" class=\"btn btn-sm\">Edit</a>
-                        <button class=\"btn btn-sm btn-danger\"
-                                hx-delete=\"{base_url}/admin/calendars/{id}\"
-                                hx-confirm=\"Delete this calendar?\"
+                        <button class=\"btn btn-sm btn-secondary\"
+                                hx-post=\"{base_url}/admin/calendars/{id}/archive\"
+                                hx-confirm=\"Archive this calendar? It will become read-only.\"
                                 hx-target=\"closest tr\"
-                                hx-swap=\"outerHTML\">Delete</button>
+                                hx-swap=\"outerHTML\">Archive</button>
                     </td>
                 </tr>",
                 base_url = base_url,
@@ -66,6 +106,82 @@ pub fn admin_dashboard_html(
             )
         })
         .collect();
+
+    // Archived calendars section
+    let archived_calendar_rows: String = archived_calendars
+        .iter()
+        .map(|cal| {
+            format!(
+                "<tr>
+                    <td>{name} <span style=\"color:#666;font-size:0.85em;\">(archived)</span></td>
+                    <td>{booking_count} booking links</td>
+                    <td>{view_count} view links</td>
+                    <td>{updated}</td>
+                    <td>
+                        <a href=\"{base_url}/admin/calendars/{id}\" class=\"btn btn-sm\">View</a>
+                        <button class=\"btn btn-sm\"
+                                hx-post=\"{base_url}/admin/calendars/{id}/unarchive\"
+                                hx-target=\"closest tr\"
+                                hx-swap=\"outerHTML\">Unarchive</button>
+                    </td>
+                </tr>",
+                base_url = base_url,
+                id = html_escape(&cal.id),
+                name = html_escape(&cal.name),
+                booking_count = cal.booking_links.len(),
+                view_count = cal.view_links.len(),
+                updated = html_escape(&cal.updated_at.split('T').next().unwrap_or("")),
+            )
+        })
+        .collect();
+
+    // Build archived sections HTML
+    let archived_forms_section = if archived_forms.is_empty() {
+        String::new()
+    } else {
+        format!(
+            "<details style=\"margin-top: 1rem;\">
+                <summary style=\"cursor: pointer; color: #666;\">Archived Forms ({count})</summary>
+                <table style=\"margin-top: 0.5rem;\">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>URL</th>
+                            <th>Responses</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>{rows}</tbody>
+                </table>
+            </details>",
+            count = archived_forms.len(),
+            rows = archived_form_rows
+        )
+    };
+
+    let archived_calendars_section = if archived_calendars.is_empty() {
+        String::new()
+    } else {
+        format!(
+            "<details style=\"margin-top: 1rem;\">
+                <summary style=\"cursor: pointer; color: #666;\">Archived Calendars ({count})</summary>
+                <table style=\"margin-top: 0.5rem;\">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Booking Links</th>
+                            <th>View Links</th>
+                            <th>Updated</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>{rows}</tbody>
+                </table>
+            </details>",
+            count = archived_calendars.len(),
+            rows = archived_calendar_rows
+        )
+    };
 
     let content = format!(
         "<h1 style=\"display: flex; align-items: center; gap: 0.5rem;\">
@@ -90,6 +206,7 @@ pub fn admin_dashboard_html(
                 {form_rows}
             </tbody>
         </table>
+        {archived_forms_section}
 
         <h2 style=\"margin-top: 2rem;\">Calendars</h2>
         <p style=\"margin: 1rem 0;\">
@@ -111,6 +228,7 @@ pub fn admin_dashboard_html(
                 {calendar_rows}
             </tbody>
         </table>
+        {archived_calendars_section}
         <script>
         function copyLink(path, btn) {{
             const url = window.location.origin + path;
@@ -136,6 +254,8 @@ pub fn admin_dashboard_html(
         } else {
             calendar_rows
         },
+        archived_forms_section = archived_forms_section,
+        archived_calendars_section = archived_calendars_section,
         hash = HASH,
     );
 
@@ -273,6 +393,7 @@ pub fn admin_calendar_html(calendar: &CalendarConfig, base_url: &str) -> String 
 
         <p><a href=\"{base_url}/admin\">&larr; Back to Dashboard</a></p>
         <h1>{name}</h1>
+        {archived_notice}
 
         <div class=\"tabs\">
             <button class=\"tab active\" onclick=\"showTab('settings')\">Settings</button>
@@ -327,11 +448,20 @@ pub fn admin_calendar_html(calendar: &CalendarConfig, base_url: &str) -> String 
                 <h2>Feed Links (iCal)</h2>
                 <p style=\"margin-bottom: 1rem; color: #666;\">Subscribe to this calendar from other apps.</p>
                 <button class=\"btn\" hx-post=\"{base_url}/admin/calendars/{id}/feed\"
-                        hx-target=\"{hash}feed-links tbody\" hx-swap=\"beforeend\">+ Add Feed Link</button>
+                        hx-target=\"{hash}feed-links tbody\" hx-swap=\"beforeend\"{readonly_disabled}>+ Add Feed Link</button>
                 <table id=\"feed-links\" style=\"margin-top: 1rem;\">
                     <thead><tr><th>Name</th><th>URL</th><th>Status</th><th>Actions</th></tr></thead>
                     <tbody>{feed_links_html}</tbody>
                 </table>
+            </div>
+
+            <div class=\"card\" style=\"border-color: #dc3545;\">
+                <h2 style=\"color: #dc3545;\">Danger Zone</h2>
+                <p style=\"margin-bottom: 1rem; color: #666;\">Permanently delete this calendar and all its data.</p>
+                <button class=\"btn btn-danger\"
+                        hx-delete=\"{base_url}/admin/calendars/{id}\"
+                        hx-confirm=\"Are you sure you want to permanently delete this calendar? This action cannot be undone.\"
+                        hx-on::after-request=\"if(event.detail.successful) window.location.href='/admin'\">Delete Calendar</button>
             </div>
         </div>
 
@@ -395,10 +525,21 @@ pub fn admin_calendar_html(calendar: &CalendarConfig, base_url: &str) -> String 
         view_links_html = view_links_html,
         feed_links_html = feed_links_html,
         instagram_sources_html = instagram_sources_html,
+        archived_notice = if calendar.archived {
+            "<div class=\"card\" style=\"background: #fff3cd; border-color: #ffc107; margin-bottom: 1rem;\">
+                <p style=\"margin: 0; color: #856404;\"><strong>This calendar is archived.</strong> It is read-only. Unarchive from the dashboard to make changes.</p>
+            </div>"
+        } else { "" },
+        readonly_disabled = if calendar.archived { " disabled" } else { "" },
         hash = HASH,
     );
 
-    base_html(&format!("Edit: {}", calendar.name), &content, &calendar.style)
+    let title = if calendar.archived {
+        format!("{} (Archived)", calendar.name)
+    } else {
+        format!("Edit: {}", calendar.name)
+    };
+    base_html(&title, &content, &calendar.style)
 }
 
 pub fn admin_events_html(calendar: &CalendarConfig, events: &[CalendarEvent], base_url: &str) -> String {

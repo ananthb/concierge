@@ -184,6 +184,10 @@ pub fn base_html(title: &str, content: &str, style: &CalendarStyle) -> String {
             cursor: pointer;
             text-decoration: none;
             font-size: 0.875rem;
+            font-family: inherit;
+            line-height: 1.2;
+            vertical-align: middle;
+            box-sizing: border-box;
         }}
         .btn:hover {{ opacity: 0.9; }}
         .btn-secondary {{
@@ -367,6 +371,10 @@ pub fn base_html_with_css(title: &str, content: &str, style: &CalendarStyle, css
             cursor: pointer;
             text-decoration: none;
             font-size: 0.875rem;
+            font-family: inherit;
+            line-height: 1.2;
+            vertical-align: middle;
+            box-sizing: border-box;
         }}
         .btn:hover {{ opacity: 0.9; }}
         .btn-secondary {{

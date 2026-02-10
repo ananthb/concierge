@@ -145,6 +145,8 @@ pub struct FormConfig {
     pub google_sheet_url: Option<String>,
     #[serde(default)]
     pub instagram_sources: Vec<InstagramSource>,
+    #[serde(default)]
+    pub archived: bool,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -201,6 +203,8 @@ pub struct CalendarConfig {
     pub instagram_sources: Vec<InstagramSource>,
     pub style: CalendarStyle,
     pub allowed_origins: Vec<String>,
+    #[serde(default)]
+    pub archived: bool,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -218,6 +222,7 @@ impl Default for CalendarConfig {
             instagram_sources: Vec::new(),
             style: CalendarStyle::default(),
             allowed_origins: Vec::new(),
+            archived: false,
             created_at: String::new(),
             updated_at: String::new(),
         }

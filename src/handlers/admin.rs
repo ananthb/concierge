@@ -156,6 +156,7 @@ async fn handle_forms_admin(
                     .filter(|s| !s.is_empty())
                     .map(String::from),
                 instagram_sources: Vec::new(),
+                archived: false,
                 created_at: now.clone(),
                 updated_at: now,
             };
@@ -231,12 +232,49 @@ async fn handle_forms_admin(
                     existing.google_sheet_url
                 },
                 instagram_sources: existing.instagram_sources,
+                archived: existing.archived,
                 created_at: existing.created_at,
                 updated_at: now_iso(),
             };
 
             save_form(&kv, &form).await?;
             Response::ok("Updated")
+        }
+
+        (Method::Post, p) if p.ends_with("/archive") && p.starts_with("/admin/forms/") => {
+            let slug = p
+                .strip_prefix("/admin/forms/")
+                .and_then(|s| s.strip_suffix("/archive"))
+                .unwrap_or("");
+            if slug.is_empty() {
+                return Response::error("Slug required", 400);
+            }
+            let mut form = match get_form(&kv, slug).await? {
+                Some(f) => f,
+                None => return Response::error("Form not found", 404),
+            };
+            form.archived = true;
+            form.updated_at = now_iso();
+            save_form(&kv, &form).await?;
+            Response::empty()
+        }
+
+        (Method::Post, p) if p.ends_with("/unarchive") && p.starts_with("/admin/forms/") => {
+            let slug = p
+                .strip_prefix("/admin/forms/")
+                .and_then(|s| s.strip_suffix("/unarchive"))
+                .unwrap_or("");
+            if slug.is_empty() {
+                return Response::error("Slug required", 400);
+            }
+            let mut form = match get_form(&kv, slug).await? {
+                Some(f) => f,
+                None => return Response::error("Form not found", 404),
+            };
+            form.archived = false;
+            form.updated_at = now_iso();
+            save_form(&kv, &form).await?;
+            Response::empty()
         }
 
         (Method::Delete, p) if p.starts_with("/admin/forms/") => {
@@ -285,6 +323,7 @@ async fn handle_calendars_admin(
                 instagram_sources: Vec::new(),
                 style: CalendarStyle::default(),
                 allowed_origins: Vec::new(),
+                archived: false,
                 created_at: now.clone(),
                 updated_at: now,
             };
@@ -298,6 +337,11 @@ async fn handle_calendars_admin(
                     <td>{date}</td>
                     <td>
                         <a href="{base_url}/admin/calendars/{id}" class="btn btn-sm">Edit</a>
+                        <button class="btn btn-sm btn-secondary"
+                                hx-post="{base_url}/admin/calendars/{id}/archive"
+                                hx-confirm="Archive this calendar? It will become read-only."
+                                hx-target="closest tr"
+                                hx-swap="outerHTML">Archive</button>
                     </td>
                 </tr>"#,
                 base_url = base_url,
@@ -348,6 +392,28 @@ async fn handle_calendars_admin(
 
         (Method::Delete, [id]) => {
             delete_calendar(&kv, id).await?;
+            Response::empty()
+        }
+
+        (Method::Post, [id, "archive"]) => {
+            let mut calendar = match get_calendar(&kv, id).await? {
+                Some(c) => c,
+                None => return Response::error("Calendar not found", 404),
+            };
+            calendar.archived = true;
+            calendar.updated_at = now_iso();
+            save_calendar(&kv, &calendar).await?;
+            Response::empty()
+        }
+
+        (Method::Post, [id, "unarchive"]) => {
+            let mut calendar = match get_calendar(&kv, id).await? {
+                Some(c) => c,
+                None => return Response::error("Calendar not found", 404),
+            };
+            calendar.archived = false;
+            calendar.updated_at = now_iso();
+            save_calendar(&kv, &calendar).await?;
             Response::empty()
         }
 

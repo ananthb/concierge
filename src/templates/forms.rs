@@ -18,6 +18,7 @@ pub fn form_editor_html(form: Option<&FormConfig>, admin_email: &str) -> String 
         digest: DigestConfig::default(),
         google_sheet_url: None,
         instagram_sources: vec![],
+        archived: false,
         created_at: now_iso(),
         updated_at: now_iso(),
     });
@@ -80,6 +81,7 @@ pub fn form_editor_html(form: Option<&FormConfig>, admin_email: &str) -> String 
     <div class="container">
         <p><a href="/admin">&larr; Back to Dashboard</a></p>
         <h1>{header}</h1>
+        {archived_notice}
 
         <div class="tabs">
             <button class="tab active" onclick="showTab('basic')">Basic Settings</button>
@@ -208,6 +210,8 @@ button {{ text-transform: uppercase; }}" onchange="style.custom_css=this.value">
                     <iframe id="preview-frame" class="preview-frame" style="width:100%;height:500px;border:none;"></iframe>
                 </div>
             </div>
+
+            {danger_zone}
 
             <div class="card" style="display:flex;gap:1rem;justify-content:flex-end;">
                 <a href="/admin" class="btn btn-secondary">Cancel</a>
@@ -476,6 +480,25 @@ ${{s.show_title?`<h1>${{data.title}}</h1>`:''}}
             }}
         }}
 
+        async function deleteForm() {{
+            if (!confirm('Are you sure you want to permanently delete this form? This action cannot be undone.')) {{
+                return;
+            }}
+            try {{
+                const resp = await fetch('/admin/forms/' + originalSlug, {{
+                    method: 'DELETE',
+                    credentials: 'same-origin'
+                }});
+                if (resp.ok) {{
+                    window.location.href = '/admin';
+                }} else {{
+                    alert('Error: ' + await resp.text());
+                }}
+            }} catch (err) {{
+                alert('Error: ' + err.message);
+            }}
+        }}
+
         renderFields();
         renderStyleInputs();
         renderResponders();
@@ -483,8 +506,8 @@ ${{s.show_title?`<h1>${{data.title}}</h1>`:''}}
     </script>
 </body>
 </html>"##,
-        title = if is_new { "New Form".to_string() } else { html_escape(&form.name) },
-        header = if is_new { "Create New Form" } else { "Edit Form" },
+        title = if is_new { "New Form".to_string() } else if form.archived { format!("{} (Archived)", html_escape(&form.name)) } else { html_escape(&form.name) },
+        header = if is_new { "Create New Form" } else if form.archived { "View Archived Form" } else { "Edit Form" },
         name = html_escape(&form.name),
         slug = html_escape(&form.slug),
         form_title = html_escape(&form.title),
@@ -500,7 +523,19 @@ ${{s.show_title?`<h1>${{data.title}}</h1>`:''}}
         slug_js = slug_escaped,
         admin_email_js = admin_email_escaped,
         is_new = is_new_str,
-        save_button = if is_new { "Create Form" } else { "Save Changes" }
+        save_button = if is_new { "Create Form" } else { "Save Changes" },
+        archived_notice = if form.archived {
+            r#"<div class="card" style="background: #fff3cd; border-color: #ffc107; margin-bottom: 1rem;">
+                <p style="margin: 0; color: #856404;"><strong>This form is archived.</strong> It is read-only. Unarchive from the dashboard to make changes.</p>
+            </div>"#
+        } else { "" },
+        danger_zone = if !is_new && !form.archived {
+            format!(r#"<div class="card" style="border-color: #dc3545;">
+                <h3 style="color: #dc3545;">Danger Zone</h3>
+                <p style="margin-bottom: 1rem; color: #666;">Permanently delete this form and all its submissions.</p>
+                <button type="button" class="btn btn-danger" onclick="deleteForm()">Delete Form</button>
+            </div>"#)
+        } else { String::new() }
     )
 }
 
@@ -568,11 +603,11 @@ pub fn responses_view_html(form: &FormConfig, submissions: &[Submission]) -> Str
 </head>
 <body>
     <div class="container">
+        <p><a href="/admin">&larr; Back to Dashboard</a></p>
         <div class="header">
             <h1>Responses for {form_name}</h1>
             <div>
-                <a href="/admin/forms/{slug}" class="btn btn-secondary">Edit Form</a>
-                <a href="/admin" class="btn btn-secondary">Dashboard</a>
+                <a href="/admin/forms/{slug}" class="btn">Edit Form</a>
             </div>
         </div>
         <table>
