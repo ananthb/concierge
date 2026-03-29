@@ -10,7 +10,7 @@ compatibility_date = "2024-01-01"
 account_id = "59b9363d35105560f2df047c995be5a2"  # <-- CHANGE THIS
 
 [build]
-command = "cargo install worker-build && worker-build --release && mdbook build docs"
+command = "worker-build --release && mdbook build docs"
 
 # Static assets (landing page + docs site built by mdBook)
 [assets]
