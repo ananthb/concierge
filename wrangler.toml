@@ -12,6 +12,11 @@ account_id = "59b9363d35105560f2df047c995be5a2"  # <-- CHANGE THIS
 [build]
 command = "worker-build --release"
 
+# Custom domain — requires calculon.tech on Cloudflare DNS
+routes = [
+    { pattern = "concierge.calculon.tech", custom_domain = true }
+]
+
 # ============================================================================
 # D1 Database for forms, calendars, events, bookings
 # ============================================================================
