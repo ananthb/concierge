@@ -3,7 +3,7 @@ title = "Concierge"
 authors = ["Ananth Bhaskararaman"]
 language = "en"
 src = "src"
-description = "Automated customer engagement for small businesses. WhatsApp replies, event calendars, Instagram integration — zero effort."
+description = "Messaging automation for small businesses — WhatsApp, Instagram DM, lead capture"
 
 [build]
 build-dir = "book"

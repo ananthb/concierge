@@ -1,102 +1,54 @@
 # Setup Guide
 
-This guide walks you through setting up Concierge from scratch.
-
 ## Prerequisites
 
-- A [Cloudflare account](https://dash.cloudflare.com/sign-up)
-- A [Google Cloud](https://console.cloud.google.com/) project with a service account
-- A [Meta Developer](https://developers.facebook.com/) account (for WhatsApp)
+- A Cloudflare account with Workers, D1, and KV enabled
+- A Meta Developer account with a Facebook App
+- A Google Cloud project (for OAuth sign-in)
+- Nix (for the development environment)
 
-## Step 1: Deploy to Cloudflare
-
-See the [Deployment guide](./deployment.md) for detailed instructions on deploying the worker, creating the database, and configuring Cloudflare Access.
-
-## Step 2: Connect Google Calendar
-
-1. Go to [Google Cloud Console](https://console.cloud.google.com/)
-2. Create a service account (or reuse one)
-3. Create a JSON key for the service account
-4. Set these secrets:
+## 1. Clone and Build
 
 ```bash
-wrangler secret put GOOGLE_SERVICE_ACCOUNT_EMAIL
-# Paste the service account email (e.g., concierge@project.iam.gserviceaccount.com)
-
-wrangler secret put GOOGLE_PRIVATE_KEY
-# Paste the private_key field from the JSON key file
+git clone https://github.com/ananthb/concierge-worker
+cd concierge-worker
+nix develop
+cargo test
 ```
 
-5. Enable the **Google Calendar API** and **Google Forms API** in your Google Cloud project
-6. In Google Calendar, share your calendar with the service account email (give it "Make changes to events" permission)
-7. In the Concierge admin, paste the Calendar ID into your calendar's settings
-
-## Step 3: Connect WhatsApp
-
-1. Go to [Meta for Developers](https://developers.facebook.com/)
-2. Create an app with the **WhatsApp** product
-3. Set up a WhatsApp Business account and get a permanent access token
-4. Set these secrets:
+## 2. Create Cloudflare Resources
 
 ```bash
-wrangler secret put WHATSAPP_ACCESS_TOKEN
-wrangler secret put WHATSAPP_PHONE_NUMBER_ID
+# Create D1 database
+wrangler d1 create concierge-worker
+
+# Create KV namespace
+wrangler kv namespace create CALENDARS_KV
 ```
 
-## Step 4: Connect Instagram (Optional)
+Update the IDs in `wrangler.toml`.
 
-For automatic event import from Instagram posts:
-
-1. Create a Meta app with **Instagram Basic Display**
-2. Configure the OAuth redirect URI: `https://your-worker.workers.dev/instagram/callback`
-3. Set these secrets:
+## 3. Apply Database Migration
 
 ```bash
-wrangler secret put ENCRYPTION_KEY
-# Generate with: openssl rand -hex 32
-
-wrangler secret put INSTAGRAM_APP_ID
-wrangler secret put INSTAGRAM_APP_SECRET
+wrangler d1 execute concierge-worker --remote --file migrations/0001_create_schema.sql
 ```
 
-4. In the Concierge admin, go to your calendar's Google Calendar tab and click "Connect Instagram Account"
+## 4. Set Secrets
 
-## Step 5: Configure Your Calendar
+See [Configuration & Secrets](./configuration.md) for the full list.
 
-1. Go to your admin dashboard (`https://your-worker.workers.dev/admin`)
-2. Click **+ New Calendar**
-3. Set the name, timezone, and Google Calendar ID
-4. Add **time slots** for booking availability
-5. Create a **booking link** for customers
-6. Create a **view link** to embed your calendar
-7. Add **form links** for Google Forms
-8. Configure **digest** notifications for WhatsApp summaries
+## 5. Deploy
 
-## Step 6: Embed on Your Website
-
-Add a single line of HTML to your website:
-
-```html
-<!-- Calendar -->
-<iframe src="https://your-worker.workers.dev/view/{calendar_id}/{slug}"
-        style="border: none; width: 100%; min-height: 500px;"></iframe>
-
-<!-- Booking form -->
-<iframe src="https://your-worker.workers.dev/book/{calendar_id}/{slug}"
-        style="border: none; width: 100%; min-height: 600px;"></iframe>
-
-<!-- Contact form -->
-<iframe src="https://your-worker.workers.dev/form/{calendar_id}/{slug}"
-        style="border: none; width: 100%; min-height: 800px;"></iframe>
+```bash
+wrangler deploy
 ```
 
-See [Embedding](./embedding.md) for more options.
+## 6. Configure Webhooks
 
-## You're Done
+After deploying, configure webhooks in the Meta Developer Console:
 
-From here, Concierge runs itself:
+- **WhatsApp**: Callback URL `https://your-domain/webhook/whatsapp`, subscribe to `messages`
+- **Instagram**: Callback URL `https://your-domain/webhook/instagram`, subscribe to `messages`
 
-- Post on Instagram and events appear on your calendar
-- Customers book appointments and get WhatsApp confirmations
-- You get daily booking digests on WhatsApp
-- Form responses are viewable in the admin dashboard
+See [Facebook App Setup](./facebook-app-setup.md) for detailed instructions.

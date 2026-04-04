@@ -1,51 +1,39 @@
 # How It Works
 
-Concierge connects four services you already use and makes them work together automatically.
+Concierge runs as a single Cloudflare Worker that handles three messaging channels:
 
-## The Pieces
+## WhatsApp Auto-Reply
 
-| Service | What It Does in Concierge |
-|---------|--------------------------|
-| **Google Calendar** | Your source of truth for events. Concierge reads events from it and creates events in it. |
-| **Instagram** | Post about an event and Concierge extracts the details using AI and adds it to your Google Calendar. |
-| **WhatsApp** | Customers get instant booking confirmations. You get daily digests of new bookings. |
-| **Google Forms** | Contact forms, intake questionnaires — embedded on your site, responses viewable in admin. |
+1. A customer sends a WhatsApp message to your business number
+2. Meta delivers the message to Concierge via webhook
+3. Concierge looks up the number, checks if auto-reply is enabled
+4. Sends a reply — either a static message or an AI-generated response
+5. Both messages are logged to the database
 
-## The Flow
+## Instagram DM Auto-Reply
 
-### Events
+1. Someone sends a DM to your Instagram business account
+2. Meta delivers the message via webhook
+3. Concierge looks up the account by page ID, checks auto-reply config
+4. Sends a reply via the Instagram Pages API
+5. Both messages are logged
 
-1. You post on Instagram about an upcoming event
-2. Concierge's AI reads the caption, extracts the date/time/title
-3. A new event is created in your Google Calendar
-4. The event automatically appears on your website's embedded calendar
+## Lead Capture Forms
 
-### Bookings
+1. You create a lead form in the admin and embed it on your website
+2. A visitor enters their phone number and submits
+3. Concierge generates a message (static or AI) and sends it via WhatsApp
+4. The submission is logged to the database
 
-1. You configure your available time slots once (e.g., Mon-Fri 9am-5pm, 30min slots)
-2. A customer visits your booking page and picks a time
-3. Concierge checks availability, prevents double-booking
-4. The customer gets a WhatsApp confirmation
-5. A Google Calendar event is created for the appointment
-6. You get a daily digest of all new bookings on WhatsApp
+## Platform Model
 
-### Forms
+Concierge uses a **shared WhatsApp Business Account (WABA)**. You own one WABA, and customers add their phone numbers to it via Meta's Embedded Signup flow. A single platform token (`WHATSAPP_ACCESS_TOKEN`) is used to send messages from any number on the WABA.
 
-1. You create a Google Form (contact form, questionnaire, etc.)
-2. You add it as a Form Link in Concierge
-3. The form is embeddable on your website
-4. You can view responses in the admin dashboard
+Instagram uses **per-account OAuth tokens** via Facebook Login. Each customer connects their Instagram business account through a standard OAuth flow. Page tokens are encrypted and stored in KV.
 
-## What You Need
+## Architecture
 
-- A **Google Cloud service account** (free) for Calendar and Forms access
-- A **Meta WhatsApp Business** account for messaging
-- An **Instagram** account (optional, for event import)
-- A **Cloudflare** account to run Concierge
-
-## What You Don't Need
-
-- Any coding skills to use day-to-day
-- To check multiple dashboards
-- To manually copy event details between platforms
-- To respond to booking confirmations yourself
+- **Cloudflare Worker** — Rust compiled to WebAssembly, handles all HTTP routes
+- **Cloudflare KV** — Stores account configs, tokens, and session data
+- **Cloudflare D1** — SQLite database for message logs and form submissions
+- **Cloudflare Workers AI** — Powers AI-mode auto-replies

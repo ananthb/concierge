@@ -1,72 +1,33 @@
-# WhatsApp Automation
+# WhatsApp Auto-Reply
 
-Concierge uses the Meta WhatsApp Business API to send messages to your customers automatically.
+## Adding a WhatsApp Number
 
-## What Gets Sent
+1. Go to **Admin → WhatsApp Accounts → Connect WhatsApp Number**
+2. Complete Meta's Embedded Signup flow to register your phone number
+3. The phone number and phone number ID are configured automatically
 
-### Booking Confirmations
+Alternatively, use the manual flow at `/admin/whatsapp/manual` if you already know your phone number ID.
 
-When a customer books an appointment and auto-accept is enabled, they receive a WhatsApp message immediately with their booking details.
+## Configuring Auto-Reply
 
-### Booking Approval Requests
+Each WhatsApp account has its own auto-reply settings:
 
-When auto-accept is disabled, you (the admin) receive a WhatsApp message with the booking details and links to approve or deny.
+- **Enabled** — Toggle auto-reply on/off
+- **Mode** — Static (fixed message) or AI (generated response)
+- **Prompt/Message** — The static message to send, or the AI system prompt
 
-### Booking Denials
+### Static Mode
 
-If you deny a booking, the customer receives a WhatsApp message explaining that their request couldn't be approved.
+Every incoming message gets the same reply. Good for "We'll get back to you" or business hours info.
 
-### Digest Notifications
+### AI Mode
 
-Daily or weekly summaries of new bookings sent to your WhatsApp. See [Digests](./digests.md).
+The prompt is used as a system instruction for Cloudflare Workers AI. The sender's name and message are passed as context. The AI generates a contextual reply.
 
-## Setting Up Responders
+## Platform Model
 
-Each booking link has two types of responders:
+All WhatsApp numbers share a single platform token (`WHATSAPP_ACCESS_TOKEN`). This is a system user token for your WhatsApp Business Account. You don't need per-customer tokens.
 
-### Customer Responders
+## Message Logging
 
-Notify the customer after their booking is confirmed.
-
-| Field | Description |
-|-------|-------------|
-| **Name** | Label for this responder |
-| **Target Field** | Which booking field contains the customer's phone number (e.g., `phone`) |
-| **Body** | Message template. Use `{{name}}`, `{{date}}`, `{{time}}` placeholders. |
-| **AI** | Enable to generate personalized messages using AI |
-
-### Admin Responders
-
-Notify you when a booking needs approval.
-
-| Field | Description |
-|-------|-------------|
-| **Name** | Label for this responder |
-| **Target Field** | Your WhatsApp phone number |
-| **Body** | Message template. Use `{{name}}`, `{{email}}`, `{{date}}`, `{{time}}`, `{{approve_url}}`, `{{deny_url}}` placeholders. |
-
-## Message Templates
-
-Use `{{field_name}}` placeholders in your message body:
-
-```
-Hi {{name}}, your appointment on {{date}} at {{time}} is confirmed!
-```
-
-Available placeholders for customer messages:
-- `{{name}}`, `{{email}}`, `{{date}}`, `{{time}}`
-- Any custom booking field by its ID
-
-Available placeholders for admin messages:
-- All of the above plus `{{approve_url}}`, `{{deny_url}}`, `{{event}}`, `{{duration}}`
-
-## AI-Generated Messages
-
-Enable the **AI** toggle on a responder to have Concierge generate personalized messages using the body as a prompt. The AI uses the booking details as context.
-
-## Requirements
-
-- Meta WhatsApp Business API access token
-- WhatsApp Business phone number ID
-
-See [Configuration](./configuration.md) for setup instructions.
+All inbound and outbound messages are logged to the D1 database (`whatsapp_messages` table) for audit and debugging.

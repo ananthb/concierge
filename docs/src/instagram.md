@@ -1,70 +1,37 @@
-# Instagram Integration
+# Instagram DM Auto-Reply
 
-Concierge monitors your Instagram posts and uses AI to extract event details from your captions. When it finds an event, it automatically creates a Google Calendar event — so you post once and your calendar updates everywhere.
+## Connecting Instagram
+
+1. Go to **Admin → Instagram Accounts → Connect Account**
+2. Sign in with Facebook (the account that manages your Instagram business page)
+3. Concierge discovers your Facebook Pages and finds the linked Instagram business account
+4. The page token is encrypted and stored for sending DM replies
+
+## Configuring Auto-Reply
+
+- **Enabled** — Toggle the account on/off
+- **Auto-Reply Enabled** — Toggle auto-reply specifically
+- **Mode** — Static or AI (same as WhatsApp)
+- **Prompt/Message** — The reply text or AI system prompt
 
 ## How It Works
 
-1. You connect your Instagram account in the admin
-2. Concierge checks for new posts every hour (via a cron trigger)
-3. For each new post, AI analyzes the caption
-4. If the caption describes an event (date, time, title), a Google Calendar event is created
-5. The event appears on your embedded calendar automatically
+1. Meta delivers incoming DMs to `POST /webhook/instagram`
+2. Concierge verifies the webhook signature
+3. Looks up the Instagram account by the recipient page ID
+4. Generates a reply (static or AI)
+5. Sends via the Instagram Pages Messaging API
+6. Logs both messages to D1
 
-## What the AI Extracts
+## Requirements
 
-The AI looks for:
+Your Meta app needs these permissions (requires App Review):
 
-- **Title** — The name of the event
-- **Date** — When the event happens
-- **Start time** and **end time**
-- **Description** — Details about the event
-- **Cancellations** — If a post is cancelling a previously announced event
+- `instagram_basic`
+- `instagram_manage_messages`
+- `pages_manage_metadata`
+- `pages_messaging`
 
-The AI uses confidence scoring — it only creates events when it's confident the post actually describes an event.
+## Token Refresh
 
-## Setting Up
-
-### 1. Create a Meta App
-
-1. Go to [Meta for Developers](https://developers.facebook.com/)
-2. Create an app with **Instagram Basic Display**
-3. Set the OAuth redirect URI to: `https://your-worker.workers.dev/instagram/callback`
-4. Add your Instagram account as a test user (required in development mode)
-
-### 2. Configure Secrets
-
-```bash
-wrangler secret put ENCRYPTION_KEY
-# Generate with: openssl rand -hex 32
-
-wrangler secret put INSTAGRAM_APP_ID
-wrangler secret put INSTAGRAM_APP_SECRET
-```
-
-### 3. Connect Your Account
-
-In the Concierge admin:
-
-1. Go to your calendar editor > **Google Calendar** tab
-2. Click **Connect Instagram Account**
-3. Authorize access when prompted
-
-### 4. Ensure Google Calendar Is Connected
-
-Instagram events are created in your Google Calendar, so make sure you've configured the Google Calendar ID in your calendar settings.
-
-## Deduplication
-
-Concierge tracks which posts it has already processed:
-
-- Same post won't be processed twice
-- Events with the same title and date won't be duplicated
-- If a post is edited, it will be re-processed
-
-## Cancellations
-
-If you post about cancelling an event, the AI detects this and logs it. Currently, cancelled events should be removed from Google Calendar directly.
-
-## Syncing Schedule
-
-Instagram posts are synced hourly via a Cloudflare cron trigger. Recent posts are checked each time.
+Page tokens are long-lived but can expire. A daily cron job checks all tokens and refreshes those within 7 days of expiry.
