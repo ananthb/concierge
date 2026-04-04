@@ -9,6 +9,8 @@ pub struct Tenant {
     pub id: String,
     pub email: String,
     pub name: Option<String>,
+    #[serde(default)]
+    pub facebook_id: Option<String>,
     pub plan: String,
     pub created_at: String,
     pub updated_at: String,

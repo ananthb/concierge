@@ -40,7 +40,31 @@ pub async fn handle_admin(req: Request, env: Env, path: &str, method: Method) ->
     let base_url = get_base_url(&req);
 
     if path == "/admin/settings" && method == Method::Get {
-        return Response::from_html(admin_settings_html(&base_url));
+        let tenant = get_tenant(&kv, &tenant_id)
+            .await?
+            .unwrap_or_else(|| crate::types::Tenant {
+                id: tenant_id.clone(),
+                email: tenant_id.clone(),
+                name: None,
+                facebook_id: None,
+                plan: "free".to_string(),
+                created_at: String::new(),
+                updated_at: String::new(),
+            });
+        let google_client_id = env
+            .secret("GOOGLE_OAUTH_CLIENT_ID")
+            .map(|s| s.to_string())
+            .unwrap_or_default();
+        let facebook_app_id = env
+            .secret("FACEBOOK_APP_ID")
+            .map(|s| s.to_string())
+            .unwrap_or_default();
+        return Response::from_html(admin_settings_html(
+            &tenant,
+            &base_url,
+            &google_client_id,
+            &facebook_app_id,
+        ));
     }
 
     if path == "/admin/delete-account" && method == Method::Delete {

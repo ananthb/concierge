@@ -1,4 +1,4 @@
-//! Authentication handlers - Google OAuth
+//! Authentication handlers - Google OAuth + Facebook Login
 
 use serde::Deserialize;
 use worker::*;
@@ -11,6 +11,7 @@ use crate::types::*;
 
 const GOOGLE_TOKEN_URL: &str = "https://oauth2.googleapis.com/token";
 const GOOGLE_USERINFO_URL: &str = "https://www.googleapis.com/oauth2/v2/userinfo";
+const GRAPH_API_URL: &str = "https://graph.facebook.com/v21.0";
 
 const SESSION_TTL_SECONDS: u64 = 7 * 24 * 60 * 60; // 7 days
 
@@ -20,7 +21,7 @@ struct TokenResponse {
 }
 
 #[derive(Deserialize)]
-struct UserInfo {
+struct GoogleUserInfo {
     email: String,
     name: Option<String>,
 }
@@ -31,22 +32,20 @@ pub async fn handle_auth(req: Request, env: Env, path: &str, method: Method) -> 
 
     match (method, path) {
         (Method::Get, "/auth/login") => {
-            let client_id = env
+            let google_client_id = env
                 .secret("GOOGLE_OAUTH_CLIENT_ID")
                 .map(|s| s.to_string())
                 .unwrap_or_default();
+            let facebook_app_id = env
+                .secret("FACEBOOK_APP_ID")
+                .map(|s| s.to_string())
+                .unwrap_or_default();
 
-            if client_id.is_empty() {
-                return Response::error(
-                    "Google OAuth not configured. Set GOOGLE_OAUTH_CLIENT_ID secret.",
-                    500,
-                );
-            }
-
-            let html = auth_login_html(&base_url, &client_id);
+            let html = auth_login_html(&base_url, &google_client_id, &facebook_app_id);
             Response::from_html(html)
         }
 
+        // Google OAuth callback
         (Method::Get, "/auth/callback") => {
             let url = req.url()?;
             let query: std::collections::HashMap<_, _> = url.query_pairs().collect();
@@ -109,10 +108,26 @@ pub async fn handle_auth(req: Request, env: Env, path: &str, method: Method) -> 
                 return Response::error("Failed to get user info", 500);
             }
 
-            let user: UserInfo = serde_json::from_str(&userinfo_text)
+            let user: GoogleUserInfo = serde_json::from_str(&userinfo_text)
                 .map_err(|e| Error::from(format!("Failed to parse user info: {}", e)))?;
 
             let kv = env.kv("CALENDARS_KV")?;
+
+            // Check if this is a link request (user already signed in)
+            if let Some(tenant_id) = resolve_tenant_id(&req, &kv).await {
+                // Link Google to existing account
+                if let Some(mut tenant) = get_tenant(&kv, &tenant_id).await? {
+                    tenant.email = user.email;
+                    if tenant.name.is_none() {
+                        tenant.name = user.name;
+                    }
+                    tenant.updated_at = now_iso();
+                    save_tenant(&kv, &tenant).await?;
+                }
+                let headers = Headers::new();
+                headers.set("Location", "/admin/settings?success=google_linked")?;
+                return Ok(Response::empty()?.with_status(302).with_headers(headers));
+            }
 
             // Find or create tenant
             let tenant = match get_tenant_by_email(&kv, &user.email).await? {
@@ -123,6 +138,7 @@ pub async fn handle_auth(req: Request, env: Env, path: &str, method: Method) -> 
                         id: generate_id(),
                         email: user.email.clone(),
                         name: user.name,
+                        facebook_id: None,
                         plan: "free".to_string(),
                         created_at: now.clone(),
                         updated_at: now,
@@ -132,22 +148,199 @@ pub async fn handle_auth(req: Request, env: Env, path: &str, method: Method) -> 
                 }
             };
 
-            // Create session
-            let session_token = generate_token();
-            save_session(&kv, &session_token, &tenant.id, SESSION_TTL_SECONDS).await?;
+            create_session_and_redirect(&kv, &tenant.id).await
+        }
 
-            // Set cookie and redirect to admin
-            let headers = Headers::new();
-            headers.set("Location", "/admin")?;
-            headers.set(
-                "Set-Cookie",
-                &format!(
-                    "session={}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age={}",
-                    session_token, SESSION_TTL_SECONDS
-                ),
-            )?;
+        // Facebook OAuth callback
+        (Method::Get, "/auth/facebook/callback") => {
+            let url = req.url()?;
+            let query: std::collections::HashMap<_, _> = url.query_pairs().collect();
 
-            Ok(Response::empty()?.with_status(302).with_headers(headers))
+            let code = match query.get("code") {
+                Some(c) => c.to_string(),
+                None => {
+                    let error = query
+                        .get("error")
+                        .map(|e| e.to_string())
+                        .unwrap_or_default();
+                    return Response::error(format!("Facebook OAuth error: {}", error), 400);
+                }
+            };
+
+            let app_id = env.secret("FACEBOOK_APP_ID")?.to_string();
+            let app_secret = env.secret("FACEBOOK_APP_SECRET")?.to_string();
+            let redirect_uri = format!("{}/auth/facebook/callback", base_url);
+
+            // Exchange code for access token
+            let token_url = format!(
+                "{}/oauth/access_token?client_id={}&redirect_uri={}&client_secret={}&code={}",
+                GRAPH_API_URL,
+                app_id,
+                urlencoding::encode(&redirect_uri),
+                app_secret,
+                code
+            );
+
+            let mut init = RequestInit::new();
+            init.with_method(Method::Get);
+            let token_req = Request::new_with_init(&token_url, &init)?;
+            let mut token_resp = Fetch::Request(token_req).send().await?;
+
+            if token_resp.status_code() != 200 {
+                let err = token_resp.text().await.unwrap_or_default();
+                return Response::error(format!("Facebook token exchange failed: {}", err), 500);
+            }
+
+            let body: serde_json::Value = token_resp.json().await?;
+            let access_token = body
+                .get("access_token")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| Error::from("Missing access_token"))?
+                .to_string();
+
+            // Get Facebook user info
+            let me_url = format!(
+                "{}/me?fields=id,name,email&access_token={}",
+                GRAPH_API_URL, access_token
+            );
+            let mut init = RequestInit::new();
+            init.with_method(Method::Get);
+            let me_req = Request::new_with_init(&me_url, &init)?;
+            let mut me_resp = Fetch::Request(me_req).send().await?;
+
+            if me_resp.status_code() != 200 {
+                return Response::error("Failed to get Facebook user info", 500);
+            }
+
+            let fb_user: serde_json::Value = me_resp.json().await?;
+            let fb_id = fb_user
+                .get("id")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| Error::from("Missing Facebook user id"))?
+                .to_string();
+            let fb_name = fb_user
+                .get("name")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+            let fb_email = fb_user
+                .get("email")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+
+            let kv = env.kv("CALENDARS_KV")?;
+
+            // Check if this is a link request (user already signed in)
+            if let Some(tenant_id) = resolve_tenant_id(&req, &kv).await {
+                if let Some(mut tenant) = get_tenant(&kv, &tenant_id).await? {
+                    tenant.facebook_id = Some(fb_id);
+                    if tenant.name.is_none() {
+                        tenant.name = fb_name;
+                    }
+                    tenant.updated_at = now_iso();
+                    save_tenant(&kv, &tenant).await?;
+                }
+                let headers = Headers::new();
+                headers.set("Location", "/admin/settings?success=facebook_linked")?;
+                return Ok(Response::empty()?.with_status(302).with_headers(headers));
+            }
+
+            // Find tenant by facebook_id, then by email, then create
+            let tenant = if let Some(t) = get_tenant_by_facebook_id(&kv, &fb_id).await? {
+                t
+            } else if !fb_email.is_empty() {
+                if let Some(mut t) = get_tenant_by_email(&kv, &fb_email).await? {
+                    // Link Facebook to existing Google account
+                    t.facebook_id = Some(fb_id);
+                    t.updated_at = now_iso();
+                    save_tenant(&kv, &t).await?;
+                    t
+                } else {
+                    let now = now_iso();
+                    let tenant = Tenant {
+                        id: generate_id(),
+                        email: fb_email,
+                        name: fb_name,
+                        facebook_id: Some(fb_id),
+                        plan: "free".to_string(),
+                        created_at: now.clone(),
+                        updated_at: now,
+                    };
+                    save_tenant(&kv, &tenant).await?;
+                    tenant
+                }
+            } else {
+                // No email from Facebook — create with empty email
+                let now = now_iso();
+                let tenant = Tenant {
+                    id: generate_id(),
+                    email: String::new(),
+                    name: fb_name,
+                    facebook_id: Some(fb_id),
+                    plan: "free".to_string(),
+                    created_at: now.clone(),
+                    updated_at: now,
+                };
+                save_tenant(&kv, &tenant).await?;
+                tenant
+            };
+
+            create_session_and_redirect(&kv, &tenant.id).await
+        }
+
+        // Unlink a provider
+        (Method::Delete, "/auth/unlink/google") => {
+            let kv = env.kv("CALENDARS_KV")?;
+            let tenant_id = match resolve_tenant_id(&req, &kv).await {
+                Some(id) => id,
+                None => return Response::error("Unauthorized", 401),
+            };
+            let mut tenant = match get_tenant(&kv, &tenant_id).await? {
+                Some(t) => t,
+                None => return Response::error("Not found", 404),
+            };
+
+            // Must keep at least one provider
+            if tenant.facebook_id.is_none() {
+                return Response::from_html(
+                    "<div class=\"error\">Cannot unlink Google — it's your only sign-in method. Link Facebook first.</div>",
+                );
+            }
+
+            // Remove email index and clear email
+            kv.delete(&format!("tenant_email:{}", tenant.email.to_lowercase()))
+                .await?;
+            tenant.email = String::new();
+            tenant.updated_at = now_iso();
+            save_tenant(&kv, &tenant).await?;
+            Response::from_html("<div class=\"success\">Google account unlinked.</div>")
+        }
+
+        (Method::Delete, "/auth/unlink/facebook") => {
+            let kv = env.kv("CALENDARS_KV")?;
+            let tenant_id = match resolve_tenant_id(&req, &kv).await {
+                Some(id) => id,
+                None => return Response::error("Unauthorized", 401),
+            };
+            let mut tenant = match get_tenant(&kv, &tenant_id).await? {
+                Some(t) => t,
+                None => return Response::error("Not found", 404),
+            };
+
+            // Must keep at least one provider
+            if tenant.email.is_empty() {
+                return Response::from_html(
+                    "<div class=\"error\">Cannot unlink Facebook — it's your only sign-in method. Link Google first.</div>",
+                );
+            }
+
+            if let Some(ref fb_id) = tenant.facebook_id {
+                delete_tenant_facebook_index(&kv, fb_id).await?;
+            }
+            tenant.facebook_id = None;
+            tenant.updated_at = now_iso();
+            save_tenant(&kv, &tenant).await?;
+            Response::from_html("<div class=\"success\">Facebook account unlinked.</div>")
         }
 
         (Method::Get, "/auth/logout") => {
@@ -169,6 +362,23 @@ pub async fn handle_auth(req: Request, env: Env, path: &str, method: Method) -> 
 
         _ => Response::error("Not Found", 404),
     }
+}
+
+async fn create_session_and_redirect(kv: &kv::KvStore, tenant_id: &str) -> Result<Response> {
+    let session_token = generate_token();
+    save_session(kv, &session_token, tenant_id, SESSION_TTL_SECONDS).await?;
+
+    let headers = Headers::new();
+    headers.set("Location", "/admin")?;
+    headers.set(
+        "Set-Cookie",
+        &format!(
+            "session={}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age={}",
+            session_token, SESSION_TTL_SECONDS
+        ),
+    )?;
+
+    Ok(Response::empty()?.with_status(302).with_headers(headers))
 }
 
 /// Extract session cookie from request

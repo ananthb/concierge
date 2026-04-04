@@ -26,16 +26,45 @@ pub async fn get_tenant_by_email(kv: &kv::KvStore, email: &str) -> Result<Option
     }
 }
 
+pub async fn get_tenant_by_facebook_id(
+    kv: &kv::KvStore,
+    facebook_id: &str,
+) -> Result<Option<Tenant>> {
+    let tenant_id = kv
+        .get(&format!("tenant_facebook:{}", facebook_id))
+        .text()
+        .await
+        .map_err(|e| Error::from(e.to_string()))?;
+
+    match tenant_id {
+        Some(id) => get_tenant(kv, &id).await,
+        None => Ok(None),
+    }
+}
+
 pub async fn save_tenant(kv: &kv::KvStore, tenant: &Tenant) -> Result<()> {
     kv.put(&format!("tenant:{}", tenant.id), tenant)?
         .execute()
         .await?;
-    kv.put(
-        &format!("tenant_email:{}", tenant.email.to_lowercase()),
-        &tenant.id,
-    )?
-    .execute()
-    .await?;
+    if !tenant.email.is_empty() {
+        kv.put(
+            &format!("tenant_email:{}", tenant.email.to_lowercase()),
+            &tenant.id,
+        )?
+        .execute()
+        .await?;
+    }
+    if let Some(ref fb_id) = tenant.facebook_id {
+        kv.put(&format!("tenant_facebook:{}", fb_id), &tenant.id)?
+            .execute()
+            .await?;
+    }
+    Ok(())
+}
+
+pub async fn delete_tenant_facebook_index(kv: &kv::KvStore, facebook_id: &str) -> Result<()> {
+    kv.delete(&format!("tenant_facebook:{}", facebook_id))
+        .await?;
     Ok(())
 }
 
@@ -334,8 +363,13 @@ pub async fn delete_tenant_data(kv: &kv::KvStore, db: &D1Database, tenant_id: &s
         .await?;
 
     if let Some(tenant) = get_tenant(kv, tenant_id).await? {
-        kv.delete(&format!("tenant_email:{}", tenant.email.to_lowercase()))
-            .await?;
+        if !tenant.email.is_empty() {
+            kv.delete(&format!("tenant_email:{}", tenant.email.to_lowercase()))
+                .await?;
+        }
+        if let Some(ref fb_id) = tenant.facebook_id {
+            kv.delete(&format!("tenant_facebook:{}", fb_id)).await?;
+        }
     }
     kv.delete(&format!("tenant:{}", tenant_id)).await?;
 

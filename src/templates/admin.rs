@@ -6,51 +6,173 @@ use crate::types::*;
 use super::base::{base_html, BaseStyle};
 use super::HASH;
 
-pub fn auth_login_html(base_url: &str, client_id: &str) -> String {
+pub fn auth_login_html(base_url: &str, google_client_id: &str, facebook_app_id: &str) -> String {
     let redirect_uri = format!("{}/auth/callback", base_url);
     let google_url = format!(
         "https://accounts.google.com/o/oauth2/v2/auth?client_id={}&redirect_uri={}&response_type=code&scope={}&access_type=online&prompt=select_account",
-        urlencoding::encode(client_id),
+        urlencoding::encode(google_client_id),
         urlencoding::encode(&redirect_uri),
         urlencoding::encode("openid email profile"),
     );
+
+    let fb_redirect_uri = format!("{}/auth/facebook/callback", base_url);
+    let facebook_url = format!(
+        "https://www.facebook.com/v21.0/dialog/oauth?client_id={}&redirect_uri={}&scope=email&response_type=code",
+        urlencoding::encode(facebook_app_id),
+        urlencoding::encode(&fb_redirect_uri),
+    );
+
+    let google_btn = if google_client_id.is_empty() {
+        String::new()
+    } else {
+        format!(
+            "<a href=\"{google_url}\" class=\"btn\" style=\"display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.75rem 1.5rem; font-size: 1rem; width: 100%; justify-content: center;\">
+                <svg width=\"18\" height=\"18\" viewBox=\"0 0 18 18\" xmlns=\"http://www.w3.org/2000/svg\"><path d=\"M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844a4.14 4.14 0 01-1.796 2.716v2.259h2.908c1.702-1.567 2.684-3.875 2.684-6.615z\" fill=\"#4285F4\"/><path d=\"M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 009 18z\" fill=\"#34A853\"/><path d=\"M3.964 10.71A5.41 5.41 0 013.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 000 9c0 1.452.348 2.827.957 4.042l3.007-2.332z\" fill=\"#FBBC05\"/><path d=\"M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 00.957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58z\" fill=\"#EA4335\"/></svg>
+                Sign in with Google
+            </a>",
+            google_url = html_escape(&google_url),
+        )
+    };
+
+    let facebook_btn = if facebook_app_id.is_empty() {
+        String::new()
+    } else {
+        format!(
+            "<a href=\"{facebook_url}\" class=\"btn\" style=\"display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.75rem 1.5rem; font-size: 1rem; background: {hash}1877F2; width: 100%; justify-content: center;\">
+                <svg width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"white\"><path d=\"M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z\"/></svg>
+                Sign in with Facebook
+            </a>",
+            facebook_url = html_escape(&facebook_url),
+            hash = HASH,
+        )
+    };
 
     let style = BaseStyle::default();
     let content = format!(
         "<div style=\"max-width: 400px; margin: 4rem auto; text-align: center;\">
             <h1 style=\"margin-bottom: 0.5rem;\">Concierge</h1>
             <p style=\"color: {hash}666; margin-bottom: 2rem;\">Sign in to manage your messaging channels.</p>
-            <a href=\"{google_url}\" class=\"btn\" style=\"display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.75rem 1.5rem; font-size: 1rem;\">
-                <svg width=\"18\" height=\"18\" viewBox=\"0 0 18 18\" xmlns=\"http://www.w3.org/2000/svg\"><path d=\"M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844a4.14 4.14 0 01-1.796 2.716v2.259h2.908c1.702-1.567 2.684-3.875 2.684-6.615z\" fill=\"#4285F4\"/><path d=\"M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 009 18z\" fill=\"#34A853\"/><path d=\"M3.964 10.71A5.41 5.41 0 013.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 000 9c0 1.452.348 2.827.957 4.042l3.007-2.332z\" fill=\"#FBBC05\"/><path d=\"M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 00.957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58z\" fill=\"#EA4335\"/></svg>
-                Sign in with Google
-            </a>
+            <div style=\"display: flex; flex-direction: column; gap: 0.75rem;\">
+                {google_btn}
+                {facebook_btn}
+            </div>
         </div>",
-        google_url = html_escape(&google_url),
         hash = HASH,
+        google_btn = google_btn,
+        facebook_btn = facebook_btn,
     );
 
     base_html("Sign In - Concierge", &content, &style)
 }
 
-pub fn admin_settings_html(base_url: &str) -> String {
+pub fn admin_settings_html(
+    tenant: &Tenant,
+    base_url: &str,
+    google_client_id: &str,
+    facebook_app_id: &str,
+) -> String {
+    let has_google = !tenant.email.is_empty();
+    let has_facebook = tenant.facebook_id.is_some();
+
+    let google_row = if has_google {
+        let unlink = if has_facebook {
+            format!(
+                "<button class=\"btn btn-sm btn-danger\"
+                        hx-delete=\"{base_url}/auth/unlink/google\"
+                        hx-confirm=\"Unlink Google? You can still sign in with Facebook.\"
+                        hx-target=\"{hash}linked-providers\" hx-swap=\"innerHTML\">Unlink</button>",
+                base_url = base_url,
+                hash = HASH,
+            )
+        } else {
+            String::from("<span class=\"text-muted\">Only provider</span>")
+        };
+        format!(
+            "<tr><td>Google</td><td>{email}</td><td>{unlink}</td></tr>",
+            email = html_escape(&tenant.email),
+            unlink = unlink,
+        )
+    } else {
+        let redirect_uri = format!("{}/auth/callback", base_url);
+        let link_url = format!(
+            "https://accounts.google.com/o/oauth2/v2/auth?client_id={}&redirect_uri={}&response_type=code&scope={}&access_type=online&prompt=select_account",
+            urlencoding::encode(google_client_id),
+            urlencoding::encode(&redirect_uri),
+            urlencoding::encode("openid email profile"),
+        );
+        if google_client_id.is_empty() {
+            String::new()
+        } else {
+            format!(
+                "<tr><td>Google</td><td class=\"text-muted\">Not linked</td><td><a href=\"{link_url}\" class=\"btn btn-sm\">Link</a></td></tr>",
+                link_url = html_escape(&link_url),
+            )
+        }
+    };
+
+    let facebook_row = if has_facebook {
+        let unlink = if has_google {
+            format!(
+                "<button class=\"btn btn-sm btn-danger\"
+                        hx-delete=\"{base_url}/auth/unlink/facebook\"
+                        hx-confirm=\"Unlink Facebook? You can still sign in with Google.\"
+                        hx-target=\"{hash}linked-providers\" hx-swap=\"innerHTML\">Unlink</button>",
+                base_url = base_url,
+                hash = HASH,
+            )
+        } else {
+            String::from("<span class=\"text-muted\">Only provider</span>")
+        };
+        format!(
+            "<tr><td>Facebook</td><td>Connected</td><td>{unlink}</td></tr>",
+            unlink = unlink,
+        )
+    } else {
+        let fb_redirect_uri = format!("{}/auth/facebook/callback", base_url);
+        let link_url = format!(
+            "https://www.facebook.com/v21.0/dialog/oauth?client_id={}&redirect_uri={}&scope=email&response_type=code",
+            urlencoding::encode(facebook_app_id),
+            urlencoding::encode(&fb_redirect_uri),
+        );
+        if facebook_app_id.is_empty() {
+            String::new()
+        } else {
+            format!(
+                "<tr><td>Facebook</td><td class=\"text-muted\">Not linked</td><td><a href=\"{link_url}\" class=\"btn btn-sm\">Link</a></td></tr>",
+                link_url = html_escape(&link_url),
+            )
+        }
+    };
+
     let style = BaseStyle::default();
     let content = format!(
         "<p><a href=\"{base_url}/admin\">&larr; Back to Dashboard</a></p>
         <h1>Settings</h1>
         <div class=\"card\">
-            <h2>Account</h2>
-            <p style=\"margin-bottom: 1rem;\" class=\"text-muted\">Manage your account.</p>
+            <h2>Linked Accounts</h2>
+            <p style=\"margin-bottom: 1rem;\" class=\"text-muted\">Sign-in providers connected to your account.</p>
+            <div id=\"linked-providers\">
+                <table>
+                    <thead><tr><th>Provider</th><th>Details</th><th></th></tr></thead>
+                    <tbody>{google_row}{facebook_row}</tbody>
+                </table>
+            </div>
+        </div>
+        <div class=\"card\">
+            <h2>Session</h2>
             <a href=\"{base_url}/auth/logout\" class=\"btn btn-secondary\">Sign Out</a>
         </div>
         <div class=\"card\" style=\"border-color: var(--error-text);\">
             <h2 style=\"color: var(--error-text);\">Delete Account</h2>
-            <p style=\"margin-bottom: 1rem;\" class=\"text-muted\">Permanently delete your account and all associated data (WhatsApp accounts, Instagram accounts, lead forms, and message logs). This cannot be undone.</p>
+            <p style=\"margin-bottom: 1rem;\" class=\"text-muted\">Permanently delete your account and all associated data. This cannot be undone.</p>
             <button class=\"btn btn-danger\"
                     hx-delete=\"{base_url}/admin/delete-account\"
                     hx-confirm=\"Are you sure? This will permanently delete your account and ALL data. This cannot be undone.\"
                     >Delete My Account</button>
         </div>",
         base_url = base_url,
+        google_row = google_row,
+        facebook_row = facebook_row,
     );
 
     base_html("Settings - Concierge", &content, &style)
