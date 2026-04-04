@@ -43,6 +43,20 @@ pub async fn handle_admin(req: Request, env: Env, path: &str, method: Method) ->
         return Response::from_html(admin_settings_html(&base_url));
     }
 
+    if path == "/admin/delete-account" && method == Method::Delete {
+        let db = env.d1("DB")?;
+        delete_tenant_data(&kv, &db, &tenant_id).await?;
+
+        // Clear session cookie
+        let headers = Headers::new();
+        headers.set("Location", "/")?;
+        headers.set(
+            "Set-Cookie",
+            "session=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0",
+        )?;
+        return Ok(Response::empty()?.with_status(302).with_headers(headers));
+    }
+
     if path.starts_with("/admin/whatsapp") {
         return super::admin_whatsapp::handle_whatsapp_admin(
             req, env, path, method, &base_url, &tenant_id,

@@ -15,6 +15,8 @@ pub fn lead_form_html(form: &LeadCaptureForm) -> String {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <link rel="icon" type="image/svg+xml" href="/logo.svg">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+<meta name="theme-color" content="#F38020">
 <title>{name}</title>
 <script src="https://unpkg.com/htmx.org@1.9.10"></script>
 <style>

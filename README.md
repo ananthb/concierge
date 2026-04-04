@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://concierge.calculon.tech/logo.svg" width="100" height="100" alt="Concierge logo">
+  <img src="assets/logo.svg" width="100" height="100" alt="Concierge logo">
 </p>
 
 # Concierge

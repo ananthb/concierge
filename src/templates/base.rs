@@ -35,6 +35,12 @@ pub fn base_html(title: &str, content: &str, style: &BaseStyle) -> String {
     <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">
     <title>{title}</title>
     <link rel=\"icon\" type=\"image/svg+xml\" href=\"/logo.svg\">
+    <link rel=\"icon\" type=\"image/png\" sizes=\"32x32\" href=\"/favicon-32.png\">
+    <link rel=\"icon\" type=\"image/png\" sizes=\"16x16\" href=\"/favicon-16.png\">
+    <link rel=\"apple-touch-icon\" sizes=\"180x180\" href=\"/apple-touch-icon.png\">
+    <link rel=\"manifest\" href=\"/site.webmanifest\">
+    <meta name=\"msapplication-TileColor\" content=\"#1A1A2E\">
+    <meta name=\"theme-color\" content=\"#F38020\">
     <script src=\"https://unpkg.com/htmx.org@1.9.10\"></script>
     <style>
         :root {{

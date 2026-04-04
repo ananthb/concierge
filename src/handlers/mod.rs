@@ -5,6 +5,7 @@ mod admin_instagram;
 mod admin_lead_forms;
 mod admin_whatsapp;
 pub mod auth;
+mod data_deletion;
 mod instagram_oauth;
 mod instagram_webhook;
 mod lead_form;
@@ -12,6 +13,7 @@ mod webhook;
 
 pub use admin::handle_admin;
 pub use auth::handle_auth;
+pub use data_deletion::handle_data_deletion;
 pub use instagram_oauth::handle_instagram;
 pub use lead_form::handle_lead_form;
 pub use webhook::handle_webhook;

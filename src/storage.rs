@@ -297,6 +297,52 @@ pub async fn list_lead_forms(kv: &kv::KvStore, tenant_id: &str) -> Result<Vec<Le
 }
 
 // ============================================================================
+// Delete All Tenant Data
+// ============================================================================
+
+pub async fn delete_tenant_data(kv: &kv::KvStore, db: &D1Database, tenant_id: &str) -> Result<()> {
+    // Delete WhatsApp accounts + phone indexes
+    let wa_accounts = list_whatsapp_accounts(kv, tenant_id).await?;
+    for account in &wa_accounts {
+        delete_whatsapp_account(kv, tenant_id, &account.id).await?;
+    }
+
+    // Delete Instagram accounts + page indexes + tokens
+    let ig_accounts = list_instagram_accounts(kv, tenant_id).await?;
+    for account in &ig_accounts {
+        delete_instagram_account(kv, tenant_id, &account.id).await?;
+    }
+
+    // Delete lead forms
+    let forms = list_lead_forms(kv, tenant_id).await?;
+    for form in &forms {
+        delete_lead_form(kv, tenant_id, &form.id).await?;
+    }
+
+    // Delete D1 data
+    let stmt = db.prepare("DELETE FROM whatsapp_messages WHERE tenant_id = ?");
+    stmt.bind(&[tenant_id.into()])?.run().await?;
+
+    let stmt = db.prepare("DELETE FROM lead_form_submissions WHERE tenant_id = ?");
+    stmt.bind(&[tenant_id.into()])?.run().await?;
+
+    let stmt = db.prepare("DELETE FROM instagram_messages WHERE tenant_id = ?");
+    stmt.bind(&[tenant_id.into()])?.run().await?;
+
+    // Delete tenant credentials and tenant record
+    kv.delete(&format!("tenant:{}:credentials", tenant_id))
+        .await?;
+
+    if let Some(tenant) = get_tenant(kv, tenant_id).await? {
+        kv.delete(&format!("tenant_email:{}", tenant.email.to_lowercase()))
+            .await?;
+    }
+    kv.delete(&format!("tenant:{}", tenant_id)).await?;
+
+    Ok(())
+}
+
+// ============================================================================
 // D1 Operations (WhatsApp Messages)
 // ============================================================================
 

@@ -41,6 +41,14 @@ pub fn admin_settings_html(base_url: &str) -> String {
             <h2>Account</h2>
             <p style=\"margin-bottom: 1rem;\" class=\"text-muted\">Manage your account.</p>
             <a href=\"{base_url}/auth/logout\" class=\"btn btn-secondary\">Sign Out</a>
+        </div>
+        <div class=\"card\" style=\"border-color: var(--error-text);\">
+            <h2 style=\"color: var(--error-text);\">Delete Account</h2>
+            <p style=\"margin-bottom: 1rem;\" class=\"text-muted\">Permanently delete your account and all associated data (WhatsApp accounts, Instagram accounts, lead forms, and message logs). This cannot be undone.</p>
+            <button class=\"btn btn-danger\"
+                    hx-delete=\"{base_url}/admin/delete-account\"
+                    hx-confirm=\"Are you sure? This will permanently delete your account and ALL data. This cannot be undone.\"
+                    >Delete My Account</button>
         </div>",
         base_url = base_url,
     );
