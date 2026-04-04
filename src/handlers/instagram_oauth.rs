@@ -151,6 +151,7 @@ pub async fn handle_instagram(
 
             // Create InstagramAccount resource
             let account_id = generate_id();
+            let now = now_iso();
             let account = InstagramAccount {
                 id: account_id.clone(),
                 tenant_id: tenant_id.clone(),
@@ -159,7 +160,8 @@ pub async fn handle_instagram(
                 page_id,
                 auto_reply: AutoReplyConfig::default(),
                 enabled: true,
-                created_at: now_iso(),
+                created_at: now.clone(),
+                updated_at: now,
             };
             save_instagram_account(&kv, &account).await?;
 

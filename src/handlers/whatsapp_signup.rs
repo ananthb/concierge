@@ -81,7 +81,7 @@ pub async fn handle_whatsapp_signup(
                 .unwrap_or_default();
 
             // Exchange code for short-lived token
-            let token = exchange_code(&code, &app_id, &app_secret).await?;
+            let _token = exchange_code(&code, &app_id, &app_secret).await?;
 
             // Discover the phone number — either from JS SDK or by querying the WABA
             let (phone_number, phone_number_id) = if let Some(pnid) = js_phone_number_id {
@@ -94,7 +94,7 @@ pub async fn handle_whatsapp_signup(
                 }
             } else {
                 // Query WABA for phone numbers using the exchange token
-                match discover_new_phone(&waba_id, &token, &platform_token).await? {
+                match discover_new_phone(&waba_id, &platform_token).await? {
                     Some(result) => result,
                     None => {
                         return redirect_error("/admin/whatsapp", "no_phone_numbers");
@@ -204,7 +204,6 @@ async fn get_phone_number_details(
 /// Query WABA phone numbers to find newly registered ones
 async fn discover_new_phone(
     waba_id: &str,
-    _user_token: &str,
     platform_token: &str,
 ) -> Result<Option<(String, String)>> {
     let url = format!(

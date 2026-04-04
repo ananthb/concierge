@@ -58,7 +58,7 @@ body{{font-family:system-ui,-apple-system,sans-serif;background:var(--lf-bg);col
         radius = html_escape(&s.border_radius),
         placeholder = html_escape(&s.placeholder_text),
         button = html_escape(&s.button_text),
-        custom_css = s.custom_css,
+        custom_css = s.custom_css.replace(['<', '>'], ""),
         hash = HASH,
     )
 }

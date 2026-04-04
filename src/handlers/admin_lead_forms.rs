@@ -90,7 +90,7 @@ pub async fn handle_lead_forms_admin(
 
             let data = req.form_data().await?;
             if let Some(FormEntry::Field(name)) = data.get("name") {
-                form.name = name;
+                form.name = truncate(&name, 200);
             }
             if let Some(FormEntry::Field(wa_id)) = data.get("whatsapp_account_id") {
                 form.whatsapp_account_id = wa_id;
@@ -102,7 +102,7 @@ pub async fn handle_lead_forms_admin(
                 };
             }
             if let Some(FormEntry::Field(prompt)) = data.get("reply_prompt") {
-                form.reply_prompt = prompt;
+                form.reply_prompt = truncate(&prompt, 2000);
             }
             if let Some(FormEntry::Field(origins)) = data.get("allowed_origins") {
                 form.allowed_origins = origins
@@ -115,28 +115,28 @@ pub async fn handle_lead_forms_admin(
 
             // Style fields
             if let Some(FormEntry::Field(v)) = data.get("style_primary_color") {
-                form.style.primary_color = v;
+                form.style.primary_color = truncate(&v, 50);
             }
             if let Some(FormEntry::Field(v)) = data.get("style_text_color") {
-                form.style.text_color = v;
+                form.style.text_color = truncate(&v, 50);
             }
             if let Some(FormEntry::Field(v)) = data.get("style_background_color") {
-                form.style.background_color = v;
+                form.style.background_color = truncate(&v, 50);
             }
             if let Some(FormEntry::Field(v)) = data.get("style_border_radius") {
-                form.style.border_radius = v;
+                form.style.border_radius = truncate(&v, 50);
             }
             if let Some(FormEntry::Field(v)) = data.get("style_button_text") {
-                form.style.button_text = v;
+                form.style.button_text = truncate(&v, 200);
             }
             if let Some(FormEntry::Field(v)) = data.get("style_placeholder_text") {
-                form.style.placeholder_text = v;
+                form.style.placeholder_text = truncate(&v, 200);
             }
             if let Some(FormEntry::Field(v)) = data.get("style_success_message") {
-                form.style.success_message = v;
+                form.style.success_message = truncate(&v, 200);
             }
             if let Some(FormEntry::Field(v)) = data.get("style_custom_css") {
-                form.style.custom_css = v;
+                form.style.custom_css = truncate(&v, 5000);
             }
 
             form.updated_at = now_iso();

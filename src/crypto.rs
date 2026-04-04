@@ -209,3 +209,33 @@ fn hex_decode(hex: &str) -> Result<Vec<u8>> {
         })
         .collect()
 }
+
+/// Compute HMAC-SHA256 and return as hex
+pub fn hmac_sha256_hex(key: &[u8], data: &[u8]) -> String {
+    use hmac::{Hmac, Mac};
+    use sha2::Sha256;
+
+    let mut mac = Hmac::<Sha256>::new_from_slice(key).expect("HMAC key length is valid");
+    mac.update(data);
+    let result = mac.finalize();
+    hex_encode(&result.into_bytes())
+}
+
+/// Verify a Meta webhook signature (X-Hub-Signature-256 header)
+/// Returns true if signature is valid
+pub fn verify_meta_signature(app_secret: &str, body: &[u8], signature_header: &str) -> bool {
+    let expected = signature_header.strip_prefix("sha256=").unwrap_or("");
+    if expected.is_empty() {
+        return false;
+    }
+    let computed = hmac_sha256_hex(app_secret.as_bytes(), body);
+    // Constant-time comparison
+    if computed.len() != expected.len() {
+        return false;
+    }
+    computed
+        .bytes()
+        .zip(expected.bytes())
+        .fold(0u8, |acc, (a, b)| acc | (a ^ b))
+        == 0
+}

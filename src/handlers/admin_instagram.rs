@@ -2,6 +2,7 @@
 
 use worker::*;
 
+use crate::helpers::*;
 use crate::storage::*;
 use crate::templates::*;
 use crate::types::*;
@@ -68,9 +69,10 @@ pub async fn handle_instagram_admin(
                 };
             }
             if let Some(FormEntry::Field(prompt)) = form.get("auto_reply_prompt") {
-                account.auto_reply.prompt = prompt;
+                account.auto_reply.prompt = truncate(&prompt, 2000);
             }
 
+            account.updated_at = crate::helpers::now_iso();
             save_instagram_account(&kv, &account).await?;
             Response::from_html(admin_success_html("Instagram account updated"))
         }

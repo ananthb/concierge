@@ -28,9 +28,13 @@ pub async fn handle_lead_form(
 
     match (method, path_parts.as_slice()) {
         // CORS preflight
-        (Method::Options, [_form_id, _slug]) => {
-            // Allow all origins for lead forms (they're embeddable)
-            cors_preflight(origin.as_deref(), &[])
+        (Method::Options, [form_id, _slug]) => {
+            let kv = env.kv("CALENDARS_KV")?;
+            let allowed = match get_lead_form(&kv, form_id).await? {
+                Some(f) if f.enabled => f.allowed_origins,
+                _ => Vec::new(),
+            };
+            cors_preflight(origin.as_deref(), &allowed)
         }
 
         // Serve the lead form
@@ -57,7 +61,19 @@ pub async fn handle_lead_form(
 
             let form_data = req.form_data().await?;
             let phone = match form_data.get("phone") {
-                Some(FormEntry::Field(p)) if !p.trim().is_empty() => p.trim().to_string(),
+                Some(FormEntry::Field(p)) => {
+                    let p = p.trim().to_string();
+                    // Basic E.164-ish validation: optional +, then 7-15 digits
+                    let digits: String = p.chars().filter(|c| c.is_ascii_digit()).collect();
+                    if digits.len() < 7 || digits.len() > 15 {
+                        let resp = Response::from_html(lead_form_error_html(
+                            &form,
+                            "Please enter a valid phone number (7-15 digits).",
+                        ))?;
+                        return Ok(with_cors(resp, origin.as_deref(), &form.allowed_origins));
+                    }
+                    p
+                }
                 _ => {
                     let resp = Response::from_html(lead_form_error_html(
                         &form,

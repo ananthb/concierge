@@ -1,21 +1,20 @@
 //! Facebook data deletion callback handler
-//!
-//! Facebook requires apps to provide a data deletion callback URL.
-//! When a user removes the app from their Facebook settings, Facebook
-//! POSTs a signed request to this endpoint.
 
 use worker::*;
 
 use crate::helpers::generate_id;
+use crate::storage::*;
 
 /// Handle POST /data-deletion
-///
-/// Facebook sends a signed_request with the user's Facebook ID.
-/// We look up any Instagram accounts linked to that user and delete all their data.
 pub async fn handle_data_deletion(mut req: Request, env: Env, method: Method) -> Result<Response> {
     if method != Method::Post {
         return Response::error("Method not allowed", 405);
     }
+
+    let app_secret = env
+        .secret("FACEBOOK_APP_SECRET")
+        .map(|s| s.to_string())
+        .unwrap_or_default();
 
     let form = req.form_data().await?;
     let signed_request = match form.get("signed_request") {
@@ -23,13 +22,21 @@ pub async fn handle_data_deletion(mut req: Request, env: Env, method: Method) ->
         _ => return Response::error("Missing signed_request", 400),
     };
 
-    // Decode the signed request payload (base64url-encoded JSON after the signature)
     let parts: Vec<&str> = signed_request.split('.').collect();
     if parts.len() != 2 {
         return Response::error("Invalid signed_request format", 400);
     }
 
-    // Decode payload (second part)
+    // Verify signature
+    if !app_secret.is_empty() {
+        let computed = crate::crypto::hmac_sha256_hex(app_secret.as_bytes(), parts[1].as_bytes());
+        let sig = base64url_to_hex(parts[0])?;
+        if computed != sig {
+            return Response::error("Invalid signature", 403);
+        }
+    }
+
+    // Decode payload
     let payload = parts[1].replace('-', "+").replace('_', "/");
     let padded = match payload.len() % 4 {
         2 => format!("{}==", payload),
@@ -50,26 +57,39 @@ pub async fn handle_data_deletion(mut req: Request, env: Env, method: Method) ->
     let kv = env.kv("CALENDARS_KV")?;
     let db = env.d1("DB")?;
 
-    // Find Instagram accounts matching this Facebook user across all tenants
-    // We scan by checking all ig_page entries (there's no direct fb_user_id index)
-    // For now, return a confirmation URL — actual deletion happens via admin/delete-account
-    let confirmation_code = generate_id();
+    // Find and delete tenant by facebook_id
+    if let Some(tenant) = get_tenant_by_facebook_id(&kv, fb_user_id).await? {
+        delete_tenant_data(&kv, &db, &tenant.id).await?;
+    }
 
-    // Return the response Facebook expects
+    let confirmation_code = generate_id();
+    let base_url = req
+        .url()
+        .map(|u| format!("{}://{}", u.scheme(), u.host_str().unwrap_or("localhost")))
+        .unwrap_or_default();
+
     let response = serde_json::json!({
-        "url": format!("https://concierge.calculon.tech/admin/settings"),
+        "url": format!("{}/admin/settings", base_url),
         "confirmation_code": confirmation_code
     });
-
-    let _ = (kv, db); // acknowledge bindings
 
     let headers = Headers::new();
     headers.set("Content-Type", "application/json")?;
     Ok(Response::ok(response.to_string())?.with_headers(headers))
 }
 
+fn base64url_to_hex(input: &str) -> Result<String> {
+    let b64 = input.replace('-', "+").replace('_', "/");
+    let padded = match b64.len() % 4 {
+        2 => format!("{}==", b64),
+        3 => format!("{}=", b64),
+        _ => b64,
+    };
+    let bytes = base64_decode(&padded)?;
+    Ok(bytes.iter().map(|b| format!("{:02x}", b)).collect())
+}
+
 fn base64_decode(input: &str) -> Result<Vec<u8>> {
-    // Simple base64 decoder for the Facebook payload
     let chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     let mut output = Vec::new();
     let mut buf: u32 = 0;

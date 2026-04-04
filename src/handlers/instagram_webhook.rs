@@ -35,7 +35,27 @@ pub fn handle_instagram_verify(req: &Request, env: &Env) -> Result<Response> {
 
 /// Handle POST /webhook/instagram — incoming DM
 pub async fn handle_instagram_dm(mut req: Request, env: Env) -> Result<Response> {
-    let payload: InstagramWebhookPayload = match req.json().await {
+    let sig_header = req
+        .headers()
+        .get("X-Hub-Signature-256")
+        .ok()
+        .flatten()
+        .unwrap_or_default();
+    let body_text = req.text().await?;
+
+    let app_secret = env
+        .secret("FACEBOOK_APP_SECRET")
+        .map(|s| s.to_string())
+        .unwrap_or_default();
+
+    if !app_secret.is_empty()
+        && !crate::crypto::verify_meta_signature(&app_secret, body_text.as_bytes(), &sig_header)
+    {
+        console_log!("Invalid Instagram webhook signature");
+        return Response::ok("OK");
+    }
+
+    let payload: InstagramWebhookPayload = match serde_json::from_str(&body_text) {
         Ok(p) => p,
         Err(e) => {
             console_log!("Failed to parse Instagram webhook: {:?}", e);
@@ -117,7 +137,7 @@ pub async fn handle_instagram_dm(mut req: Request, env: Env) -> Result<Response>
             };
 
             // Log inbound message
-            let _ = save_instagram_message(
+            if let Err(e) = save_instagram_message(
                 &db,
                 &generate_id(),
                 &account_id,
@@ -127,7 +147,10 @@ pub async fn handle_instagram_dm(mut req: Request, env: Env) -> Result<Response>
                 &text,
                 &account.tenant_id,
             )
-            .await;
+            .await
+            {
+                console_log!("Failed to save message: {:?}", e);
+            }
 
             // Generate reply
             let reply = match account.auto_reply.mode {
@@ -157,7 +180,7 @@ pub async fn handle_instagram_dm(mut req: Request, env: Env) -> Result<Response>
                 }
 
                 // Log outbound
-                let _ = save_instagram_message(
+                if let Err(e) = save_instagram_message(
                     &db,
                     &generate_id(),
                     &account_id,
@@ -167,7 +190,10 @@ pub async fn handle_instagram_dm(mut req: Request, env: Env) -> Result<Response>
                     &reply,
                     &account.tenant_id,
                 )
-                .await;
+                .await
+                {
+                    console_log!("Failed to save message: {:?}", e);
+                }
             }
         }
     }

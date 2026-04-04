@@ -54,7 +54,31 @@ pub async fn handle_webhook(
 
         // Incoming WhatsApp messages (POST /webhook/whatsapp)
         (Method::Post, ["whatsapp"]) => {
-            let body: WhatsAppWebhook = match req.json().await {
+            let sig_header = req
+                .headers()
+                .get("X-Hub-Signature-256")
+                .ok()
+                .flatten()
+                .unwrap_or_default();
+            let body_text = req.text().await?;
+
+            let app_secret = env
+                .secret("FACEBOOK_APP_SECRET")
+                .map(|s| s.to_string())
+                .unwrap_or_default();
+
+            if !app_secret.is_empty()
+                && !crate::crypto::verify_meta_signature(
+                    &app_secret,
+                    body_text.as_bytes(),
+                    &sig_header,
+                )
+            {
+                console_log!("Invalid WhatsApp webhook signature");
+                return Response::ok("OK");
+            }
+
+            let body: WhatsAppWebhook = match serde_json::from_str(&body_text) {
                 Ok(b) => b,
                 Err(e) => {
                     console_log!("Failed to parse webhook body: {:?}", e);
@@ -121,7 +145,7 @@ pub async fn handle_webhook(
                         };
 
                         // Log inbound message
-                        let _ = save_whatsapp_message(
+                        if let Err(e) = save_whatsapp_message(
                             &db,
                             &generate_id(),
                             &account_id,
@@ -131,7 +155,10 @@ pub async fn handle_webhook(
                             &incoming.text,
                             &account.tenant_id,
                         )
-                        .await;
+                        .await
+                        {
+                            console_log!("Failed to save message: {:?}", e);
+                        }
 
                         // Handle auto-reply
                         if account.auto_reply.enabled {
@@ -176,7 +203,7 @@ pub async fn handle_webhook(
                                 }
 
                                 // Log outbound message
-                                let _ = save_whatsapp_message(
+                                if let Err(e) = save_whatsapp_message(
                                     &db,
                                     &generate_id(),
                                     &account_id,
@@ -186,7 +213,10 @@ pub async fn handle_webhook(
                                     &reply,
                                     &account.tenant_id,
                                 )
-                                .await;
+                                .await
+                                {
+                                    console_log!("Failed to save message: {:?}", e);
+                                }
                             }
                         }
                     }

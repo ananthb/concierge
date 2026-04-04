@@ -64,6 +64,8 @@ pub struct InstagramAccount {
     pub auto_reply: AutoReplyConfig,
     pub enabled: bool,
     pub created_at: String,
+    #[serde(default)]
+    pub updated_at: String,
 }
 
 // ============================================================================

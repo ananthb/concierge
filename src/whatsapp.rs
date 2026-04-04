@@ -8,7 +8,7 @@ pub async fn send_whatsapp_message(
     text: &str,
 ) -> Result<()> {
     let url = format!(
-        "https://graph.facebook.com/v18.0/{}/messages",
+        "https://graph.facebook.com/v21.0/{}/messages",
         phone_number_id
     );
 

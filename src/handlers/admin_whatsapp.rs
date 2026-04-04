@@ -105,13 +105,13 @@ pub async fn handle_whatsapp_admin(
 
             let form = req.form_data().await?;
             if let Some(FormEntry::Field(name)) = form.get("name") {
-                account.name = name;
+                account.name = truncate(&name, 200);
             }
             if let Some(FormEntry::Field(phone)) = form.get("phone_number") {
-                account.phone_number = phone;
+                account.phone_number = truncate(&phone, 20);
             }
             if let Some(FormEntry::Field(phone_id)) = form.get("phone_number_id") {
-                account.phone_number_id = phone_id;
+                account.phone_number_id = truncate(&phone_id, 30);
             }
 
             // Auto-reply config
@@ -123,7 +123,7 @@ pub async fn handle_whatsapp_admin(
                 };
             }
             if let Some(FormEntry::Field(prompt)) = form.get("auto_reply_prompt") {
-                account.auto_reply.prompt = prompt;
+                account.auto_reply.prompt = truncate(&prompt, 2000);
             }
 
             account.updated_at = now_iso();

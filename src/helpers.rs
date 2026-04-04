@@ -18,11 +18,13 @@ pub fn generate_slug() -> String {
 
     let adj_idx = (js_sys::Math::random() * adjectives.len() as f64) as usize;
     let noun_idx = (js_sys::Math::random() * nouns.len() as f64) as usize;
-    let suffix: String = (0..3)
-        .map(|_| {
-            let chars = "abcdefghijklmnopqrstuvwxyz0123456789";
-            let idx = (js_sys::Math::random() * chars.len() as f64) as usize;
-            chars.chars().nth(idx).unwrap_or('x')
+    let mut rng_bytes = [0u8; 3];
+    getrandom::getrandom(&mut rng_bytes).expect("getrandom failed");
+    let suffix: String = rng_bytes
+        .iter()
+        .map(|b| {
+            let chars = b"abcdefghijklmnopqrstuvwxyz0123456789";
+            chars[(*b as usize) % chars.len()] as char
         })
         .collect();
 
@@ -31,13 +33,9 @@ pub fn generate_slug() -> String {
 
 /// Generate a secure token
 pub fn generate_token() -> String {
-    (0..32)
-        .map(|_| {
-            let chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-            let idx = (js_sys::Math::random() * chars.len() as f64) as usize;
-            chars.chars().nth(idx).unwrap_or('x')
-        })
-        .collect()
+    let mut bytes = [0u8; 32];
+    getrandom::getrandom(&mut bytes).expect("getrandom failed");
+    bytes.iter().map(|b| format!("{:02x}", b)).collect()
 }
 
 /// Get current ISO timestamp
@@ -138,6 +136,15 @@ pub fn interpolate_template(
         result = result.replace(&placeholder, &replacement);
     }
     result
+}
+
+/// Truncate string to max length
+pub fn truncate(s: &str, max: usize) -> String {
+    if s.len() <= max {
+        s.to_string()
+    } else {
+        s[..max].to_string()
+    }
 }
 
 #[cfg(test)]

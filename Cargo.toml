@@ -18,6 +18,8 @@ wasm-bindgen-futures = "0.4"
 js-sys = "0.3"
 web-sys = { version = "0.3", features = ["Crypto", "SubtleCrypto", "CryptoKey"] }
 urlencoding = "2"
+sha2 = "0.10"
+hmac = "0.12"
 
 [profile.release]
 opt-level = "s"
