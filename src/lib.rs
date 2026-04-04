@@ -88,6 +88,11 @@ async fn fetch(req: Request, env: Env, _ctx: Context) -> Result<Response> {
         return handlers::handle_auth(req, env, path, method).await;
     }
 
+    // WhatsApp Embedded Signup callback
+    if path.starts_with("/whatsapp/signup/") {
+        return handlers::handle_whatsapp_signup(req, env, path, method).await;
+    }
+
     // Admin routes (session-protected)
     if path.starts_with("/admin") {
         return handlers::handle_admin(req, env, path, method).await;

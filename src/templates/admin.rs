@@ -228,7 +228,7 @@ pub fn admin_whatsapp_list_html(accounts: &[WhatsAppAccount], base_url: &str) ->
         "<p><a href=\"{base_url}/admin\">&larr; Back to Dashboard</a></p>
         <div style=\"display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;\">
             <h1>WhatsApp Accounts</h1>
-            <a href=\"{base_url}/admin/whatsapp/new\" class=\"btn\">+ Add Account</a>
+            <a href=\"{base_url}/admin/whatsapp/new\" class=\"btn\">+ Connect WhatsApp Number</a>
         </div>
         <div id=\"toast\"></div>
         <div class=\"card\">
@@ -243,6 +243,106 @@ pub fn admin_whatsapp_list_html(accounts: &[WhatsAppAccount], base_url: &str) ->
     );
 
     base_html("WhatsApp Accounts - Concierge", &content, &style)
+}
+
+pub fn admin_whatsapp_signup_html(
+    base_url: &str,
+    app_id: &str,
+    config_id: &str,
+    state: &str,
+) -> String {
+    let style = BaseStyle::default();
+    let content = format!(
+        r#"<p><a href="{base_url}/admin/whatsapp">&larr; Back to WhatsApp Accounts</a></p>
+        <h1>Connect WhatsApp Number</h1>
+        <div class="card" style="text-align: center; padding: 2rem;">
+            <p class="text-muted" style="margin-bottom: 1.5rem;">Click the button below to register your phone number through Meta's WhatsApp setup flow.</p>
+            <div id="signup-error" style="color: var(--error-text); margin-bottom: 1rem;"></div>
+            <button id="signup-btn" class="btn" style="padding: 0.75rem 2rem; font-size: 1rem;" onclick="launchSignup()">
+                Connect WhatsApp Number
+            </button>
+            <p class="text-muted" style="margin-top: 1.5rem; font-size: 0.85rem;">
+                Or <a href="{base_url}/admin/whatsapp/manual">enter phone number ID manually</a>
+            </p>
+        </div>
+        <script async defer crossorigin="anonymous" src="https://connect.facebook.net/en_US/sdk.js"></script>
+        <script>
+            window.fbAsyncInit = function() {{
+                FB.init({{
+                    appId: '{app_id}',
+                    autoLogAppEvents: true,
+                    xfbml: true,
+                    version: 'v21.0'
+                }});
+            }};
+
+            function launchSignup() {{
+                var btn = document.getElementById('signup-btn');
+                var errDiv = document.getElementById('signup-error');
+                btn.disabled = true;
+                btn.textContent = 'Connecting...';
+                errDiv.textContent = '';
+
+                var loginConfig = {{
+                    response_type: 'code',
+                    override_default_response_type: true,
+                    extras: {{
+                        featureType: '',
+                        sessionInfoVersion: '3'
+                    }}
+                }};
+
+                var configId = '{config_id}';
+                if (configId) {{
+                    loginConfig.config_id = configId;
+                }} else {{
+                    loginConfig.scope = 'whatsapp_business_management,whatsapp_business_messaging';
+                }}
+
+                FB.login(function(response) {{
+                    if (response.authResponse && response.authResponse.code) {{
+                        var form = document.createElement('form');
+                        form.method = 'POST';
+                        form.action = '{base_url}/whatsapp/signup/callback';
+
+                        var codeInput = document.createElement('input');
+                        codeInput.type = 'hidden';
+                        codeInput.name = 'code';
+                        codeInput.value = response.authResponse.code;
+                        form.appendChild(codeInput);
+
+                        var stateInput = document.createElement('input');
+                        stateInput.type = 'hidden';
+                        stateInput.name = 'state';
+                        stateInput.value = '{state}';
+                        form.appendChild(stateInput);
+
+                        // If phone_number_id is in the response, send it too
+                        if (response.authResponse.phone_number_id) {{
+                            var phoneInput = document.createElement('input');
+                            phoneInput.type = 'hidden';
+                            phoneInput.name = 'phone_number_id';
+                            phoneInput.value = response.authResponse.phone_number_id;
+                            form.appendChild(phoneInput);
+                        }}
+
+                        document.body.appendChild(form);
+                        form.submit();
+                    }} else {{
+                        btn.disabled = false;
+                        btn.textContent = 'Connect WhatsApp Number';
+                        errDiv.textContent = 'Signup was cancelled or failed. Please try again.';
+                    }}
+                }}, loginConfig);
+            }}
+        </script>"#,
+        base_url = html_escape(base_url),
+        app_id = html_escape(app_id),
+        config_id = html_escape(config_id),
+        state = html_escape(state),
+    );
+
+    base_html("Connect WhatsApp - Concierge", &content, &style)
 }
 
 pub fn admin_whatsapp_edit_html(account: &WhatsAppAccount, base_url: &str) -> String {

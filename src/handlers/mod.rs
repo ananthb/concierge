@@ -10,6 +10,7 @@ mod instagram_oauth;
 mod instagram_webhook;
 mod lead_form;
 mod webhook;
+mod whatsapp_signup;
 
 pub use admin::handle_admin;
 pub use auth::handle_auth;
@@ -17,6 +18,7 @@ pub use data_deletion::handle_data_deletion;
 pub use instagram_oauth::handle_instagram;
 pub use lead_form::handle_lead_form;
 pub use webhook::handle_webhook;
+pub use whatsapp_signup::handle_whatsapp_signup;
 
 use worker::Request;
 

@@ -35,8 +35,31 @@ pub async fn handle_whatsapp_admin(
             Response::from_html(admin_whatsapp_list_html(&accounts, base_url))
         }
 
-        // Create new WhatsApp account (GET /admin/whatsapp/new or POST /admin/whatsapp)
-        (Method::Get, ["new"]) | (Method::Post, []) => {
+        // Embedded Signup page
+        (Method::Get, ["new"]) => {
+            let app_id = env
+                .secret("FACEBOOK_APP_ID")
+                .map(|s| s.to_string())
+                .unwrap_or_default();
+            let config_id = env
+                .var("WHATSAPP_SIGNUP_CONFIG_ID")
+                .map(|v| v.to_string())
+                .unwrap_or_default();
+
+            // Generate CSRF state nonce
+            let state = generate_token();
+            kv.put(&format!("wa_signup_state:{}", state), tenant_id)?
+                .expiration_ttl(600)
+                .execute()
+                .await?;
+
+            Response::from_html(admin_whatsapp_signup_html(
+                base_url, &app_id, &config_id, &state,
+            ))
+        }
+
+        // Manual fallback — create blank account
+        (Method::Get, ["manual"]) | (Method::Post, []) => {
             let now = now_iso();
             let account = WhatsAppAccount {
                 id: generate_id(),

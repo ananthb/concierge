@@ -40,6 +40,8 @@ binding = "AI"
 
 [vars]
 ENVIRONMENT = "production"
+WHATSAPP_WABA_ID = ""           # Your shared WABA ID
+WHATSAPP_SIGNUP_CONFIG_ID = ""  # Meta Embedded Signup config ID (from App Dashboard)
 
 # ============================================================================
 # Cron triggers — daily at 6AM UTC for Instagram token refresh
