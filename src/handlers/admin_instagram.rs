@@ -31,7 +31,7 @@ pub async fn handle_instagram_admin(
         // List all Instagram accounts
         (Method::Get, []) => {
             let accounts = list_instagram_accounts(&kv, tenant_id).await?;
-            Response::from_html(admin_instagram_list_html(&accounts, base_url))
+            Response::from_html(admin_instagram_list_html(&accounts, base_url, tenant_id))
         }
 
         // Edit page for an Instagram account

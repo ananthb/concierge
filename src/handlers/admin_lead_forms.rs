@@ -35,8 +35,8 @@ pub async fn handle_lead_forms_admin(
             Response::from_html(admin_lead_forms_list_html(&forms, base_url))
         }
 
-        // Create new lead form
-        (Method::Post, []) => {
+        // Create new lead form (GET /admin/lead-forms/new or POST /admin/lead-forms)
+        (Method::Get, ["new"]) | (Method::Post, []) => {
             let now = now_iso();
             let slug = generate_slug();
             let id = generate_id();
@@ -114,28 +114,28 @@ pub async fn handle_lead_forms_admin(
             form.enabled = data.get("enabled").is_some();
 
             // Style fields
-            if let Some(FormEntry::Field(v)) = data.get("primary_color") {
+            if let Some(FormEntry::Field(v)) = data.get("style_primary_color") {
                 form.style.primary_color = v;
             }
-            if let Some(FormEntry::Field(v)) = data.get("text_color") {
+            if let Some(FormEntry::Field(v)) = data.get("style_text_color") {
                 form.style.text_color = v;
             }
-            if let Some(FormEntry::Field(v)) = data.get("background_color") {
+            if let Some(FormEntry::Field(v)) = data.get("style_background_color") {
                 form.style.background_color = v;
             }
-            if let Some(FormEntry::Field(v)) = data.get("border_radius") {
+            if let Some(FormEntry::Field(v)) = data.get("style_border_radius") {
                 form.style.border_radius = v;
             }
-            if let Some(FormEntry::Field(v)) = data.get("button_text") {
+            if let Some(FormEntry::Field(v)) = data.get("style_button_text") {
                 form.style.button_text = v;
             }
-            if let Some(FormEntry::Field(v)) = data.get("placeholder_text") {
+            if let Some(FormEntry::Field(v)) = data.get("style_placeholder_text") {
                 form.style.placeholder_text = v;
             }
-            if let Some(FormEntry::Field(v)) = data.get("success_message") {
+            if let Some(FormEntry::Field(v)) = data.get("style_success_message") {
                 form.style.success_message = v;
             }
-            if let Some(FormEntry::Field(v)) = data.get("custom_css") {
+            if let Some(FormEntry::Field(v)) = data.get("style_custom_css") {
                 form.style.custom_css = v;
             }
 

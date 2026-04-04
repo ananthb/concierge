@@ -316,7 +316,11 @@ pub fn admin_whatsapp_edit_html(account: &WhatsAppAccount, base_url: &str) -> St
     base_html("Edit WhatsApp Account - Concierge", &content, &style)
 }
 
-pub fn admin_instagram_list_html(accounts: &[InstagramAccount], base_url: &str) -> String {
+pub fn admin_instagram_list_html(
+    accounts: &[InstagramAccount],
+    base_url: &str,
+    tenant_id: &str,
+) -> String {
     let rows: String = accounts
         .iter()
         .map(|a| {
@@ -355,6 +359,7 @@ pub fn admin_instagram_list_html(accounts: &[InstagramAccount], base_url: &str) 
         "<p><a href=\"{base_url}/admin\">&larr; Back to Dashboard</a></p>
         <div style=\"display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;\">
             <h1>Instagram Accounts</h1>
+            <a href=\"{base_url}/instagram/auth/{tenant_id}\" class=\"btn\">+ Connect Account</a>
         </div>
         <div id=\"toast\"></div>
         <div class=\"card\">
@@ -364,6 +369,7 @@ pub fn admin_instagram_list_html(accounts: &[InstagramAccount], base_url: &str) 
             </table>
         </div>",
         base_url = base_url,
+        tenant_id = html_escape(tenant_id),
         rows = rows,
         empty = empty,
     );

@@ -35,8 +35,8 @@ pub async fn handle_whatsapp_admin(
             Response::from_html(admin_whatsapp_list_html(&accounts, base_url))
         }
 
-        // Create new WhatsApp account
-        (Method::Post, []) => {
+        // Create new WhatsApp account (GET /admin/whatsapp/new or POST /admin/whatsapp)
+        (Method::Get, ["new"]) | (Method::Post, []) => {
             let now = now_iso();
             let account = WhatsAppAccount {
                 id: generate_id(),

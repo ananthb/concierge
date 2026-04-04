@@ -197,6 +197,12 @@ pub fn base_html(title: &str, content: &str, style: &BaseStyle) -> String {
     <div class=\"container\">
         {content}
     </div>
+    <footer style=\"text-align: center; padding: 2rem 1rem; color: var(--text-muted); font-size: 0.8rem;\">
+        <a href=\"/terms\" style=\"color: var(--text-muted);\">Terms</a> &middot;
+        <a href=\"/privacy\" style=\"color: var(--text-muted);\">Privacy</a> &middot;
+        <a href=\"https://ananthb.github.io/concierge-worker/\" style=\"color: var(--text-muted);\">Docs</a> &middot;
+        <a href=\"https://github.com/ananthb/concierge-worker\" style=\"color: var(--text-muted);\">Source</a>
+    </footer>
     <script>
         function copyUrl(btn, url) {{
             navigator.clipboard.writeText(url).then(function() {{
