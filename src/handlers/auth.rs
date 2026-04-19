@@ -48,7 +48,24 @@ pub async fn handle_auth(req: Request, env: Env, path: &str, method: Method) -> 
                 &meta_app_id,
                 last_provider.as_deref(),
             );
-            Response::from_html(html)
+
+            // Capture biz name from query param (set during onboarding start)
+            let mut resp = Response::from_html(html)?;
+            let url = req.url()?;
+            if let Some(biz) = url
+                .query_pairs()
+                .find(|(k, _)| k == "biz")
+                .map(|(_, v)| v.to_string())
+            {
+                if !biz.is_empty() {
+                    resp.headers_mut().append(
+                        "Set-Cookie",
+                        &format!("onboarding_biz={}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=3600",
+                            urlencoding::encode(&biz)),
+                    )?;
+                }
+            }
+            Ok(resp)
         }
 
         // Google OAuth callback

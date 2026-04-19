@@ -61,6 +61,7 @@ fn wizard_shell(step: &str, base_url: &str, content: &str) -> String {
     <div class="rail-wrap">{rail}</div>
     <div class="top-right">
       <span class="mono muted">step {step_num}/{total}</span>
+      <a href="/auth/login" class="btn ghost sm">Sign in</a>
     </div>
   </header>
   <main>{content}</main>
@@ -82,13 +83,13 @@ pub fn welcome_html(base_url: &str) -> String {
     <div class="eyebrow">// automated customer engagement</div>
     <h1 class="display">Hello. I'll be answering<br><em>every DM, WhatsApp &amp; email</em><br>so you don't have to.</h1>
     <p class="lead">Connect your channels, set a tone, and your concierge handles the rest. Auto-replies across WhatsApp, Instagram, and email. 100 replies free every month.</p>
-    <form class="welcome-form" hx-post="{base_url}/admin/wizard/goto" hx-target="body" hx-swap="innerHTML">
-      <input type="hidden" name="to" value="connect">
+    <form class="welcome-form" action="/auth/login" method="get">
       <input class="input" name="biz" placeholder="Business name" required>
       <button class="btn primary lg" type="submit">Start setup &rarr;</button>
     </form>
     <div class="mono fineprint">
-      &#x25E6; <a href="/pricing" style="color:var(--accent)">transparent pricing</a>
+      &#x25E6; <a href="/auth/login" style="color:var(--accent)">already have an account? sign in</a>
+      &nbsp; &#x25E6; <a href="/pricing" style="color:var(--muted)">pricing</a>
       &nbsp; &#x25E6; <a href="https://github.com/ananthb/concierge-worker" style="color:var(--muted)">open-source</a>
     </div>
   </div>
@@ -106,7 +107,6 @@ pub fn welcome_html(base_url: &str) -> String {
     <div class="stamp">ON<br>DUTY<br>24/7</div>
   </aside>
 </section>"#,
-        base_url = base_url,
         hash = HASH,
     );
 
@@ -500,7 +500,7 @@ pub fn pricing_html(packs: &[crate::types::CreditPackRow]) -> String {
   </div>
 
   <div style="text-align:center">
-    <a href="/auth/login" class="btn primary lg">Get started &rarr;</a>
+    <a href="/" class="btn primary lg">Get started &rarr;</a>
   </div>
 </div>"##,
         logo = LOGO_INLINE,

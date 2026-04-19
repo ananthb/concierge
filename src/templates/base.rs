@@ -173,7 +173,7 @@ code {
 .section-label { display:flex; align-items:center; gap:10px; margin-bottom:4px; }
 
 /* Wizard */
-.wizard { min-height:100vh; display:flex; flex-direction:column; }
+.wizard { display:flex; flex-direction:column; }
 .top { display:grid; grid-template-columns:auto 1fr auto; align-items:center; gap:28px;
   padding:18px 28px; border-bottom:1px solid var(--hair);
   background:rgba(251,247,238,0.88); backdrop-filter:blur(10px); position:sticky; top:0; z-index:10; }

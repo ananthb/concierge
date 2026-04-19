@@ -19,6 +19,17 @@ pub async fn handle_wizard(
     let kv = env.kv("CALENDARS_KV")?;
     let mut state = get_onboarding(&kv, tenant_id).await?;
 
+    // Pick up business name from onboarding cookie (set during login)
+    if state.biz_name.is_empty() {
+        if let Some(biz) = crate::handlers::auth::get_cookie(&req, "onboarding_biz") {
+            let decoded = urlencoding::decode(&biz).unwrap_or_default().to_string();
+            if !decoded.is_empty() {
+                state.biz_name = decoded;
+                let _ = save_onboarding(&kv, tenant_id, &state).await;
+            }
+        }
+    }
+
     let sub = path
         .strip_prefix("/admin/wizard")
         .unwrap_or("")
