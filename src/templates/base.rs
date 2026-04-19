@@ -240,7 +240,7 @@ code {
 
 /* Welcome form */
 .welcome { display:grid; grid-template-columns:minmax(0,1fr) 380px; gap:60px; align-items:center; }
-@media(max-width:900px){.welcome{grid-template-columns:1fr}.postcard{display:none}}
+@media(max-width:900px){.welcome{grid-template-columns:1fr;gap:32px}.postcard{display:none}}
 .welcome-form { display:flex; gap:10px; flex-wrap:wrap; margin-top:22px; }
 .welcome-form .input { max-width:240px; }
 .display { font-family:var(--f-display); font-size:clamp(44px,6vw,82px); line-height:1.02; letter-spacing:-0.02em; margin:0 0 16px; }
@@ -296,6 +296,35 @@ code {
 
 /* HTMX loading state */
 .htmx-request .btn { opacity: 0.6; pointer-events: none; }
+
+/* Mobile */
+@media(max-width:600px){
+  .page { padding:32px 16px 48px; }
+  .display { font-size:clamp(32px,8vw,44px); }
+  .display br { display:none; }
+  .display-md { font-size:clamp(26px,6vw,34px); }
+  .lead { font-size:15px; }
+  .welcome-form { flex-direction:column; }
+  .welcome-form .input { max-width:100%; }
+  .welcome-form .btn { width:100%; justify-content:center; }
+  .fineprint { display:flex; flex-direction:column; gap:4px; }
+  .top { grid-template-columns:auto 1fr; padding:12px 16px; gap:12px; }
+  .top-right { display:none; }
+  .rail-labels { font-size:8px; }
+  .app-top { padding:12px 16px; gap:12px; flex-wrap:wrap; }
+  .app-nav { gap:10px; overflow-x:auto; -webkit-overflow-scrolling:touch; flex-wrap:nowrap; white-space:nowrap; }
+  .app-nav a { font-size:13px; flex-shrink:0; }
+  .channels-grid { grid-template-columns:1fr; }
+  .admin-grid { grid-template-columns:1fr; }
+  .admin-card { min-height:auto; }
+  .between { flex-wrap:wrap; gap:12px; }
+  .dash-grid { padding:16px; }
+  .rt-head, .rt-row { grid-template-columns:1fr; gap:4px; padding:10px 14px; }
+  .replies-head, .replies-row { grid-template-columns:1fr; gap:4px; padding:10px 14px; }
+  .banner { padding:14px 16px; flex-direction:column; gap:10px; text-align:center; }
+  .terminal { padding:14px; font-size:12px; min-height:auto; }
+  .term-row { grid-template-columns:1fr; gap:2px; }
+}
 
 /* Scrollbars */
 ::-webkit-scrollbar { width:10px; height:10px; }
