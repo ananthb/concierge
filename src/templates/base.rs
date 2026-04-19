@@ -299,18 +299,19 @@ code {
 
 /* Mobile */
 @media(max-width:600px){
-  .page { padding:32px 16px 48px; }
-  .display { font-size:clamp(32px,8vw,44px); }
+  .page { padding:24px 16px 40px; }
+  .display { font-size:clamp(32px,8vw,44px); margin:0 0 12px; }
   .display br { display:none; }
   .display-md { font-size:clamp(26px,6vw,34px); }
-  .lead { font-size:15px; }
+  .lead { font-size:15px; margin:0 0 16px; }
   .welcome-form { flex-direction:column; }
   .welcome-form .input { max-width:100%; }
   .welcome-form .btn { width:100%; justify-content:center; }
   .fineprint { display:flex; flex-direction:column; gap:4px; }
-  .top { grid-template-columns:auto 1fr; padding:12px 16px; gap:12px; }
-  .top-right { display:none; }
-  .rail-labels { font-size:8px; }
+  .top { grid-template-columns:auto auto; padding:12px 16px; gap:12px; }
+  .top .rail-wrap { display:none; }
+  .top-right { gap:8px; }
+  .top-right .mono { display:none; }
   .app-top { padding:12px 16px; gap:12px; flex-wrap:wrap; }
   .app-nav { gap:10px; overflow-x:auto; -webkit-overflow-scrolling:touch; flex-wrap:nowrap; white-space:nowrap; }
   .app-nav a { font-size:13px; flex-shrink:0; }
@@ -324,6 +325,9 @@ code {
   .banner { padding:14px 16px; flex-direction:column; gap:10px; text-align:center; }
   .terminal { padding:14px; font-size:12px; min-height:auto; }
   .term-row { grid-template-columns:1fr; gap:2px; }
+}
+@media(max-width:480px){
+  .rail-labels span:not(.active):not(.done) { display:none; }
 }
 
 /* Scrollbars */
