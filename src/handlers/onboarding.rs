@@ -16,7 +16,7 @@ pub async fn handle_wizard(
     base_url: &str,
     tenant_id: &str,
 ) -> Result<Response> {
-    let kv = env.kv("CALENDARS_KV")?;
+    let kv = env.kv("KV")?;
     let mut state = get_onboarding(&kv, tenant_id).await?;
 
     // Pick up business name from onboarding cookie (set during login)

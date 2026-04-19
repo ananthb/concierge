@@ -14,7 +14,7 @@ pub async fn handle_email(
     raw_bytes: &[u8],
     env: &Env,
 ) -> Result<EmailResult> {
-    let kv = env.kv("CALENDARS_KV")?;
+    let kv = env.kv("KV")?;
     let db = env.d1("DB")?;
 
     // Extract domain from recipient

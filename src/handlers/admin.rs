@@ -8,7 +8,7 @@ use crate::templates::*;
 
 /// Unified admin handler - session-protected
 pub async fn handle_admin(req: Request, env: Env, path: &str, method: Method) -> Result<Response> {
-    let kv = env.kv("CALENDARS_KV")?;
+    let kv = env.kv("KV")?;
 
     // Resolve tenant from session cookie
     let tenant_id = match super::auth::resolve_tenant_id(&req, &kv).await {
@@ -122,20 +122,21 @@ pub async fn handle_admin(req: Request, env: Env, path: &str, method: Method) ->
     }
 
     if path == "/admin" || path == "/admin/" {
-        let calendars_kv = env.kv("CALENDARS_KV")?;
+        let kv = env.kv("KV")?;
 
         // Redirect to onboarding if not completed
-        let onboarding = crate::storage::get_onboarding(&calendars_kv, &tenant_id).await?;
+        let onboarding = crate::storage::get_onboarding(&kv, &tenant_id).await?;
         if !onboarding.completed {
             let headers = Headers::new();
             headers.set("Location", &format!("{}/admin/wizard", base_url))?;
             return Ok(Response::empty()?.with_status(302).with_headers(headers));
         }
 
-        let whatsapp_accounts = list_whatsapp_accounts(&calendars_kv, &tenant_id).await?;
-        let instagram_accounts = list_instagram_accounts(&calendars_kv, &tenant_id).await?;
-        let lead_forms = list_lead_forms(&calendars_kv, &tenant_id).await?;
-        let billing = crate::storage::get_tenant_billing(&calendars_kv, &tenant_id).await?;
+        let whatsapp_accounts = list_whatsapp_accounts(&kv, &tenant_id).await?;
+        let instagram_accounts = list_instagram_accounts(&kv, &tenant_id).await?;
+        let lead_forms = list_lead_forms(&kv, &tenant_id).await?;
+        let mut billing = crate::storage::get_tenant_billing(&kv, &tenant_id).await?;
+        crate::billing::refresh_billing(&mut billing);
 
         let mut resp = Response::from_html(admin_dashboard_html(
             &whatsapp_accounts,

@@ -29,7 +29,7 @@ pub async fn handle_lead_form(
     match (method, path_parts.as_slice()) {
         // CORS preflight
         (Method::Options, [form_id, _slug]) => {
-            let kv = env.kv("CALENDARS_KV")?;
+            let kv = env.kv("KV")?;
             let allowed = match get_lead_form(&kv, form_id).await? {
                 Some(f) if f.enabled => f.allowed_origins,
                 _ => Vec::new(),
@@ -39,7 +39,7 @@ pub async fn handle_lead_form(
 
         // Serve the lead form
         (Method::Get, [form_id, _slug]) => {
-            let kv = env.kv("CALENDARS_KV")?;
+            let kv = env.kv("KV")?;
             let form = match get_lead_form(&kv, form_id).await? {
                 Some(f) if f.enabled => f,
                 _ => return Response::error("Form not found", 404),
@@ -51,7 +51,7 @@ pub async fn handle_lead_form(
 
         // Handle form submission
         (Method::Post, [form_id, _slug]) => {
-            let kv = env.kv("CALENDARS_KV")?;
+            let kv = env.kv("KV")?;
             let db = env.d1("DB")?;
 
             let form = match get_lead_form(&kv, form_id).await? {

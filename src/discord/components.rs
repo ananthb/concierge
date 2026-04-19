@@ -96,7 +96,7 @@ fn show_reply_modal(ctx_id: &str) -> Result<Response> {
 /// followup message via the interaction webhook once Cloudflare Workers supports
 /// reliable post-response execution.
 async fn send_relay_reply(ctx_id: &str, reply_text: &str, env: &Env) -> Result<Response> {
-    let kv = env.kv("CALENDARS_KV")?;
+    let kv = env.kv("KV")?;
     let db = env.d1("DB")?;
 
     let ctx = match get_conversation_context(&kv, ctx_id).await? {
@@ -161,7 +161,7 @@ async fn send_relay_reply(ctx_id: &str, reply_text: &str, env: &Env) -> Result<R
 /// TODO: Same 3-second Discord interaction timeout risk as `send_relay_reply`.
 /// A deferred response pattern should be used when feasible.
 async fn handle_approve(ctx_id: &str, env: &Env) -> Result<Response> {
-    let kv = env.kv("CALENDARS_KV")?;
+    let kv = env.kv("KV")?;
     let db = env.d1("DB")?;
 
     let ctx = match get_conversation_context(&kv, ctx_id).await? {
@@ -234,7 +234,7 @@ async fn handle_approve(ctx_id: &str, env: &Env) -> Result<Response> {
 
 /// Reject an AI draft.
 async fn handle_reject(ctx_id: &str, env: &Env) -> Result<Response> {
-    let kv = env.kv("CALENDARS_KV")?;
+    let kv = env.kv("KV")?;
     let _ = delete_conversation_context(&kv, ctx_id).await;
 
     Response::from_json(&serde_json::json!({
@@ -245,7 +245,7 @@ async fn handle_reject(ctx_id: &str, env: &Env) -> Result<Response> {
 
 /// Drop/dismiss a forwarded message.
 async fn handle_drop(ctx_id: &str, env: &Env) -> Result<Response> {
-    let kv = env.kv("CALENDARS_KV")?;
+    let kv = env.kv("KV")?;
     let _ = delete_conversation_context(&kv, ctx_id).await;
 
     Response::from_json(&serde_json::json!({

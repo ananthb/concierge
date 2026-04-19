@@ -29,7 +29,7 @@ database_id = "332c2ee6-05c9-4293-9df3-51e61238b61a"
 # KV Namespace for configs
 # ============================================================================
 [[kv_namespaces]]
-binding = "CALENDARS_KV"
+binding = "KV"
 id = "2c2f474d22e04d1f8a4d12b37810390b"
 
 # ============================================================================
@@ -46,7 +46,8 @@ name = "EMAIL"
 
 [vars]
 ENVIRONMENT = "production"
-MANAGEMENT_EMAILS = ""          # Comma-separated emails for /manage/* access (Cloudflare Access)
+CF_ACCESS_TEAM = ""             # Cloudflare Access team name (e.g. "myteam" from myteam.cloudflare.com)
+CF_ACCESS_AUD = ""              # Cloudflare Access Application Audience (AUD) tag
 WHATSAPP_WABA_ID = ""           # Your shared WABA ID
 WHATSAPP_SIGNUP_CONFIG_ID = ""  # Meta Embedded Signup config ID (from App Dashboard)
 
@@ -84,3 +85,8 @@ invocation_logs = true
 #   DISCORD_PUBLIC_KEY      - Discord application public key (Ed25519 verification)
 #   DISCORD_APPLICATION_ID  - Discord application ID
 #   DISCORD_BOT_TOKEN       - Discord bot token
+#
+# Razorpay (billing):
+#   RAZORPAY_KEY_ID         - Razorpay key ID
+#   RAZORPAY_KEY_SECRET     - Razorpay key secret
+#   RAZORPAY_WEBHOOK_SECRET - Razorpay webhook secret (for payment.captured events)

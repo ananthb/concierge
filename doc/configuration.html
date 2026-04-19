@@ -65,7 +65,8 @@ footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--border
   </thead>
   <tbody>
     <tr><td><code>ENVIRONMENT</code></td><td><code>production</code> or <code>development</code></td></tr>
-    <tr><td><code>MANAGEMENT_EMAILS</code></td><td>Comma-separated emails allowed to access <code>/manage/*</code> (matched against <code>Cf-Access-Authenticated-User-Email</code> header)</td></tr>
+    <tr><td><code>CF_ACCESS_TEAM</code></td><td>Cloudflare Access team name (e.g. <code>myteam</code> from <code>myteam.cloudflare.com</code>)</td></tr>
+    <tr><td><code>CF_ACCESS_AUD</code></td><td>Cloudflare Access Application Audience (AUD) tag for <code>/manage/*</code></td></tr>
     <tr><td><code>WHATSAPP_WABA_ID</code></td><td>Your WhatsApp Business Account ID</td></tr>
     <tr><td><code>WHATSAPP_SIGNUP_CONFIG_ID</code></td><td>Meta Embedded Signup configuration ID</td></tr>
   </tbody>
@@ -145,7 +146,7 @@ footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--border
   </thead>
   <tbody>
     <tr><td><code>DB</code></td><td>D1</td><td>SQLite database for message logs, payments, audit, credit packs</td></tr>
-    <tr><td><code>CALENDARS_KV</code></td><td>KV</td><td>Config store for tenants, accounts, sessions, routing rules, billing state</td></tr>
+    <tr><td><code>KV</code></td><td>KV</td><td>Config store for tenants, accounts, sessions, routing rules, billing state</td></tr>
     <tr><td><code>AI</code></td><td>AI</td><td>Cloudflare Workers AI for auto-reply generation</td></tr>
     <tr><td><code>EMAIL</code></td><td>send_email</td><td>Outbound email for forwarding and reverse-alias replies</td></tr>
   </tbody>

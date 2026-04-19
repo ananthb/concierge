@@ -81,7 +81,7 @@ cargo test</code></pre>
 wrangler d1 create concierge-worker
 
 # Create KV namespace
-wrangler kv namespace create CALENDARS_KV</code></pre>
+wrangler kv namespace create KV</code></pre>
 
 <p>Update the IDs in <code>wrangler.toml</code>.</p>
 
@@ -124,7 +124,8 @@ wrangler secret put RAZORPAY_WEBHOOK_SECRET</code></pre>
 <p>Update these in the <code>[vars]</code> section:</p>
 
 <ul>
-  <li><code>MANAGEMENT_EMAILS</code> -- Comma-separated list of emails allowed to access <code>/manage/*</code></li>
+  <li><code>CF_ACCESS_TEAM</code> -- Your Cloudflare Access team name (e.g. <code>myteam</code>)</li>
+  <li><code>CF_ACCESS_AUD</code> -- Application Audience (AUD) tag from your Access application for <code>/manage/*</code></li>
   <li><code>WHATSAPP_WABA_ID</code> -- Your WhatsApp Business Account ID</li>
   <li><code>WHATSAPP_SIGNUP_CONFIG_ID</code> -- Meta Embedded Signup configuration ID</li>
 </ul>
@@ -171,7 +172,8 @@ wrangler secret put RAZORPAY_WEBHOOK_SECRET</code></pre>
 <ol>
   <li>In the Cloudflare dashboard, go to <strong>Zero Trust &gt; Access &gt; Applications</strong></li>
   <li>Create an application for <code>your-domain/manage/*</code></li>
-  <li>Add a policy allowing the emails listed in <code>MANAGEMENT_EMAILS</code></li>
+  <li>Copy the <strong>Application Audience (AUD) Tag</strong> and set it as <code>CF_ACCESS_AUD</code> in <code>wrangler.toml</code></li>
+  <li>Add a policy allowing the emails that should have management access</li>
 </ol>
 
 <p>See <a href="management.html">Management Panel</a> for details.</p>

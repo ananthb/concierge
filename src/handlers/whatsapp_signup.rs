@@ -23,7 +23,7 @@ pub async fn handle_whatsapp_signup(
     match (method, path_parts.as_slice()) {
         // POST /whatsapp/signup/callback — receive code from JS SDK
         (Method::Post, ["callback"]) => {
-            let kv = env.kv("CALENDARS_KV")?;
+            let kv = env.kv("KV")?;
 
             // Authenticate via session cookie
             let tenant_id = match super::auth::resolve_tenant_id(&req, &kv).await {

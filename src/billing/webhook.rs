@@ -67,8 +67,8 @@ pub async fn handle_razorpay_webhook(mut req: Request, env: Env) -> Result<Respo
             record_payment(&db, payment_id, tenant_id, credits).await?;
 
             // Grant credits
-            let kv = env.kv("CALENDARS_KV")?;
-            super::grant_replies(&kv, tenant_id, credits).await?;
+            let kv = env.kv("KV")?;
+            super::grant_purchased(&kv, tenant_id, credits).await?;
 
             console_log!("Granted {credits} replies to {tenant_id} (payment {payment_id})");
             Response::ok("OK")

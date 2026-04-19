@@ -674,17 +674,42 @@ mod tests {
 // Billing Types — Reply Credits
 // ============================================================================
 
-/// Tenant billing state. Credits = reply count. Management grants credits.
+/// Source of a credit entry — determines expiry behavior.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum CreditSource {
+    FreeMonthly,
+    Purchase,
+    Grant,
+}
+
+/// A single credit ledger entry with optional expiry.
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct CreditEntry {
+    pub amount: i64,
+    pub source: CreditSource,
+    pub expires_at: Option<String>, // ISO 8601, None = never expires
+    pub granted_at: String,         // ISO 8601
+}
+
+/// Tenant billing state — credit ledger with expiry support.
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct TenantBilling {
-    pub replies_remaining: i64, // available replies
-    pub replies_used: i64,      // lifetime replies sent
-    pub replies_granted: i64,   // lifetime replies granted by management
+    #[serde(default)]
+    pub credits: Vec<CreditEntry>,
+    #[serde(default)]
+    pub free_month: Option<String>, // "2026-04" = last month free credits were issued
+    #[serde(default)]
+    pub replies_used: i64, // lifetime replies sent
 }
 
 impl TenantBilling {
     pub fn has_credits(&self) -> bool {
-        self.replies_remaining > 0
+        self.total_remaining() > 0
+    }
+
+    pub fn total_remaining(&self) -> i64 {
+        self.credits.iter().map(|e| e.amount).sum()
     }
 }
 

@@ -16,7 +16,7 @@ pub async fn handle_scheduled(_event: ScheduledEvent, env: Env, _ctx: ScheduleCo
 }
 
 async fn refresh_instagram_tokens(env: &Env) -> Result<()> {
-    let kv = env.kv("CALENDARS_KV")?;
+    let kv = env.kv("KV")?;
 
     let encryption_key = env
         .secret("ENCRYPTION_KEY")

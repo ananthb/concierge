@@ -12,7 +12,7 @@ use crate::types::*;
 
 /// Process an inbound message from WhatsApp or Instagram.
 pub async fn process_inbound(msg: &InboundMessage, env: &Env) -> Result<()> {
-    let kv = env.kv("CALENDARS_KV")?;
+    let kv = env.kv("KV")?;
     let db = env.d1("DB")?;
 
     // 1. Log inbound to unified messages table

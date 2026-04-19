@@ -17,7 +17,7 @@ pub async fn handle_instagram(
     method: Method,
 ) -> Result<Response> {
     let base_url = get_base_url(&req);
-    let kv = env.kv("CALENDARS_KV")?;
+    let kv = env.kv("KV")?;
 
     let app_id = env
         .secret("META_APP_ID")

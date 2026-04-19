@@ -140,7 +140,7 @@ pub async fn handle_billing(
             Ok(Response::empty()?.with_status(200))
         }
 
-        // Grant free credits to a tenant
+        // Grant credits to a tenant with expiry
         (Method::Post, ["grant", tenant_id]) => {
             let form: serde_json::Value = req.json().await?;
             let count = form
@@ -148,6 +148,11 @@ pub async fn handle_billing(
                 .and_then(|v| v.as_str())
                 .and_then(|s| s.parse::<i64>().ok())
                 .unwrap_or(0);
+            let expires_days = form
+                .get("expires_days")
+                .and_then(|v| v.as_str())
+                .and_then(|s| s.parse::<i64>().ok())
+                .unwrap_or(365);
 
             if count <= 0 {
                 return Response::from_html(
@@ -155,24 +160,27 @@ pub async fn handle_billing(
                 );
             }
 
-            crate::billing::grant_replies(kv, tenant_id, count).await?;
+            crate::billing::grant_with_expiry(kv, tenant_id, count, expires_days).await?;
 
+            let expires_at = crate::helpers::days_from_now(expires_days);
             audit::log_action(
                 db,
                 actor_email,
                 "grant_replies",
                 "billing",
                 Some(tenant_id),
-                Some(&serde_json::json!({"replies": count})),
+                Some(&serde_json::json!({"replies": count, "expires_in_days": expires_days, "expires_at": expires_at})),
             )
             .await?;
 
-            let billing = storage::get_tenant_billing(kv, tenant_id).await?;
+            let mut billing = storage::get_tenant_billing(kv, tenant_id).await?;
+            crate::billing::refresh_billing(&mut billing);
             Response::from_html(format!(
-                r#"<div class="success">Granted {count} replies to {tid}. Balance: {bal}</div>"#,
+                r#"<div class="success">Granted {count} replies to {tid} (expires in {days} days). Balance: {bal}</div>"#,
                 count = count,
                 tid = crate::helpers::html_escape(tenant_id),
-                bal = billing.replies_remaining,
+                days = expires_days,
+                bal = billing.total_remaining(),
             ))
         }
 

@@ -118,8 +118,9 @@ wrangler d1 execute concierge-worker --remote --file migrations/0001_create_sche
   <li>In the Cloudflare dashboard, go to <strong>Zero Trust &gt; Access &gt; Applications</strong></li>
   <li>Create a <strong>Self-hosted</strong> application</li>
   <li>Set the application domain to <code>your-domain</code> and path to <code>/manage/*</code></li>
-  <li>Create a policy (e.g., "Allow management emails") with an <strong>Emails</strong> rule matching the addresses in your <code>MANAGEMENT_EMAILS</code> variable</li>
-  <li>Cloudflare Access injects the <code>Cf-Access-Authenticated-User-Email</code> header, which Concierge validates against <code>MANAGEMENT_EMAILS</code></li>
+  <li>Copy the <strong>Application Audience (AUD) Tag</strong> and set it as <code>CF_ACCESS_AUD</code> in <code>wrangler.toml</code>. Set <code>CF_ACCESS_TEAM</code> to your team name.</li>
+  <li>Create a policy allowing the emails that should have management access</li>
+  <li>Concierge verifies the <code>Cf-Access-Jwt-Assertion</code> JWT signature and audience — no spoofable headers</li>
 </ol>
 
 <h2>Email Routing Setup</h2>

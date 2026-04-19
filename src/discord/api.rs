@@ -22,7 +22,7 @@ pub async fn post_forwarded_message(
         .map(|s| s.to_string())
         .unwrap_or_default();
 
-    let kv = env.kv("CALENDARS_KV")?;
+    let kv = env.kv("KV")?;
 
     // Create conversation context for relay
     let ctx = ConversationContext {
@@ -141,7 +141,7 @@ pub async fn post_ai_draft(
         .map(|s| s.to_string())
         .unwrap_or_default();
 
-    let kv = env.kv("CALENDARS_KV")?;
+    let kv = env.kv("KV")?;
 
     let ctx = ConversationContext {
         id: generate_id(),

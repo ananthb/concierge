@@ -134,7 +134,7 @@ pub async fn handle_auth(req: Request, env: Env, path: &str, method: Method) -> 
             let user: GoogleUserInfo = serde_json::from_str(&userinfo_text)
                 .map_err(|e| Error::from(format!("Failed to parse user info: {}", e)))?;
 
-            let kv = env.kv("CALENDARS_KV")?;
+            let kv = env.kv("KV")?;
 
             // Check if this is a link request (user already signed in)
             if let Some(tenant_id) = resolve_tenant_id(&req, &kv).await {
@@ -254,7 +254,7 @@ pub async fn handle_auth(req: Request, env: Env, path: &str, method: Method) -> 
                 .unwrap_or("")
                 .to_string();
 
-            let kv = env.kv("CALENDARS_KV")?;
+            let kv = env.kv("KV")?;
 
             // Check if this is a link request (user already signed in)
             if let Some(tenant_id) = resolve_tenant_id(&req, &kv).await {
@@ -316,7 +316,7 @@ pub async fn handle_auth(req: Request, env: Env, path: &str, method: Method) -> 
 
         // Unlink a provider
         (Method::Delete, "/auth/unlink/google") => {
-            let kv = env.kv("CALENDARS_KV")?;
+            let kv = env.kv("KV")?;
             let tenant_id = match resolve_tenant_id(&req, &kv).await {
                 Some(id) => id,
                 None => return Response::error("Unauthorized", 401),
@@ -343,7 +343,7 @@ pub async fn handle_auth(req: Request, env: Env, path: &str, method: Method) -> 
         }
 
         (Method::Delete, "/auth/unlink/facebook") => {
-            let kv = env.kv("CALENDARS_KV")?;
+            let kv = env.kv("KV")?;
             let tenant_id = match resolve_tenant_id(&req, &kv).await {
                 Some(id) => id,
                 None => return Response::error("Unauthorized", 401),
@@ -372,7 +372,7 @@ pub async fn handle_auth(req: Request, env: Env, path: &str, method: Method) -> 
         (Method::Get, "/auth/logout") => {
             // Clear session from KV if exists
             if let Some(session_token) = get_session_cookie(&req) {
-                let kv = env.kv("CALENDARS_KV")?;
+                let kv = env.kv("KV")?;
                 delete_session(&kv, &session_token).await?;
             }
 

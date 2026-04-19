@@ -1,10 +1,70 @@
 //! Billing templates — tenant-facing credit balance + purchase
 
 use crate::helpers::html_escape;
-use crate::types::{CreditPackRow, TenantBilling};
+use crate::types::{CreditPackRow, CreditSource, TenantBilling};
 
 use super::base::{app_shell, base_html};
 use super::HASH;
+
+/// Summary of credits by source, computed from the ledger.
+struct CreditSummary {
+    total: i64,
+    free: i64,
+    free_expires: Option<String>,
+    purchased: i64,
+    granted: i64,
+    granted_earliest_expiry: Option<String>,
+}
+
+fn summarize(billing: &TenantBilling) -> CreditSummary {
+    let mut free = 0i64;
+    let mut free_expires: Option<String> = None;
+    let mut purchased = 0i64;
+    let mut granted = 0i64;
+    let mut granted_earliest: Option<String> = None;
+
+    for entry in &billing.credits {
+        match entry.source {
+            CreditSource::FreeMonthly => {
+                free += entry.amount;
+                if let Some(exp) = &entry.expires_at {
+                    free_expires = Some(exp.clone());
+                }
+            }
+            CreditSource::Purchase => {
+                purchased += entry.amount;
+            }
+            CreditSource::Grant => {
+                granted += entry.amount;
+                if let Some(exp) = &entry.expires_at {
+                    match &granted_earliest {
+                        None => granted_earliest = Some(exp.clone()),
+                        Some(existing) if exp < existing => granted_earliest = Some(exp.clone()),
+                        _ => {}
+                    }
+                }
+            }
+        }
+    }
+
+    CreditSummary {
+        total: free + purchased + granted,
+        free,
+        free_expires,
+        purchased,
+        granted,
+        granted_earliest_expiry: granted_earliest,
+    }
+}
+
+fn format_expiry(iso: &str) -> String {
+    // Extract YYYY-MM-DD from ISO string for display
+    if iso.len() >= 10 {
+        iso[..10].to_string()
+    } else {
+        iso.to_string()
+    }
+}
 
 pub fn billing_overview_html(
     billing: &TenantBilling,
@@ -12,10 +72,32 @@ pub fn billing_overview_html(
     currency: &str,
     base_url: &str,
 ) -> String {
-    let credits_style = if billing.replies_remaining <= 0 {
+    let summary = summarize(billing);
+
+    let total_style = if summary.total <= 0 {
         r#"style="color:var(--warn)""#
     } else {
         ""
+    };
+
+    let free_detail = match &summary.free_expires {
+        Some(exp) => format!(
+            r#"<div class="mono muted" style="font-size:11px">expires {}</div>"#,
+            format_expiry(exp)
+        ),
+        None => String::new(),
+    };
+
+    let granted_detail = if summary.granted > 0 {
+        match &summary.granted_earliest_expiry {
+            Some(exp) => format!(
+                r#"<div class="mono muted" style="font-size:11px">earliest expiry {}</div>"#,
+                format_expiry(exp)
+            ),
+            None => String::new(),
+        }
+    } else {
+        String::new()
     };
 
     let pack_buttons: String = packs
@@ -45,34 +127,49 @@ pub fn billing_overview_html(
   <div class="eyebrow">Billing</div>
   <h2 class="display-sm" style="margin:4px 0 16px">Reply credits</h2>
 
-  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:24px">
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:16px;margin-bottom:24px">
     <div class="card" style="padding:18px;text-align:center">
-      <div class="stat-n serif" {credits_style}>{remaining}</div>
-      <div class="mono muted" style="font-size:11px">Replies remaining</div>
+      <div class="stat-n serif" {total_style}>{total}</div>
+      <div class="mono muted" style="font-size:11px">Total remaining</div>
+    </div>
+    <div class="card" style="padding:18px;text-align:center">
+      <div class="stat-n serif">{free}</div>
+      <div class="mono muted" style="font-size:11px">Free this month</div>
+      {free_detail}
+    </div>
+    <div class="card" style="padding:18px;text-align:center">
+      <div class="stat-n serif">{purchased}</div>
+      <div class="mono muted" style="font-size:11px">Purchased</div>
+      <div class="mono muted" style="font-size:11px">never expire</div>
+    </div>
+    <div class="card" style="padding:18px;text-align:center">
+      <div class="stat-n serif">{granted}</div>
+      <div class="mono muted" style="font-size:11px">Granted</div>
+      {granted_detail}
     </div>
     <div class="card" style="padding:18px;text-align:center">
       <div class="stat-n serif">{used}</div>
       <div class="mono muted" style="font-size:11px">Replies sent</div>
     </div>
-    <div class="card" style="padding:18px;text-align:center">
-      <div class="stat-n serif">{granted}</div>
-      <div class="mono muted" style="font-size:11px">Total granted</div>
-    </div>
   </div>
 
   <div class="card" style="padding:22px">
     <h3 style="margin-bottom:8px">Buy reply credits</h3>
-    <p class="muted" style="margin-bottom:16px">Purchase a pack to top up your balance. First 100 replies each month are free.</p>
+    <p class="muted" style="margin-bottom:16px">Purchase a pack to top up your balance. Purchased credits never expire. First 100 replies each month are free.</p>
     <div class="row gap-12" style="flex-wrap:wrap">
       {pack_buttons}
     </div>
   </div>
 </div>"##,
         base_url = base_url,
-        remaining = billing.replies_remaining,
+        total = summary.total,
+        total_style = total_style,
+        free = summary.free,
+        free_detail = free_detail,
+        purchased = summary.purchased,
+        granted = summary.granted,
+        granted_detail = granted_detail,
         used = billing.replies_used,
-        granted = billing.replies_granted,
-        credits_style = credits_style,
         pack_buttons = pack_buttons,
     );
 

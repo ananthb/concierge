@@ -57,18 +57,18 @@ footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--border
 
 <h1>Management Panel</h1>
 
-<p>The management panel at <code>/manage/*</code> is a platform operator dashboard for managing tenants, billing, and reviewing audit logs. It is protected by Cloudflare Access and restricted to emails listed in the <code>MANAGEMENT_EMAILS</code> environment variable.</p>
+<p>The management panel at <code>/manage/*</code> is a platform operator dashboard for managing tenants, billing, and reviewing audit logs. It is protected by Cloudflare Access with full JWT verification.</p>
 
 <h2>Authentication</h2>
 
-<p>Management routes use a two-layer authentication:</p>
+<p>Management routes verify the <code>Cf-Access-Jwt-Assertion</code> header:</p>
 
 <ol>
-  <li><strong>Cloudflare Access</strong> -- Handles the login flow and injects the <code>Cf-Access-Authenticated-User-Email</code> header</li>
-  <li><strong>Email allowlist</strong> -- Concierge checks the header value against the comma-separated <code>MANAGEMENT_EMAILS</code> variable. Only matching emails are granted access.</li>
+  <li><strong>Cloudflare Access</strong> -- Handles the login flow and issues a signed JWT</li>
+  <li><strong>JWT verification</strong> -- Concierge fetches the team's JWKS, verifies the RS256 signature, checks the <code>aud</code> claim against <code>CF_ACCESS_AUD</code>, and extracts the email</li>
 </ol>
 
-<p>This means you need both a Cloudflare Access policy allowing the email <em>and</em> the email listed in <code>MANAGEMENT_EMAILS</code>.</p>
+<p>Anyone with a valid Access JWT (matching your Access policy) is authorized. Scope access via your Cloudflare Access policy.</p>
 
 <h2>Dashboard</h2>
 
@@ -127,12 +127,11 @@ footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--border
 <h2>Setup</h2>
 
 <ol>
-  <li>Set <code>MANAGEMENT_EMAILS</code> in <code>wrangler.toml</code> to a comma-separated list of operator emails:
-    <pre><code>MANAGEMENT_EMAILS = "admin@example.com,ops@example.com"</code></pre>
-  </li>
   <li>In the Cloudflare dashboard, go to <strong>Zero Trust &gt; Access &gt; Applications</strong></li>
   <li>Create a Self-hosted application for <code>your-domain/manage/*</code></li>
-  <li>Add a policy allowing the same emails (or a broader group if desired)</li>
+  <li>Copy the <strong>Application Audience (AUD) Tag</strong> from the application overview</li>
+  <li>Set <code>CF_ACCESS_TEAM</code> (your team name) and <code>CF_ACCESS_AUD</code> in <code>wrangler.toml</code></li>
+  <li>Add a policy allowing the emails that should have management access</li>
   <li>Deploy with <code>wrangler deploy</code></li>
 </ol>
 

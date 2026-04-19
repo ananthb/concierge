@@ -65,7 +65,7 @@ pub async fn handle_instagram_dm(mut req: Request, env: Env) -> Result<Response>
         return Response::ok("OK");
     }
 
-    let kv = env.kv("CALENDARS_KV")?;
+    let kv = env.kv("KV")?;
 
     for entry in &payload.entry {
         let page_id = &entry.id;

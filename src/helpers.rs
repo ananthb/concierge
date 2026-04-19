@@ -51,6 +51,47 @@ pub fn now_iso() -> String {
         .unwrap_or_else(|| String::from("1970-01-01T00:00:00.000Z"))
 }
 
+/// Get current year-month as "YYYY-MM"
+pub fn current_month() -> String {
+    let d = js_sys::Date::new_0();
+    let y = d.get_utc_full_year();
+    let m = d.get_utc_month() + 1; // 0-indexed
+    format!("{y:04}-{m:02}")
+}
+
+/// Get ISO 8601 timestamp for the last moment of the current UTC month.
+pub fn end_of_month() -> String {
+    let d = js_sys::Date::new_0();
+    let y = d.get_utc_full_year() as i32;
+    let m = (d.get_utc_month() + 1) as u32; // 1-indexed
+    let last_day = days_in_month(y, m);
+    format!("{y:04}-{m:02}-{last_day:02}T23:59:59Z")
+}
+
+/// Get ISO 8601 timestamp `days` from now.
+pub fn days_from_now(days: i64) -> String {
+    let ms = js_sys::Date::now() + (days as f64 * 86_400_000.0);
+    let d = js_sys::Date::new(&wasm_bindgen::JsValue::from_f64(ms));
+    d.to_iso_string()
+        .as_string()
+        .unwrap_or_else(|| String::from("2099-12-31T23:59:59.000Z"))
+}
+
+fn days_in_month(year: i32, month: u32) -> u32 {
+    match month {
+        1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
+        4 | 6 | 9 | 11 => 30,
+        2 => {
+            if (year % 4 == 0 && year % 100 != 0) || year % 400 == 0 {
+                29
+            } else {
+                28
+            }
+        }
+        _ => 30,
+    }
+}
+
 /// HTML escape for XSS prevention
 pub fn html_escape(s: &str) -> String {
     s.replace('&', "&amp;")

@@ -54,7 +54,7 @@ pub async fn handle_data_deletion(mut req: Request, env: Env, method: Method) ->
         return Response::error("Missing user_id", 400);
     }
 
-    let kv = env.kv("CALENDARS_KV")?;
+    let kv = env.kv("KV")?;
     let db = env.d1("DB")?;
 
     // Find and delete tenant by facebook_id

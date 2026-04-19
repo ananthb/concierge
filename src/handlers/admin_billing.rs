@@ -16,7 +16,7 @@ pub async fn handle_billing_admin(
     base_url: &str,
     tenant_id: &str,
 ) -> Result<Response> {
-    let kv = env.kv("CALENDARS_KV")?;
+    let kv = env.kv("KV")?;
     let db = env.d1("DB")?;
 
     let sub = path
@@ -29,7 +29,9 @@ pub async fn handle_billing_admin(
     match (method, sub) {
         // Billing overview
         (Method::Get, "" | "/") => {
-            let bill = storage::get_tenant_billing(&kv, tenant_id).await?;
+            let mut bill = storage::get_tenant_billing(&kv, tenant_id).await?;
+            crate::billing::refresh_billing(&mut bill);
+            storage::save_tenant_billing(&kv, tenant_id, &bill).await?;
             let country = req.headers().get("cf-ipcountry")?.unwrap_or_default();
             let currency = if country == "IN" { "INR" } else { "USD" };
             let packs = storage::get_active_credit_packs(&db).await?;

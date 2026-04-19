@@ -49,7 +49,7 @@ pub async fn send_reply(
     to: &str,
     body: &str,
 ) -> Result<()> {
-    let kv = env.kv("CALENDARS_KV")?;
+    let kv = env.kv("KV")?;
     let encryption_key = env
         .secret("ENCRYPTION_KEY")
         .map(|s| s.to_string())

@@ -81,7 +81,7 @@ pub fn welcome_html(base_url: &str) -> String {
         r#"<section class="page welcome">
   <div class="welcome-left">
     <div class="eyebrow">// automated customer engagement</div>
-    <h1 class="display">Hello. I'll be answering<br>every <em>DM, WhatsApp &amp; email</em><br>so you don't have to.</h1>
+    <h1 class="display">Hello. I'll be answering <br>every <em>DM, WhatsApp &amp; email</em> <br>so you don't have to.</h1>
     <p class="lead">Connect your channels, set a tone, and your concierge handles the rest. Auto-replies across WhatsApp, Instagram, and email. 100 replies free every month.</p>
     <form class="welcome-form" action="/auth/login" method="get">
       <input class="input" name="biz" placeholder="Business name" required>

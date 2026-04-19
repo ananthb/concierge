@@ -16,7 +16,7 @@ pub async fn handle_instagram_admin(
     base_url: &str,
     tenant_id: &str,
 ) -> Result<Response> {
-    let kv = env.kv("CALENDARS_KV")?;
+    let kv = env.kv("KV")?;
 
     let path_parts: Vec<&str> = path
         .strip_prefix("/admin/instagram")

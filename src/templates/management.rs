@@ -395,6 +395,7 @@ pub fn billing_overview_html(packs: &[CreditPackRow], base_url: &str) -> String 
       <div class="row gap-12" style="flex-wrap:wrap">
         <input class="input" name="tenant_id" placeholder="Tenant ID" required style="max-width:300px">
         <input class="input" name="replies" placeholder="Replies" type="number" min="1" required style="max-width:140px">
+        <input class="input" name="expires_days" placeholder="Expires in (days)" type="number" min="1" value="365" style="max-width:160px">
         <button class="btn sm" type="submit">Grant</button>
       </div>
     </form>

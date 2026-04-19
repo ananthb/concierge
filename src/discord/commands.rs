@@ -14,7 +14,7 @@ pub async fn handle_command(interaction: &DiscordInteraction, env: &Env) -> Resu
         .unwrap_or("");
 
     let guild_id = interaction.guild_id.as_deref().unwrap_or("");
-    let kv = env.kv("CALENDARS_KV")?;
+    let kv = env.kv("KV")?;
 
     // Resolve tenant from guild
     let tenant_id = match get_discord_config_by_guild(&kv, guild_id).await? {

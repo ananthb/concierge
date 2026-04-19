@@ -89,7 +89,7 @@ pub async fn handle_webhook(
                 return Response::ok("OK");
             }
 
-            let kv = env.kv("CALENDARS_KV")?;
+            let kv = env.kv("KV")?;
 
             for entry in &body.entry {
                 for change in &entry.changes {

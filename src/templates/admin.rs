@@ -304,8 +304,8 @@ pub fn admin_dashboard_html(
         wa_count = whatsapp_accounts.len(),
         ig_count = instagram_accounts.len(),
         lf_count = lead_forms.len(),
-        credits = billing.replies_remaining,
-        credit_warn_style = if billing.replies_remaining <= 10 {
+        credits = billing.total_remaining(),
+        credit_warn_style = if billing.total_remaining() <= 10 {
             ";border-color:var(--warn);background:var(--accent-soft)"
         } else {
             ""
