@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>How It Works — Concierge</title>
+<title>How It Works | Concierge</title>
 <link rel="icon" type="image/svg+xml" href="https://concierge.calculon.tech/logo.svg">
 <meta name="theme-color" content="#E86A2C">
 <style>
@@ -61,7 +61,7 @@ footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--border
 
 <h2>Unified Pipeline</h2>
 
-<p>All inbound messages -- regardless of channel -- are normalized into an <code>InboundMessage</code> struct and processed through a common pipeline:</p>
+<p>All inbound messages: regardless of channel: are normalized into an <code>InboundMessage</code> struct and processed through a common pipeline:</p>
 
 <ol>
   <li>Channel-specific webhook or handler receives the raw message</li>
@@ -80,7 +80,7 @@ footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--border
   <li>Meta delivers the message to Concierge via webhook at <code>POST /webhook/whatsapp</code></li>
   <li>Concierge looks up the WhatsApp account by phone number ID, checks if auto-reply is enabled</li>
   <li>One reply credit is deducted before generating the response</li>
-  <li>Sends a reply -- either a static message or an AI-generated response via Workers AI</li>
+  <li>Sends a reply: either a static message or an AI-generated response via Workers AI</li>
   <li>If the send fails, the credit is restored</li>
 </ol>
 
@@ -140,13 +140,13 @@ footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--border
 <h2>Architecture</h2>
 
 <ul>
-  <li><strong>Cloudflare Worker</strong> -- Rust compiled to WebAssembly, handles all HTTP routes, webhooks, and email events</li>
-  <li><strong>Cloudflare KV</strong> -- Stores tenant configs, account configs, tokens, sessions, routing rules, billing state, and conversation contexts</li>
-  <li><strong>Cloudflare D1</strong> -- SQLite database for message metadata logs, email metrics, lead form submissions, credit packs, payments, and audit logs</li>
-  <li><strong>Cloudflare Workers AI</strong> -- Powers AI-mode auto-replies and email draft generation</li>
-  <li><strong>Cloudflare Email Routing</strong> -- Triggers the Worker's email handler for inbound emails</li>
-  <li><strong>Discord Interactions API</strong> -- Slash commands, button interactions, and modal submissions via <code>POST /discord/interactions</code></li>
-  <li><strong>Razorpay</strong> -- Payment processing for credit pack purchases</li>
+  <li><strong>Cloudflare Worker</strong>: Rust compiled to WebAssembly, handles all HTTP routes, webhooks, and email events</li>
+  <li><strong>Cloudflare KV</strong>: Stores tenant configs, account configs, tokens, sessions, routing rules, billing state, and conversation contexts</li>
+  <li><strong>Cloudflare D1</strong>: SQLite database for message metadata logs, email metrics, lead form submissions, credit packs, payments, and audit logs</li>
+  <li><strong>Cloudflare Workers AI</strong>: Powers AI-mode auto-replies and email draft generation</li>
+  <li><strong>Cloudflare Email Routing</strong>: Triggers the Worker's email handler for inbound emails</li>
+  <li><strong>Discord Interactions API</strong>: Slash commands, button interactions, and modal submissions via <code>POST /discord/interactions</code></li>
+  <li><strong>Razorpay</strong>: Payment processing for credit pack purchases</li>
 </ul>
 
 <footer>

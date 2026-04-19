@@ -3,9 +3,14 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Concierge — Documentation</title>
+<title>Concierge | Documentation</title>
 <link rel="icon" type="image/svg+xml" href="https://concierge.calculon.tech/logo.svg">
 <meta name="theme-color" content="#E86A2C">
+<meta name="description" content="Documentation for Concierge, an automated multi-channel messaging platform for small businesses built on Cloudflare Workers.">
+<meta property="og:title" content="Concierge Documentation">
+<meta property="og:description" content="Documentation for Concierge, an automated multi-channel messaging platform for small businesses built on Cloudflare Workers.">
+<meta property="og:type" content="website">
+<meta property="og:image" content="https://concierge.calculon.tech/logo-512.png">
 <style>
 :root { --bg: #fff; --fg: #1a1a1a; --muted: #555; --accent: #C55A11; --code-bg: #f5f6f8; --border: #e0e0e0; --max-w: 740px; --orange: #E86A2C; --navy: #1A1A2E; }
 @media (prefers-color-scheme: dark) { :root { --bg: #121212; --fg: #e0e0e0; --muted: #aaa; --accent: #F9A825; --code-bg: #2a2a2a; --border: #3a3a3a; } }
@@ -32,6 +37,7 @@ nav.site-nav { display: flex; gap: 0.75rem; margin: 1rem 0 2rem; flex-wrap: wrap
 nav.site-nav a { padding: 0.3rem 0.6rem; background: var(--code-bg); border-radius: 4px; font-weight: 500; font-size: 0.85rem; }
 nav.site-nav a.current { background: var(--orange); color: #fff; }
 footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--border); font-size: 0.8rem; color: var(--muted); }
+.deploy-btn { display: inline-block; margin: 1rem 0; }
 </style>
 </head>
 <body>
@@ -57,23 +63,27 @@ footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--border
 
 <h1>Concierge</h1>
 
-<p>Multi-channel messaging automation for small businesses. WhatsApp and Instagram auto-replies, email routing with smart rules, a unified Discord inbox, embeddable lead capture forms, and credit-based billing -- all in one self-hosted Cloudflare Worker.</p>
+<p>Multi-channel messaging automation for small businesses. WhatsApp and Instagram auto-replies, email routing with smart rules, a unified Discord inbox, embeddable lead capture forms, and credit-based billing. All in one self-hosted Cloudflare Worker.</p>
+
+<a class="deploy-btn" href="https://deploy.workers.cloudflare.com/?url=https://github.com/ananthb/concierge-worker">
+  <img src="https://deploy.workers.cloudflare.com/button" alt="Deploy to Cloudflare">
+</a>
 
 <h2>Features</h2>
 
 <ul>
-  <li><strong>WhatsApp Auto-Reply</strong> -- Reply instantly to incoming messages with static text or AI-generated responses via the Meta Business API</li>
-  <li><strong>Instagram DM Auto-Reply</strong> -- Auto-respond to Instagram Direct Messages via Facebook Pages API</li>
-  <li><strong>Email Routing</strong> -- Catch-all email with flexible routing rules using glob patterns. Actions include drop, spam reject, forward email (with reverse-alias reply routing), forward to Discord, and AI-generated replies with approval workflow</li>
-  <li><strong>Discord Relay</strong> -- Unified inbox in Discord where messages from any channel are forwarded with Reply, Approve, and Drop buttons. Replies in Discord route back through the originating channel</li>
-  <li><strong>Discord Slash Commands</strong> -- <code>/status</code>, <code>/domains</code>, and <code>/rules</code> for managing your setup from Discord</li>
-  <li><strong>Lead Capture Forms</strong> -- Embeddable phone number forms that trigger WhatsApp messages on submission</li>
-  <li><strong>Unified Message Pipeline</strong> -- All channels produce a common <code>InboundMessage</code> type, logged to a unified messages table (metadata only, no message content stored)</li>
-  <li><strong>Onboarding Wizard</strong> -- 6-step guided setup for new tenants</li>
-  <li><strong>Management Panel</strong> -- Platform operator dashboard at <code>/manage/*</code> behind Cloudflare Access for tenant CRUD, billing controls, and audit logs</li>
-  <li><strong>Billing</strong> -- Prepaid reply credits with management-granted free credits and Razorpay integration for paid credit packs</li>
-  <li><strong>Multi-Tenant Auth</strong> -- Google and Facebook OAuth with multi-provider account linking</li>
-  <li><strong>Privacy-First</strong> -- No message content stored. GDPR data deletion endpoint. AGPL-3.0 licensed</li>
+  <li><strong>WhatsApp Auto-Reply</strong>: reply instantly to incoming messages with static text or AI-generated responses via the Meta Business API</li>
+  <li><strong>Instagram DM Auto-Reply</strong>: auto-respond to Instagram Direct Messages via Facebook Pages API</li>
+  <li><strong>Email Routing</strong>: catch-all email with flexible routing rules using glob patterns. Actions include drop, spam reject, forward email (with reverse-alias reply routing), forward to Discord, and AI-generated replies with approval workflow</li>
+  <li><strong>Discord Relay</strong>: unified inbox in Discord where messages from any channel are forwarded with Reply, Approve, and Drop buttons. Replies in Discord route back through the originating channel</li>
+  <li><strong>Discord Slash Commands</strong>: <code>/status</code>, <code>/domains</code>, and <code>/rules</code> for managing your setup from Discord</li>
+  <li><strong>Lead Capture Forms</strong>: embeddable phone number forms that trigger WhatsApp messages on submission</li>
+  <li><strong>Unified Message Pipeline</strong>: all channels produce a common <code>InboundMessage</code> type, logged to a unified messages table (metadata only, no message content stored)</li>
+  <li><strong>Onboarding Wizard</strong>: 6-step guided setup for new tenants</li>
+  <li><strong>Management Panel</strong>: platform operator dashboard at <code>/manage/*</code> behind Cloudflare Access for tenant CRUD, billing controls, and audit logs</li>
+  <li><strong>Billing</strong>: prepaid reply credits with 100 free per month. Purchased credits never expire. Razorpay integration for paid credit packs</li>
+  <li><strong>Multi-Tenant Auth</strong>: Google and Facebook OAuth with multi-provider account linking</li>
+  <li><strong>Privacy-First</strong>: no message content stored. GDPR data deletion endpoint. AGPL-3.0 licensed</li>
 </ul>
 
 <h2>Built With</h2>
@@ -85,6 +95,10 @@ footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--border
   <li>Discord Interactions API (slash commands, buttons, modals)</li>
   <li>Razorpay payment gateway</li>
 </ul>
+
+<h2>Getting Started</h2>
+
+<p>Click the deploy button above to deploy to Cloudflare Workers. The deploy flow will fork the repo and provision the Worker, D1 database, and KV namespace automatically. Then follow the <a href="setup.html">setup guide</a> to configure secrets and webhooks.</p>
 
 <h2>License</h2>
 

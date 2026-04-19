@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Email Routing — Concierge</title>
+<title>Email Routing | Concierge</title>
 <link rel="icon" type="image/svg+xml" href="https://concierge.calculon.tech/logo.svg">
 <meta name="theme-color" content="#E86A2C">
 <style>
@@ -121,11 +121,11 @@ footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--border
 <h3>Pattern Examples</h3>
 
 <ul>
-  <li><code>*</code> -- matches everything</li>
-  <li><code>*@example.com</code> -- any address at example.com</li>
-  <li><code>*@*.example.com</code> -- any subdomain of example.com</li>
-  <li><code>support+*@example.com</code> -- plus-addressed support emails</li>
-  <li><code>*invoice*</code> -- subject or body containing "invoice"</li>
+  <li><code>*</code>: matches everything</li>
+  <li><code>*@example.com</code>: any address at example.com</li>
+  <li><code>*@*.example.com</code>: any subdomain of example.com</li>
+  <li><code>support+*@example.com</code>: plus-addressed support emails</li>
+  <li><code>*invoice*</code>: subject or body containing "invoice"</li>
 </ul>
 
 <h2>Actions</h2>
@@ -147,7 +147,7 @@ footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--border
 
 <p>When an email is forwarded via the <strong>Forward Email</strong> action, Concierge generates a unique reverse-alias address on the domain (e.g., <code>reply-abc123@example.com</code>). This alias is used as the <code>From</code> address in the forwarded email.</p>
 
-<p>When the recipient replies to the forwarded email, their reply goes to the reverse-alias address. Concierge looks up the alias, finds the original sender, and forwards the reply back to them -- making the conversation appear seamless.</p>
+<p>When the recipient replies to the forwarded email, their reply goes to the reverse-alias address. Concierge looks up the alias, finds the original sender, and forwards the reply back to them: making the conversation appear seamless.</p>
 
 <ol>
   <li>Email from <code>alice@external.com</code> to <code>support@example.com</code></li>
@@ -158,11 +158,11 @@ footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--border
 
 <h2>AI Reply with Approval</h2>
 
-<p>The <strong>AI Reply</strong> action generates a draft response using Cloudflare Workers AI. The draft is not sent automatically -- it is posted to a Discord channel for human approval with Approve and Reject buttons.</p>
+<p>The <strong>AI Reply</strong> action generates a draft response using Cloudflare Workers AI. The draft is not sent automatically: it is posted to a Discord channel for human approval with Approve and Reject buttons.</p>
 
 <ul>
-  <li><strong>Approve</strong> -- sends the AI-generated draft to the original sender</li>
-  <li><strong>Reject</strong> -- discards the draft</li>
+  <li><strong>Approve</strong>: sends the AI-generated draft to the original sender</li>
+  <li><strong>Reject</strong>: discards the draft</li>
   <li>You can also click <strong>Reply</strong> to write a custom response instead of using the draft</li>
 </ul>
 
@@ -173,8 +173,8 @@ footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--border
 <p>Rules can be managed via:</p>
 
 <ul>
-  <li><strong>Web admin panel</strong> -- Full CRUD for domains and rules</li>
-  <li><strong>Discord</strong> -- <code>/rules list &lt;domain&gt;</code> to view rules. For complex rule management, use the web admin</li>
+  <li><strong>Web admin panel</strong>: Full CRUD for domains and rules</li>
+  <li><strong>Discord</strong>: <code>/rules list &lt;domain&gt;</code> to view rules. For complex rule management, use the web admin</li>
 </ul>
 
 <h2>Loop Detection</h2>

@@ -2,20 +2,8 @@ name = "concierge-worker"
 main = "build/worker/shim.mjs"
 compatibility_date = "2024-01-01"
 
-# ============================================================================
-# WARNING: You MUST replace the IDs below with your own!
-# ============================================================================
-
-# Your Cloudflare Account ID
-account_id = "59b9363d35105560f2df047c995be5a2"
-
 [build]
 command = "worker-build --release"
-
-# Custom domain — requires calculon.tech on Cloudflare DNS
-[[routes]]
-pattern = "concierge.calculon.tech"
-custom_domain = true
 
 # ============================================================================
 # D1 Database for messages and submissions
@@ -23,14 +11,12 @@ custom_domain = true
 [[d1_databases]]
 binding = "DB"
 database_name = "concierge-worker"
-database_id = "332c2ee6-05c9-4293-9df3-51e61238b61a"
 
 # ============================================================================
 # KV Namespace for configs
 # ============================================================================
 [[kv_namespaces]]
 binding = "KV"
-id = "2c2f474d22e04d1f8a4d12b37810390b"
 
 # ============================================================================
 # AI Binding for auto-reply generation
@@ -46,10 +32,10 @@ name = "EMAIL"
 
 [vars]
 ENVIRONMENT = "production"
-CF_ACCESS_TEAM = "kedi-dev"
-CF_ACCESS_AUD = "26725d64652a31a304eec066f5ff9e556e56a3eb10c047ef5da34b48ff00e04826725d64652a31a304eec066f5ff9e556e56a3eb10c047ef5da34b48ff00e048"
-WHATSAPP_WABA_ID = "4343643062548588"
-WHATSAPP_SIGNUP_CONFIG_ID = "1645422080027471"
+CF_ACCESS_TEAM = ""             # Your Cloudflare Access team name (e.g. "myteam")
+CF_ACCESS_AUD = ""              # Application Audience (AUD) tag from Access application
+WHATSAPP_WABA_ID = ""           # Your WhatsApp Business Account ID
+WHATSAPP_SIGNUP_CONFIG_ID = ""  # Meta Embedded Signup config ID
 
 # ============================================================================
 # Cron triggers — daily at 6AM UTC for Instagram token refresh

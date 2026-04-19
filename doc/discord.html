@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Discord Integration — Concierge</title>
+<title>Discord Integration | Concierge</title>
 <link rel="icon" type="image/svg+xml" href="https://concierge.calculon.tech/logo.svg">
 <meta name="theme-color" content="#E86A2C">
 <style>
@@ -57,7 +57,7 @@ footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--border
 
 <h1>Discord Integration</h1>
 
-<p>Discord serves as a unified inbox for Concierge. Messages from any channel (email, WhatsApp, Instagram) can be forwarded to Discord, where you can read, reply, approve AI drafts, or drop messages -- all without leaving Discord.</p>
+<p>Discord serves as a unified inbox for Concierge. Messages from any channel (email, WhatsApp, Instagram) can be forwarded to Discord, where you can read, reply, approve AI drafts, or drop messages: all without leaving Discord.</p>
 
 <h2>Bot Setup</h2>
 
@@ -86,9 +86,9 @@ wrangler secret put DISCORD_BOT_TOKEN</code></pre>
 <p>Generate an invite URL with these permissions:</p>
 
 <ul>
-  <li><strong>Send Messages</strong> -- for posting forwarded messages and embeds</li>
-  <li><strong>Use Slash Commands</strong> -- for admin commands</li>
-  <li><strong>Embed Links</strong> -- for rich message formatting</li>
+  <li><strong>Send Messages</strong>: for posting forwarded messages and embeds</li>
+  <li><strong>Use Slash Commands</strong>: for admin commands</li>
+  <li><strong>Embed Links</strong>: for rich message formatting</li>
 </ul>
 
 <p>The invite URL format:</p>
@@ -119,9 +119,9 @@ wrangler secret put DISCORD_BOT_TOKEN</code></pre>
 <p>Manage email domains:</p>
 
 <ul>
-  <li><code>/domains list</code> -- list all configured domains</li>
-  <li><code>/domains add &lt;domain&gt;</code> -- register a new domain</li>
-  <li><code>/domains remove &lt;domain&gt;</code> -- remove a domain and its rules</li>
+  <li><code>/domains list</code>: list all configured domains</li>
+  <li><code>/domains add &lt;domain&gt;</code>: register a new domain</li>
+  <li><code>/domains remove &lt;domain&gt;</code>: remove a domain and its rules</li>
 </ul>
 
 <h3><code>/rules</code></h3>
@@ -129,7 +129,7 @@ wrangler secret put DISCORD_BOT_TOKEN</code></pre>
 <p>View email routing rules:</p>
 
 <ul>
-  <li><code>/rules list &lt;domain&gt;</code> -- list all rules for a domain with status, priority, and action</li>
+  <li><code>/rules list &lt;domain&gt;</code>: list all rules for a domain with status, priority, and action</li>
 </ul>
 
 <p>For complex rule management (creating, editing, deleting rules), use the web admin panel.</p>
@@ -139,9 +139,9 @@ wrangler secret put DISCORD_BOT_TOKEN</code></pre>
 <p>When a message from another channel is forwarded to Discord (e.g., via the <strong>Forward Discord</strong> email action), it arrives as a rich embed with action buttons:</p>
 
 <ul>
-  <li><strong>Reply</strong> -- opens a modal for composing a response. The reply is sent back through the originating channel.</li>
-  <li><strong>Approve</strong> -- sends an AI-generated draft (for AI Reply actions). Only shown when there is a draft.</li>
-  <li><strong>Drop</strong> -- dismisses the message and cleans up the conversation context.</li>
+  <li><strong>Reply</strong>: opens a modal for composing a response. The reply is sent back through the originating channel.</li>
+  <li><strong>Approve</strong>: sends an AI-generated draft (for AI Reply actions). Only shown when there is a draft.</li>
+  <li><strong>Drop</strong>: dismisses the message and cleans up the conversation context.</li>
 </ul>
 
 <h3>ConversationContext</h3>

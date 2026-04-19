@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Management Panel — Concierge</title>
+<title>Management Panel | Concierge</title>
 <link rel="icon" type="image/svg+xml" href="https://concierge.calculon.tech/logo.svg">
 <meta name="theme-color" content="#E86A2C">
 <style>
@@ -64,8 +64,8 @@ footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--border
 <p>Management routes verify the <code>Cf-Access-Jwt-Assertion</code> header:</p>
 
 <ol>
-  <li><strong>Cloudflare Access</strong> -- Handles the login flow and issues a signed JWT</li>
-  <li><strong>JWT verification</strong> -- Concierge fetches the team's JWKS, verifies the RS256 signature, checks the <code>aud</code> claim against <code>CF_ACCESS_AUD</code>, and extracts the email</li>
+  <li><strong>Cloudflare Access</strong>: Handles the login flow and issues a signed JWT</li>
+  <li><strong>JWT verification</strong>: Concierge fetches the team's JWKS, verifies the RS256 signature, checks the <code>aud</code> claim against <code>CF_ACCESS_AUD</code>, and extracts the email</li>
 </ol>
 
 <p>Anyone with a valid Access JWT (matching your Access policy) is authorized. Scope access via your Cloudflare Access policy.</p>
@@ -96,12 +96,12 @@ footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--border
 <p>At <code>/manage/billing</code>, operators can:</p>
 
 <ul>
-  <li><strong>View credit packs</strong> -- See all defined packs with their reply counts, prices, and status</li>
-  <li><strong>Create packs</strong> -- Add new credit packs with name, reply count, INR price, USD price, and sort order</li>
-  <li><strong>Update packs</strong> -- Edit existing pack details</li>
-  <li><strong>Activate/Deactivate packs</strong> -- Control which packs are visible to tenants</li>
-  <li><strong>Delete packs</strong> -- Remove packs entirely</li>
-  <li><strong>Grant credits</strong> -- Give free reply credits to a specific tenant (at <code>/manage/billing/grant/{tenant_id}</code>)</li>
+  <li><strong>View credit packs</strong>: See all defined packs with their reply counts, prices, and status</li>
+  <li><strong>Create packs</strong>: Add new credit packs with name, reply count, INR price, USD price, and sort order</li>
+  <li><strong>Update packs</strong>: Edit existing pack details</li>
+  <li><strong>Activate/Deactivate packs</strong>: Control which packs are visible to tenants</li>
+  <li><strong>Delete packs</strong>: Remove packs entirely</li>
+  <li><strong>Grant credits</strong>: Give free reply credits to a specific tenant (at <code>/manage/billing/grant/{tenant_id}</code>)</li>
 </ul>
 
 <h2>Audit Log</h2>
