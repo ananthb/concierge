@@ -309,8 +309,8 @@ code {
   .welcome-form .input { max-width:100%; }
   .welcome-form .btn { width:100%; justify-content:center; }
   .fineprint { display:flex; flex-direction:column; gap:4px; }
-  .top { grid-template-columns:auto 1fr auto; padding:12px 16px; gap:12px; }
-  .top .rail-wrap { display:none; }
+  .top { padding:12px 16px; gap:12px; }
+  .top .rail-wrap { visibility:hidden; height:0; overflow:hidden; }
   .top-right { gap:8px; }
   .top-right .mono { display:none; }
   .app-top { padding:12px 16px; gap:12px; flex-wrap:wrap; }

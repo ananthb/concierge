@@ -1,10 +1,12 @@
 //! Legal pages — Terms of Service and Privacy Policy
 
-const LEGAL_STYLE: &str = r#"*{margin:0;padding:0;box-sizing:border-box}body{font-family:system-ui,-apple-system,sans-serif;color:#333;line-height:1.7;padding:2rem 1rem;max-width:720px;margin:0 auto}h1{font-size:2rem;margin-bottom:1rem}h2{font-size:1.25rem;margin:2rem 0 .5rem}p,ul{margin-bottom:1rem}ul{padding-left:1.5rem}a{color:#F38020}footer{margin-top:3rem;padding-top:1rem;border-top:1px solid #ddd;font-size:.85rem;color:#666}"#;
+const LEGAL_STYLE: &str = "*{margin:0;padding:0;box-sizing:border-box}body{font-family:Inter,system-ui,-apple-system,sans-serif;background:#F5EFE4;color:#1B1814;line-height:1.7;padding:2rem 1rem;max-width:720px;margin:0 auto;-webkit-font-smoothing:antialiased}h1{font-family:'Instrument Serif',Georgia,serif;font-size:2.5rem;margin-bottom:.5rem;letter-spacing:-0.02em}h2{font-size:1.15rem;margin:2rem 0 .5rem;color:#3A332B}p,ul{margin-bottom:1rem;color:#3A332B}ul{padding-left:1.5rem}a{color:#E86A2C;text-decoration:none}a:hover{text-decoration:underline}footer{margin-top:3rem;padding-top:1rem;border-top:1px solid #D9CEB8;font-size:.85rem;color:#7A6E5E}";
+
+const LEGAL_FONTS: &str = "<link rel=\"preconnect\" href=\"https://fonts.googleapis.com\"><link rel=\"preconnect\" href=\"https://fonts.gstatic.com\" crossorigin><link href=\"https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&amp;family=Inter:wght@400;500;600&amp;display=swap\" rel=\"stylesheet\">";
 
 pub fn terms_of_service_html() -> String {
     format!(
-        r#"<!DOCTYPE html>
+        r##"<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -16,6 +18,8 @@ pub fn terms_of_service_html() -> String {
 <meta property="og:description" content="Terms of Service for Concierge, an automated messaging platform for small businesses.">
 <meta property="og:type" content="article">
 <meta property="og:image" content="https://concierge.calculon.tech/logo-512.png">
+<meta name="theme-color" content="#E86A2C">
+{fonts}
 <style>{style}</style>
 </head>
 <body>
@@ -48,14 +52,15 @@ pub fn terms_of_service_html() -> String {
 
 <footer><a href="/">Home</a> · <a href="/privacy">Privacy</a> · <a href="https://github.com/ananthb/concierge-worker">Source Code</a> (AGPL-3.0)</footer>
 </body>
-</html>"#,
+</html>"##,
         style = LEGAL_STYLE,
+        fonts = LEGAL_FONTS,
     )
 }
 
 pub fn privacy_policy_html() -> String {
     format!(
-        r#"<!DOCTYPE html>
+        r##"<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -67,6 +72,8 @@ pub fn privacy_policy_html() -> String {
 <meta property="og:description" content="Privacy Policy for Concierge. We store the minimum data needed to operate and you can delete everything at any time.">
 <meta property="og:type" content="article">
 <meta property="og:image" content="https://concierge.calculon.tech/logo-512.png">
+<meta name="theme-color" content="#E86A2C">
+{fonts}
 <style>{style}</style>
 </head>
 <body>
@@ -106,7 +113,8 @@ pub fn privacy_policy_html() -> String {
 
 <footer><a href="/">Home</a> · <a href="/terms">Terms</a> · <a href="https://github.com/ananthb/concierge-worker">Source Code</a> (AGPL-3.0)</footer>
 </body>
-</html>"#,
+</html>"##,
         style = LEGAL_STYLE,
+        fonts = LEGAL_FONTS,
     )
 }

@@ -544,7 +544,7 @@ pub fn pricing_html(packs: &[crate::types::CreditPackRow]) -> String {
   </div>
 
   <div style="text-align:center">
-    <a href="/" class="btn primary lg">Get started &rarr;</a>
+    <a href="/" class="btn ghost">&larr; Back to home</a>
   </div>
 </div>"##,
         logo = LOGO_INLINE,

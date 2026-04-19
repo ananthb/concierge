@@ -55,6 +55,7 @@ pub fn auth_login_html(
       {primary_btn}
       {secondary_btn}
     </div>
+    <a href="/" class="btn ghost sm" style="margin-top:24px">&larr; Back to home</a>
 </div>"#,
         logo = super::base::LOGO_INLINE,
         primary_btn = primary_btn,
