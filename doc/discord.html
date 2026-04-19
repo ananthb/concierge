@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Discord Integration — Concierge</title>
+<link rel="icon" type="image/svg+xml" href="https://concierge.calculon.tech/logo.svg">
+<meta name="theme-color" content="#E86A2C">
+<style>
+:root { --bg: #fff; --fg: #1a1a1a; --muted: #555; --accent: #C55A11; --code-bg: #f5f6f8; --border: #e0e0e0; --max-w: 740px; --orange: #E86A2C; --navy: #1A1A2E; }
+@media (prefers-color-scheme: dark) { :root { --bg: #121212; --fg: #e0e0e0; --muted: #aaa; --accent: #F9A825; --code-bg: #2a2a2a; --border: #3a3a3a; } }
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--fg); line-height: 1.6; }
+.container { max-width: var(--max-w); margin: 0 auto; padding: 2rem 1.5rem; }
+h1 { font-size: 1.8rem; margin-bottom: 0.5rem; }
+h2 { font-size: 1.25rem; margin-top: 2rem; margin-bottom: 0.5rem; border-bottom: 1px solid var(--border); padding-bottom: 0.3rem; }
+h3 { font-size: 1.05rem; margin-top: 1.5rem; margin-bottom: 0.3rem; }
+p { margin: 0.5rem 0; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+ul, ol { margin: 0.5rem 0 0.5rem 1.5rem; }
+li { margin: 0.3rem 0; }
+code { background: var(--code-bg); padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9em; font-family: ui-monospace, monospace; }
+pre { background: var(--code-bg); padding: 1rem; border-radius: 6px; overflow-x: auto; margin: 0.75rem 0; }
+pre code { background: none; padding: 0; }
+table { width: 100%; border-collapse: collapse; margin: 0.75rem 0; }
+th, td { padding: 0.5rem 0.75rem; text-align: left; border-bottom: 1px solid var(--border); }
+th { font-weight: 600; font-size: 0.9rem; }
+strong { font-weight: 600; }
+nav.site-nav { display: flex; gap: 0.75rem; margin: 1rem 0 2rem; flex-wrap: wrap; padding-bottom: 1rem; border-bottom: 1px solid var(--border); }
+nav.site-nav a { padding: 0.3rem 0.6rem; background: var(--code-bg); border-radius: 4px; font-weight: 500; font-size: 0.85rem; }
+nav.site-nav a.current { background: var(--orange); color: #fff; }
+footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--border); font-size: 0.8rem; color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="container">
+
+<nav class="site-nav" aria-label="Documentation">
+  <a href="./">Overview</a>
+  <a href="how-it-works.html">How It Works</a>
+  <a href="setup.html">Setup</a>
+  <a href="configuration.html">Config</a>
+  <a href="whatsapp.html">WhatsApp</a>
+  <a href="instagram.html">Instagram</a>
+  <a href="email-routing.html">Email Routing</a>
+  <a href="discord.html" class="current">Discord</a>
+  <a href="lead-forms.html">Lead Forms</a>
+  <a href="embedding.html">Embedding</a>
+  <a href="billing.html">Billing</a>
+  <a href="management.html">Management</a>
+  <a href="deployment.html">Deployment</a>
+  <a href="facebook-app-setup.html">Facebook App</a>
+  <a href="api/concierge_worker/">API Docs</a>
+</nav>
+
+<h1>Discord Integration</h1>
+
+<p>Discord serves as a unified inbox for Concierge. Messages from any channel (email, WhatsApp, Instagram) can be forwarded to Discord, where you can read, reply, approve AI drafts, or drop messages -- all without leaving Discord.</p>
+
+<h2>Bot Setup</h2>
+
+<ol>
+  <li>Go to the <a href="https://discord.com/developers/applications">Discord Developer Portal</a></li>
+  <li>Create a new application</li>
+  <li>Under <strong>General Information</strong>, copy the <strong>Application ID</strong> and <strong>Public Key</strong></li>
+  <li>Under <strong>Bot</strong>, create a bot user and copy the <strong>Token</strong></li>
+  <li>Set these as Worker secrets:
+    <pre><code>wrangler secret put DISCORD_APPLICATION_ID
+wrangler secret put DISCORD_PUBLIC_KEY
+wrangler secret put DISCORD_BOT_TOKEN</code></pre>
+  </li>
+</ol>
+
+<h2>Interaction Endpoint</h2>
+
+<p>In the Discord Developer Portal, under <strong>General Information</strong>, set the <strong>Interactions Endpoint URL</strong> to:</p>
+
+<pre><code>https://your-domain/discord/interactions</code></pre>
+
+<p>Discord will send a PING request to verify the endpoint. Concierge verifies all interactions using Ed25519 signature verification with the <code>DISCORD_PUBLIC_KEY</code>.</p>
+
+<h2>Inviting the Bot</h2>
+
+<p>Generate an invite URL with these permissions:</p>
+
+<ul>
+  <li><strong>Send Messages</strong> -- for posting forwarded messages and embeds</li>
+  <li><strong>Use Slash Commands</strong> -- for admin commands</li>
+  <li><strong>Embed Links</strong> -- for rich message formatting</li>
+</ul>
+
+<p>The invite URL format:</p>
+
+<pre><code>https://discord.com/api/oauth2/authorize?client_id=YOUR_APP_ID&amp;permissions=2048&amp;scope=bot%20applications.commands</code></pre>
+
+<h2>Guild-to-Tenant Mapping</h2>
+
+<p>Each Discord server (guild) is linked to a tenant via a <code>DiscordConfig</code> stored in KV. This maps guild IDs to tenant IDs so slash commands and relay actions know which tenant's data to access.</p>
+
+<h2>Slash Commands</h2>
+
+<p>Concierge supports three slash commands:</p>
+
+<h3><code>/status</code></h3>
+
+<p>Shows an overview of the tenant's configuration:</p>
+
+<ul>
+  <li>Number of WhatsApp accounts</li>
+  <li>Number of Instagram accounts</li>
+  <li>Configured email domains</li>
+  <li>Email metrics for the last 7 days (action counts by type)</li>
+</ul>
+
+<h3><code>/domains</code></h3>
+
+<p>Manage email domains:</p>
+
+<ul>
+  <li><code>/domains list</code> -- list all configured domains</li>
+  <li><code>/domains add &lt;domain&gt;</code> -- register a new domain</li>
+  <li><code>/domains remove &lt;domain&gt;</code> -- remove a domain and its rules</li>
+</ul>
+
+<h3><code>/rules</code></h3>
+
+<p>View email routing rules:</p>
+
+<ul>
+  <li><code>/rules list &lt;domain&gt;</code> -- list all rules for a domain with status, priority, and action</li>
+</ul>
+
+<p>For complex rule management (creating, editing, deleting rules), use the web admin panel.</p>
+
+<h2>Cross-Channel Relay</h2>
+
+<p>When a message from another channel is forwarded to Discord (e.g., via the <strong>Forward Discord</strong> email action), it arrives as a rich embed with action buttons:</p>
+
+<ul>
+  <li><strong>Reply</strong> -- opens a modal for composing a response. The reply is sent back through the originating channel.</li>
+  <li><strong>Approve</strong> -- sends an AI-generated draft (for AI Reply actions). Only shown when there is a draft.</li>
+  <li><strong>Drop</strong> -- dismisses the message and cleans up the conversation context.</li>
+</ul>
+
+<h3>ConversationContext</h3>
+
+<p>When a message is forwarded to Discord, a <code>ConversationContext</code> is saved in KV. It stores:</p>
+
+<ul>
+  <li>The Discord message and channel IDs</li>
+  <li>The originating channel (email, WhatsApp, Instagram)</li>
+  <li>The original sender and recipient</li>
+  <li>Tenant and account identifiers</li>
+  <li>Reply metadata needed to route the response back</li>
+  <li>An optional AI draft (for AI Reply actions)</li>
+</ul>
+
+<p>When you click Reply and submit text, Concierge looks up the <code>ConversationContext</code>, calls the appropriate channel adapter (email forward, WhatsApp API, Instagram API), and sends the reply to the original sender.</p>
+
+<h3>Relay Flow Example</h3>
+
+<ol>
+  <li>Email from <code>alice@external.com</code> arrives at <code>support@example.com</code></li>
+  <li>A routing rule with action <strong>Forward Discord</strong> matches</li>
+  <li>The email content is posted to Discord channel <code>#inbox</code> as an embed</li>
+  <li>A <code>ConversationContext</code> is saved with the email details</li>
+  <li>You click <strong>Reply</strong>, type your response in the modal</li>
+  <li>Concierge sends an email reply to <code>alice@external.com</code> via the email channel adapter</li>
+  <li>The relay is logged to the unified <code>messages</code> table</li>
+</ol>
+
+<h2>Interaction Types</h2>
+
+<p>Concierge handles four Discord interaction types:</p>
+
+<table>
+  <thead>
+    <tr><th>Type</th><th>Code</th><th>Handler</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>PING</td><td>1</td><td>Returns <code>{"type": 1}</code> for endpoint verification</td></tr>
+    <tr><td>APPLICATION_COMMAND</td><td>2</td><td>Dispatches to slash command handlers</td></tr>
+    <tr><td>MESSAGE_COMPONENT</td><td>3</td><td>Handles button clicks (Reply, Approve, Drop)</td></tr>
+    <tr><td>MODAL_SUBMIT</td><td>5</td><td>Handles reply text submitted from modals</td></tr>
+  </tbody>
+</table>
+
+<footer>
+  <a href="https://github.com/ananthb/concierge-worker">Open-source</a> &middot;
+  Licensed under <a href="https://www.gnu.org/licenses/agpl-3.0.html">AGPL-3.0</a> &middot;
+  <a href="api/concierge_worker/">API Reference</a>
+</footer>
+
+</div>
+</body>
+</html>

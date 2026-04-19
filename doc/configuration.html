@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Configuration &amp; Secrets — Concierge</title>
 <link rel="icon" type="image/svg+xml" href="https://concierge.calculon.tech/logo.svg">
-<meta name="theme-color" content="#F38020">
+<meta name="theme-color" content="#E86A2C">
 <style>
-:root { --bg: #fff; --fg: #1a1a1a; --muted: #555; --accent: #C55A11; --code-bg: #f5f6f8; --border: #e0e0e0; --max-w: 740px; --orange: #F38020; --navy: #1A1A2E; }
+:root { --bg: #fff; --fg: #1a1a1a; --muted: #555; --accent: #C55A11; --code-bg: #f5f6f8; --border: #e0e0e0; --max-w: 740px; --orange: #E86A2C; --navy: #1A1A2E; }
 @media (prefers-color-scheme: dark) { :root { --bg: #121212; --fg: #e0e0e0; --muted: #aaa; --accent: #F9A825; --code-bg: #2a2a2a; --border: #3a3a3a; } }
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body { font-family: system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--fg); line-height: 1.6; }
@@ -44,8 +44,12 @@ footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--border
   <a href="configuration.html" class="current">Config</a>
   <a href="whatsapp.html">WhatsApp</a>
   <a href="instagram.html">Instagram</a>
+  <a href="email-routing.html">Email Routing</a>
+  <a href="discord.html">Discord</a>
   <a href="lead-forms.html">Lead Forms</a>
   <a href="embedding.html">Embedding</a>
+  <a href="billing.html">Billing</a>
+  <a href="management.html">Management</a>
   <a href="deployment.html">Deployment</a>
   <a href="facebook-app-setup.html">Facebook App</a>
   <a href="api/concierge_worker/">API Docs</a>
@@ -61,6 +65,7 @@ footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--border
   </thead>
   <tbody>
     <tr><td><code>ENVIRONMENT</code></td><td><code>production</code> or <code>development</code></td></tr>
+    <tr><td><code>MANAGEMENT_EMAILS</code></td><td>Comma-separated emails allowed to access <code>/manage/*</code> (matched against <code>Cf-Access-Authenticated-User-Email</code> header)</td></tr>
     <tr><td><code>WHATSAPP_WABA_ID</code></td><td>Your WhatsApp Business Account ID</td></tr>
     <tr><td><code>WHATSAPP_SIGNUP_CONFIG_ID</code></td><td>Meta Embedded Signup configuration ID</td></tr>
   </tbody>
@@ -68,19 +73,81 @@ footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--border
 
 <h2>Secrets (<code>wrangler secret put</code>)</h2>
 
+<h3>Core</h3>
+
 <table>
   <thead>
     <tr><th>Secret</th><th>Description</th></tr>
   </thead>
   <tbody>
-    <tr><td><code>ENCRYPTION_KEY</code></td><td>32-byte hex key for AES-256-GCM encryption. Generate with <code>openssl rand -hex 32</code></td></tr>
+    <tr><td><code>ENCRYPTION_KEY</code></td><td>32-byte hex key for AES-256-GCM encryption of stored tokens. Generate with <code>openssl rand -hex 32</code></td></tr>
+  </tbody>
+</table>
+
+<h3>Google OAuth</h3>
+
+<table>
+  <thead>
+    <tr><th>Secret</th><th>Description</th></tr>
+  </thead>
+  <tbody>
     <tr><td><code>GOOGLE_OAUTH_CLIENT_ID</code></td><td>Google OAuth client ID (for sign-in)</td></tr>
     <tr><td><code>GOOGLE_OAUTH_CLIENT_SECRET</code></td><td>Google OAuth client secret</td></tr>
-    <tr><td><code>META_APP_ID</code></td><td>Meta app ID (sign-in + Instagram + WhatsApp signup)</td></tr>
-    <tr><td><code>META_APP_SECRET</code></td><td>Meta app secret</td></tr>
+  </tbody>
+</table>
+
+<h3>Meta (Facebook / Instagram / WhatsApp)</h3>
+
+<table>
+  <thead>
+    <tr><th>Secret</th><th>Description</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>META_APP_ID</code></td><td>Meta app ID (shared for Facebook Login, Instagram, WhatsApp signup)</td></tr>
+    <tr><td><code>META_APP_SECRET</code></td><td>Meta app secret (used for webhook signature verification and token exchange)</td></tr>
     <tr><td><code>WHATSAPP_ACCESS_TOKEN</code></td><td>System user token for your shared WABA</td></tr>
     <tr><td><code>WHATSAPP_VERIFY_TOKEN</code></td><td>Webhook verification token. Generate with <code>openssl rand -hex 16</code></td></tr>
     <tr><td><code>INSTAGRAM_VERIFY_TOKEN</code></td><td>Instagram webhook verification token. Generate with <code>openssl rand -hex 16</code></td></tr>
+  </tbody>
+</table>
+
+<h3>Discord</h3>
+
+<table>
+  <thead>
+    <tr><th>Secret</th><th>Description</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>DISCORD_PUBLIC_KEY</code></td><td>Discord application public key (Ed25519 signature verification for interactions)</td></tr>
+    <tr><td><code>DISCORD_APPLICATION_ID</code></td><td>Discord application ID (for registering slash commands)</td></tr>
+    <tr><td><code>DISCORD_BOT_TOKEN</code></td><td>Discord bot token (for sending messages and managing interactions)</td></tr>
+  </tbody>
+</table>
+
+<h3>Razorpay (Optional)</h3>
+
+<table>
+  <thead>
+    <tr><th>Secret</th><th>Description</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>RAZORPAY_KEY_ID</code></td><td>Razorpay API key ID</td></tr>
+    <tr><td><code>RAZORPAY_KEY_SECRET</code></td><td>Razorpay API key secret</td></tr>
+    <tr><td><code>RAZORPAY_WEBHOOK_SECRET</code></td><td>Razorpay webhook secret (for verifying payment notifications at <code>POST /webhook/razorpay</code>)</td></tr>
+  </tbody>
+</table>
+
+<h2>Bindings (<code>wrangler.toml</code>)</h2>
+
+<table>
+  <thead>
+    <tr><th>Binding</th><th>Type</th><th>Description</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>DB</code></td><td>D1</td><td>SQLite database for message logs, payments, audit, credit packs</td></tr>
+    <tr><td><code>CALENDARS_KV</code></td><td>KV</td><td>Config store for tenants, accounts, sessions, routing rules, billing state</td></tr>
+    <tr><td><code>AI</code></td><td>AI</td><td>Cloudflare Workers AI for auto-reply generation</td></tr>
+    <tr><td><code>EMAIL</code></td><td>send_email</td><td>Outbound email for forwarding and reverse-alias replies</td></tr>
   </tbody>
 </table>
 
@@ -93,10 +160,25 @@ footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--border
   <li><strong>Facebook</strong>: <code>https://your-domain/auth/facebook/callback</code> and <code>https://your-domain/instagram/callback</code></li>
 </ul>
 
+<h2>Webhook URLs</h2>
+
+<p>Configure these endpoints in the respective platforms:</p>
+
+<ul>
+  <li><strong>WhatsApp</strong>: <code>https://your-domain/webhook/whatsapp</code></li>
+  <li><strong>Instagram</strong>: <code>https://your-domain/webhook/instagram</code></li>
+  <li><strong>Discord Interactions</strong>: <code>https://your-domain/discord/interactions</code></li>
+  <li><strong>Razorpay</strong>: <code>https://your-domain/webhook/razorpay</code></li>
+</ul>
+
+<h2>Cron Triggers</h2>
+
+<p>A daily cron runs at 6 AM UTC (<code>0 6 * * *</code>) for Instagram token refresh. This is configured in the <code>[triggers]</code> section of <code>wrangler.toml</code>.</p>
+
 <footer>
-  <a href="https://github.com/ananthb/concierge-worker">Source Code</a> &middot;
+  <a href="https://github.com/ananthb/concierge-worker">Open-source</a> &middot;
+  Licensed under <a href="https://www.gnu.org/licenses/agpl-3.0.html">AGPL-3.0</a> &middot;
   <a href="api/concierge_worker/">API Reference</a>
-  <p>AGPL-3.0 &mdash; <a href="https://github.com/ananthb/concierge-worker">source on GitHub</a></p>
 </footer>
 
 </div>

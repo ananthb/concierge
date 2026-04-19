@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>WhatsApp Auto-Reply — Concierge</title>
 <link rel="icon" type="image/svg+xml" href="https://concierge.calculon.tech/logo.svg">
-<meta name="theme-color" content="#F38020">
+<meta name="theme-color" content="#E86A2C">
 <style>
-:root { --bg: #fff; --fg: #1a1a1a; --muted: #555; --accent: #C55A11; --code-bg: #f5f6f8; --border: #e0e0e0; --max-w: 740px; --orange: #F38020; --navy: #1A1A2E; }
+:root { --bg: #fff; --fg: #1a1a1a; --muted: #555; --accent: #C55A11; --code-bg: #f5f6f8; --border: #e0e0e0; --max-w: 740px; --orange: #E86A2C; --navy: #1A1A2E; }
 @media (prefers-color-scheme: dark) { :root { --bg: #121212; --fg: #e0e0e0; --muted: #aaa; --accent: #F9A825; --code-bg: #2a2a2a; --border: #3a3a3a; } }
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body { font-family: system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--fg); line-height: 1.6; }
@@ -44,8 +44,12 @@ footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--border
   <a href="configuration.html">Config</a>
   <a href="whatsapp.html" class="current">WhatsApp</a>
   <a href="instagram.html">Instagram</a>
+  <a href="email-routing.html">Email Routing</a>
+  <a href="discord.html">Discord</a>
   <a href="lead-forms.html">Lead Forms</a>
   <a href="embedding.html">Embedding</a>
+  <a href="billing.html">Billing</a>
+  <a href="management.html">Management</a>
   <a href="deployment.html">Deployment</a>
   <a href="facebook-app-setup.html">Facebook App</a>
   <a href="api/concierge_worker/">API Docs</a>
@@ -53,10 +57,12 @@ footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--border
 
 <h1>WhatsApp Auto-Reply</h1>
 
+<p>WhatsApp is one of four channels in the unified messaging pipeline. Incoming WhatsApp messages are normalized into <code>InboundMessage</code> structs and processed through the common pipeline, which handles credit deduction, reply generation, and metadata logging.</p>
+
 <h2>Adding a WhatsApp Number</h2>
 
 <ol>
-  <li>Go to <strong>Admin → WhatsApp Accounts → Connect WhatsApp Number</strong></li>
+  <li>Go to <strong>Admin &gt; WhatsApp Accounts &gt; Connect WhatsApp Number</strong></li>
   <li>Complete Meta's Embedded Signup flow to register your phone number</li>
   <li>The phone number and phone number ID are configured automatically</li>
 </ol>
@@ -68,9 +74,9 @@ footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--border
 <p>Each WhatsApp account has its own auto-reply settings:</p>
 
 <ul>
-  <li><strong>Enabled</strong> — Toggle auto-reply on/off</li>
-  <li><strong>Mode</strong> — Static (fixed message) or AI (generated response)</li>
-  <li><strong>Prompt/Message</strong> — The static message to send, or the AI system prompt</li>
+  <li><strong>Enabled</strong> -- Toggle auto-reply on/off</li>
+  <li><strong>Mode</strong> -- Static (fixed message) or AI (generated response)</li>
+  <li><strong>Prompt/Message</strong> -- The static message to send, or the AI system prompt</li>
 </ul>
 
 <h3>Static Mode</h3>
@@ -81,18 +87,24 @@ footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--border
 
 <p>The prompt is used as a system instruction for Cloudflare Workers AI. The sender's name and message are passed as context. The AI generates a contextual reply.</p>
 
+<h2>Credit Deduction</h2>
+
+<p>Each auto-reply deducts one reply credit from the tenant's balance. Credits are deducted <em>before</em> the reply is generated and sent. If the AI generation or send fails, the credit is automatically restored. When credits reach zero, auto-replies stop silently.</p>
+
+<p>See <a href="billing.html">Billing</a> for details on managing credits.</p>
+
 <h2>Platform Model</h2>
 
 <p>All WhatsApp numbers share a single platform token (<code>WHATSAPP_ACCESS_TOKEN</code>). This is a system user token for your WhatsApp Business Account. You don't need per-customer tokens.</p>
 
 <h2>Message Logging</h2>
 
-<p>All inbound and outbound messages are logged to the D1 database (<code>whatsapp_messages</code> table) for audit and debugging.</p>
+<p>Inbound and outbound message metadata (direction, sender ID, recipient ID, timestamp) is logged to the unified <code>messages</code> table. No message content is stored.</p>
 
 <footer>
-  <a href="https://github.com/ananthb/concierge-worker">Source Code</a> &middot;
+  <a href="https://github.com/ananthb/concierge-worker">Open-source</a> &middot;
+  Licensed under <a href="https://www.gnu.org/licenses/agpl-3.0.html">AGPL-3.0</a> &middot;
   <a href="api/concierge_worker/">API Reference</a>
-  <p>AGPL-3.0 &mdash; <a href="https://github.com/ananthb/concierge-worker">source on GitHub</a></p>
 </footer>
 
 </div>

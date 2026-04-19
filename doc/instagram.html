@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Instagram DM Auto-Reply — Concierge</title>
 <link rel="icon" type="image/svg+xml" href="https://concierge.calculon.tech/logo.svg">
-<meta name="theme-color" content="#F38020">
+<meta name="theme-color" content="#E86A2C">
 <style>
-:root { --bg: #fff; --fg: #1a1a1a; --muted: #555; --accent: #C55A11; --code-bg: #f5f6f8; --border: #e0e0e0; --max-w: 740px; --orange: #F38020; --navy: #1A1A2E; }
+:root { --bg: #fff; --fg: #1a1a1a; --muted: #555; --accent: #C55A11; --code-bg: #f5f6f8; --border: #e0e0e0; --max-w: 740px; --orange: #E86A2C; --navy: #1A1A2E; }
 @media (prefers-color-scheme: dark) { :root { --bg: #121212; --fg: #e0e0e0; --muted: #aaa; --accent: #F9A825; --code-bg: #2a2a2a; --border: #3a3a3a; } }
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body { font-family: system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--fg); line-height: 1.6; }
@@ -44,8 +44,12 @@ footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--border
   <a href="configuration.html">Config</a>
   <a href="whatsapp.html">WhatsApp</a>
   <a href="instagram.html" class="current">Instagram</a>
+  <a href="email-routing.html">Email Routing</a>
+  <a href="discord.html">Discord</a>
   <a href="lead-forms.html">Lead Forms</a>
   <a href="embedding.html">Embedding</a>
+  <a href="billing.html">Billing</a>
+  <a href="management.html">Management</a>
   <a href="deployment.html">Deployment</a>
   <a href="facebook-app-setup.html">Facebook App</a>
   <a href="api/concierge_worker/">API Docs</a>
@@ -53,10 +57,12 @@ footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--border
 
 <h1>Instagram DM Auto-Reply</h1>
 
+<p>Instagram is one of four channels in the unified messaging pipeline. Incoming DMs are normalized into <code>InboundMessage</code> structs and processed through the common pipeline, which handles credit deduction, reply generation, and metadata logging.</p>
+
 <h2>Connecting Instagram</h2>
 
 <ol>
-  <li>Go to <strong>Admin → Instagram Accounts → Connect Account</strong></li>
+  <li>Go to <strong>Admin &gt; Instagram Accounts &gt; Connect Account</strong></li>
   <li>Sign in with Facebook (the account that manages your Instagram business page)</li>
   <li>Concierge discovers your Facebook Pages and finds the linked Instagram business account</li>
   <li>The page token is encrypted and stored for sending DM replies</li>
@@ -65,10 +71,10 @@ footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--border
 <h2>Configuring Auto-Reply</h2>
 
 <ul>
-  <li><strong>Enabled</strong> — Toggle the account on/off</li>
-  <li><strong>Auto-Reply Enabled</strong> — Toggle auto-reply specifically</li>
-  <li><strong>Mode</strong> — Static or AI (same as WhatsApp)</li>
-  <li><strong>Prompt/Message</strong> — The reply text or AI system prompt</li>
+  <li><strong>Enabled</strong> -- Toggle the account on/off</li>
+  <li><strong>Auto-Reply Enabled</strong> -- Toggle auto-reply specifically</li>
+  <li><strong>Mode</strong> -- Static or AI (same as WhatsApp)</li>
+  <li><strong>Prompt/Message</strong> -- The reply text or AI system prompt</li>
 </ul>
 
 <h2>How It Works</h2>
@@ -77,10 +83,18 @@ footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--border
   <li>Meta delivers incoming DMs to <code>POST /webhook/instagram</code></li>
   <li>Concierge verifies the webhook signature</li>
   <li>Looks up the Instagram account by the recipient page ID</li>
+  <li>One reply credit is deducted from the tenant's balance</li>
   <li>Generates a reply (static or AI)</li>
   <li>Sends via the Instagram Pages Messaging API</li>
-  <li>Logs both messages to D1</li>
+  <li>If the send fails, the credit is restored</li>
+  <li>Message metadata (no content) is logged to the unified <code>messages</code> table</li>
 </ol>
+
+<h2>Credit Deduction</h2>
+
+<p>Each auto-reply deducts one reply credit. Credits are deducted before the reply is sent and restored on failure. When credits reach zero, auto-replies stop silently.</p>
+
+<p>See <a href="billing.html">Billing</a> for details on managing credits.</p>
 
 <h2>Requirements</h2>
 
@@ -95,12 +109,12 @@ footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--border
 
 <h2>Token Refresh</h2>
 
-<p>Page tokens are long-lived but can expire. A daily cron job checks all tokens and refreshes those within 7 days of expiry.</p>
+<p>Page tokens are long-lived but can expire. A daily cron job (6 AM UTC) checks all tokens and refreshes those within 7 days of expiry.</p>
 
 <footer>
-  <a href="https://github.com/ananthb/concierge-worker">Source Code</a> &middot;
+  <a href="https://github.com/ananthb/concierge-worker">Open-source</a> &middot;
+  Licensed under <a href="https://www.gnu.org/licenses/agpl-3.0.html">AGPL-3.0</a> &middot;
   <a href="api/concierge_worker/">API Reference</a>
-  <p>AGPL-3.0 &mdash; <a href="https://github.com/ananthb/concierge-worker">source on GitHub</a></p>
 </footer>
 
 </div>

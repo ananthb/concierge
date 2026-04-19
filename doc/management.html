@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Management Panel — Concierge</title>
+<link rel="icon" type="image/svg+xml" href="https://concierge.calculon.tech/logo.svg">
+<meta name="theme-color" content="#E86A2C">
+<style>
+:root { --bg: #fff; --fg: #1a1a1a; --muted: #555; --accent: #C55A11; --code-bg: #f5f6f8; --border: #e0e0e0; --max-w: 740px; --orange: #E86A2C; --navy: #1A1A2E; }
+@media (prefers-color-scheme: dark) { :root { --bg: #121212; --fg: #e0e0e0; --muted: #aaa; --accent: #F9A825; --code-bg: #2a2a2a; --border: #3a3a3a; } }
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--fg); line-height: 1.6; }
+.container { max-width: var(--max-w); margin: 0 auto; padding: 2rem 1.5rem; }
+h1 { font-size: 1.8rem; margin-bottom: 0.5rem; }
+h2 { font-size: 1.25rem; margin-top: 2rem; margin-bottom: 0.5rem; border-bottom: 1px solid var(--border); padding-bottom: 0.3rem; }
+h3 { font-size: 1.05rem; margin-top: 1.5rem; margin-bottom: 0.3rem; }
+p { margin: 0.5rem 0; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+ul, ol { margin: 0.5rem 0 0.5rem 1.5rem; }
+li { margin: 0.3rem 0; }
+code { background: var(--code-bg); padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9em; font-family: ui-monospace, monospace; }
+pre { background: var(--code-bg); padding: 1rem; border-radius: 6px; overflow-x: auto; margin: 0.75rem 0; }
+pre code { background: none; padding: 0; }
+table { width: 100%; border-collapse: collapse; margin: 0.75rem 0; }
+th, td { padding: 0.5rem 0.75rem; text-align: left; border-bottom: 1px solid var(--border); }
+th { font-weight: 600; font-size: 0.9rem; }
+strong { font-weight: 600; }
+nav.site-nav { display: flex; gap: 0.75rem; margin: 1rem 0 2rem; flex-wrap: wrap; padding-bottom: 1rem; border-bottom: 1px solid var(--border); }
+nav.site-nav a { padding: 0.3rem 0.6rem; background: var(--code-bg); border-radius: 4px; font-weight: 500; font-size: 0.85rem; }
+nav.site-nav a.current { background: var(--orange); color: #fff; }
+footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--border); font-size: 0.8rem; color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="container">
+
+<nav class="site-nav" aria-label="Documentation">
+  <a href="./">Overview</a>
+  <a href="how-it-works.html">How It Works</a>
+  <a href="setup.html">Setup</a>
+  <a href="configuration.html">Config</a>
+  <a href="whatsapp.html">WhatsApp</a>
+  <a href="instagram.html">Instagram</a>
+  <a href="email-routing.html">Email Routing</a>
+  <a href="discord.html">Discord</a>
+  <a href="lead-forms.html">Lead Forms</a>
+  <a href="embedding.html">Embedding</a>
+  <a href="billing.html">Billing</a>
+  <a href="management.html" class="current">Management</a>
+  <a href="deployment.html">Deployment</a>
+  <a href="facebook-app-setup.html">Facebook App</a>
+  <a href="api/concierge_worker/">API Docs</a>
+</nav>
+
+<h1>Management Panel</h1>
+
+<p>The management panel at <code>/manage/*</code> is a platform operator dashboard for managing tenants, billing, and reviewing audit logs. It is protected by Cloudflare Access and restricted to emails listed in the <code>MANAGEMENT_EMAILS</code> environment variable.</p>
+
+<h2>Authentication</h2>
+
+<p>Management routes use a two-layer authentication:</p>
+
+<ol>
+  <li><strong>Cloudflare Access</strong> -- Handles the login flow and injects the <code>Cf-Access-Authenticated-User-Email</code> header</li>
+  <li><strong>Email allowlist</strong> -- Concierge checks the header value against the comma-separated <code>MANAGEMENT_EMAILS</code> variable. Only matching emails are granted access.</li>
+</ol>
+
+<p>This means you need both a Cloudflare Access policy allowing the email <em>and</em> the email listed in <code>MANAGEMENT_EMAILS</code>.</p>
+
+<h2>Dashboard</h2>
+
+<p>The main dashboard (<code>/manage</code>) shows:</p>
+
+<ul>
+  <li>The authenticated operator's email</li>
+  <li>Total tenant count</li>
+  <li>Links to tenant management, billing, and audit log</li>
+</ul>
+
+<h2>Tenant Management</h2>
+
+<p>At <code>/manage/tenants</code>, operators can:</p>
+
+<ul>
+  <li>List all tenants with their email, plan, and creation date</li>
+  <li>View individual tenant details including connected accounts</li>
+  <li>See a tenant's billing state (credits remaining, used, granted)</li>
+  <li>Grant free reply credits to a tenant</li>
+</ul>
+
+<h2>Billing Controls</h2>
+
+<p>At <code>/manage/billing</code>, operators can:</p>
+
+<ul>
+  <li><strong>View credit packs</strong> -- See all defined packs with their reply counts, prices, and status</li>
+  <li><strong>Create packs</strong> -- Add new credit packs with name, reply count, INR price, USD price, and sort order</li>
+  <li><strong>Update packs</strong> -- Edit existing pack details</li>
+  <li><strong>Activate/Deactivate packs</strong> -- Control which packs are visible to tenants</li>
+  <li><strong>Delete packs</strong> -- Remove packs entirely</li>
+  <li><strong>Grant credits</strong> -- Give free reply credits to a specific tenant (at <code>/manage/billing/grant/{tenant_id}</code>)</li>
+</ul>
+
+<h2>Audit Log</h2>
+
+<p>At <code>/manage/audit</code>, operators can review a chronological log of all management actions. Each entry records:</p>
+
+<table>
+  <thead>
+    <tr><th>Field</th><th>Description</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>actor_email</code></td><td>The operator who performed the action</td></tr>
+    <tr><td><code>action</code></td><td>What was done (e.g., <code>grant_replies</code>, <code>create_pack</code>, <code>update_pack</code>, <code>delete_pack</code>)</td></tr>
+    <tr><td><code>resource_type</code></td><td>The type of resource affected (e.g., <code>billing</code>, <code>credit_pack</code>)</td></tr>
+    <tr><td><code>resource_id</code></td><td>The specific resource identifier (optional)</td></tr>
+    <tr><td><code>details</code></td><td>JSON payload with action-specific details</td></tr>
+    <tr><td><code>created_at</code></td><td>Timestamp</td></tr>
+  </tbody>
+</table>
+
+<p>The audit log shows the most recent 100 entries.</p>
+
+<h2>Setup</h2>
+
+<ol>
+  <li>Set <code>MANAGEMENT_EMAILS</code> in <code>wrangler.toml</code> to a comma-separated list of operator emails:
+    <pre><code>MANAGEMENT_EMAILS = "admin@example.com,ops@example.com"</code></pre>
+  </li>
+  <li>In the Cloudflare dashboard, go to <strong>Zero Trust &gt; Access &gt; Applications</strong></li>
+  <li>Create a Self-hosted application for <code>your-domain/manage/*</code></li>
+  <li>Add a policy allowing the same emails (or a broader group if desired)</li>
+  <li>Deploy with <code>wrangler deploy</code></li>
+</ol>
+
+<footer>
+  <a href="https://github.com/ananthb/concierge-worker">Open-source</a> &middot;
+  Licensed under <a href="https://www.gnu.org/licenses/agpl-3.0.html">AGPL-3.0</a> &middot;
+  <a href="api/concierge_worker/">API Reference</a>
+</footer>
+
+</div>
+</body>
+</html>

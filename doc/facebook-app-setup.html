@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Facebook App Setup — Concierge</title>
 <link rel="icon" type="image/svg+xml" href="https://concierge.calculon.tech/logo.svg">
-<meta name="theme-color" content="#F38020">
+<meta name="theme-color" content="#E86A2C">
 <style>
-:root { --bg: #fff; --fg: #1a1a1a; --muted: #555; --accent: #C55A11; --code-bg: #f5f6f8; --border: #e0e0e0; --max-w: 740px; --orange: #F38020; --navy: #1A1A2E; }
+:root { --bg: #fff; --fg: #1a1a1a; --muted: #555; --accent: #C55A11; --code-bg: #f5f6f8; --border: #e0e0e0; --max-w: 740px; --orange: #E86A2C; --navy: #1A1A2E; }
 @media (prefers-color-scheme: dark) { :root { --bg: #121212; --fg: #e0e0e0; --muted: #aaa; --accent: #F9A825; --code-bg: #2a2a2a; --border: #3a3a3a; } }
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body { font-family: system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--fg); line-height: 1.6; }
@@ -44,8 +44,12 @@ footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--border
   <a href="configuration.html">Config</a>
   <a href="whatsapp.html">WhatsApp</a>
   <a href="instagram.html">Instagram</a>
+  <a href="email-routing.html">Email Routing</a>
+  <a href="discord.html">Discord</a>
   <a href="lead-forms.html">Lead Forms</a>
   <a href="embedding.html">Embedding</a>
+  <a href="billing.html">Billing</a>
+  <a href="management.html">Management</a>
   <a href="deployment.html">Deployment</a>
   <a href="facebook-app-setup.html" class="current">Facebook App</a>
   <a href="api/concierge_worker/">API Docs</a>
@@ -59,13 +63,13 @@ footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--border
 
 <ol>
   <li>Go to <a href="https://developers.facebook.com/apps/">developers.facebook.com/apps</a></li>
-  <li>Click <strong>Create App</strong> → choose <strong>Business</strong> type</li>
+  <li>Click <strong>Create App</strong> &gt; choose <strong>Business</strong> type</li>
   <li>Enter app name and contact email</li>
 </ol>
 
 <h2>2. Basic Settings</h2>
 
-<p>Go to <strong>Settings → Basic</strong>:</p>
+<p>Go to <strong>Settings &gt; Basic</strong>:</p>
 
 <ul>
   <li><strong>App Domains</strong>: <code>your-domain</code></li>
@@ -78,7 +82,7 @@ footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--border
 
 <ol>
   <li>Add the <strong>Facebook Login</strong> product</li>
-  <li>Go to <strong>Facebook Login → Settings</strong></li>
+  <li>Go to <strong>Facebook Login &gt; Settings</strong></li>
   <li>Add Valid OAuth Redirect URIs:
     <ul>
       <li><code>https://your-domain/auth/facebook/callback</code></li>
@@ -91,8 +95,8 @@ footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--border
 
 <ol>
   <li>Add the <strong>WhatsApp</strong> product</li>
-  <li>Go to <strong>WhatsApp → API Setup</strong> — note your WABA ID</li>
-  <li>Go to <strong>WhatsApp → Configuration</strong>:
+  <li>Go to <strong>WhatsApp &gt; API Setup</strong> -- note your WABA ID</li>
+  <li>Go to <strong>WhatsApp &gt; Configuration</strong>:
     <ul>
       <li>Callback URL: <code>https://your-domain/webhook/whatsapp</code></li>
       <li>Verify token: your <code>WHATSAPP_VERIFY_TOKEN</code> value</li>
@@ -104,9 +108,9 @@ footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--border
 <h3>Embedded Signup</h3>
 
 <ol>
-  <li>Go to <strong>WhatsApp → Embedded Signup</strong></li>
+  <li>Go to <strong>WhatsApp &gt; Embedded Signup</strong></li>
   <li>Create a configuration</li>
-  <li>Copy the Config ID → set as <code>WHATSAPP_SIGNUP_CONFIG_ID</code> in <code>wrangler.toml</code></li>
+  <li>Copy the Config ID &gt; set as <code>WHATSAPP_SIGNUP_CONFIG_ID</code> in <code>wrangler.toml</code></li>
 </ol>
 
 <h2>5. Instagram Webhooks</h2>
@@ -150,12 +154,12 @@ footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--border
   <li>Your privacy policy URL</li>
 </ul>
 
-<p><strong>Tip</strong>: Before App Review is complete, add yourself as a tester at <strong>App Roles → People</strong> to test all features in development mode.</p>
+<p><strong>Tip</strong>: Before App Review is complete, add yourself as a tester at <strong>App Roles &gt; People</strong> to test all features in development mode.</p>
 
 <footer>
-  <a href="https://github.com/ananthb/concierge-worker">Source Code</a> &middot;
+  <a href="https://github.com/ananthb/concierge-worker">Open-source</a> &middot;
+  Licensed under <a href="https://www.gnu.org/licenses/agpl-3.0.html">AGPL-3.0</a> &middot;
   <a href="api/concierge_worker/">API Reference</a>
-  <p>AGPL-3.0 &mdash; <a href="https://github.com/ananthb/concierge-worker">source on GitHub</a></p>
 </footer>
 
 </div>

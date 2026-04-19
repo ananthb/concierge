@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Setup Guide — Concierge</title>
 <link rel="icon" type="image/svg+xml" href="https://concierge.calculon.tech/logo.svg">
-<meta name="theme-color" content="#F38020">
+<meta name="theme-color" content="#E86A2C">
 <style>
-:root { --bg: #fff; --fg: #1a1a1a; --muted: #555; --accent: #C55A11; --code-bg: #f5f6f8; --border: #e0e0e0; --max-w: 740px; --orange: #F38020; --navy: #1A1A2E; }
+:root { --bg: #fff; --fg: #1a1a1a; --muted: #555; --accent: #C55A11; --code-bg: #f5f6f8; --border: #e0e0e0; --max-w: 740px; --orange: #E86A2C; --navy: #1A1A2E; }
 @media (prefers-color-scheme: dark) { :root { --bg: #121212; --fg: #e0e0e0; --muted: #aaa; --accent: #F9A825; --code-bg: #2a2a2a; --border: #3a3a3a; } }
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body { font-family: system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--fg); line-height: 1.6; }
@@ -44,8 +44,12 @@ footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--border
   <a href="configuration.html">Config</a>
   <a href="whatsapp.html">WhatsApp</a>
   <a href="instagram.html">Instagram</a>
+  <a href="email-routing.html">Email Routing</a>
+  <a href="discord.html">Discord</a>
   <a href="lead-forms.html">Lead Forms</a>
   <a href="embedding.html">Embedding</a>
+  <a href="billing.html">Billing</a>
+  <a href="management.html">Management</a>
   <a href="deployment.html">Deployment</a>
   <a href="facebook-app-setup.html">Facebook App</a>
   <a href="api/concierge_worker/">API Docs</a>
@@ -56,9 +60,11 @@ footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--border
 <h2>Prerequisites</h2>
 
 <ul>
-  <li>A Cloudflare account with Workers, D1, and KV enabled</li>
+  <li>A Cloudflare account with Workers, D1, KV, and Email Routing enabled</li>
   <li>A Meta Developer account with a Facebook App</li>
   <li>A Google Cloud project (for OAuth sign-in)</li>
+  <li>A Discord application (for the relay bot and slash commands)</li>
+  <li>A Razorpay account (for paid credit packs, optional)</li>
   <li>Nix (for the development environment)</li>
 </ul>
 
@@ -83,15 +89,51 @@ wrangler kv namespace create CALENDARS_KV</code></pre>
 
 <pre><code>wrangler d1 execute concierge-worker --remote --file migrations/0001_create_schema.sql</code></pre>
 
+<p>This creates all tables: <code>tenants</code>, <code>whatsapp_messages</code>, <code>instagram_messages</code>, <code>lead_form_submissions</code>, <code>email_messages</code>, <code>email_metrics</code>, <code>messages</code>, <code>credit_packs</code>, <code>payments</code>, and <code>audit_log</code>. It also seeds the default credit packs.</p>
+
 <h2>4. Set Secrets</h2>
 
-<p>See <a href="configuration.html">Configuration &amp; Secrets</a> for the full list.</p>
+<p>See <a href="configuration.html">Configuration &amp; Secrets</a> for the full list. At minimum you need:</p>
 
-<h2>5. Deploy</h2>
+<pre><code># Core encryption
+wrangler secret put ENCRYPTION_KEY
+
+# Google OAuth
+wrangler secret put GOOGLE_OAUTH_CLIENT_ID
+wrangler secret put GOOGLE_OAUTH_CLIENT_SECRET
+
+# Meta (Facebook/Instagram/WhatsApp)
+wrangler secret put META_APP_ID
+wrangler secret put META_APP_SECRET
+wrangler secret put WHATSAPP_ACCESS_TOKEN
+wrangler secret put WHATSAPP_VERIFY_TOKEN
+wrangler secret put INSTAGRAM_VERIFY_TOKEN
+
+# Discord
+wrangler secret put DISCORD_PUBLIC_KEY
+wrangler secret put DISCORD_APPLICATION_ID
+wrangler secret put DISCORD_BOT_TOKEN
+
+# Razorpay (optional, for paid billing)
+wrangler secret put RAZORPAY_KEY_ID
+wrangler secret put RAZORPAY_KEY_SECRET
+wrangler secret put RAZORPAY_WEBHOOK_SECRET</code></pre>
+
+<h2>5. Configure <code>wrangler.toml</code> Variables</h2>
+
+<p>Update these in the <code>[vars]</code> section:</p>
+
+<ul>
+  <li><code>MANAGEMENT_EMAILS</code> -- Comma-separated list of emails allowed to access <code>/manage/*</code></li>
+  <li><code>WHATSAPP_WABA_ID</code> -- Your WhatsApp Business Account ID</li>
+  <li><code>WHATSAPP_SIGNUP_CONFIG_ID</code> -- Meta Embedded Signup configuration ID</li>
+</ul>
+
+<h2>6. Deploy</h2>
 
 <pre><code>wrangler deploy</code></pre>
 
-<h2>6. Configure Webhooks</h2>
+<h2>7. Configure Webhooks</h2>
 
 <p>After deploying, configure webhooks in the Meta Developer Console:</p>
 
@@ -102,10 +144,52 @@ wrangler kv namespace create CALENDARS_KV</code></pre>
 
 <p>See <a href="facebook-app-setup.html">Facebook App Setup</a> for detailed instructions.</p>
 
+<h2>8. Set Up Discord Bot</h2>
+
+<ol>
+  <li>Create a Discord application at <a href="https://discord.com/developers/applications">discord.com/developers</a></li>
+  <li>Set the <strong>Interactions Endpoint URL</strong> to <code>https://your-domain/discord/interactions</code></li>
+  <li>Create a bot user and copy the token</li>
+  <li>Register slash commands (<code>/status</code>, <code>/domains</code>, <code>/rules</code>) via the Discord API</li>
+  <li>Invite the bot to your server with appropriate permissions</li>
+</ol>
+
+<p>See <a href="discord.html">Discord Integration</a> for details.</p>
+
+<h2>9. Set Up Email Routing</h2>
+
+<ol>
+  <li>In the Cloudflare dashboard, go to <strong>Email Routing</strong> for your domain</li>
+  <li>Add a catch-all rule that routes to your Worker</li>
+  <li>Configure domains and routing rules in the admin panel or via Discord slash commands</li>
+</ol>
+
+<p>See <a href="email-routing.html">Email Routing</a> for details.</p>
+
+<h2>10. Set Up Cloudflare Access for Management</h2>
+
+<ol>
+  <li>In the Cloudflare dashboard, go to <strong>Zero Trust &gt; Access &gt; Applications</strong></li>
+  <li>Create an application for <code>your-domain/manage/*</code></li>
+  <li>Add a policy allowing the emails listed in <code>MANAGEMENT_EMAILS</code></li>
+</ol>
+
+<p>See <a href="management.html">Management Panel</a> for details.</p>
+
+<h2>11. Set Up Razorpay (Optional)</h2>
+
+<ol>
+  <li>Create a Razorpay account and get your API keys</li>
+  <li>Set up a webhook in Razorpay pointing to <code>https://your-domain/webhook/razorpay</code></li>
+  <li>Set the webhook secret and API keys as Worker secrets</li>
+</ol>
+
+<p>See <a href="billing.html">Billing</a> for details.</p>
+
 <footer>
-  <a href="https://github.com/ananthb/concierge-worker">Source Code</a> &middot;
+  <a href="https://github.com/ananthb/concierge-worker">Open-source</a> &middot;
+  Licensed under <a href="https://www.gnu.org/licenses/agpl-3.0.html">AGPL-3.0</a> &middot;
   <a href="api/concierge_worker/">API Reference</a>
-  <p>AGPL-3.0 &mdash; <a href="https://github.com/ananthb/concierge-worker">source on GitHub</a></p>
 </footer>
 
 </div>

@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Billing — Concierge</title>
+<link rel="icon" type="image/svg+xml" href="https://concierge.calculon.tech/logo.svg">
+<meta name="theme-color" content="#E86A2C">
+<style>
+:root { --bg: #fff; --fg: #1a1a1a; --muted: #555; --accent: #C55A11; --code-bg: #f5f6f8; --border: #e0e0e0; --max-w: 740px; --orange: #E86A2C; --navy: #1A1A2E; }
+@media (prefers-color-scheme: dark) { :root { --bg: #121212; --fg: #e0e0e0; --muted: #aaa; --accent: #F9A825; --code-bg: #2a2a2a; --border: #3a3a3a; } }
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--fg); line-height: 1.6; }
+.container { max-width: var(--max-w); margin: 0 auto; padding: 2rem 1.5rem; }
+h1 { font-size: 1.8rem; margin-bottom: 0.5rem; }
+h2 { font-size: 1.25rem; margin-top: 2rem; margin-bottom: 0.5rem; border-bottom: 1px solid var(--border); padding-bottom: 0.3rem; }
+h3 { font-size: 1.05rem; margin-top: 1.5rem; margin-bottom: 0.3rem; }
+p { margin: 0.5rem 0; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+ul, ol { margin: 0.5rem 0 0.5rem 1.5rem; }
+li { margin: 0.3rem 0; }
+code { background: var(--code-bg); padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9em; font-family: ui-monospace, monospace; }
+pre { background: var(--code-bg); padding: 1rem; border-radius: 6px; overflow-x: auto; margin: 0.75rem 0; }
+pre code { background: none; padding: 0; }
+table { width: 100%; border-collapse: collapse; margin: 0.75rem 0; }
+th, td { padding: 0.5rem 0.75rem; text-align: left; border-bottom: 1px solid var(--border); }
+th { font-weight: 600; font-size: 0.9rem; }
+strong { font-weight: 600; }
+nav.site-nav { display: flex; gap: 0.75rem; margin: 1rem 0 2rem; flex-wrap: wrap; padding-bottom: 1rem; border-bottom: 1px solid var(--border); }
+nav.site-nav a { padding: 0.3rem 0.6rem; background: var(--code-bg); border-radius: 4px; font-weight: 500; font-size: 0.85rem; }
+nav.site-nav a.current { background: var(--orange); color: #fff; }
+footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--border); font-size: 0.8rem; color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="container">
+
+<nav class="site-nav" aria-label="Documentation">
+  <a href="./">Overview</a>
+  <a href="how-it-works.html">How It Works</a>
+  <a href="setup.html">Setup</a>
+  <a href="configuration.html">Config</a>
+  <a href="whatsapp.html">WhatsApp</a>
+  <a href="instagram.html">Instagram</a>
+  <a href="email-routing.html">Email Routing</a>
+  <a href="discord.html">Discord</a>
+  <a href="lead-forms.html">Lead Forms</a>
+  <a href="embedding.html">Embedding</a>
+  <a href="billing.html" class="current">Billing</a>
+  <a href="management.html">Management</a>
+  <a href="deployment.html">Deployment</a>
+  <a href="facebook-app-setup.html">Facebook App</a>
+  <a href="api/concierge_worker/">API Docs</a>
+</nav>
+
+<h1>Billing</h1>
+
+<p>Concierge uses a prepaid reply credit system. Every auto-reply (WhatsApp, Instagram) and relay reply (Discord) deducts one credit from the tenant's balance. When credits reach zero, auto-replies stop silently.</p>
+
+<h2>How Credits Work</h2>
+
+<ul>
+  <li>Each tenant has a <code>TenantBilling</code> record in KV tracking: <code>replies_remaining</code>, <code>replies_used</code> (lifetime), and <code>replies_granted</code> (lifetime)</li>
+  <li>Credits are deducted <em>before</em> the reply is sent (optimistic deduction)</li>
+  <li>If the AI generation or message send fails, the credit is automatically restored</li>
+  <li>An empty reply (e.g., AI returns nothing) also triggers a credit restore</li>
+</ul>
+
+<h2>Getting Credits</h2>
+
+<p>There are two ways to get reply credits:</p>
+
+<h3>1. Management Grants (Free)</h3>
+
+<p>Platform operators can grant free credits to any tenant via the <a href="management.html">management panel</a>. This is useful for onboarding, promotions, or support situations. Grants are logged to the audit trail.</p>
+
+<h3>2. Paid Credit Packs (Razorpay)</h3>
+
+<p>Tenants can purchase credit packs via Razorpay checkout. The available packs are configurable by management. Default packs seeded by the migration:</p>
+
+<table>
+  <thead>
+    <tr><th>Pack</th><th>Replies</th><th>Price (INR)</th><th>Price (USD)</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>Starter</td><td>500</td><td>249.00</td><td>$3.00</td></tr>
+    <tr><td>Growth</td><td>2,000</td><td>799.00</td><td>$10.00</td></tr>
+    <tr><td>Scale</td><td>10,000</td><td>2,999.00</td><td>$36.00</td></tr>
+    <tr><td>Volume</td><td>50,000</td><td>9,999.00</td><td>$120.00</td></tr>
+  </tbody>
+</table>
+
+<p>Prices are stored in paise (INR) and cents (USD) internally.</p>
+
+<h2>Razorpay Integration</h2>
+
+<p>The payment flow works as follows:</p>
+
+<ol>
+  <li>Tenant selects a credit pack on the pricing page (<code>/pricing</code>)</li>
+  <li>Concierge creates a Razorpay order via the API</li>
+  <li>The Razorpay checkout widget opens in the browser</li>
+  <li>On successful payment, Razorpay sends a webhook to <code>POST /webhook/razorpay</code></li>
+  <li>Concierge verifies the payment signature (HMAC-SHA256) and credits the tenant's balance</li>
+  <li>The payment is recorded in the <code>payments</code> D1 table</li>
+</ol>
+
+<h3>Required Secrets</h3>
+
+<ul>
+  <li><code>RAZORPAY_KEY_ID</code> -- Razorpay API key ID</li>
+  <li><code>RAZORPAY_KEY_SECRET</code> -- Razorpay API key secret</li>
+  <li><code>RAZORPAY_WEBHOOK_SECRET</code> -- Webhook secret for signature verification</li>
+</ul>
+
+<h2>Credit Pack Management</h2>
+
+<p>Platform operators can manage credit packs via the <a href="management.html">management panel</a> at <code>/manage/billing</code>:</p>
+
+<ul>
+  <li>Create new packs with custom names, reply counts, and prices</li>
+  <li>Update existing pack details</li>
+  <li>Activate or deactivate packs (inactive packs are hidden from tenants)</li>
+  <li>Delete packs</li>
+  <li>Control sort order for display on the pricing page</li>
+</ul>
+
+<p>All pack management actions are recorded in the audit log.</p>
+
+<h2>Billing State</h2>
+
+<p>Each tenant's billing state is stored in KV as a <code>TenantBilling</code> JSON object:</p>
+
+<pre><code>{
+  "replies_remaining": 450,
+  "replies_used": 50,
+  "replies_granted": 500
+}</code></pre>
+
+<footer>
+  <a href="https://github.com/ananthb/concierge-worker">Open-source</a> &middot;
+  Licensed under <a href="https://www.gnu.org/licenses/agpl-3.0.html">AGPL-3.0</a> &middot;
+  <a href="api/concierge_worker/">API Reference</a>
+</footer>
+
+</div>
+</body>
+</html>

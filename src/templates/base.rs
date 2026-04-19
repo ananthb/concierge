@@ -312,6 +312,7 @@ pub fn footer() -> &'static str {
     r##"<footer style="text-align:center;padding:2rem;color:var(--muted);font-size:13px;border-top:1px solid var(--hair)">
   <a href="https://github.com/ananthb/concierge-worker" style="color:var(--muted)">Open-source</a> &middot;
   Licensed under <a href="https://www.gnu.org/licenses/agpl-3.0.html" style="color:var(--muted)">AGPL-3.0</a> &middot;
+  <a href="https://ananthb.github.io/concierge-worker/" style="color:var(--muted)">Docs</a> &middot;
   <a href="/terms" style="color:var(--muted)">Terms</a> &middot;
   <a href="/privacy" style="color:var(--muted)">Privacy</a>
 </footer>"##

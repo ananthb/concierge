@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>How It Works — Concierge</title>
 <link rel="icon" type="image/svg+xml" href="https://concierge.calculon.tech/logo.svg">
-<meta name="theme-color" content="#F38020">
+<meta name="theme-color" content="#E86A2C">
 <style>
-:root { --bg: #fff; --fg: #1a1a1a; --muted: #555; --accent: #C55A11; --code-bg: #f5f6f8; --border: #e0e0e0; --max-w: 740px; --orange: #F38020; --navy: #1A1A2E; }
+:root { --bg: #fff; --fg: #1a1a1a; --muted: #555; --accent: #C55A11; --code-bg: #f5f6f8; --border: #e0e0e0; --max-w: 740px; --orange: #E86A2C; --navy: #1A1A2E; }
 @media (prefers-color-scheme: dark) { :root { --bg: #121212; --fg: #e0e0e0; --muted: #aaa; --accent: #F9A825; --code-bg: #2a2a2a; --border: #3a3a3a; } }
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body { font-family: system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--fg); line-height: 1.6; }
@@ -44,8 +44,12 @@ footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--border
   <a href="configuration.html">Config</a>
   <a href="whatsapp.html">WhatsApp</a>
   <a href="instagram.html">Instagram</a>
+  <a href="email-routing.html">Email Routing</a>
+  <a href="discord.html">Discord</a>
   <a href="lead-forms.html">Lead Forms</a>
   <a href="embedding.html">Embedding</a>
+  <a href="billing.html">Billing</a>
+  <a href="management.html">Management</a>
   <a href="deployment.html">Deployment</a>
   <a href="facebook-app-setup.html">Facebook App</a>
   <a href="api/concierge_worker/">API Docs</a>
@@ -53,36 +57,75 @@ footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--border
 
 <h1>How It Works</h1>
 
-<p>Concierge runs as a single Cloudflare Worker that handles three messaging channels:</p>
+<p>Concierge runs as a single Cloudflare Worker that handles four messaging channels through a unified pipeline.</p>
+
+<h2>Unified Pipeline</h2>
+
+<p>All inbound messages -- regardless of channel -- are normalized into an <code>InboundMessage</code> struct and processed through a common pipeline:</p>
+
+<ol>
+  <li>Channel-specific webhook or handler receives the raw message</li>
+  <li>The message is normalized into <code>InboundMessage</code> with channel, sender, recipient, tenant, and metadata</li>
+  <li>Metadata (no message content) is logged to the unified <code>messages</code> table in D1</li>
+  <li>Channel-specific routing logic runs (auto-reply, email rules, Discord relay, etc.)</li>
+  <li>If a reply is sent, one reply credit is deducted from the tenant's balance</li>
+</ol>
+
+<p><strong>Privacy note:</strong> The unified messages table stores only metadata (channel, direction, sender ID, recipient ID, tenant, timestamp). No message content is ever persisted.</p>
 
 <h2>WhatsApp Auto-Reply</h2>
 
 <ol>
   <li>A customer sends a WhatsApp message to your business number</li>
-  <li>Meta delivers the message to Concierge via webhook</li>
-  <li>Concierge looks up the number, checks if auto-reply is enabled</li>
-  <li>Sends a reply — either a static message or an AI-generated response</li>
-  <li>Both messages are logged to the database</li>
+  <li>Meta delivers the message to Concierge via webhook at <code>POST /webhook/whatsapp</code></li>
+  <li>Concierge looks up the WhatsApp account by phone number ID, checks if auto-reply is enabled</li>
+  <li>One reply credit is deducted before generating the response</li>
+  <li>Sends a reply -- either a static message or an AI-generated response via Workers AI</li>
+  <li>If the send fails, the credit is restored</li>
 </ol>
 
 <h2>Instagram DM Auto-Reply</h2>
 
 <ol>
   <li>Someone sends a DM to your Instagram business account</li>
-  <li>Meta delivers the message via webhook</li>
+  <li>Meta delivers the message via webhook at <code>POST /webhook/instagram</code></li>
   <li>Concierge looks up the account by page ID, checks auto-reply config</li>
-  <li>Sends a reply via the Instagram Pages API</li>
-  <li>Both messages are logged</li>
+  <li>One reply credit is deducted, a reply is generated and sent via the Instagram Pages API</li>
+</ol>
+
+<h2>Email Routing</h2>
+
+<ol>
+  <li>An email arrives at your catch-all domain (configured via Cloudflare Email Routing)</li>
+  <li>Cloudflare triggers the Worker's <code>email()</code> handler</li>
+  <li>Concierge extracts the domain, looks up the tenant, parses the email</li>
+  <li>Routing rules are evaluated in priority order using glob-pattern matching on from, to, subject, body, and attachment presence</li>
+  <li>The matched rule's action executes: drop, spam reject, forward email, forward to Discord, or AI reply with approval</li>
+  <li>For email forwarding, a reverse-alias address is generated so replies route back through Concierge to the original sender</li>
+</ol>
+
+<h2>Discord Relay</h2>
+
+<ol>
+  <li>When a message from any channel is forwarded to Discord (via email routing rules or future direct integrations), it arrives as an embed with Reply, Approve, and Drop buttons</li>
+  <li>A <code>ConversationContext</code> is saved in KV, linking the Discord message to the original channel, sender, and reply metadata</li>
+  <li>When someone clicks Reply, a modal opens for composing a response</li>
+  <li>The reply is sent back through the originating channel (email, WhatsApp, etc.) using the stored context</li>
+  <li>For AI-generated drafts, Approve sends the draft and Drop discards it</li>
 </ol>
 
 <h2>Lead Capture Forms</h2>
 
 <ol>
-  <li>You create a lead form in the admin and embed it on your website</li>
+  <li>You create a lead form in the admin and embed it on your website via iframe</li>
   <li>A visitor enters their phone number and submits</li>
   <li>Concierge generates a message (static or AI) and sends it via WhatsApp</li>
-  <li>The submission is logged to the database</li>
+  <li>The submission metadata is logged to the database</li>
 </ol>
+
+<h2>Billing</h2>
+
+<p>Every auto-reply or relay reply deducts one reply credit from the tenant's balance. Credits are deducted <em>before</em> the reply is sent (optimistic deduction) and restored if the send fails. When credits reach zero, auto-replies stop. Credits can be granted free by management or purchased via Razorpay.</p>
 
 <h2>Platform Model</h2>
 
@@ -90,19 +133,26 @@ footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--border
 
 <p>Instagram uses <strong>per-account OAuth tokens</strong> via Facebook Login. Each customer connects their Instagram business account through a standard OAuth flow. Page tokens are encrypted and stored in KV.</p>
 
+<p>Email routing uses <strong>per-domain configuration</strong>. Each tenant registers their domains and creates routing rules. Domains are mapped to tenants via a KV index.</p>
+
+<p>Discord uses <strong>guild-to-tenant mapping</strong>. Each Discord server (guild) is linked to a tenant, and the bot token is stored per-tenant.</p>
+
 <h2>Architecture</h2>
 
 <ul>
-  <li><strong>Cloudflare Worker</strong> — Rust compiled to WebAssembly, handles all HTTP routes</li>
-  <li><strong>Cloudflare KV</strong> — Stores account configs, tokens, and session data</li>
-  <li><strong>Cloudflare D1</strong> — SQLite database for message logs and form submissions</li>
-  <li><strong>Cloudflare Workers AI</strong> — Powers AI-mode auto-replies</li>
+  <li><strong>Cloudflare Worker</strong> -- Rust compiled to WebAssembly, handles all HTTP routes, webhooks, and email events</li>
+  <li><strong>Cloudflare KV</strong> -- Stores tenant configs, account configs, tokens, sessions, routing rules, billing state, and conversation contexts</li>
+  <li><strong>Cloudflare D1</strong> -- SQLite database for message metadata logs, email metrics, lead form submissions, credit packs, payments, and audit logs</li>
+  <li><strong>Cloudflare Workers AI</strong> -- Powers AI-mode auto-replies and email draft generation</li>
+  <li><strong>Cloudflare Email Routing</strong> -- Triggers the Worker's email handler for inbound emails</li>
+  <li><strong>Discord Interactions API</strong> -- Slash commands, button interactions, and modal submissions via <code>POST /discord/interactions</code></li>
+  <li><strong>Razorpay</strong> -- Payment processing for credit pack purchases</li>
 </ul>
 
 <footer>
-  <a href="https://github.com/ananthb/concierge-worker">Source Code</a> &middot;
+  <a href="https://github.com/ananthb/concierge-worker">Open-source</a> &middot;
+  Licensed under <a href="https://www.gnu.org/licenses/agpl-3.0.html">AGPL-3.0</a> &middot;
   <a href="api/concierge_worker/">API Reference</a>
-  <p>AGPL-3.0 &mdash; <a href="https://github.com/ananthb/concierge-worker">source on GitHub</a></p>
 </footer>
 
 </div>

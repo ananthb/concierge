@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Deployment — Concierge</title>
 <link rel="icon" type="image/svg+xml" href="https://concierge.calculon.tech/logo.svg">
-<meta name="theme-color" content="#F38020">
+<meta name="theme-color" content="#E86A2C">
 <style>
-:root { --bg: #fff; --fg: #1a1a1a; --muted: #555; --accent: #C55A11; --code-bg: #f5f6f8; --border: #e0e0e0; --max-w: 740px; --orange: #F38020; --navy: #1A1A2E; }
+:root { --bg: #fff; --fg: #1a1a1a; --muted: #555; --accent: #C55A11; --code-bg: #f5f6f8; --border: #e0e0e0; --max-w: 740px; --orange: #E86A2C; --navy: #1A1A2E; }
 @media (prefers-color-scheme: dark) { :root { --bg: #121212; --fg: #e0e0e0; --muted: #aaa; --accent: #F9A825; --code-bg: #2a2a2a; --border: #3a3a3a; } }
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body { font-family: system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--fg); line-height: 1.6; }
@@ -44,8 +44,12 @@ footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--border
   <a href="configuration.html">Config</a>
   <a href="whatsapp.html">WhatsApp</a>
   <a href="instagram.html">Instagram</a>
+  <a href="email-routing.html">Email Routing</a>
+  <a href="discord.html">Discord</a>
   <a href="lead-forms.html">Lead Forms</a>
   <a href="embedding.html">Embedding</a>
+  <a href="billing.html">Billing</a>
+  <a href="management.html">Management</a>
   <a href="deployment.html" class="current">Deployment</a>
   <a href="facebook-app-setup.html">Facebook App</a>
   <a href="api/concierge_worker/">API Docs</a>
@@ -68,31 +72,81 @@ wrangler deploy</code></pre>
 
 <h2>Database Migration</h2>
 
-<p>After deploying schema changes:</p>
+<p>Apply the schema migration (creates all tables, safe to re-run with <code>IF NOT EXISTS</code>):</p>
 
 <pre><code>wrangler d1 execute concierge-worker --remote --file migrations/0001_create_schema.sql</code></pre>
 
+<p>This creates the following tables:</p>
+
+<table>
+  <thead>
+    <tr><th>Table</th><th>Purpose</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>tenants</code></td><td>Tenant accounts</td></tr>
+    <tr><td><code>whatsapp_messages</code></td><td>WhatsApp message metadata log</td></tr>
+    <tr><td><code>instagram_messages</code></td><td>Instagram message metadata log</td></tr>
+    <tr><td><code>lead_form_submissions</code></td><td>Lead form submission records</td></tr>
+    <tr><td><code>email_messages</code></td><td>Email routing action log</td></tr>
+    <tr><td><code>email_metrics</code></td><td>Aggregated email routing counters by domain, rule, date, and action</td></tr>
+    <tr><td><code>messages</code></td><td>Unified message metadata log (all channels, no content stored)</td></tr>
+    <tr><td><code>credit_packs</code></td><td>Available credit pack definitions (managed via management panel)</td></tr>
+    <tr><td><code>payments</code></td><td>Razorpay payment history</td></tr>
+    <tr><td><code>audit_log</code></td><td>Management action audit trail</td></tr>
+  </tbody>
+</table>
+
+<p>The migration also seeds four default credit packs (Starter, Growth, Scale, Volume).</p>
+
 <p>To reset the database (drops all data):</p>
 
-<pre><code>wrangler d1 execute concierge-worker --remote --command "DROP TABLE IF EXISTS tenants; DROP TABLE IF EXISTS whatsapp_messages; DROP TABLE IF EXISTS lead_form_submissions; DROP TABLE IF EXISTS instagram_messages;"
+<pre><code>wrangler d1 execute concierge-worker --remote --command "DROP TABLE IF EXISTS tenants; DROP TABLE IF EXISTS whatsapp_messages; DROP TABLE IF EXISTS instagram_messages; DROP TABLE IF EXISTS lead_form_submissions; DROP TABLE IF EXISTS email_messages; DROP TABLE IF EXISTS email_metrics; DROP TABLE IF EXISTS messages; DROP TABLE IF EXISTS credit_packs; DROP TABLE IF EXISTS payments; DROP TABLE IF EXISTS audit_log;"
 wrangler d1 execute concierge-worker --remote --file migrations/0001_create_schema.sql</code></pre>
+
+<h2>Razorpay Webhook Setup</h2>
+
+<ol>
+  <li>In the Razorpay Dashboard, go to <strong>Settings &gt; Webhooks</strong></li>
+  <li>Add a new webhook URL: <code>https://your-domain/webhook/razorpay</code></li>
+  <li>Select events: <code>payment.captured</code>, <code>payment.failed</code></li>
+  <li>Copy the webhook secret and set it: <code>wrangler secret put RAZORPAY_WEBHOOK_SECRET</code></li>
+</ol>
+
+<h2>Cloudflare Access Setup for <code>/manage/*</code></h2>
+
+<ol>
+  <li>In the Cloudflare dashboard, go to <strong>Zero Trust &gt; Access &gt; Applications</strong></li>
+  <li>Create a <strong>Self-hosted</strong> application</li>
+  <li>Set the application domain to <code>your-domain</code> and path to <code>/manage/*</code></li>
+  <li>Create a policy (e.g., "Allow management emails") with an <strong>Emails</strong> rule matching the addresses in your <code>MANAGEMENT_EMAILS</code> variable</li>
+  <li>Cloudflare Access injects the <code>Cf-Access-Authenticated-User-Email</code> header, which Concierge validates against <code>MANAGEMENT_EMAILS</code></li>
+</ol>
+
+<h2>Email Routing Setup</h2>
+
+<ol>
+  <li>In the Cloudflare dashboard, go to <strong>Email Routing</strong> for your domain</li>
+  <li>Enable Email Routing and verify the domain</li>
+  <li>Add a <strong>Catch-all</strong> rule that routes to your Worker (<code>concierge-worker</code>)</li>
+  <li>The Worker's <code>email()</code> handler receives all inbound emails for the domain</li>
+</ol>
 
 <h2>Pre-commit Hooks</h2>
 
 <p>The Nix dev shell installs git hooks via <code>cachix/git-hooks.nix</code>:</p>
 
 <ul>
-  <li><code>rustfmt</code> — code formatting</li>
-  <li><code>nixpkgs-fmt</code> — Nix formatting</li>
-  <li><code>check-toml</code>, <code>check-yaml</code>, <code>check-json</code> — config validation</li>
-  <li><code>detect-private-keys</code> — prevents accidental key commits</li>
-  <li><code>end-of-file-fixer</code>, <code>trim-trailing-whitespace</code> — file hygiene</li>
+  <li><code>rustfmt</code> -- code formatting</li>
+  <li><code>nixpkgs-fmt</code> -- Nix formatting</li>
+  <li><code>check-toml</code>, <code>check-yaml</code>, <code>check-json</code> -- config validation</li>
+  <li><code>detect-private-keys</code> -- prevents accidental key commits</li>
+  <li><code>end-of-file-fixer</code>, <code>trim-trailing-whitespace</code> -- file hygiene</li>
 </ul>
 
 <footer>
-  <a href="https://github.com/ananthb/concierge-worker">Source Code</a> &middot;
+  <a href="https://github.com/ananthb/concierge-worker">Open-source</a> &middot;
+  Licensed under <a href="https://www.gnu.org/licenses/agpl-3.0.html">AGPL-3.0</a> &middot;
   <a href="api/concierge_worker/">API Reference</a>
-  <p>AGPL-3.0 &mdash; <a href="https://github.com/ananthb/concierge-worker">source on GitHub</a></p>
 </footer>
 
 </div>

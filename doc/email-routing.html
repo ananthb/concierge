@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Email Routing — Concierge</title>
+<link rel="icon" type="image/svg+xml" href="https://concierge.calculon.tech/logo.svg">
+<meta name="theme-color" content="#E86A2C">
+<style>
+:root { --bg: #fff; --fg: #1a1a1a; --muted: #555; --accent: #C55A11; --code-bg: #f5f6f8; --border: #e0e0e0; --max-w: 740px; --orange: #E86A2C; --navy: #1A1A2E; }
+@media (prefers-color-scheme: dark) { :root { --bg: #121212; --fg: #e0e0e0; --muted: #aaa; --accent: #F9A825; --code-bg: #2a2a2a; --border: #3a3a3a; } }
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--fg); line-height: 1.6; }
+.container { max-width: var(--max-w); margin: 0 auto; padding: 2rem 1.5rem; }
+h1 { font-size: 1.8rem; margin-bottom: 0.5rem; }
+h2 { font-size: 1.25rem; margin-top: 2rem; margin-bottom: 0.5rem; border-bottom: 1px solid var(--border); padding-bottom: 0.3rem; }
+h3 { font-size: 1.05rem; margin-top: 1.5rem; margin-bottom: 0.3rem; }
+p { margin: 0.5rem 0; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+ul, ol { margin: 0.5rem 0 0.5rem 1.5rem; }
+li { margin: 0.3rem 0; }
+code { background: var(--code-bg); padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9em; font-family: ui-monospace, monospace; }
+pre { background: var(--code-bg); padding: 1rem; border-radius: 6px; overflow-x: auto; margin: 0.75rem 0; }
+pre code { background: none; padding: 0; }
+table { width: 100%; border-collapse: collapse; margin: 0.75rem 0; }
+th, td { padding: 0.5rem 0.75rem; text-align: left; border-bottom: 1px solid var(--border); }
+th { font-weight: 600; font-size: 0.9rem; }
+strong { font-weight: 600; }
+nav.site-nav { display: flex; gap: 0.75rem; margin: 1rem 0 2rem; flex-wrap: wrap; padding-bottom: 1rem; border-bottom: 1px solid var(--border); }
+nav.site-nav a { padding: 0.3rem 0.6rem; background: var(--code-bg); border-radius: 4px; font-weight: 500; font-size: 0.85rem; }
+nav.site-nav a.current { background: var(--orange); color: #fff; }
+footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--border); font-size: 0.8rem; color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="container">
+
+<nav class="site-nav" aria-label="Documentation">
+  <a href="./">Overview</a>
+  <a href="how-it-works.html">How It Works</a>
+  <a href="setup.html">Setup</a>
+  <a href="configuration.html">Config</a>
+  <a href="whatsapp.html">WhatsApp</a>
+  <a href="instagram.html">Instagram</a>
+  <a href="email-routing.html" class="current">Email Routing</a>
+  <a href="discord.html">Discord</a>
+  <a href="lead-forms.html">Lead Forms</a>
+  <a href="embedding.html">Embedding</a>
+  <a href="billing.html">Billing</a>
+  <a href="management.html">Management</a>
+  <a href="deployment.html">Deployment</a>
+  <a href="facebook-app-setup.html">Facebook App</a>
+  <a href="api/concierge_worker/">API Docs</a>
+</nav>
+
+<h1>Email Routing</h1>
+
+<p>Concierge acts as a smart email router. Inbound emails arrive via Cloudflare Email Routing's catch-all rule, are matched against configurable routing rules, and actions are executed automatically.</p>
+
+<h2>How It Works</h2>
+
+<ol>
+  <li>An email arrives at any address on your domain (e.g., <code>support@example.com</code>)</li>
+  <li>Cloudflare Email Routing triggers the Worker's <code>email()</code> handler</li>
+  <li>The recipient domain is extracted and mapped to a tenant via a KV index</li>
+  <li>The email is parsed (subject, body, attachments)</li>
+  <li>A loop-detection header (<code>X-EmailProxy-Forwarded</code>) is checked</li>
+  <li>Routing rules for that domain are evaluated in priority order</li>
+  <li>The highest-priority matching rule's action is executed</li>
+  <li>If no rule matches, the domain's default action is used (defaults to Drop)</li>
+  <li>The action is logged to the <code>email_messages</code> table and <code>email_metrics</code> counters</li>
+</ol>
+
+<h2>Domains</h2>
+
+<p>Each tenant can register one or more email domains. A domain represents a catch-all email endpoint. Domains are managed via:</p>
+
+<ul>
+  <li>The web admin panel</li>
+  <li>Discord <code>/domains</code> slash command (<code>/domains list</code>, <code>/domains add</code>, <code>/domains remove</code>)</li>
+</ul>
+
+<p>Each domain has a <strong>default action</strong> that applies when no routing rule matches. The default is <code>Drop</code> (silently discard).</p>
+
+<h2>Routing Rules</h2>
+
+<p>Rules are per-domain, evaluated in priority order (highest priority wins). Each rule has:</p>
+
+<table>
+  <thead>
+    <tr><th>Field</th><th>Description</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>name</code></td><td>Human-readable label</td></tr>
+    <tr><td><code>priority</code></td><td>Integer priority (higher = evaluated later, wins over lower)</td></tr>
+    <tr><td><code>enabled</code></td><td>Toggle on/off without deleting</td></tr>
+    <tr><td><code>criteria</code></td><td>Match conditions (see below)</td></tr>
+    <tr><td><code>action</code></td><td>What to do when the rule matches</td></tr>
+  </tbody>
+</table>
+
+<h2>Match Criteria (Glob Patterns)</h2>
+
+<p>Rules match using glob patterns with <code>*</code> (any sequence) and <code>?</code> (single character). Matching is case-insensitive. All specified criteria must match (AND logic). Omitted criteria match everything.</p>
+
+<table>
+  <thead>
+    <tr><th>Criterion</th><th>Description</th><th>Example</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>from_pattern</code></td><td>Sender email address</td><td><code>*@newsletter.com</code></td></tr>
+    <tr><td><code>to_pattern</code></td><td>Recipient email address</td><td><code>support+*@example.com</code></td></tr>
+    <tr><td><code>subject_pattern</code></td><td>Email subject line</td><td><code>*invoice*</code></td></tr>
+    <tr><td><code>body_pattern</code></td><td>Plain-text body content</td><td><code>*unsubscribe*</code></td></tr>
+    <tr><td><code>has_attachment</code></td><td>Whether the email has attachments</td><td><code>true</code> or <code>false</code></td></tr>
+  </tbody>
+</table>
+
+<h3>Pattern Examples</h3>
+
+<ul>
+  <li><code>*</code> -- matches everything</li>
+  <li><code>*@example.com</code> -- any address at example.com</li>
+  <li><code>*@*.example.com</code> -- any subdomain of example.com</li>
+  <li><code>support+*@example.com</code> -- plus-addressed support emails</li>
+  <li><code>*invoice*</code> -- subject or body containing "invoice"</li>
+</ul>
+
+<h2>Actions</h2>
+
+<table>
+  <thead>
+    <tr><th>Action</th><th>Description</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><strong>Drop</strong></td><td>Silently discard the email. Nothing is sent back.</td></tr>
+    <tr><td><strong>Spam</strong></td><td>Reject the email with an optional message. The sender's MTA receives the rejection.</td></tr>
+    <tr><td><strong>Forward Email</strong></td><td>Forward to a destination email address. A reverse-alias is generated for reply routing (see below).</td></tr>
+    <tr><td><strong>Forward Discord</strong></td><td>Post the email content to a Discord channel as an embed. The email is consumed (not forwarded via SMTP).</td></tr>
+    <tr><td><strong>AI Reply</strong></td><td>Generate an AI draft reply using Workers AI, then post it to a Discord channel for human approval before sending.</td></tr>
+  </tbody>
+</table>
+
+<h2>Reverse-Alias Reply Routing</h2>
+
+<p>When an email is forwarded via the <strong>Forward Email</strong> action, Concierge generates a unique reverse-alias address on the domain (e.g., <code>reply-abc123@example.com</code>). This alias is used as the <code>From</code> address in the forwarded email.</p>
+
+<p>When the recipient replies to the forwarded email, their reply goes to the reverse-alias address. Concierge looks up the alias, finds the original sender, and forwards the reply back to them -- making the conversation appear seamless.</p>
+
+<ol>
+  <li>Email from <code>alice@external.com</code> to <code>support@example.com</code></li>
+  <li>Concierge forwards to <code>you@personal.com</code> with From: <code>reply-abc123@example.com</code></li>
+  <li>You reply to <code>reply-abc123@example.com</code></li>
+  <li>Concierge forwards your reply back to <code>alice@external.com</code> with From: <code>support@example.com</code></li>
+</ol>
+
+<h2>AI Reply with Approval</h2>
+
+<p>The <strong>AI Reply</strong> action generates a draft response using Cloudflare Workers AI. The draft is not sent automatically -- it is posted to a Discord channel for human approval with Approve and Reject buttons.</p>
+
+<ul>
+  <li><strong>Approve</strong> -- sends the AI-generated draft to the original sender</li>
+  <li><strong>Reject</strong> -- discards the draft</li>
+  <li>You can also click <strong>Reply</strong> to write a custom response instead of using the draft</li>
+</ul>
+
+<p>The AI Reply action supports an optional <code>system_prompt</code> to customize the AI's behavior for specific types of emails.</p>
+
+<h2>Managing Rules</h2>
+
+<p>Rules can be managed via:</p>
+
+<ul>
+  <li><strong>Web admin panel</strong> -- Full CRUD for domains and rules</li>
+  <li><strong>Discord</strong> -- <code>/rules list &lt;domain&gt;</code> to view rules. For complex rule management, use the web admin</li>
+</ul>
+
+<h2>Loop Detection</h2>
+
+<p>Concierge adds an <code>X-EmailProxy-Forwarded</code> header to forwarded emails. If an inbound email already has this header, it is rejected to prevent forwarding loops.</p>
+
+<h2>Metrics</h2>
+
+<p>Email actions are tracked in the <code>email_metrics</code> table, aggregated by domain, rule, date, and action type. View them via the <code>/status</code> Discord command or the management panel.</p>
+
+<footer>
+  <a href="https://github.com/ananthb/concierge-worker">Open-source</a> &middot;
+  Licensed under <a href="https://www.gnu.org/licenses/agpl-3.0.html">AGPL-3.0</a> &middot;
+  <a href="api/concierge_worker/">API Reference</a>
+</footer>
+
+</div>
+</body>
+</html>
