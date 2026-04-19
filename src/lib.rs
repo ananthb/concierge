@@ -139,6 +139,19 @@ const LOGO_192: &[u8] = include_bytes!("../assets/logo-192.png");
 const LOGO_512: &[u8] = include_bytes!("../assets/logo-512.png");
 const MSTILE_150: &[u8] = include_bytes!("../assets/mstile-150x150.png");
 
+/// Add security headers to an HTML response.
+fn add_security_headers(resp: &mut Response) -> Result<()> {
+    let headers = resp.headers_mut();
+    headers.set("X-Frame-Options", "DENY")?;
+    headers.set("X-Content-Type-Options", "nosniff")?;
+    headers.set("Referrer-Policy", "strict-origin-when-cross-origin")?;
+    headers.set(
+        "Content-Security-Policy",
+        "default-src 'self'; script-src 'self' https://unpkg.com https://checkout.razorpay.com https://connect.facebook.net 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self'"
+    )?;
+    Ok(())
+}
+
 fn serve_text(body: &str, content_type: &str) -> Result<Response> {
     let headers = Headers::new();
     headers.set("Content-Type", content_type)?;
@@ -156,13 +169,39 @@ fn serve_png(body: &[u8]) -> Result<Response> {
 #[event(fetch)]
 async fn fetch(req: Request, env: Env, _ctx: Context) -> Result<Response> {
     console_error_panic_hook::set_once();
+    let mut resp = handle_request(req, env).await?;
+    // Add security headers to all HTML responses
+    if resp
+        .headers()
+        .get("Content-Type")
+        .ok()
+        .flatten()
+        .map_or(false, |ct| ct.contains("text/html"))
+    {
+        add_security_headers(&mut resp)?;
+    }
+    Ok(resp)
+}
 
+async fn handle_request(req: Request, env: Env) -> Result<Response> {
     let url = req.url()?;
     let path = url.path();
     let method = req.method();
 
     // Static assets
     match path {
+        "/robots.txt" => {
+            return serve_text(
+                "User-agent: *\nAllow: /\nAllow: /pricing\nAllow: /terms\nAllow: /privacy\nDisallow: /admin\nDisallow: /manage\nDisallow: /auth\nDisallow: /webhook\nDisallow: /discord\nDisallow: /instagram\nDisallow: /whatsapp\n\nSitemap: https://concierge.calculon.tech/sitemap.txt\n",
+                "text/plain",
+            );
+        }
+        "/sitemap.txt" => {
+            return serve_text(
+                "https://concierge.calculon.tech/\nhttps://concierge.calculon.tech/pricing\nhttps://concierge.calculon.tech/terms\nhttps://concierge.calculon.tech/privacy\nhttps://ananthb.github.io/concierge-worker/\n",
+                "text/plain",
+            );
+        }
         "/logo.svg" => return serve_text(LOGO_SVG, "image/svg+xml"),
         "/site.webmanifest" => return serve_text(WEBMANIFEST, "application/manifest+json"),
         "/browserconfig.xml" => return serve_text(BROWSERCONFIG, "application/xml"),

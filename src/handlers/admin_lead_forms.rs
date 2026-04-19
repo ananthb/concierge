@@ -93,7 +93,16 @@ pub async fn handle_lead_forms_admin(
                 form.name = truncate(&name, 200);
             }
             if let Some(FormEntry::Field(wa_id)) = data.get("whatsapp_account_id") {
-                form.whatsapp_account_id = wa_id;
+                // Validate that the WhatsApp account belongs to this tenant
+                if !wa_id.is_empty() {
+                    let wa_accounts =
+                        crate::storage::list_whatsapp_accounts(&kv, tenant_id).await?;
+                    if wa_accounts.iter().any(|a| a.phone_number_id == wa_id) {
+                        form.whatsapp_account_id = wa_id;
+                    }
+                } else {
+                    form.whatsapp_account_id = String::new();
+                }
             }
             if let Some(FormEntry::Field(mode)) = data.get("reply_mode") {
                 form.reply_mode = match mode.as_str() {

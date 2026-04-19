@@ -68,9 +68,17 @@ pub async fn handle_email_admin(
                 .trim()
                 .to_lowercase();
 
-            if domain.is_empty() {
+            if domain.is_empty()
+                || !domain.contains('.')
+                || domain.starts_with('.')
+                || domain.ends_with('.')
+                || domain.contains("..")
+                || !domain
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '.')
+            {
                 return Response::from_html(
-                    "<div class=\"error\">Domain cannot be empty</div>".to_string(),
+                    "<div class=\"error\">Invalid domain format</div>".to_string(),
                 );
             }
 

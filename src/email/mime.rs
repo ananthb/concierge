@@ -73,6 +73,10 @@ fn build_email(params: &EmailParams<'_>) -> Vec<u8> {
     }
 
     for (name, value) in *extra_headers {
+        // Guard against header injection
+        if name.contains(['\r', '\n']) || value.contains(['\r', '\n']) {
+            continue;
+        }
         out.push_str(&format!("{name}: {value}\r\n"));
     }
 

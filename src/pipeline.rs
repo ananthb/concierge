@@ -68,15 +68,13 @@ async fn handle_auto_reply(
         AutoReplyMode::Ai => {
             let mut context = serde_json::Map::new();
             if let Some(ref name) = msg.sender_name {
-                context.insert(
-                    "sender_name".into(),
-                    serde_json::Value::String(name.clone()),
-                );
+                // Truncate sender name to prevent prompt injection via long input
+                let safe_name: String = name.chars().take(100).collect();
+                context.insert("sender_name".into(), serde_json::Value::String(safe_name));
             }
-            context.insert(
-                "message".into(),
-                serde_json::Value::String(msg.body.clone()),
-            );
+            // Truncate message body to limit prompt injection surface
+            let safe_body: String = msg.body.chars().take(1000).collect();
+            context.insert("message".into(), serde_json::Value::String(safe_body));
             match ai::generate_response(env, &config.prompt, &context).await {
                 Ok(r) => r,
                 Err(e) => {

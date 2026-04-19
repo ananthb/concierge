@@ -101,6 +101,30 @@ pub async fn delete_session(kv: &kv::KvStore, token: &str) -> Result<()> {
 }
 
 // ============================================================================
+// CSRF Token KV Operations
+// ============================================================================
+
+pub async fn save_csrf_token(
+    kv: &kv::KvStore,
+    tenant_id: &str,
+    token: &str,
+    ttl_seconds: u64,
+) -> Result<()> {
+    kv.put(&format!("csrf:{}", tenant_id), token)?
+        .expiration_ttl(ttl_seconds)
+        .execute()
+        .await?;
+    Ok(())
+}
+
+pub async fn get_csrf_token(kv: &kv::KvStore, tenant_id: &str) -> Result<Option<String>> {
+    kv.get(&format!("csrf:{}", tenant_id))
+        .text()
+        .await
+        .map_err(|e| Error::from(e.to_string()))
+}
+
+// ============================================================================
 // WhatsApp Account KV Operations
 // ============================================================================
 

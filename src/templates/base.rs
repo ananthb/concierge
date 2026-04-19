@@ -357,15 +357,46 @@ pub fn footer() -> &'static str {
 </footer>"##
 }
 
+/// OpenGraph / meta description tags for a page.
+pub struct PageMeta {
+    pub description: &'static str,
+    pub og_title: &'static str,
+    pub og_type: &'static str, // "website", "article", etc.
+}
+
+impl Default for PageMeta {
+    fn default() -> Self {
+        Self {
+            description: "Automated customer messaging for small businesses. Auto-reply across WhatsApp, Instagram DMs, and email. 100 replies free every month.",
+            og_title: "Concierge",
+            og_type: "website",
+        }
+    }
+}
+
 /// Base HTML wrapper for all pages.
 pub fn base_html(title: &str, content: &str) -> String {
+    base_html_with_meta(title, content, &PageMeta::default())
+}
+
+/// Base HTML wrapper with custom meta tags.
+pub fn base_html_with_meta(title: &str, content: &str, meta: &PageMeta) -> String {
     format!(
         r##"<!DOCTYPE html>
-<html lang="en"
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{title}</title>
+<meta name="description" content="{description}">
+<meta property="og:title" content="{og_title}">
+<meta property="og:description" content="{description}">
+<meta property="og:type" content="{og_type}">
+<meta property="og:image" content="https://concierge.calculon.tech/logo-512.png">
+<meta property="og:site_name" content="Concierge">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="{og_title}">
+<meta name="twitter:description" content="{description}">
 <link rel="icon" href="/logo.svg" type="image/svg+xml">
 <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
 <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png">
@@ -375,7 +406,7 @@ pub fn base_html(title: &str, content: &str) -> String {
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-<script src="https://unpkg.com/htmx.org@1.9.10"></script>
+<script src="https://unpkg.com/htmx.org@1.9.10" integrity="sha384-YwQSRkoBOUtKKVfHQ8C2zCPslUZHuxiPHts6X/xQCuGHipTtRXd7ImqS1VTLlpiT" crossorigin="anonymous"></script>
 <style>{css}</style>
 </head>
 <body>
@@ -393,10 +424,18 @@ document.addEventListener("htmx:responseError", function() {{
   var t = document.getElementById("toast");
   if (t) {{ t.innerHTML = '<div class="error">Something went wrong. Please try again.</div>'; }}
 }});
+// Send CSRF token with all HTMX requests
+document.addEventListener("htmx:configRequest", function(e) {{
+  var csrf = document.cookie.split(';').map(function(c){{return c.trim()}}).find(function(c){{return c.startsWith('csrf=')}});
+  if (csrf) {{ e.detail.headers['X-CSRF-Token'] = csrf.substring(5); }}
+}});
 </script>
 </body>
 </html>"##,
         title = html_escape(title),
+        description = html_escape(meta.description),
+        og_title = html_escape(meta.og_title),
+        og_type = meta.og_type,
         content = content,
         css = CSS,
         footer = footer(),

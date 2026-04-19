@@ -22,6 +22,7 @@ sha2 = "0.10"
 hmac = "0.12"
 mail-parser = "0.9"
 base64 = "0.22"
+subtle = "2.6"
 
 [profile.release]
 opt-level = "s"

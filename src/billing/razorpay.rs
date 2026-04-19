@@ -38,17 +38,16 @@ pub async fn create_customer(
     razorpay_post(key_id, key_secret, "/customers", &payload).await
 }
 
-/// Verify a Razorpay payment signature.
-/// Returns true if the signature matches.
+/// Verify a Razorpay payment signature (constant-time).
 pub fn verify_payment_signature(
     order_id: &str,
     payment_id: &str,
     signature: &str,
     key_secret: &str,
 ) -> bool {
-    // HMAC-SHA256 of "{order_id}|{payment_id}" with key_secret
     use hmac::{Hmac, Mac};
     use sha2::Sha256;
+    use subtle::ConstantTimeEq;
 
     type HmacSha256 = Hmac<Sha256>;
 
@@ -58,13 +57,14 @@ pub fn verify_payment_signature(
     mac.update(message.as_bytes());
 
     let expected = hex_encode(&mac.finalize().into_bytes());
-    expected == signature
+    expected.as_bytes().ct_eq(signature.as_bytes()).into()
 }
 
-/// Verify a Razorpay webhook signature.
+/// Verify a Razorpay webhook signature (constant-time).
 pub fn verify_webhook_signature(body: &str, signature: &str, webhook_secret: &str) -> bool {
     use hmac::{Hmac, Mac};
     use sha2::Sha256;
+    use subtle::ConstantTimeEq;
 
     type HmacSha256 = Hmac<Sha256>;
 
@@ -73,7 +73,7 @@ pub fn verify_webhook_signature(body: &str, signature: &str, webhook_secret: &st
     mac.update(body.as_bytes());
 
     let expected = hex_encode(&mac.finalize().into_bytes());
-    expected == signature
+    expected.as_bytes().ct_eq(signature.as_bytes()).into()
 }
 
 // --- Internal helpers ---

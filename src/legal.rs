@@ -10,7 +10,12 @@ pub fn terms_of_service_html() -> String {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <link rel="icon" type="image/svg+xml" href="/logo.svg">
-<title>Terms of Service — Concierge</title>
+<title>Terms of Service | Concierge</title>
+<meta name="description" content="Terms of Service for Concierge, an automated messaging platform for small businesses.">
+<meta property="og:title" content="Terms of Service | Concierge">
+<meta property="og:description" content="Terms of Service for Concierge, an automated messaging platform for small businesses.">
+<meta property="og:type" content="article">
+<meta property="og:image" content="https://concierge.calculon.tech/logo-512.png">
 <style>{style}</style>
 </head>
 <body>
@@ -56,7 +61,12 @@ pub fn privacy_policy_html() -> String {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <link rel="icon" type="image/svg+xml" href="/logo.svg">
-<title>Privacy Policy — Concierge</title>
+<title>Privacy Policy | Concierge</title>
+<meta name="description" content="Privacy Policy for Concierge. We store the minimum data needed to operate and you can delete everything at any time.">
+<meta property="og:title" content="Privacy Policy | Concierge">
+<meta property="og:description" content="Privacy Policy for Concierge. We store the minimum data needed to operate and you can delete everything at any time.">
+<meta property="og:type" content="article">
+<meta property="og:image" content="https://concierge.calculon.tech/logo-512.png">
 <style>{style}</style>
 </head>
 <body>

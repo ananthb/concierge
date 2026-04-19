@@ -60,7 +60,7 @@ pub async fn handle_auth(req: Request, env: Env, path: &str, method: Method) -> 
                 if !biz.is_empty() {
                     resp.headers_mut().append(
                         "Set-Cookie",
-                        &format!("onboarding_biz={}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=3600",
+                        &format!("onboarding_biz={}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=3600",
                             urlencoding::encode(&biz)),
                     )?;
                 }
@@ -110,7 +110,8 @@ pub async fn handle_auth(req: Request, env: Env, path: &str, method: Method) -> 
             let token_text = token_resp.text().await?;
 
             if token_resp.status_code() != 200 {
-                return Response::error(format!("Token exchange failed: {}", token_text), 500);
+                console_log!("Google token exchange failed: {}", token_text);
+                return Response::error("Authentication failed. Please try again.", 500);
             }
 
             let tokens: TokenResponse = serde_json::from_str(&token_text)
@@ -212,7 +213,8 @@ pub async fn handle_auth(req: Request, env: Env, path: &str, method: Method) -> 
 
             if token_resp.status_code() != 200 {
                 let err = token_resp.text().await.unwrap_or_default();
-                return Response::error(format!("Facebook token exchange failed: {}", err), 500);
+                console_log!("Facebook token exchange failed: {}", err);
+                return Response::error("Authentication failed. Please try again.", 500);
             }
 
             let body: serde_json::Value = token_resp.json().await?;
@@ -296,19 +298,11 @@ pub async fn handle_auth(req: Request, env: Env, path: &str, method: Method) -> 
                     tenant
                 }
             } else {
-                // No email from Facebook — create with empty email
-                let now = now_iso();
-                let tenant = Tenant {
-                    id: generate_id(),
-                    email: String::new(),
-                    name: fb_name,
-                    facebook_id: Some(fb_id),
-                    plan: "free".to_string(),
-                    created_at: now.clone(),
-                    updated_at: now,
-                };
-                save_tenant(&kv, &tenant).await?;
-                tenant
+                // No email from Facebook — cannot create account without email
+                return Response::error(
+                    "Facebook did not provide an email address. Please sign in with Google instead.",
+                    400,
+                );
             };
 
             create_session_and_redirect(&kv, &tenant.id, "facebook").await
@@ -329,7 +323,7 @@ pub async fn handle_auth(req: Request, env: Env, path: &str, method: Method) -> 
             // Must keep at least one provider
             if tenant.facebook_id.is_none() {
                 return Response::from_html(
-                    "<div class=\"error\">Cannot unlink Google — it's your only sign-in method. Link Facebook first.</div>",
+                    "<div class=\"error\">Cannot unlink Google. It is your only sign-in method. Link Facebook first.</div>",
                 );
             }
 
@@ -356,7 +350,7 @@ pub async fn handle_auth(req: Request, env: Env, path: &str, method: Method) -> 
             // Must keep at least one provider
             if tenant.email.is_empty() {
                 return Response::from_html(
-                    "<div class=\"error\">Cannot unlink Facebook — it's your only sign-in method. Link Google first.</div>",
+                    "<div class=\"error\">Cannot unlink Facebook. It is your only sign-in method. Link Google first.</div>",
                 );
             }
 
@@ -380,7 +374,7 @@ pub async fn handle_auth(req: Request, env: Env, path: &str, method: Method) -> 
             headers.set("Location", "/auth/login")?;
             headers.set(
                 "Set-Cookie",
-                "session=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0",
+                "session=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0",
             )?;
 
             Ok(Response::empty()?.with_status(302).with_headers(headers))
@@ -396,22 +390,32 @@ async fn create_session_and_redirect(
     provider: &str,
 ) -> Result<Response> {
     let session_token = generate_token()?;
+    let csrf_token = generate_token()?;
     save_session(kv, &session_token, tenant_id, SESSION_TTL_SECONDS).await?;
+    save_csrf_token(kv, tenant_id, &csrf_token, SESSION_TTL_SECONDS).await?;
 
     let headers = Headers::new();
     headers.set("Location", "/admin")?;
     headers.set(
         "Set-Cookie",
         &format!(
-            "session={}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age={}",
+            "session={}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age={}",
             session_token, SESSION_TTL_SECONDS
         ),
     )?;
     headers.append(
         "Set-Cookie",
         &format!(
-            "last_provider={}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=2592000",
+            "last_provider={}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=2592000",
             provider
+        ),
+    )?;
+    // CSRF cookie — NOT HttpOnly so HTMX JS can read it
+    headers.append(
+        "Set-Cookie",
+        &format!(
+            "csrf={}; Path=/; Secure; SameSite=Strict; Max-Age={}",
+            csrf_token, SESSION_TTL_SECONDS
         ),
     )?;
 
@@ -442,4 +446,33 @@ pub fn get_session_cookie(req: &Request) -> Option<String> {
 pub async fn resolve_tenant_id(req: &Request, kv: &kv::KvStore) -> Option<String> {
     let token = get_session_cookie(req)?;
     get_session(kv, &token).await.ok()?
+}
+
+/// Validate CSRF token from X-CSRF-Token header or csrf form field against stored token.
+pub async fn validate_csrf(
+    req: &Request,
+    kv: &kv::KvStore,
+    tenant_id: &str,
+) -> std::result::Result<(), String> {
+    use subtle::ConstantTimeEq;
+
+    // Get token from header (HTMX) or cookie (double-submit)
+    let submitted = req
+        .headers()
+        .get("X-CSRF-Token")
+        .ok()
+        .flatten()
+        .or_else(|| get_cookie(req, "csrf"))
+        .ok_or_else(|| "Missing CSRF token".to_string())?;
+
+    let stored = get_csrf_token(kv, tenant_id)
+        .await
+        .map_err(|e| format!("CSRF lookup failed: {e}"))?
+        .ok_or_else(|| "No CSRF token stored for session".to_string())?;
+
+    let valid: bool = submitted.as_bytes().ct_eq(stored.as_bytes()).into();
+    if !valid {
+        return Err("CSRF token mismatch".to_string());
+    }
+    Ok(())
 }

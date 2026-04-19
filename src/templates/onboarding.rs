@@ -3,7 +3,7 @@
 use crate::helpers::html_escape;
 use crate::types::*;
 
-use super::base::{base_html, brand_mark, LOGO_INLINE};
+use super::base::{base_html, base_html_with_meta, brand_mark, PageMeta, LOGO_INLINE};
 use super::HASH;
 
 const STEPS: &[(&str, &str)] = &[
@@ -506,5 +506,13 @@ pub fn pricing_html(packs: &[crate::types::CreditPackRow]) -> String {
         logo = LOGO_INLINE,
     );
 
-    base_html("Pricing - Concierge", &content)
+    base_html_with_meta(
+        "Pricing - Concierge",
+        &content,
+        &PageMeta {
+            description: "Simple, prepaid pricing for Concierge. 100 free replies every month. Buy credit packs when you need more. Purchased credits never expire.",
+            og_title: "Concierge Pricing",
+            ..PageMeta::default()
+        },
+    )
 }

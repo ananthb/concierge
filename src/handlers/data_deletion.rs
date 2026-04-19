@@ -27,11 +27,13 @@ pub async fn handle_data_deletion(mut req: Request, env: Env, method: Method) ->
         return Response::error("Invalid signed_request format", 400);
     }
 
-    // Verify signature
+    // Verify signature (constant-time)
     if !app_secret.is_empty() {
+        use subtle::ConstantTimeEq;
         let computed = crate::crypto::hmac_sha256_hex(app_secret.as_bytes(), parts[1].as_bytes())?;
         let sig = base64url_to_hex(parts[0])?;
-        if computed != sig {
+        let valid: bool = computed.as_bytes().ct_eq(sig.as_bytes()).into();
+        if !valid {
             return Response::error("Invalid signature", 403);
         }
     }
@@ -90,26 +92,8 @@ fn base64url_to_hex(input: &str) -> Result<String> {
 }
 
 fn base64_decode(input: &str) -> Result<Vec<u8>> {
-    let chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    let mut output = Vec::new();
-    let mut buf: u32 = 0;
-    let mut bits: u32 = 0;
-
-    for c in input.chars() {
-        if c == '=' {
-            break;
-        }
-        let val = chars
-            .find(c)
-            .ok_or_else(|| Error::from("Invalid base64 character"))? as u32;
-        buf = (buf << 6) | val;
-        bits += 6;
-        if bits >= 8 {
-            bits -= 8;
-            output.push((buf >> bits) as u8);
-            buf &= (1 << bits) - 1;
-        }
-    }
-
-    Ok(output)
+    use base64::Engine;
+    base64::engine::general_purpose::STANDARD
+        .decode(input)
+        .map_err(|e| Error::from(format!("Invalid base64: {e}")))
 }

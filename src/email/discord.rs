@@ -121,7 +121,7 @@ pub async fn post_ai_draft_for_approval(
     };
 
     let message = CreateMessage {
-        content: Some("**AI Draft Reply** — React with ✅ to approve, ❌ to discard.".to_string()),
+        content: Some("**AI Draft Reply**: React with ✅ to approve, ❌ to discard.".to_string()),
         embeds: Some(vec![
             Embed {
                 title: Some(format!("Re: {subject}")),

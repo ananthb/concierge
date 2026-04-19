@@ -10,34 +10,24 @@ use crate::templates::*;
 pub async fn handle_admin(req: Request, env: Env, path: &str, method: Method) -> Result<Response> {
     let kv = env.kv("KV")?;
 
-    // Resolve tenant from session cookie
+    // Resolve tenant from session cookie only — no header fallback
     let tenant_id = match super::auth::resolve_tenant_id(&req, &kv).await {
         Some(id) => id,
         None => {
-            let access_user = req
-                .headers()
-                .get("Cf-Access-Authenticated-User-Email")
-                .ok()
-                .flatten();
-
-            let is_dev = env
-                .var("ENVIRONMENT")
-                .map(|v| v.to_string() == "development")
-                .unwrap_or(false);
-
-            match access_user {
-                Some(email) => email,
-                None if is_dev => "default".to_string(),
-                None => {
-                    let headers = Headers::new();
-                    headers.set("Location", "/auth/login")?;
-                    return Ok(Response::empty()?.with_status(302).with_headers(headers));
-                }
-            }
+            let headers = Headers::new();
+            headers.set("Location", "/auth/login")?;
+            return Ok(Response::empty()?.with_status(302).with_headers(headers));
         }
     };
 
     let base_url = get_base_url(&req);
+
+    // CSRF validation on state-changing requests
+    if matches!(method, Method::Post | Method::Put | Method::Delete) {
+        if let Err(e) = super::auth::validate_csrf(&req, &kv, &tenant_id).await {
+            return Response::error(format!("CSRF validation failed: {e}"), 403);
+        }
+    }
 
     if path == "/admin/settings" && method == Method::Get {
         let tenant = get_tenant(&kv, &tenant_id)

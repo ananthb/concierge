@@ -5,6 +5,25 @@ use crate::types::LeadCaptureForm;
 
 use super::HASH;
 
+/// Sanitize user-provided CSS to prevent injection attacks.
+fn sanitize_css(css: &str) -> String {
+    let result = css.replace(['<', '>'], "");
+    let lower = result.to_lowercase();
+    let blocked = [
+        "expression(",
+        "@import",
+        "javascript:",
+        "behavior:",
+        "-moz-binding",
+        "url(",
+    ];
+    if blocked.iter().any(|p| lower.contains(p)) {
+        // If any dangerous pattern is found, strip all CSS rather than trying to selectively fix
+        return String::new();
+    }
+    result
+}
+
 /// Render the embeddable lead capture form
 pub fn lead_form_html(form: &LeadCaptureForm) -> String {
     let s = &form.style;
@@ -62,7 +81,7 @@ body{{font-family:system-ui,-apple-system,sans-serif;background:var(--lf-bg);col
         radius = html_escape(&s.border_radius),
         placeholder = html_escape(&s.placeholder_text),
         button = html_escape(&s.button_text),
-        custom_css = s.custom_css.replace(['<', '>'], ""),
+        custom_css = sanitize_css(&s.custom_css),
         hash = HASH,
     )
 }

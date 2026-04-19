@@ -234,12 +234,9 @@ pub fn verify_meta_signature(app_secret: &str, body: &[u8], signature_header: &s
         Err(_) => return false,
     };
     // Constant-time comparison
+    use subtle::ConstantTimeEq;
     if computed.len() != expected.len() {
         return false;
     }
-    computed
-        .bytes()
-        .zip(expected.bytes())
-        .fold(0u8, |acc, (a, b)| acc | (a ^ b))
-        == 0
+    computed.as_bytes().ct_eq(expected.as_bytes()).into()
 }

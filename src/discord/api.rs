@@ -168,7 +168,7 @@ pub async fn post_ai_draft(
     });
 
     let payload = serde_json::json!({
-        "content": "**AI Draft Reply** — Approve or reject.",
+        "content": "**AI Draft Reply**: Approve or reject.",
         "embeds": [
             {
                 "title": format!("Re: {}", msg.subject.as_deref().unwrap_or("(message)")),

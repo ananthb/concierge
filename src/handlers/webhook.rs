@@ -74,7 +74,7 @@ pub async fn handle_webhook(
                 )
             {
                 console_log!("Invalid WhatsApp webhook signature");
-                return Response::ok("OK");
+                return Response::error("Unauthorized", 401);
             }
 
             let body: WhatsAppWebhook = match serde_json::from_str(&body_text) {

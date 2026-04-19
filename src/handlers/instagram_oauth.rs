@@ -31,6 +31,9 @@ pub async fn handle_instagram(
         .secret("ENCRYPTION_KEY")
         .map(|s| s.to_string())
         .unwrap_or_default();
+    if encryption_key.is_empty() {
+        return Response::error("Server misconfiguration: encryption key not set", 500);
+    }
 
     let path_parts: Vec<&str> = path
         .strip_prefix("/instagram/")
@@ -46,7 +49,7 @@ pub async fn handle_instagram(
                 return Response::error("Instagram integration not configured", 500);
             }
 
-            let state = format!("{}:{}", tenant_id, generate_token()?);
+            let state = generate_token()?;
             let redirect_uri = format!("{}/instagram/callback", base_url);
 
             kv.put(&format!("instagram_oauth_state:{}", state), *tenant_id)?

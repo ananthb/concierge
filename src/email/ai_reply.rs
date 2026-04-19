@@ -16,7 +16,7 @@ struct AiMessage {
     content: String,
 }
 
-const DEFAULT_SYSTEM_PROMPT: &str = "You are an email assistant. Draft a polite, professional reply to the email below. Keep it concise. Do not include subject line or headers — just the reply body.";
+const DEFAULT_SYSTEM_PROMPT: &str = "You are an email assistant. Draft a polite, professional reply to the email below. Keep it concise. Do not include subject line or headers, just the reply body.";
 
 /// Generate an AI reply draft for an incoming email.
 pub async fn generate_email_reply(

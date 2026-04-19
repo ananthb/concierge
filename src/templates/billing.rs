@@ -111,7 +111,7 @@ pub fn billing_overview_html(
             format!(
                 r##"<form hx-post="{base_url}/admin/billing/checkout" hx-target="body" hx-swap="innerHTML" style="display:inline">
   <input type="hidden" name="credits" value="{credits}">
-  <button class="btn sm" type="submit">{name}: {credits} replies &mdash; {price}</button>
+  <button class="btn sm" type="submit">{name}: {credits} replies, {price}</button>
 </form>"##,
                 base_url = base_url,
                 credits = p.replies,
