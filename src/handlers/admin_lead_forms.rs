@@ -135,9 +135,7 @@ pub async fn handle_lead_forms_admin(
             if let Some(FormEntry::Field(v)) = data.get("style_success_message") {
                 form.style.success_message = truncate(&v, 200);
             }
-            if let Some(FormEntry::Field(v)) = data.get("style_custom_css") {
-                form.style.custom_css = truncate(&v, 5000);
-            }
+            // custom_css removed — XSS risk with no benefit
 
             form.updated_at = now_iso();
             save_lead_form(&kv, &form).await?;

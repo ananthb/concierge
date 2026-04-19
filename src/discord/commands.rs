@@ -6,10 +6,7 @@ use crate::storage::*;
 use crate::types::*;
 
 /// Dispatch a slash command.
-pub async fn handle_command(
-    interaction: &DiscordInteraction,
-    env: &Env,
-) -> Result<Response> {
+pub async fn handle_command(interaction: &DiscordInteraction, env: &Env) -> Result<Response> {
     let name = interaction
         .data
         .as_ref()
@@ -23,7 +20,9 @@ pub async fn handle_command(
     let tenant_id = match get_discord_config_by_guild(&kv, guild_id).await? {
         Some(config) => config.tenant_id,
         None => {
-            return ephemeral("This server is not linked to a tenant. Configure via the web admin.");
+            return ephemeral(
+                "This server is not linked to a tenant. Configure via the web admin.",
+            );
         }
     };
 
@@ -35,11 +34,7 @@ pub async fn handle_command(
     }
 }
 
-async fn handle_status(
-    kv: &kv::KvStore,
-    env: &Env,
-    tenant_id: &str,
-) -> Result<Response> {
+async fn handle_status(kv: &kv::KvStore, env: &Env, tenant_id: &str) -> Result<Response> {
     let wa_accounts = list_whatsapp_accounts(kv, tenant_id).await?;
     let ig_accounts = list_instagram_accounts(kv, tenant_id).await?;
     let domains = get_email_domains(kv, tenant_id).await?;
@@ -168,7 +163,9 @@ async fn handle_domains(
 
             ephemeral(&format!("Domain `{domain}` removed."))
         }
-        _ => ephemeral("Usage: `/domains list`, `/domains add <domain>`, `/domains remove <domain>`"),
+        _ => {
+            ephemeral("Usage: `/domains list`, `/domains add <domain>`, `/domains remove <domain>`")
+        }
     }
 }
 
@@ -222,7 +219,10 @@ async fn handle_rules(
                     };
                     format!(
                         "- [{}] **{}** (p:{}) → {} `{}`",
-                        status, r.name, r.priority, action,
+                        status,
+                        r.name,
+                        r.priority,
+                        action,
                         r.id.chars().take(8).collect::<String>()
                     )
                 })
@@ -230,7 +230,9 @@ async fn handle_rules(
                 .join("\n");
             ephemeral(&format!("**Rules for {domain}**\n{list}"))
         }
-        _ => ephemeral("Usage: `/rules list <domain>`\nFor complex rule management, use the web admin."),
+        _ => ephemeral(
+            "Usage: `/rules list <domain>`\nFor complex rule management, use the web admin.",
+        ),
     }
 }
 

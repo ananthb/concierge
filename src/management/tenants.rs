@@ -76,15 +76,7 @@ pub async fn handle_tenants(
 
         // Delete tenant
         (Method::Delete, [id]) => {
-            audit::log_action(
-                db,
-                actor_email,
-                "delete_tenant",
-                "tenant",
-                Some(id),
-                None,
-            )
-            .await?;
+            audit::log_action(db, actor_email, "delete_tenant", "tenant", Some(id), None).await?;
 
             delete_tenant_data(kv, db, id).await?;
             Ok(Response::empty()?.with_status(200))

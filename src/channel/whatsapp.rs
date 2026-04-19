@@ -4,10 +4,7 @@ use crate::helpers::generate_id;
 use crate::types::*;
 
 /// Parse WhatsApp webhook change into InboundMessages.
-pub fn parse_inbound(
-    change: &WebhookChange,
-    account: &WhatsAppAccount,
-) -> Vec<InboundMessage> {
+pub fn parse_inbound(change: &WebhookChange, account: &WhatsAppAccount) -> Vec<InboundMessage> {
     let phone_number_id = &change.value.metadata.phone_number_id;
     let contacts = &change.value.contacts;
 
@@ -159,9 +156,7 @@ mod tests {
                     id: "msg-2".into(),
                     timestamp: "2".into(),
                     message_type: "text".into(),
-                    text: Some(TextMessage {
-                        body: "Hey".into(),
-                    }),
+                    text: Some(TextMessage { body: "Hey".into() }),
                 },
             ],
             vec![],
@@ -188,7 +183,10 @@ mod tests {
 
         let msgs = parse_inbound(&change, &make_account());
         assert_eq!(
-            msgs[0].raw_metadata.get("phone_number_id").and_then(|v| v.as_str()),
+            msgs[0]
+                .raw_metadata
+                .get("phone_number_id")
+                .and_then(|v| v.as_str()),
             Some("phone-123")
         );
     }

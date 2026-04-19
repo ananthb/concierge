@@ -1,7 +1,9 @@
 use wasm_bindgen::JsValue;
 use worker::*;
 
-use crate::types::{CreditPackRow, InstagramAccount, LeadCaptureForm, Tenant, TenantBilling, WhatsAppAccount};
+use crate::types::{
+    CreditPackRow, InstagramAccount, LeadCaptureForm, Tenant, TenantBilling, WhatsAppAccount,
+};
 
 // ============================================================================
 // Tenant KV Operations
@@ -349,15 +351,45 @@ pub async fn delete_tenant_data(kv: &kv::KvStore, db: &D1Database, tenant_id: &s
         delete_lead_form(kv, tenant_id, &form.id).await?;
     }
 
-    // Delete D1 data
-    let stmt = db.prepare("DELETE FROM whatsapp_messages WHERE tenant_id = ?");
-    stmt.bind(&[tenant_id.into()])?.run().await?;
+    // Delete ALL D1 data for this tenant
+    for table in &[
+        "whatsapp_messages",
+        "lead_form_submissions",
+        "instagram_messages",
+        "email_messages",
+        "email_metrics",
+        "messages",
+        "payments",
+        "audit_log",
+    ] {
+        let query = format!("DELETE FROM {} WHERE tenant_id = ?", table);
+        let stmt = db.prepare(&query);
+        if let Err(e) = stmt.bind(&[tenant_id.into()])?.run().await {
+            console_log!("Failed to delete from {}: {:?}", table, e);
+        }
+    }
 
-    let stmt = db.prepare("DELETE FROM lead_form_submissions WHERE tenant_id = ?");
-    stmt.bind(&[tenant_id.into()])?.run().await?;
+    // Delete KV billing data
+    kv.delete(&format!("billing:{}", tenant_id)).await?;
 
-    let stmt = db.prepare("DELETE FROM instagram_messages WHERE tenant_id = ?");
-    stmt.bind(&[tenant_id.into()])?.run().await?;
+    // Delete email domains and rules
+    if let Ok(domains) = get_email_domains(kv, tenant_id).await {
+        for domain in &domains {
+            let _ = delete_email_domain_index(kv, &domain.domain).await;
+            let _ = save_email_rules(kv, tenant_id, &domain.domain, &[]).await;
+        }
+        let _ = save_email_domains(kv, tenant_id, &[]).await;
+    }
+
+    // Delete discord config
+    if let Ok(Some(config)) = get_discord_config_by_tenant(kv, tenant_id).await {
+        kv.delete(&format!("discord_guild:{}", config.guild_id))
+            .await?;
+        kv.delete(&format!("discord_config:{}", tenant_id)).await?;
+    }
+
+    // Delete onboarding state
+    kv.delete(&format!("onboarding:{}", tenant_id)).await?;
 
     // Delete tenant credentials and tenant record
     kv.delete(&format!("tenant:{}:credentials", tenant_id))
@@ -381,7 +413,6 @@ pub async fn delete_tenant_data(kv: &kv::KvStore, db: &D1Database, tenant_id: &s
 // D1 Operations (WhatsApp Messages)
 // ============================================================================
 
-#[allow(clippy::too_many_arguments)]
 pub async fn save_whatsapp_message(
     db: &D1Database,
     id: &str,
@@ -389,12 +420,11 @@ pub async fn save_whatsapp_message(
     direction: &str,
     from_number: &str,
     to_number: &str,
-    body: &str,
     tenant_id: &str,
 ) -> Result<()> {
     let stmt = db.prepare(
-        "INSERT INTO whatsapp_messages (id, whatsapp_account_id, direction, from_number, to_number, body, tenant_id, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))",
+        "INSERT INTO whatsapp_messages (id, whatsapp_account_id, direction, from_number, to_number, tenant_id, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, datetime('now'))",
     );
     stmt.bind(&[
         id.into(),
@@ -402,7 +432,6 @@ pub async fn save_whatsapp_message(
         direction.into(),
         from_number.into(),
         to_number.into(),
-        body.into(),
         tenant_id.into(),
     ])?
     .run()
@@ -447,7 +476,6 @@ pub async fn save_lead_form_submission(
 // D1 Operations (Instagram Messages)
 // ============================================================================
 
-#[allow(clippy::too_many_arguments)]
 pub async fn save_instagram_message(
     db: &D1Database,
     id: &str,
@@ -455,12 +483,11 @@ pub async fn save_instagram_message(
     direction: &str,
     sender_id: &str,
     recipient_id: &str,
-    body: &str,
     tenant_id: &str,
 ) -> Result<()> {
     let stmt = db.prepare(
-        "INSERT INTO instagram_messages (id, instagram_account_id, direction, sender_id, recipient_id, body, tenant_id, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))",
+        "INSERT INTO instagram_messages (id, instagram_account_id, direction, sender_id, recipient_id, tenant_id, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, datetime('now'))",
     );
     stmt.bind(&[
         id.into(),
@@ -468,7 +495,6 @@ pub async fn save_instagram_message(
         direction.into(),
         sender_id.into(),
         recipient_id.into(),
-        body.into(),
         tenant_id.into(),
     ])?
     .run()
@@ -510,11 +536,7 @@ pub async fn save_email_domains(
 }
 
 /// Set the domain→tenant reverse index.
-pub async fn set_email_domain_index(
-    kv: &kv::KvStore,
-    domain: &str,
-    tenant_id: &str,
-) -> Result<()> {
+pub async fn set_email_domain_index(kv: &kv::KvStore, domain: &str, tenant_id: &str) -> Result<()> {
     let key = format!("email_domain:{domain}");
     kv.put(&key, tenant_id)?.execute().await?;
     Ok(())
@@ -603,11 +625,7 @@ pub async fn get_discord_bot_token(kv: &kv::KvStore, tenant_id: &str) -> Result<
 }
 
 /// Save discord bot token for a tenant.
-pub async fn save_discord_bot_token(
-    kv: &kv::KvStore,
-    tenant_id: &str,
-    token: &str,
-) -> Result<()> {
+pub async fn save_discord_bot_token(kv: &kv::KvStore, tenant_id: &str, token: &str) -> Result<()> {
     let key = format!("discord_bot_token:{tenant_id}");
     kv.put(&key, token)?.execute().await?;
     Ok(())
@@ -622,28 +640,23 @@ pub struct EmailLogEntry<'a> {
     pub direction: &'a str,
     pub from_email: &'a str,
     pub to_email: &'a str,
-    pub subject: &'a str,
     pub action_taken: &'a str,
     pub error_msg: Option<&'a str>,
 }
 
 pub async fn save_email_message(db: &D1Database, entry: &EmailLogEntry<'_>) -> Result<()> {
     let stmt = db.prepare(
-        "INSERT INTO email_messages (id, tenant_id, domain, rule_id, direction, from_email, to_email, subject, action_taken, error_msg)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO email_messages (id, tenant_id, domain, rule_id, direction, from_email, to_email, action_taken, error_msg)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
     );
     stmt.bind(&[
         entry.id.into(),
         entry.tenant_id.into(),
         entry.domain.into(),
-        entry
-            .rule_id
-            .map(JsValue::from)
-            .unwrap_or(JsValue::null()),
+        entry.rule_id.map(JsValue::from).unwrap_or(JsValue::null()),
         entry.direction.into(),
         entry.from_email.into(),
         entry.to_email.into(),
-        entry.subject.into(),
         entry.action_taken.into(),
         entry
             .error_msg
@@ -729,7 +742,7 @@ pub async fn get_email_metrics(
 
 use crate::types::{Channel, ConversationContext, DiscordConfig, InboundMessage, OnboardingState};
 
-/// Save a unified message to D1.
+/// Save a unified message to D1. No message content stored — metadata only.
 pub async fn save_message(
     db: &D1Database,
     id: &str,
@@ -737,20 +750,13 @@ pub async fn save_message(
     direction: &str,
     sender: &str,
     recipient: &str,
-    body: &str,
-    subject: Option<&str>,
     tenant_id: &str,
     channel_account_id: &str,
     action_taken: Option<&str>,
-    metadata: Option<&serde_json::Value>,
 ) -> Result<()> {
-    let meta_str = metadata
-        .map(|m| serde_json::to_string(m).unwrap_or_else(|_| "{}".into()))
-        .unwrap_or_else(|| "{}".into());
-
     let stmt = db.prepare(
-        "INSERT INTO messages (id, channel, direction, sender, recipient, body, subject, tenant_id, channel_account_id, action_taken, metadata)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO messages (id, channel, direction, sender, recipient, tenant_id, channel_account_id, action_taken)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
     );
     stmt.bind(&[
         id.into(),
@@ -758,14 +764,9 @@ pub async fn save_message(
         direction.into(),
         sender.into(),
         recipient.into(),
-        body.into(),
-        subject.map(JsValue::from).unwrap_or(JsValue::null()),
         tenant_id.into(),
         channel_account_id.into(),
-        action_taken
-            .map(JsValue::from)
-            .unwrap_or(JsValue::null()),
-        meta_str.as_str().into(),
+        action_taken.map(JsValue::from).unwrap_or(JsValue::null()),
     ])?
     .run()
     .await?;
@@ -785,12 +786,9 @@ pub async fn save_inbound_message(
         "inbound",
         &msg.sender,
         &msg.recipient,
-        &msg.body,
-        msg.subject.as_deref(),
         &msg.tenant_id,
         &msg.channel_account_id,
         action_taken,
-        Some(&msg.raw_metadata),
     )
     .await
 }
@@ -816,9 +814,8 @@ pub async fn get_messages(
             .await?;
         result.results::<serde_json::Value>()
     } else {
-        let stmt = db.prepare(
-            "SELECT * FROM messages WHERE tenant_id = ? ORDER BY created_at DESC LIMIT ?",
-        );
+        let stmt = db
+            .prepare("SELECT * FROM messages WHERE tenant_id = ? ORDER BY created_at DESC LIMIT ?");
         let result = stmt
             .bind(&[tenant_id.into(), JsValue::from(limit as f64)])?
             .all()
@@ -833,13 +830,9 @@ pub async fn get_messages(
 
 const CONVERSATION_TTL: u64 = 7 * 24 * 60 * 60; // 7 days
 
-pub async fn save_conversation_context(
-    kv: &kv::KvStore,
-    ctx: &ConversationContext,
-) -> Result<()> {
+pub async fn save_conversation_context(kv: &kv::KvStore, ctx: &ConversationContext) -> Result<()> {
     let key = format!("conv:{}", ctx.id);
-    let json =
-        serde_json::to_string(ctx).map_err(|e| Error::from(format!("JSON error: {e}")))?;
+    let json = serde_json::to_string(ctx).map_err(|e| Error::from(format!("JSON error: {e}")))?;
     kv.put(&key, json)?
         .expiration_ttl(CONVERSATION_TTL)
         .execute()
@@ -912,8 +905,7 @@ pub async fn save_onboarding(
     state: &OnboardingState,
 ) -> Result<()> {
     let key = format!("onboarding:{tenant_id}");
-    let json =
-        serde_json::to_string(state).map_err(|e| Error::from(format!("JSON error: {e}")))?;
+    let json = serde_json::to_string(state).map_err(|e| Error::from(format!("JSON error: {e}")))?;
     kv.put(&key, json)?.execute().await?;
     Ok(())
 }
@@ -959,9 +951,7 @@ pub async fn save_tenant_billing(
 // ============================================================================
 
 pub async fn get_active_credit_packs(db: &D1Database) -> Result<Vec<CreditPackRow>> {
-    let stmt = db.prepare(
-        "SELECT * FROM credit_packs WHERE active = 1 ORDER BY sort_order ASC",
-    );
+    let stmt = db.prepare("SELECT * FROM credit_packs WHERE active = 1 ORDER BY sort_order ASC");
     let result = stmt.all().await?;
     result.results()
 }

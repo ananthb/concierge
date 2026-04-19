@@ -138,7 +138,10 @@ mod tests {
     fn glob_complex_patterns() {
         assert!(glob_match("*@*.example.com", "user@sub.example.com"));
         assert!(glob_match("*invoice*", "Your invoice #123 is ready"));
-        assert!(glob_match("support+*@example.com", "support+billing@example.com"));
+        assert!(glob_match(
+            "support+*@example.com",
+            "support+billing@example.com"
+        ));
         assert!(!glob_match("support+*@example.com", "info@example.com"));
     }
 
@@ -213,13 +216,7 @@ mod tests {
 
     #[test]
     fn multiple_criteria_and_logic() {
-        let rule = make_rule(
-            20,
-            Some("*@shop.com"),
-            None,
-            Some("*invoice*"),
-            Some(true),
-        );
+        let rule = make_rule(20, Some("*@shop.com"), None, Some("*invoice*"), Some(true));
         // All match
         assert!(matches_rule(
             &rule,
@@ -268,8 +265,8 @@ mod tests {
     #[test]
     fn highest_priority_wins() {
         let rules = vec![
-            make_rule(0, None, None, None, None),                       // catch-all
-            make_rule(10, Some("*@newsletter.com"), None, None, None),   // newsletter
+            make_rule(0, None, None, None, None), // catch-all
+            make_rule(10, Some("*@newsletter.com"), None, None, None), // newsletter
             make_rule(20, Some("spam@newsletter.com"), None, None, None), // specific sender
         ];
 
@@ -278,13 +275,11 @@ mod tests {
         assert_eq!(matched.unwrap().priority, 0);
 
         // Newsletter sender → newsletter rule (priority 10)
-        let matched =
-            find_matching_rule(&rules, "news@newsletter.com", "me@x.com", "", false, "");
+        let matched = find_matching_rule(&rules, "news@newsletter.com", "me@x.com", "", false, "");
         assert_eq!(matched.unwrap().priority, 10);
 
         // Specific spam sender → specific rule (priority 20)
-        let matched =
-            find_matching_rule(&rules, "spam@newsletter.com", "me@x.com", "", false, "");
+        let matched = find_matching_rule(&rules, "spam@newsletter.com", "me@x.com", "", false, "");
         assert_eq!(matched.unwrap().priority, 20);
     }
 

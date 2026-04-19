@@ -462,7 +462,8 @@ pub struct PersonaConfig {
 
 impl PersonaConfig {
     pub fn to_system_prompt(&self) -> String {
-        let mut parts = vec!["You are a helpful messaging assistant for a small business.".to_string()];
+        let mut parts =
+            vec!["You are a helpful messaging assistant for a small business.".to_string()];
         if !self.biz_type.is_empty() {
             let loc = if self.city.is_empty() {
                 String::new()
@@ -472,7 +473,10 @@ impl PersonaConfig {
             parts.push(format!("The business is a {}{}.", self.biz_type, loc));
         }
         if !self.tone.is_empty() {
-            parts.push(format!("Tone: {}. Match this tone in every reply.", self.tone));
+            parts.push(format!(
+                "Tone: {}. Match this tone in every reply.",
+                self.tone
+            ));
         }
         if !self.never.is_empty() {
             parts.push(format!(
@@ -480,7 +484,9 @@ impl PersonaConfig {
                 self.never
             ));
         }
-        parts.push("Keep replies short (1-3 sentences). If unsure, hand off to the owner.".to_string());
+        parts.push(
+            "Keep replies short (1-3 sentences). If unsure, hand off to the owner.".to_string(),
+        );
         parts.join("\n")
     }
 }
@@ -566,10 +572,7 @@ mod tests {
             serde_json::to_string(&Channel::WhatsApp).unwrap(),
             "\"whats_app\""
         );
-        assert_eq!(
-            serde_json::to_string(&Channel::Email).unwrap(),
-            "\"email\""
-        );
+        assert_eq!(serde_json::to_string(&Channel::Email).unwrap(), "\"email\"");
         let ch: Channel = serde_json::from_str("\"instagram\"").unwrap();
         assert_eq!(ch, Channel::Instagram);
     }
@@ -626,7 +629,10 @@ mod tests {
         }"#;
         let interaction: DiscordInteraction = serde_json::from_str(json).unwrap();
         assert_eq!(interaction.interaction_type, 2);
-        assert_eq!(interaction.data.as_ref().unwrap().name.as_deref(), Some("status"));
+        assert_eq!(
+            interaction.data.as_ref().unwrap().name.as_deref(),
+            Some("status")
+        );
         assert_eq!(interaction.guild_id.as_deref(), Some("guild-1"));
     }
 
@@ -671,9 +677,9 @@ mod tests {
 /// Tenant billing state. Credits = reply count. Management grants credits.
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct TenantBilling {
-    pub replies_remaining: i64,  // available replies
-    pub replies_used: i64,       // lifetime replies sent
-    pub replies_granted: i64,    // lifetime replies granted by management
+    pub replies_remaining: i64, // available replies
+    pub replies_used: i64,      // lifetime replies sent
+    pub replies_granted: i64,   // lifetime replies granted by management
 }
 
 impl TenantBilling {
@@ -696,6 +702,10 @@ pub struct CreditPackRow {
 
 impl CreditPackRow {
     pub fn price(&self, currency: &str) -> i64 {
-        if currency == "INR" { self.price_inr } else { self.price_usd }
+        if currency == "INR" {
+            self.price_inr
+        } else {
+            self.price_usd
+        }
     }
 }

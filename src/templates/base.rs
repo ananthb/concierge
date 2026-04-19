@@ -302,9 +302,19 @@ pub const LOGO_INLINE: &str = r##"<svg width="30" height="30" viewBox="0 0 100 1
 
 pub fn brand_mark() -> String {
     format!(
-        r#"<div class="brand">{}<span class="serif">Concierge</span></div>"#,
+        r#"<a href="/" class="brand" style="text-decoration:none;color:inherit">{}<span class="serif">Concierge</span></a>"#,
         LOGO_INLINE
     )
+}
+
+/// Shared footer for all pages.
+pub fn footer() -> &'static str {
+    r##"<footer style="text-align:center;padding:2rem;color:var(--muted);font-size:13px;border-top:1px solid var(--hair)">
+  <a href="https://github.com/ananthb/concierge-worker" style="color:var(--muted)">Open-source</a> &middot;
+  Licensed under <a href="https://www.gnu.org/licenses/agpl-3.0.html" style="color:var(--muted)">AGPL-3.0</a> &middot;
+  <a href="/terms" style="color:var(--muted)">Terms</a> &middot;
+  <a href="/privacy" style="color:var(--muted)">Privacy</a>
+</footer>"##
 }
 
 /// Base HTML wrapper for all pages.
@@ -330,6 +340,7 @@ pub fn base_html(title: &str, content: &str) -> String {
 </head>
 <body>
 <div class="app-root">{content}</div>
+{footer}
 <script>
 function copyUrl(btn, url) {{
     navigator.clipboard.writeText(url).then(function() {{
@@ -345,6 +356,7 @@ function copyUrl(btn, url) {{
         title = html_escape(title),
         content = content,
         css = CSS,
+        footer = footer(),
     )
 }
 

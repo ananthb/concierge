@@ -28,9 +28,7 @@ pub async fn log_action(
         actor_email.into(),
         action.into(),
         resource_type.into(),
-        resource_id
-            .map(JsValue::from)
-            .unwrap_or(JsValue::null()),
+        resource_id.map(JsValue::from).unwrap_or(JsValue::null()),
         details_str.as_str().into(),
     ])?
     .run()
@@ -39,16 +37,8 @@ pub async fn log_action(
 }
 
 /// Get recent audit log entries.
-pub async fn get_audit_log(
-    db: &D1Database,
-    limit: u32,
-) -> Result<Vec<serde_json::Value>> {
-    let stmt = db.prepare(
-        "SELECT * FROM audit_log ORDER BY created_at DESC LIMIT ?",
-    );
-    let result = stmt
-        .bind(&[JsValue::from(limit as f64)])?
-        .all()
-        .await?;
+pub async fn get_audit_log(db: &D1Database, limit: u32) -> Result<Vec<serde_json::Value>> {
+    let stmt = db.prepare("SELECT * FROM audit_log ORDER BY created_at DESC LIMIT ?");
+    let result = stmt.bind(&[JsValue::from(limit as f64)])?.all().await?;
     result.results::<serde_json::Value>()
 }

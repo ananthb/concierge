@@ -34,8 +34,7 @@ pub async fn handle_management(
 
     // Route subroutes first (before consuming method in match)
     if sub.starts_with("tenants") {
-        return tenants::handle_tenants(req, &env, &kv, &db, sub, method, &email, &base_url)
-            .await;
+        return tenants::handle_tenants(req, &env, &kv, &db, sub, method, &email, &base_url).await;
     }
 
     if sub.starts_with("billing") {
@@ -84,17 +83,8 @@ fn verify_access(req: &Request, env: &Env) -> Option<String> {
 
 /// Count tenants by scanning KV prefix. Returns approximate count.
 async fn count_tenants(kv: &kv::KvStore) -> usize {
-    match kv
-        .list()
-        .prefix("tenant:".to_string())
-        .execute()
-        .await
-    {
-        Ok(list) => list
-            .keys
-            .iter()
-            .filter(|k| !k.name.contains(':'))
-            .count(),
+    match kv.list().prefix("tenant:".to_string()).execute().await {
+        Ok(list) => list.keys.iter().filter(|k| !k.name.contains(':')).count(),
         Err(_) => 0,
     }
 }

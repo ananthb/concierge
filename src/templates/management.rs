@@ -222,16 +222,44 @@ pub fn tenant_detail_html(
         name = html_escape(tenant.name.as_deref().unwrap_or("—")),
         plan = html_escape(&tenant.plan),
         created = html_escape(&tenant.created_at.get(..10).unwrap_or(&tenant.created_at)),
-        free_sel = if tenant.plan == "free" { " selected" } else { "" },
-        starter_sel = if tenant.plan == "starter" { " selected" } else { "" },
-        pro_sel = if tenant.plan == "pro" { " selected" } else { "" },
-        business_sel = if tenant.plan == "business" { " selected" } else { "" },
+        free_sel = if tenant.plan == "free" {
+            " selected"
+        } else {
+            ""
+        },
+        starter_sel = if tenant.plan == "starter" {
+            " selected"
+        } else {
+            ""
+        },
+        pro_sel = if tenant.plan == "pro" {
+            " selected"
+        } else {
+            ""
+        },
+        business_sel = if tenant.plan == "business" {
+            " selected"
+        } else {
+            ""
+        },
         wa_count = wa.len(),
         ig_count = ig.len(),
         domain_count = domains.len(),
-        wa_list = if wa_list.is_empty() { r#"<div class="muted" style="font-size:13px">None</div>"#.to_string() } else { wa_list },
-        ig_list = if ig_list.is_empty() { r#"<div class="muted" style="font-size:13px">None</div>"#.to_string() } else { ig_list },
-        domain_list = if domain_list.is_empty() { r#"<div class="muted" style="font-size:13px">None</div>"#.to_string() } else { domain_list },
+        wa_list = if wa_list.is_empty() {
+            r#"<div class="muted" style="font-size:13px">None</div>"#.to_string()
+        } else {
+            wa_list
+        },
+        ig_list = if ig_list.is_empty() {
+            r#"<div class="muted" style="font-size:13px">None</div>"#.to_string()
+        } else {
+            ig_list
+        },
+        domain_list = if domain_list.is_empty() {
+            r#"<div class="muted" style="font-size:13px">None</div>"#.to_string()
+        } else {
+            domain_list
+        },
     );
 
     manage_shell(
@@ -246,11 +274,23 @@ pub fn audit_html(log: &[serde_json::Value], base_url: &str) -> String {
     let rows: String = log
         .iter()
         .map(|entry| {
-            let actor = entry.get("actor_email").and_then(|v| v.as_str()).unwrap_or("?");
+            let actor = entry
+                .get("actor_email")
+                .and_then(|v| v.as_str())
+                .unwrap_or("?");
             let action = entry.get("action").and_then(|v| v.as_str()).unwrap_or("?");
-            let resource = entry.get("resource_type").and_then(|v| v.as_str()).unwrap_or("");
-            let resource_id = entry.get("resource_id").and_then(|v| v.as_str()).unwrap_or("");
-            let created = entry.get("created_at").and_then(|v| v.as_str()).unwrap_or("");
+            let resource = entry
+                .get("resource_type")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            let resource_id = entry
+                .get("resource_id")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            let created = entry
+                .get("created_at")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
 
             format!(
                 r##"<div class="rt-row" style="grid-template-columns:0.8fr 1fr 0.6fr 0.6fr 0.5fr">

@@ -18,7 +18,6 @@ CREATE TABLE IF NOT EXISTS whatsapp_messages (
     direction TEXT NOT NULL CHECK (direction IN ('inbound', 'outbound')),
     from_number TEXT NOT NULL,
     to_number TEXT NOT NULL,
-    body TEXT NOT NULL,
     tenant_id TEXT NOT NULL,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -52,7 +51,6 @@ CREATE TABLE IF NOT EXISTS instagram_messages (
     direction TEXT NOT NULL CHECK (direction IN ('inbound', 'outbound')),
     sender_id TEXT NOT NULL,
     recipient_id TEXT NOT NULL,
-    body TEXT NOT NULL,
     tenant_id TEXT NOT NULL,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -71,7 +69,6 @@ CREATE TABLE IF NOT EXISTS email_messages (
     direction TEXT NOT NULL,
     from_email TEXT NOT NULL,
     to_email TEXT NOT NULL,
-    subject TEXT DEFAULT '',
     action_taken TEXT NOT NULL,
     error_msg TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -97,12 +94,9 @@ CREATE TABLE IF NOT EXISTS messages (
     direction TEXT NOT NULL,
     sender TEXT NOT NULL,
     recipient TEXT NOT NULL,
-    body TEXT NOT NULL DEFAULT '',
-    subject TEXT,
     tenant_id TEXT NOT NULL,
     channel_account_id TEXT NOT NULL DEFAULT '',
     action_taken TEXT,
-    metadata TEXT DEFAULT '{}',
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_messages_tenant ON messages(tenant_id, created_at);

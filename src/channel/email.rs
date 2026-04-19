@@ -18,10 +18,7 @@ pub fn parse_inbound(
         sender: from.to_string(),
         sender_name: None,
         recipient: to.to_string(),
-        body: parsed
-            .text_body
-            .clone()
-            .unwrap_or_default(),
+        body: parsed.text_body.clone().unwrap_or_default(),
         subject: Some(parsed.subject.clone()),
         has_attachment: parsed.has_attachment,
         tenant_id: tenant_id.to_string(),
@@ -36,7 +33,11 @@ pub fn parse_inbound(
 
 /// The result of sending an email reply.
 pub enum EmailSendResult {
-    Sent { from: String, to: String, raw: Vec<u8> },
+    Sent {
+        from: String,
+        to: String,
+        raw: Vec<u8>,
+    },
 }
 
 /// Send a reply via email. Builds a MIME message and returns the raw bytes
@@ -94,7 +95,13 @@ mod tests {
             has_attachment: true,
         };
 
-        let msg = parse_inbound("alice@example.com", "support@proxy.com", &parsed, "t1", "proxy.com");
+        let msg = parse_inbound(
+            "alice@example.com",
+            "support@proxy.com",
+            &parsed,
+            "t1",
+            "proxy.com",
+        );
         assert_eq!(msg.channel, Channel::Email);
         assert_eq!(msg.sender, "alice@example.com");
         assert_eq!(msg.recipient, "support@proxy.com");

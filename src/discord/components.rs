@@ -9,10 +9,7 @@ use crate::storage::*;
 use crate::types::*;
 
 /// Handle MESSAGE_COMPONENT interactions (button clicks).
-pub async fn handle_component(
-    interaction: &DiscordInteraction,
-    env: &Env,
-) -> Result<Response> {
+pub async fn handle_component(interaction: &DiscordInteraction, env: &Env) -> Result<Response> {
     let custom_id = interaction
         .data
         .as_ref()
@@ -42,10 +39,7 @@ pub async fn handle_component(
 }
 
 /// Handle MODAL_SUBMIT interactions (reply text submitted).
-pub async fn handle_modal_submit(
-    interaction: &DiscordInteraction,
-    env: &Env,
-) -> Result<Response> {
+pub async fn handle_modal_submit(interaction: &DiscordInteraction, env: &Env) -> Result<Response> {
     let custom_id = interaction
         .data
         .as_ref()
@@ -53,8 +47,7 @@ pub async fn handle_modal_submit(
         .unwrap_or("");
 
     if let Some(ctx_id) = custom_id.strip_prefix("reply_modal:") {
-        let reply_text = extract_modal_text(interaction, "reply_text")
-            .unwrap_or_default();
+        let reply_text = extract_modal_text(interaction, "reply_text").unwrap_or_default();
 
         if reply_text.is_empty() {
             return Response::from_json(&serde_json::json!({
@@ -144,12 +137,9 @@ async fn send_relay_reply(ctx_id: &str, reply_text: &str, env: &Env) -> Result<R
         "relay",
         &ctx.origin_recipient,
         &ctx.origin_sender,
-        reply_text,
-        subject,
         &ctx.tenant_id,
         &ctx.channel_account_id,
         Some("relay"),
-        None,
     )
     .await;
 
@@ -217,12 +207,9 @@ async fn handle_approve(ctx_id: &str, env: &Env) -> Result<Response> {
         "outbound",
         &ctx.origin_recipient,
         &ctx.origin_sender,
-        &draft,
-        subject,
         &ctx.tenant_id,
         &ctx.channel_account_id,
         Some("ai_approved"),
-        None,
     )
     .await;
 

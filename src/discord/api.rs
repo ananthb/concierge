@@ -223,8 +223,8 @@ async fn post_to_discord(
     payload: &serde_json::Value,
 ) -> Result<String> {
     let url = format!("{DISCORD_API}/channels/{channel_id}/messages");
-    let body = serde_json::to_string(payload)
-        .map_err(|e| Error::from(format!("JSON error: {e}")))?;
+    let body =
+        serde_json::to_string(payload).map_err(|e| Error::from(format!("JSON error: {e}")))?;
 
     let headers = Headers::new();
     headers.set("Authorization", &format!("Bot {bot_token}"))?;
@@ -241,7 +241,10 @@ async fn post_to_discord(
     if resp.status_code() >= 400 {
         let err = resp.text().await.unwrap_or_default();
         console_log!("Discord API error: {err}");
-        return Err(Error::from(format!("Discord API error: {}", resp.status_code())));
+        return Err(Error::from(format!(
+            "Discord API error: {}",
+            resp.status_code()
+        )));
     }
 
     let response: serde_json::Value = resp.json().await?;

@@ -117,10 +117,8 @@ pub async fn handle_admin(req: Request, env: Env, path: &str, method: Method) ->
     }
 
     if path.starts_with("/admin/wizard") {
-        return super::onboarding::handle_wizard(
-            req, env, path, method, &base_url, &tenant_id,
-        )
-        .await;
+        return super::onboarding::handle_wizard(req, env, path, method, &base_url, &tenant_id)
+            .await;
     }
 
     if path == "/admin" || path == "/admin/" {

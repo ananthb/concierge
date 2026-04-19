@@ -98,9 +98,8 @@ pub async fn email_handler(
             to: send_to,
             raw,
         } => {
-            let email_binding =
-                js_sys::Reflect::get(&worker_env.into(), &"EMAIL".into())
-                    .map_err(|_| JsValue::from_str("Missing EMAIL binding"))?;
+            let email_binding = js_sys::Reflect::get(&worker_env.into(), &"EMAIL".into())
+                .map_err(|_| JsValue::from_str("Missing EMAIL binding"))?;
             let send_email: SendEmailBinding = email_binding.unchecked_into();
 
             let obj = js_sys::Object::new();
@@ -193,7 +192,9 @@ async fn fetch(req: Request, env: Env, _ctx: Context) -> Result<Response> {
     // Pricing page
     if path == "/pricing" {
         let db = env.d1("DB")?;
-        let packs = storage::get_active_credit_packs(&db).await.unwrap_or_default();
+        let packs = storage::get_active_credit_packs(&db)
+            .await
+            .unwrap_or_default();
         return Response::from_html(templates::onboarding::pricing_html(&packs));
     }
 

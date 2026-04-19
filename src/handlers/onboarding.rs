@@ -28,10 +28,7 @@ pub async fn handle_wizard(
         // Navigation between steps
         "goto" => {
             let form: serde_json::Value = req.json().await?;
-            let to = form
-                .get("to")
-                .and_then(|v| v.as_str())
-                .unwrap_or("welcome");
+            let to = form.get("to").and_then(|v| v.as_str()).unwrap_or("welcome");
 
             // Save biz name if coming from welcome
             if let Some(biz) = form.get("biz").and_then(|v| v.as_str()) {
@@ -49,10 +46,7 @@ pub async fn handle_wizard(
         // Admin channel selection
         "admin-pick" => {
             let form: serde_json::Value = req.json().await?;
-            let v = form
-                .get("v")
-                .and_then(|v| v.as_str())
-                .unwrap_or("");
+            let v = form.get("v").and_then(|v| v.as_str()).unwrap_or("");
             state.admin_channel = v.to_string();
             save_onboarding(&kv, tenant_id, &state).await?;
 
@@ -77,10 +71,7 @@ pub async fn handle_wizard(
             state.step = "replies".to_string();
             save_onboarding(&kv, tenant_id, &state).await?;
 
-            Response::from_html(replies_html(
-                &state.canned_replies,
-                base_url,
-            ))
+            Response::from_html(replies_html(&state.canned_replies, base_url))
         }
 
         // Add canned reply

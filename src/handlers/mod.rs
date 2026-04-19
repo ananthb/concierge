@@ -27,12 +27,14 @@ use worker::Request;
 
 /// Extract base URL from request
 pub(crate) fn get_base_url(req: &Request) -> String {
-    let url = req.url().unwrap();
-    format!(
-        "{}://{}",
-        url.scheme(),
-        url.host_str().unwrap_or("localhost")
-    )
+    match req.url() {
+        Ok(url) => format!(
+            "{}://{}",
+            url.scheme(),
+            url.host_str().unwrap_or("localhost")
+        ),
+        Err(_) => String::from("https://localhost"),
+    }
 }
 
 /// Extract Origin header from request

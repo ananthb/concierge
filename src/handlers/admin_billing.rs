@@ -30,14 +30,13 @@ pub async fn handle_billing_admin(
         // Billing overview
         (Method::Get, "" | "/") => {
             let bill = storage::get_tenant_billing(&kv, tenant_id).await?;
-            let country = req
-                .headers()
-                .get("cf-ipcountry")?
-                .unwrap_or_default();
+            let country = req.headers().get("cf-ipcountry")?.unwrap_or_default();
             let currency = if country == "IN" { "INR" } else { "USD" };
-
             let packs = storage::get_active_credit_packs(&db).await?;
-            Response::from_html(tmpl::billing_overview_html(&bill, &packs, currency, base_url))
+
+            Response::from_html(tmpl::billing_overview_html(
+                &bill, &packs, currency, base_url,
+            ))
         }
 
         // Create Razorpay order
@@ -49,13 +48,9 @@ pub async fn handle_billing_admin(
                 .and_then(|s| s.parse::<i64>().ok())
                 .unwrap_or(500);
 
-            let country = req
-                .headers()
-                .get("cf-ipcountry")?
-                .unwrap_or_default();
+            let country = req.headers().get("cf-ipcountry")?.unwrap_or_default();
             let currency = if country == "IN" { "INR" } else { "USD" };
 
-            // Find matching pack from database
             let packs = storage::get_active_credit_packs(&db).await?;
             let pack = match packs.iter().find(|p| p.replies == credits) {
                 Some(p) => p,
@@ -67,25 +62,32 @@ pub async fn handle_billing_admin(
             let key_secret = env.secret("RAZORPAY_KEY_SECRET")?.to_string();
 
             let receipt = generate_id();
-            let order = razorpay::create_order(&key_id, &key_secret, amount, currency, &receipt).await?;
+            let order =
+                razorpay::create_order(&key_id, &key_secret, amount, currency, &receipt).await?;
 
-            let order_id = order
-                .get("id")
-                .and_then(|v| v.as_str())
-                .unwrap_or("");
+            let order_id = order.get("id").and_then(|v| v.as_str()).unwrap_or("");
 
             Response::from_html(tmpl::checkout_html(
                 order_id, amount, currency, credits, &key_id, tenant_id, base_url,
             ))
         }
 
-        // Verify payment
+        // Payment verification — only validates signature, does NOT grant credits.
+        // Credits are granted exclusively by the Razorpay webhook handler.
         (Method::Post, "verify") => {
             let form: serde_json::Value = req.json().await?;
-            let order_id = form.get("razorpay_order_id").and_then(|v| v.as_str()).unwrap_or("");
-            let payment_id = form.get("razorpay_payment_id").and_then(|v| v.as_str()).unwrap_or("");
-            let signature = form.get("razorpay_signature").and_then(|v| v.as_str()).unwrap_or("");
-            let credits = form.get("credits").and_then(|v| v.as_str()).and_then(|s| s.parse::<i64>().ok()).unwrap_or(0);
+            let order_id = form
+                .get("razorpay_order_id")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            let payment_id = form
+                .get("razorpay_payment_id")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            let signature = form
+                .get("razorpay_signature")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
 
             let key_secret = env.secret("RAZORPAY_KEY_SECRET")?.to_string();
 
@@ -95,10 +97,7 @@ pub async fn handle_billing_admin(
                 );
             }
 
-            billing::grant_replies(&kv, tenant_id, credits).await?;
-
-            console_log!("Payment verified: {credits} replies for tenant {tenant_id} (payment {payment_id})");
-
+            // Redirect to billing page. Webhook will handle crediting.
             let headers = Headers::new();
             headers.set("HX-Redirect", &format!("{base_url}/admin/billing"))?;
             Ok(Response::empty()?.with_status(200).with_headers(headers))

@@ -16,10 +16,7 @@ const STEPS: &[(&str, &str)] = &[
 ];
 
 fn rail_html(current: &str) -> String {
-    let idx = STEPS
-        .iter()
-        .position(|(id, _)| *id == current)
-        .unwrap_or(0);
+    let idx = STEPS.iter().position(|(id, _)| *id == current).unwrap_or(0);
 
     let segs: String = STEPS
         .iter()
@@ -51,16 +48,11 @@ fn rail_html(current: &str) -> String {
         })
         .collect();
 
-    format!(
-        r#"<div class="rail">{segs}</div><div class="rail-labels">{labels}</div>"#
-    )
+    format!(r#"<div class="rail">{segs}</div><div class="rail-labels">{labels}</div>"#)
 }
 
 fn wizard_shell(step: &str, base_url: &str, content: &str) -> String {
-    let idx = STEPS
-        .iter()
-        .position(|(id, _)| *id == step)
-        .unwrap_or(0);
+    let idx = STEPS.iter().position(|(id, _)| *id == step).unwrap_or(0);
 
     let inner = format!(
         r#"<div class="wizard">
@@ -97,7 +89,7 @@ pub fn welcome_html(base_url: &str) -> String {
     </form>
     <div class="mono fineprint">
       &#x25E6; <a href="/pricing" style="color:var(--accent)">transparent pricing</a>
-      &nbsp; &#x25E6; <a href="https://github.com/ananthb/concierge-worker" style="color:var(--muted)">source code</a>
+      &nbsp; &#x25E6; <a href="https://github.com/ananthb/concierge-worker" style="color:var(--muted)">open-source</a>
     </div>
   </div>
   <aside class="postcard" aria-hidden="true">
@@ -121,11 +113,7 @@ pub fn welcome_html(base_url: &str) -> String {
     wizard_shell("welcome", base_url, &content)
 }
 
-pub fn connect_html(
-    ig_connected: bool,
-    wa_connected: bool,
-    base_url: &str,
-) -> String {
+pub fn connect_html(ig_connected: bool, wa_connected: bool, base_url: &str) -> String {
     let ig_card = channel_card(
         "ig",
         "Instagram DMs",
@@ -235,16 +223,28 @@ fn channel_card(
 
 fn channel_icon(key: &str) -> &'static str {
     match key {
-        "ig" => r#"<svg width="22" height="22" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="18" rx="5" stroke="currentColor" stroke-width="1.6"/><circle cx="12" cy="12" r="4.2" stroke="currentColor" stroke-width="1.6"/><circle cx="17.2" cy="6.8" r="1.1" fill="currentColor"/></svg>"#,
-        "wa" => r#"<svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M4 20l1.3-4.1A8 8 0 1 1 8.2 18.8L4 20z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>"#,
-        "discord" => r#"<svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M7 7c1.4-.7 3-1 5-1s3.6.3 5 1l1 1 1.5 4.5c.2 2-.3 3.8-1.5 5.5-1 .3-2 .5-3 .5l-1-1.5c.5-.2 1-.4 1.5-.8-.3-.2-.8-.4-1.2-.5-2 .7-4.6.7-6.6 0-.4.1-.9.3-1.2.5.5.4 1 .6 1.5.8L6 17.5c-1 0-2-.2-3-.5-1.2-1.7-1.7-3.5-1.5-5.5L3 7l1-1z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>"#,
-        "mail" => r#"<svg width="22" height="22" viewBox="0 0 24 24" fill="none"><rect x="3" y="5" width="18" height="14" rx="2" stroke="currentColor" stroke-width="1.6"/><path d="M3.5 6.5l8.5 6 8.5-6" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>"#,
+        "ig" => {
+            r#"<svg width="22" height="22" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="18" rx="5" stroke="currentColor" stroke-width="1.6"/><circle cx="12" cy="12" r="4.2" stroke="currentColor" stroke-width="1.6"/><circle cx="17.2" cy="6.8" r="1.1" fill="currentColor"/></svg>"#
+        }
+        "wa" => {
+            r#"<svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M4 20l1.3-4.1A8 8 0 1 1 8.2 18.8L4 20z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>"#
+        }
+        "discord" => {
+            r#"<svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M7 7c1.4-.7 3-1 5-1s3.6.3 5 1l1 1 1.5 4.5c.2 2-.3 3.8-1.5 5.5-1 .3-2 .5-3 .5l-1-1.5c.5-.2 1-.4 1.5-.8-.3-.2-.8-.4-1.2-.5-2 .7-4.6.7-6.6 0-.4.1-.9.3-1.2.5.5.4 1 .6 1.5.8L6 17.5c-1 0-2-.2-3-.5-1.2-1.7-1.7-3.5-1.5-5.5L3 7l1-1z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>"#
+        }
+        "mail" => {
+            r#"<svg width="22" height="22" viewBox="0 0 24 24" fill="none"><rect x="3" y="5" width="18" height="14" rx="2" stroke="currentColor" stroke-width="1.6"/><path d="M3.5 6.5l8.5 6 8.5-6" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>"#
+        }
         _ => "",
     }
 }
 
 pub fn admin_pick_html(selected: &str, base_url: &str) -> String {
-    let discord_sel = if selected == "discord" { " selected" } else { "" };
+    let discord_sel = if selected == "discord" {
+        " selected"
+    } else {
+        ""
+    };
     let email_sel = if selected == "email" { " selected" } else { "" };
     let disabled = if selected.is_empty() { " disabled" } else { "" };
 
@@ -501,11 +501,6 @@ pub fn pricing_html(packs: &[crate::types::CreditPackRow]) -> String {
 
   <div style="text-align:center">
     <a href="/auth/login" class="btn primary lg">Get started &rarr;</a>
-    <div class="mono fineprint" style="margin-top:12px">
-      <a href="https://github.com/ananthb/concierge-worker" style="color:var(--muted)">Source code</a> &middot;
-      <a href="/terms" style="color:var(--muted)">Terms</a> &middot;
-      <a href="/privacy" style="color:var(--muted)">Privacy</a>
-    </div>
   </div>
 </div>"##,
         logo = LOGO_INLINE,

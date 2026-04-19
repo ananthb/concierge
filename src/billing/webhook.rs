@@ -1,8 +1,11 @@
 //! Razorpay webhook handler — processes payment events.
+//! Idempotent: checks payment_id in D1 before granting credits.
 
+use wasm_bindgen::JsValue;
 use worker::*;
 
 use super::razorpay;
+use crate::helpers::generate_id;
 
 /// Handle POST /webhook/razorpay
 pub async fn handle_razorpay_webhook(mut req: Request, env: Env) -> Result<Response> {
@@ -24,13 +27,10 @@ pub async fn handle_razorpay_webhook(mut req: Request, env: Env) -> Result<Respo
         return Response::error("Invalid signature", 401);
     }
 
-    let payload: serde_json::Value = serde_json::from_str(&body)
-        .map_err(|e| Error::from(format!("JSON parse error: {e}")))?;
+    let payload: serde_json::Value =
+        serde_json::from_str(&body).map_err(|e| Error::from(format!("JSON parse error: {e}")))?;
 
-    let event = payload
-        .get("event")
-        .and_then(|v| v.as_str())
-        .unwrap_or("");
+    let event = payload.get("event").and_then(|v| v.as_str()).unwrap_or("");
 
     match event {
         "payment.captured" => {
@@ -50,12 +50,27 @@ pub async fn handle_razorpay_webhook(mut req: Request, env: Env) -> Result<Respo
                 .and_then(|s| s.parse::<i64>().ok())
                 .unwrap_or(0);
 
-            if !tenant_id.is_empty() && credits > 0 {
-                let kv = env.kv("CALENDARS_KV")?;
-                super::grant_replies(&kv, tenant_id, credits).await?;
-                console_log!("Webhook: granted {credits} replies to {tenant_id} (payment {payment_id})");
+            if tenant_id.is_empty() || credits <= 0 || payment_id.is_empty() {
+                console_log!("Webhook missing tenant_id/credits/payment_id");
+                return Response::ok("OK");
             }
 
+            let db = env.d1("DB")?;
+
+            // Idempotency check: has this payment already been processed?
+            if is_payment_processed(&db, payment_id).await? {
+                console_log!("Payment {payment_id} already processed, skipping");
+                return Response::ok("OK");
+            }
+
+            // Record the payment first (before granting credits)
+            record_payment(&db, payment_id, tenant_id, credits).await?;
+
+            // Grant credits
+            let kv = env.kv("CALENDARS_KV")?;
+            super::grant_replies(&kv, tenant_id, credits).await?;
+
+            console_log!("Granted {credits} replies to {tenant_id} (payment {payment_id})");
             Response::ok("OK")
         }
         "payment.failed" => {
@@ -67,4 +82,35 @@ pub async fn handle_razorpay_webhook(mut req: Request, env: Env) -> Result<Respo
             Response::ok("OK")
         }
     }
+}
+
+async fn is_payment_processed(db: &D1Database, payment_id: &str) -> Result<bool> {
+    let stmt = db.prepare("SELECT id FROM payments WHERE razorpay_payment_id = ?");
+    let result = stmt
+        .bind(&[payment_id.into()])?
+        .first::<serde_json::Value>(None)
+        .await?;
+    Ok(result.is_some())
+}
+
+async fn record_payment(
+    db: &D1Database,
+    payment_id: &str,
+    tenant_id: &str,
+    credits: i64,
+) -> Result<()> {
+    let id = generate_id();
+    let stmt = db.prepare(
+        "INSERT INTO payments (id, tenant_id, razorpay_payment_id, amount, currency, status)
+         VALUES (?, ?, ?, ?, 'INR', 'captured')",
+    );
+    stmt.bind(&[
+        id.as_str().into(),
+        tenant_id.into(),
+        payment_id.into(),
+        JsValue::from(credits as f64),
+    ])?
+    .run()
+    .await?;
+    Ok(())
 }

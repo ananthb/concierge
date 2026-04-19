@@ -42,7 +42,12 @@ pub async fn handle_auth(req: Request, env: Env, path: &str, method: Method) -> 
                 .unwrap_or_default();
 
             let last_provider = get_cookie(&req, "last_provider");
-            let html = auth_login_html(&base_url, &google_client_id, &meta_app_id, last_provider.as_deref());
+            let html = auth_login_html(
+                &base_url,
+                &google_client_id,
+                &meta_app_id,
+                last_provider.as_deref(),
+            );
             Response::from_html(html)
         }
 
@@ -365,7 +370,11 @@ pub async fn handle_auth(req: Request, env: Env, path: &str, method: Method) -> 
     }
 }
 
-async fn create_session_and_redirect(kv: &kv::KvStore, tenant_id: &str, provider: &str) -> Result<Response> {
+async fn create_session_and_redirect(
+    kv: &kv::KvStore,
+    tenant_id: &str,
+    provider: &str,
+) -> Result<Response> {
     let session_token = generate_token();
     save_session(kv, &session_token, tenant_id, SESSION_TTL_SECONDS).await?;
 
@@ -381,7 +390,7 @@ async fn create_session_and_redirect(kv: &kv::KvStore, tenant_id: &str, provider
     headers.append(
         "Set-Cookie",
         &format!(
-            "last_provider={}; Path=/; SameSite=Lax; Max-Age=31536000",
+            "last_provider={}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=2592000",
             provider
         ),
     )?;

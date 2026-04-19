@@ -33,15 +33,42 @@ pub async fn handle_billing(
         // Add a new pack
         (Method::Post, ["packs"]) => {
             let form: serde_json::Value = req.json().await?;
-            let name = form.get("name").and_then(|v| v.as_str()).unwrap_or("New Pack");
-            let replies = form.get("replies").and_then(|v| v.as_str()).and_then(|s| s.parse::<i64>().ok()).unwrap_or(100);
-            let price_inr = form.get("price_inr").and_then(|v| v.as_str()).and_then(|s| s.parse::<i64>().ok()).unwrap_or(0);
-            let price_usd = form.get("price_usd").and_then(|v| v.as_str()).and_then(|s| s.parse::<i64>().ok()).unwrap_or(0);
-            let sort_order = form.get("sort_order").and_then(|v| v.as_str()).and_then(|s| s.parse::<i32>().ok()).unwrap_or(99);
+            let name = form
+                .get("name")
+                .and_then(|v| v.as_str())
+                .unwrap_or("New Pack");
+            let replies = form
+                .get("replies")
+                .and_then(|v| v.as_str())
+                .and_then(|s| s.parse::<i64>().ok())
+                .unwrap_or(100);
+            let price_inr = form
+                .get("price_inr")
+                .and_then(|v| v.as_str())
+                .and_then(|s| s.parse::<i64>().ok())
+                .unwrap_or(0);
+            let price_usd = form
+                .get("price_usd")
+                .and_then(|v| v.as_str())
+                .and_then(|s| s.parse::<i64>().ok())
+                .unwrap_or(0);
+            let sort_order = form
+                .get("sort_order")
+                .and_then(|v| v.as_str())
+                .and_then(|s| s.parse::<i32>().ok())
+                .unwrap_or(99);
 
             storage::save_credit_pack(db, name, replies, price_inr, price_usd, sort_order).await?;
 
-            audit::log_action(db, actor_email, "create_pack", "credit_pack", None, Some(&form)).await?;
+            audit::log_action(
+                db,
+                actor_email,
+                "create_pack",
+                "credit_pack",
+                None,
+                Some(&form),
+            )
+            .await?;
 
             let headers = worker::Headers::new();
             headers.set("HX-Redirect", &format!("{base_url}/manage/billing"))?;
@@ -50,27 +77,66 @@ pub async fn handle_billing(
 
         // Update a pack
         (Method::Put, ["packs", id_str]) => {
-            let id = id_str.parse::<i64>().map_err(|_| Error::from("Invalid ID"))?;
+            let id = id_str
+                .parse::<i64>()
+                .map_err(|_| Error::from("Invalid ID"))?;
             let form: serde_json::Value = req.json().await?;
             let name = form.get("name").and_then(|v| v.as_str()).unwrap_or("");
-            let replies = form.get("replies").and_then(|v| v.as_str()).and_then(|s| s.parse::<i64>().ok()).unwrap_or(0);
-            let price_inr = form.get("price_inr").and_then(|v| v.as_str()).and_then(|s| s.parse::<i64>().ok()).unwrap_or(0);
-            let price_usd = form.get("price_usd").and_then(|v| v.as_str()).and_then(|s| s.parse::<i64>().ok()).unwrap_or(0);
+            let replies = form
+                .get("replies")
+                .and_then(|v| v.as_str())
+                .and_then(|s| s.parse::<i64>().ok())
+                .unwrap_or(0);
+            let price_inr = form
+                .get("price_inr")
+                .and_then(|v| v.as_str())
+                .and_then(|s| s.parse::<i64>().ok())
+                .unwrap_or(0);
+            let price_usd = form
+                .get("price_usd")
+                .and_then(|v| v.as_str())
+                .and_then(|s| s.parse::<i64>().ok())
+                .unwrap_or(0);
             let active = form.get("active").and_then(|v| v.as_str()) == Some("true");
-            let sort_order = form.get("sort_order").and_then(|v| v.as_str()).and_then(|s| s.parse::<i32>().ok()).unwrap_or(0);
+            let sort_order = form
+                .get("sort_order")
+                .and_then(|v| v.as_str())
+                .and_then(|s| s.parse::<i32>().ok())
+                .unwrap_or(0);
 
-            storage::update_credit_pack(db, id, name, replies, price_inr, price_usd, active, sort_order).await?;
+            storage::update_credit_pack(
+                db, id, name, replies, price_inr, price_usd, active, sort_order,
+            )
+            .await?;
 
-            audit::log_action(db, actor_email, "update_pack", "credit_pack", Some(id_str), Some(&form)).await?;
+            audit::log_action(
+                db,
+                actor_email,
+                "update_pack",
+                "credit_pack",
+                Some(id_str),
+                Some(&form),
+            )
+            .await?;
 
             Response::from_html(r#"<div class="success">Pack updated</div>"#.to_string())
         }
 
         // Delete a pack
         (Method::Delete, ["packs", id_str]) => {
-            let id = id_str.parse::<i64>().map_err(|_| Error::from("Invalid ID"))?;
+            let id = id_str
+                .parse::<i64>()
+                .map_err(|_| Error::from("Invalid ID"))?;
             storage::delete_credit_pack(db, id).await?;
-            audit::log_action(db, actor_email, "delete_pack", "credit_pack", Some(id_str), None).await?;
+            audit::log_action(
+                db,
+                actor_email,
+                "delete_pack",
+                "credit_pack",
+                Some(id_str),
+                None,
+            )
+            .await?;
             Ok(Response::empty()?.with_status(200))
         }
 

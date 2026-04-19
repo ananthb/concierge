@@ -4,32 +4,29 @@
 use worker::*;
 
 use crate::ai;
+use crate::billing;
 use crate::channel;
 use crate::helpers::generate_id;
 use crate::storage::*;
 use crate::types::*;
 
 /// Process an inbound message from WhatsApp or Instagram.
-/// Email has its own routing engine and calls into this only for Discord forwarding.
 pub async fn process_inbound(msg: &InboundMessage, env: &Env) -> Result<()> {
     let kv = env.kv("CALENDARS_KV")?;
     let db = env.d1("DB")?;
 
     // 1. Log inbound to unified messages table
-    let _ = save_inbound_message(&db, msg, None).await;
+    if let Err(e) = save_inbound_message(&db, msg, None).await {
+        console_log!("Failed to log inbound message: {:?}", e);
+    }
 
     // 2. Channel-specific routing
     match msg.channel {
         Channel::WhatsApp | Channel::Instagram => {
             handle_auto_reply(msg, &kv, &db, env).await?;
         }
-        Channel::Email => {
-            // Email uses its own routing engine in email::handler
-            // This function is not called for email's main path
-        }
-        Channel::Discord => {
-            // Discord inbound = operator interaction, handled by discord::components
-        }
+        Channel::Email => {}
+        Channel::Discord => {}
     }
 
     Ok(())
@@ -49,9 +46,7 @@ async fn handle_auto_reply(
         }
         Channel::Instagram => {
             let account = get_instagram_account(kv, &msg.channel_account_id).await?;
-            account
-                .filter(|a| a.enabled)
-                .map(|a| a.auto_reply)
+            account.filter(|a| a.enabled).map(|a| a.auto_reply)
         }
         _ => None,
     };
@@ -61,12 +56,9 @@ async fn handle_auto_reply(
         _ => return Ok(()),
     };
 
-    // Check credits before generating a reply
-    if !crate::billing::can_reply(kv, &msg.tenant_id).await? {
-        console_log!(
-            "Tenant {} out of credits, skipping reply",
-            msg.tenant_id
-        );
+    // Deduct credit BEFORE generating/sending (prevents double-spend race)
+    if !billing::try_deduct(kv, &msg.tenant_id).await? {
+        console_log!("Tenant {} out of credits, skipping reply", msg.tenant_id);
         return Ok(());
     }
 
@@ -89,6 +81,10 @@ async fn handle_auto_reply(
                 Ok(r) => r,
                 Err(e) => {
                     console_log!("AI auto-reply error: {:?}", e);
+                    // Restore credit since we didn't send
+                    if let Err(re) = billing::restore_credit(kv, &msg.tenant_id).await {
+                        console_log!("Failed to restore credit: {:?}", re);
+                    }
                     return Ok(());
                 }
             }
@@ -96,36 +92,48 @@ async fn handle_auto_reply(
     };
 
     if reply.is_empty() {
+        // Restore credit — no reply to send
+        if let Err(e) = billing::restore_credit(kv, &msg.tenant_id).await {
+            console_log!("Failed to restore credit: {:?}", e);
+        }
         return Ok(());
     }
 
     // Send reply via channel adapter
-    if let Err(e) =
-        channel::send_reply(&msg.channel, env, &msg.raw_metadata, &msg.sender, &reply, None).await
+    if let Err(e) = channel::send_reply(
+        &msg.channel,
+        env,
+        &msg.raw_metadata,
+        &msg.sender,
+        &reply,
+        None,
+    )
+    .await
     {
         console_log!("Auto-reply send error: {:?}", e);
+        // Restore credit — send failed
+        if let Err(re) = billing::restore_credit(kv, &msg.tenant_id).await {
+            console_log!("Failed to restore credit: {:?}", re);
+        }
         return Ok(());
     }
 
-    // Deduct credit after successful send
-    let _ = crate::billing::deduct_reply(kv, &msg.tenant_id).await;
-
     // Log outbound
-    let _ = save_message(
+    if let Err(e) = save_message(
         db,
         &generate_id(),
         &msg.channel,
         "outbound",
         &msg.recipient,
         &msg.sender,
-        &reply,
-        None,
         &msg.tenant_id,
         &msg.channel_account_id,
         Some("auto_reply"),
-        None,
     )
-    .await;
+    .await
+    {
+        console_log!("Failed to log outbound message: {:?}", e);
+    }
 
     Ok(())
 }

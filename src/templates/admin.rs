@@ -6,7 +6,12 @@ use crate::types::*;
 use super::base::base_html;
 use super::HASH;
 
-pub fn auth_login_html(base_url: &str, google_client_id: &str, meta_app_id: &str, last_provider: Option<&str>) -> String {
+pub fn auth_login_html(
+    base_url: &str,
+    google_client_id: &str,
+    meta_app_id: &str,
+    last_provider: Option<&str>,
+) -> String {
     let redirect_uri = format!("{}/auth/callback", base_url);
     let google_url = format!(
         "https://accounts.google.com/o/oauth2/v2/auth?client_id={}&redirect_uri={}&response_type=code&scope={}&access_type=online&prompt=select_account",

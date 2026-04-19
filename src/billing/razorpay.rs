@@ -8,9 +8,9 @@ const RAZORPAY_API: &str = "https://api.razorpay.com/v1";
 pub async fn create_order(
     key_id: &str,
     key_secret: &str,
-    amount: i64,       // in paise (INR) or cents (USD)
-    currency: &str,    // "INR" or "USD"
-    receipt: &str,     // our internal order ID
+    amount: i64,    // in paise (INR) or cents (USD)
+    currency: &str, // "INR" or "USD"
+    receipt: &str,  // our internal order ID
 ) -> Result<serde_json::Value> {
     let payload = serde_json::json!({
         "amount": amount,
@@ -62,18 +62,14 @@ pub fn verify_payment_signature(
 }
 
 /// Verify a Razorpay webhook signature.
-pub fn verify_webhook_signature(
-    body: &str,
-    signature: &str,
-    webhook_secret: &str,
-) -> bool {
+pub fn verify_webhook_signature(body: &str, signature: &str, webhook_secret: &str) -> bool {
     use hmac::{Hmac, Mac};
     use sha2::Sha256;
 
     type HmacSha256 = Hmac<Sha256>;
 
-    let mut mac = HmacSha256::new_from_slice(webhook_secret.as_bytes())
-        .expect("HMAC accepts any key length");
+    let mut mac =
+        HmacSha256::new_from_slice(webhook_secret.as_bytes()).expect("HMAC accepts any key length");
     mac.update(body.as_bytes());
 
     let expected = hex_encode(&mac.finalize().into_bytes());
@@ -89,8 +85,8 @@ async fn razorpay_post(
     payload: &serde_json::Value,
 ) -> Result<serde_json::Value> {
     let url = format!("{RAZORPAY_API}{path}");
-    let body = serde_json::to_string(payload)
-        .map_err(|e| Error::from(format!("JSON error: {e}")))?;
+    let body =
+        serde_json::to_string(payload).map_err(|e| Error::from(format!("JSON error: {e}")))?;
 
     let auth = base64_encode(&format!("{key_id}:{key_secret}"));
 

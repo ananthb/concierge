@@ -28,9 +28,7 @@ pub async fn generate_email_reply(
 ) -> Result<String> {
     let prompt = system_prompt.unwrap_or(DEFAULT_SYSTEM_PROMPT);
 
-    let user_message = format!(
-        "From: {from}\nSubject: {subject}\n\n{body}"
-    );
+    let user_message = format!("From: {from}\nSubject: {subject}\n\n{body}");
 
     let request = AiRequest {
         messages: vec![

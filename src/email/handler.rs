@@ -18,11 +18,7 @@ pub async fn handle_email(
     let db = env.d1("DB")?;
 
     // Extract domain from recipient
-    let domain = to
-        .rsplit('@')
-        .next()
-        .unwrap_or("")
-        .to_lowercase();
+    let domain = to.rsplit('@').next().unwrap_or("").to_lowercase();
 
     if domain.is_empty() {
         return Ok(EmailResult::Reject("Invalid recipient".into()));
@@ -62,14 +58,11 @@ pub async fn handle_email(
 
     // Load and match routing rules
     let rules = get_email_rules(&kv, &tenant_id, &domain).await?;
-    let matched_rule = routing::find_matching_rule(&rules, from, to, subject, has_attachment, text_body);
+    let matched_rule =
+        routing::find_matching_rule(&rules, from, to, subject, has_attachment, text_body);
 
     let (rule_id, rule_name, action) = match matched_rule {
-        Some(rule) => (
-            Some(rule.id.as_str()),
-            rule.name.as_str(),
-            &rule.action,
-        ),
+        Some(rule) => (Some(rule.id.as_str()), rule.name.as_str(), &rule.action),
         None => {
             // Use domain default action
             let domains = get_email_domains(&kv, &tenant_id).await?;
@@ -79,16 +72,16 @@ pub async fn handle_email(
                 .unwrap_or(EmailAction::Drop);
             // Store temporarily to extend lifetime
             return execute_action(
-                &default, None, "default", from, to, subject, text_body,
-                &parsed, &kv, &db, &domain, &tenant_id, env,
+                &default, None, "default", from, to, subject, text_body, &parsed, &kv, &db,
+                &domain, &tenant_id, env,
             )
             .await;
         }
     };
 
     execute_action(
-        action, rule_id, rule_name, from, to, subject, text_body,
-        &parsed, &kv, &db, &domain, &tenant_id, env,
+        action, rule_id, rule_name, from, to, subject, text_body, &parsed, &kv, &db, &domain,
+        &tenant_id, env,
     )
     .await
 }
@@ -125,9 +118,7 @@ async fn execute_action(
         }
 
         EmailAction::Spam { message } => {
-            let msg = message
-                .as_deref()
-                .unwrap_or("Rejected");
+            let msg = message.as_deref().unwrap_or("Rejected");
             console_log!("Rejecting as spam from {from} to {to} (rule: {rule_name})");
             Ok(EmailResult::Reject(msg.to_string()))
         }
@@ -221,7 +212,6 @@ async fn execute_action(
             direction: "inbound",
             from_email: from,
             to_email: to,
-            subject,
             action_taken: action_name,
             error_msg: None,
         },
@@ -274,7 +264,6 @@ async fn handle_reverse_alias(
             direction: "reply",
             from_email: &reverse.alias,
             to_email: &reverse.original_sender,
-            subject: &parsed.subject,
             action_taken: "forwarded",
             error_msg: None,
         },

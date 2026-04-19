@@ -21,8 +21,14 @@ fn action_detail(action: &EmailAction) -> String {
         EmailAction::Drop => String::new(),
         EmailAction::Spam { message } => message.clone().unwrap_or_default(),
         EmailAction::ForwardEmail { destination } => html_escape(destination),
-        EmailAction::ForwardDiscord { channel_id } => format!("Channel: {}", html_escape(channel_id)),
-        EmailAction::AiReply { approval_channel_id, approval_email, .. } => {
+        EmailAction::ForwardDiscord { channel_id } => {
+            format!("Channel: {}", html_escape(channel_id))
+        }
+        EmailAction::AiReply {
+            approval_channel_id,
+            approval_email,
+            ..
+        } => {
             let mut parts = Vec::new();
             if let Some(ch) = approval_channel_id {
                 parts.push(format!("Discord: {}", html_escape(ch)));
@@ -64,8 +70,6 @@ pub fn email_dashboard_html(
     metrics: &[serde_json::Value],
     base_url: &str,
 ) -> String {
-
-
     let domain_rows: String = domains
         .iter()
         .map(|d| {
@@ -147,8 +151,6 @@ pub fn email_dashboard_html(
 }
 
 pub fn email_rules_html(domain: &str, rules: &[RoutingRule], base_url: &str) -> String {
-
-
     let rule_rows: String = rules
         .iter()
         .map(|r| {
@@ -211,14 +213,10 @@ pub fn email_rules_html(domain: &str, rules: &[RoutingRule], base_url: &str) -> 
         rule_form = rule_form_html(domain, None, base_url),
     );
 
-    base_html(
-        &format!("Rules: {} - Concierge", domain),
-        &content,
-    )
+    base_html(&format!("Rules: {} - Concierge", domain), &content)
 }
 
 pub fn email_rule_edit_html(domain: &str, rule: &RoutingRule, base_url: &str) -> String {
-
     let content = format!(
         "<p><a href=\"{base_url}/admin/email/domains/{domain}/rules\">&larr; Back to Rules</a></p>
         <h1>Edit Rule: {name}</h1>
@@ -232,10 +230,7 @@ pub fn email_rule_edit_html(domain: &str, rule: &RoutingRule, base_url: &str) ->
         form = rule_form_html(domain, Some(rule), base_url),
     );
 
-    base_html(
-        &format!("Edit Rule - Concierge"),
-        &content,
-    )
+    base_html(&format!("Edit Rule - Concierge"), &content)
 }
 
 fn rule_form_html(domain: &str, rule: Option<&RoutingRule>, base_url: &str) -> String {
@@ -290,38 +285,39 @@ fn rule_form_html(domain: &str, rule: Option<&RoutingRule>, base_url: &str) -> S
         ""
     };
 
-    let (action_type, destination, channel_id, spam_message, system_prompt, approval_channel_id, approval_email) =
-        match rule.map(|r| &r.action) {
-            Some(EmailAction::Drop) | None => ("drop", "", "", "", "", "", ""),
-            Some(EmailAction::Spam { message }) => (
-                "spam",
-                "",
-                "",
-                message.as_deref().unwrap_or(""),
-                "",
-                "",
-                "",
-            ),
-            Some(EmailAction::ForwardEmail { destination }) => {
-                ("forward_email", destination.as_str(), "", "", "", "", "")
-            }
-            Some(EmailAction::ForwardDiscord { channel_id }) => {
-                ("forward_discord", "", channel_id.as_str(), "", "", "", "")
-            }
-            Some(EmailAction::AiReply {
-                system_prompt,
-                approval_channel_id,
-                approval_email,
-            }) => (
-                "ai_reply",
-                "",
-                "",
-                "",
-                system_prompt.as_deref().unwrap_or(""),
-                approval_channel_id.as_deref().unwrap_or(""),
-                approval_email.as_deref().unwrap_or(""),
-            ),
-        };
+    let (
+        action_type,
+        destination,
+        channel_id,
+        spam_message,
+        system_prompt,
+        approval_channel_id,
+        approval_email,
+    ) = match rule.map(|r| &r.action) {
+        Some(EmailAction::Drop) | None => ("drop", "", "", "", "", "", ""),
+        Some(EmailAction::Spam { message }) => {
+            ("spam", "", "", message.as_deref().unwrap_or(""), "", "", "")
+        }
+        Some(EmailAction::ForwardEmail { destination }) => {
+            ("forward_email", destination.as_str(), "", "", "", "", "")
+        }
+        Some(EmailAction::ForwardDiscord { channel_id }) => {
+            ("forward_discord", "", channel_id.as_str(), "", "", "", "")
+        }
+        Some(EmailAction::AiReply {
+            system_prompt,
+            approval_channel_id,
+            approval_email,
+        }) => (
+            "ai_reply",
+            "",
+            "",
+            "",
+            system_prompt.as_deref().unwrap_or(""),
+            approval_channel_id.as_deref().unwrap_or(""),
+            approval_email.as_deref().unwrap_or(""),
+        ),
+    };
 
     let action_options = [
         ("drop", "Drop"),
@@ -448,24 +444,37 @@ fn rule_form_html(domain: &str, rule: Option<&RoutingRule>, base_url: &str) -> S
 }
 
 pub fn email_log_html(log: &[serde_json::Value], base_url: &str) -> String {
-
-
     let rows: String = log
         .iter()
         .map(|entry| {
-            let from = entry.get("from_email").and_then(|v| v.as_str()).unwrap_or("");
+            let from = entry
+                .get("from_email")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
             let to = entry.get("to_email").and_then(|v| v.as_str()).unwrap_or("");
             let subject = entry.get("subject").and_then(|v| v.as_str()).unwrap_or("");
-            let action = entry.get("action_taken").and_then(|v| v.as_str()).unwrap_or("");
+            let action = entry
+                .get("action_taken")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
             let domain = entry.get("domain").and_then(|v| v.as_str()).unwrap_or("");
-            let created = entry.get("created_at").and_then(|v| v.as_str()).unwrap_or("");
-            let error = entry.get("error_msg").and_then(|v| v.as_str()).unwrap_or("");
+            let created = entry
+                .get("created_at")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            let error = entry
+                .get("error_msg")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
 
             let status = if error.is_empty() {
                 format!("<span style=\"color: var(--success-text);\">{action}</span>")
             } else {
-                format!("<span style=\"color: var(--error-text);\">{action}: {error}</span>",
-                    action = html_escape(action), error = html_escape(error))
+                format!(
+                    "<span style=\"color: var(--error-text);\">{action}: {error}</span>",
+                    action = html_escape(action),
+                    error = html_escape(error)
+                )
             };
 
             format!(
@@ -511,7 +520,6 @@ pub fn email_log_html(log: &[serde_json::Value], base_url: &str) -> String {
 }
 
 pub fn email_settings_html(discord_token: Option<&str>, base_url: &str) -> String {
-
     let token_value = discord_token.unwrap_or("");
 
     let content = format!(
