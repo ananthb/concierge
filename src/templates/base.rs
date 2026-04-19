@@ -295,6 +295,14 @@ code {
   padding:18px 28px; background:linear-gradient(90deg,var(--accent-soft),transparent 60%);
   border-bottom:1px solid var(--hair); }
 
+/* Legal pages */
+.legal { max-width:720px; margin:0 auto; padding:48px 28px 64px; }
+.legal h1 { font-family:var(--f-display); font-size:clamp(32px,5vw,48px); letter-spacing:-0.02em; margin:0 0 4px; }
+.legal h2 { font-size:1.1rem; margin:2rem 0 .5rem; color:var(--ink-2); }
+.legal p, .legal ul { margin-bottom:1rem; color:var(--ink-2); line-height:1.7; }
+.legal ul { padding-left:1.5rem; }
+@media(max-width:600px){ .legal { padding:28px 16px 40px; } }
+
 /* HTMX loading state */
 .htmx-request .btn { opacity: 0.6; pointer-events: none; }
 

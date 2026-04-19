@@ -217,18 +217,12 @@ async fn handle_request(req: Request, env: Env) -> Result<Response> {
 
     // Terms of Service
     if path == "/terms" {
-        let headers = Headers::new();
-        headers.set("Content-Type", "text/html; charset=utf-8")?;
-        headers.set("Cache-Control", "public, max-age=3600")?;
-        return Ok(Response::ok(legal::terms_of_service_html())?.with_headers(headers));
+        return Response::from_html(legal::terms_of_service_html());
     }
 
     // Privacy Policy
     if path == "/privacy" {
-        let headers = Headers::new();
-        headers.set("Content-Type", "text/html; charset=utf-8")?;
-        headers.set("Cache-Control", "public, max-age=3600")?;
-        return Ok(Response::ok(legal::privacy_policy_html())?.with_headers(headers));
+        return Response::from_html(legal::privacy_policy_html());
     }
 
     // Pricing page
