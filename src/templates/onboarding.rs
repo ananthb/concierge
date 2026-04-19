@@ -8,11 +8,11 @@ use super::HASH;
 
 const STEPS: &[(&str, &str)] = &[
     ("welcome", "Hey"),
-    ("connect", "Plug in"),
-    ("admin", "Ping me"),
+    ("channels", "Plug in"),
+    ("notifications", "Ping me"),
     ("persona", "Your voice"),
     ("replies", "Quick replies"),
-    ("test", "Go live"),
+    ("launch", "Go live"),
 ];
 
 fn rail_html(current: &str) -> String {
@@ -156,7 +156,7 @@ pub fn connect_html(ig_connected: bool, wa_connected: bool, base_url: &str) -> S
     <button class="btn ghost" hx-post="{base_url}/admin/wizard/goto" hx-vals='{{"to":"welcome"}}' hx-target="body" hx-swap="innerHTML">&larr; Back</button>
     <div class="row gap-12">
       {hint}
-      <button class="btn primary"{disabled} hx-post="{base_url}/admin/wizard/goto" hx-vals='{{"to":"admin"}}' hx-target="body" hx-swap="innerHTML">Continue &rarr;</button>
+      <button class="btn primary"{disabled} hx-post="{base_url}/admin/wizard/goto" hx-vals='{{"to":"notifications"}}' hx-target="body" hx-swap="innerHTML">Continue &rarr;</button>
     </div>
   </div>
 </section>"#,
@@ -167,7 +167,7 @@ pub fn connect_html(ig_connected: bool, wa_connected: bool, base_url: &str) -> S
         disabled = disabled,
     );
 
-    wizard_shell("connect", base_url, &content)
+    wizard_shell("channels", base_url, &content)
 }
 
 fn channel_card(
@@ -274,7 +274,7 @@ pub fn admin_pick_html(selected: &str, base_url: &str) -> String {
     </button>
   </div>
   <div class="between" style="margin-top:36px">
-    <button class="btn ghost" hx-post="{base_url}/admin/wizard/goto" hx-vals='{{"to":"connect"}}' hx-target="body" hx-swap="innerHTML">&larr; Back</button>
+    <button class="btn ghost" hx-post="{base_url}/admin/wizard/goto" hx-vals='{{"to":"channels"}}' hx-target="body" hx-swap="innerHTML">&larr; Back</button>
     <button class="btn primary"{disabled} hx-post="{base_url}/admin/wizard/goto" hx-vals='{{"to":"persona"}}' hx-target="body" hx-swap="innerHTML">Continue &rarr;</button>
   </div>
 </section>"##,
@@ -286,7 +286,7 @@ pub fn admin_pick_html(selected: &str, base_url: &str) -> String {
         mail_icon = channel_icon("mail"),
     );
 
-    wizard_shell("admin", base_url, &content)
+    wizard_shell("notifications", base_url, &content)
 }
 
 pub fn persona_html(persona: &PersonaConfig, base_url: &str) -> String {
@@ -341,7 +341,7 @@ pub fn persona_html(persona: &PersonaConfig, base_url: &str) -> String {
     <pre class="mono" style="margin:0;white-space:pre-wrap;font-size:12px;color:var(--cream);line-height:1.6">{prompt}</pre>
   </div>
   <div class="between" style="margin-top:32px">
-    <button class="btn ghost" hx-post="{base_url}/admin/wizard/goto" hx-vals='{{"to":"admin"}}' hx-target="body" hx-swap="innerHTML">&larr; Back</button>
+    <button class="btn ghost" hx-post="{base_url}/admin/wizard/goto" hx-vals='{{"to":"notifications"}}' hx-target="body" hx-swap="innerHTML">&larr; Back</button>
     <button class="btn primary"{disabled} hx-post="{base_url}/admin/wizard/goto" hx-vals='{{"to":"replies"}}' hx-target="body" hx-swap="innerHTML">Continue &rarr;</button>
   </div>
 </section>"#,
@@ -448,7 +448,7 @@ pub fn test_html(base_url: &str) -> String {
         base_url = base_url,
     );
 
-    wizard_shell("test", base_url, &content)
+    wizard_shell("launch", base_url, &content)
 }
 
 /// Public pricing page at /pricing

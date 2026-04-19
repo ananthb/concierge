@@ -136,7 +136,7 @@ pub async fn handle_wizard(
                 i += 1;
             }
             state.canned_replies = replies;
-            state.step = "test".to_string();
+            state.step = "launch".to_string();
             save_onboarding(&kv, tenant_id, &state).await?;
 
             Response::from_html(test_html(base_url))
@@ -163,15 +163,15 @@ async fn render_step(
 ) -> Result<Response> {
     match step {
         "welcome" => Response::from_html(welcome_html(base_url)),
-        "connect" => {
+        "channels" => {
             let wa = list_whatsapp_accounts(kv, tenant_id).await?;
             let ig = list_instagram_accounts(kv, tenant_id).await?;
             Response::from_html(connect_html(!ig.is_empty(), !wa.is_empty(), base_url))
         }
-        "admin" => Response::from_html(admin_pick_html(&state.admin_channel, base_url)),
+        "notifications" => Response::from_html(admin_pick_html(&state.admin_channel, base_url)),
         "persona" => Response::from_html(persona_html(&state.persona, base_url)),
         "replies" => Response::from_html(replies_html(&state.canned_replies, base_url)),
-        "test" => Response::from_html(test_html(base_url)),
+        "launch" => Response::from_html(test_html(base_url)),
         _ => Response::from_html(welcome_html(base_url)),
     }
 }
