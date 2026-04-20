@@ -160,12 +160,16 @@ wrangler secret put RAZORPAY_WEBHOOK_SECRET</code></pre>
 <h2>9. Set Up Email Routing</h2>
 
 <ol>
-  <li>In the Cloudflare dashboard, go to <strong>Email Routing</strong> for your domain</li>
-  <li>Add a catch-all rule that routes to your Worker</li>
-  <li>Configure domains and routing rules in the admin panel or via Discord slash commands</li>
+  <li>Add your email domain (e.g. <code>cncg.email</code>) to your Cloudflare account</li>
+  <li>In the Cloudflare dashboard, go to <strong>Email Routing</strong> for that domain</li>
+  <li>Enable Email Routing and add a <strong>catch-all</strong> rule that routes to your Worker (<code>concierge-worker</code>)</li>
+  <li>Note the MX servers assigned (visible in the Email Routing DNS settings)</li>
+  <li>Set the environment variables: <code>EMAIL_ZONE_ID</code>, <code>EMAIL_BASE_DOMAIN</code>, <code>EMAIL_MX_PRIMARY</code>, <code>EMAIL_MX_SECONDARY</code></li>
+  <li>Create a Cloudflare API token with <strong>DNS Edit</strong> permission scoped to the email zone</li>
+  <li>Set the token: <code>wrangler secret put CF_DNS_API_TOKEN</code></li>
 </ol>
 
-<p>See <a href="email-routing.html">Email Routing</a> for details.</p>
+<p>Tenant subdomains (e.g. <code>acme.cncg.email</code>) are provisioned automatically via the admin panel. See <a href="email-routing.html">Email Routing</a> for details.</p>
 
 <h2>10. Set Up Cloudflare Access for Management</h2>
 

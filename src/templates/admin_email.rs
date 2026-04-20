@@ -150,7 +150,7 @@ pub fn email_dashboard_html(
 </div>"#,
         base_url = base_url,
         base_domain = html_escape(
-            &std::env::var("EMAIL_BASE_DOMAIN").unwrap_or_else(|_| "example.com".into())
+            &std::env::var("EMAIL_BASE_DOMAIN").unwrap_or_else(|_| "cncg.email".into())
         ),
         subdomain_rows = subdomain_rows,
         empty_state = empty_state,

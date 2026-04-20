@@ -57,7 +57,7 @@ footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--border
 
 <h1>Email Routing</h1>
 
-<p>Concierge provides managed email subdomains with smart routing. Each tenant gets one or more subdomains (e.g., <code>acme.conciergemail.co</code>) provisioned automatically. Inbound emails are matched against configurable routing rules and actions are executed automatically.</p>
+<p>Concierge provides managed email subdomains with smart routing. Each tenant gets one or more subdomains (e.g., <code>acme.cncg.email</code>) provisioned automatically. Inbound emails are matched against configurable routing rules and actions are executed automatically.</p>
 
 <h2>Getting Started</h2>
 
@@ -73,7 +73,7 @@ footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--border
 <h2>How It Works</h2>
 
 <ol>
-  <li>An email arrives at any address on your subdomain (e.g., <code>support@acme.conciergemail.co</code>)</li>
+  <li>An email arrives at any address on your subdomain (e.g., <code>support@acme.cncg.email</code>)</li>
   <li>Cloudflare Email Routing triggers the Worker's <code>email()</code> handler</li>
   <li>The recipient domain is extracted and mapped to a tenant via a KV index</li>
   <li>The email is parsed (subject, body, attachments)</li>
@@ -168,15 +168,15 @@ footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--border
 
 <h2>Reverse-Alias Reply Routing</h2>
 
-<p>When an email is forwarded via the <strong>Forward Email</strong> action, Concierge generates a unique reverse-alias address on the subdomain (e.g., <code>reply+abc123@acme.conciergemail.co</code>). This alias is used as the <code>From</code> address in the forwarded email.</p>
+<p>When an email is forwarded via the <strong>Forward Email</strong> action, Concierge generates a unique reverse-alias address on the subdomain (e.g., <code>reply+abc123@acme.cncg.email</code>). This alias is used as the <code>From</code> address in the forwarded email.</p>
 
 <p>When the recipient replies to the forwarded email, their reply goes to the reverse-alias address. Concierge looks up the alias, finds the original sender, and forwards the reply back to them: making the conversation appear seamless.</p>
 
 <ol>
-  <li>Email from <code>alice@external.com</code> to <code>support@acme.conciergemail.co</code></li>
-  <li>Concierge forwards to <code>you@personal.com</code> with From: <code>reply+abc123@acme.conciergemail.co</code></li>
-  <li>You reply to <code>reply+abc123@acme.conciergemail.co</code></li>
-  <li>Concierge forwards your reply back to <code>alice@external.com</code> with From: <code>support@acme.conciergemail.co</code></li>
+  <li>Email from <code>alice@external.com</code> to <code>support@acme.cncg.email</code></li>
+  <li>Concierge forwards to <code>you@personal.com</code> with From: <code>reply+abc123@acme.cncg.email</code></li>
+  <li>You reply to <code>reply+abc123@acme.cncg.email</code></li>
+  <li>Concierge forwards your reply back to <code>alice@external.com</code> with From: <code>support@acme.cncg.email</code></li>
 </ol>
 
 <h2>AI Reply with Approval</h2>
