@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 // Tenant Types
 // ============================================================================
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct Tenant {
     pub id: String,
     pub email: String,
@@ -12,8 +12,14 @@ pub struct Tenant {
     #[serde(default)]
     pub facebook_id: Option<String>,
     pub plan: String,
+    #[serde(default = "default_currency")]
+    pub currency: String,
     pub created_at: String,
     pub updated_at: String,
+}
+
+fn default_currency() -> String {
+    "INR".to_string()
 }
 
 // ============================================================================

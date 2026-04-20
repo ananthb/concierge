@@ -64,7 +64,11 @@ pub async fn handle_razorpay_webhook(mut req: Request, env: Env) -> Result<Respo
             }
 
             // Record the payment first (before granting credits)
-            record_payment(&db, payment_id, tenant_id, credits).await?;
+            let currency = payment
+                .get("currency")
+                .and_then(|v| v.as_str())
+                .unwrap_or("INR");
+            record_payment(&db, payment_id, tenant_id, credits, currency).await?;
 
             // Grant credits
             super::grant_purchased(&db, tenant_id, credits).await?;
@@ -246,17 +250,19 @@ async fn record_payment(
     payment_id: &str,
     tenant_id: &str,
     credits: i64,
+    currency: &str,
 ) -> Result<()> {
     let id = generate_id();
     let stmt = db.prepare(
         "INSERT INTO payments (id, tenant_id, razorpay_payment_id, amount, currency, status)
-         VALUES (?, ?, ?, ?, 'INR', 'captured')",
+         VALUES (?, ?, ?, ?, ?, 'captured')",
     );
     stmt.bind(&[
         id.as_str().into(),
         tenant_id.into(),
         payment_id.into(),
         JsValue::from(credits as f64),
+        currency.into(),
     ])?
     .run()
     .await?;

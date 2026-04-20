@@ -36,11 +36,7 @@ pub async fn handle_admin(req: Request, env: Env, path: &str, method: Method) ->
             .unwrap_or_else(|| crate::types::Tenant {
                 id: tenant_id.clone(),
                 email: tenant_id.clone(),
-                name: None,
-                facebook_id: None,
-                plan: "free".to_string(),
-                created_at: String::new(),
-                updated_at: String::new(),
+                ..Default::default()
             });
         let google_client_id = env
             .secret("GOOGLE_OAUTH_CLIENT_ID")

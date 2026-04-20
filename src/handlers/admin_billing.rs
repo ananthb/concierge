@@ -31,8 +31,14 @@ pub async fn handle_billing_admin(
             let mut bill = storage::get_tenant_billing(&db, tenant_id).await?;
             crate::billing::refresh_billing(&mut bill);
             storage::save_tenant_billing(&db, tenant_id, &bill).await?;
-            let country = req.headers().get("cf-ipcountry")?.unwrap_or_default();
-            let currency = if country == "IN" { "INR" } else { "USD" };
+            let tenant = storage::get_tenant(&db, tenant_id)
+                .await?
+                .unwrap_or_default();
+            let currency = if tenant.currency == "USD" {
+                "USD"
+            } else {
+                "INR"
+            };
             let packs = storage::get_active_credit_packs(&db).await?;
 
             Response::from_html(tmpl::billing_overview_html(
@@ -49,8 +55,14 @@ pub async fn handle_billing_admin(
                 .and_then(|s| s.parse::<i64>().ok())
                 .unwrap_or(500);
 
-            let country = req.headers().get("cf-ipcountry")?.unwrap_or_default();
-            let currency = if country == "IN" { "INR" } else { "USD" };
+            let tenant = storage::get_tenant(&db, tenant_id)
+                .await?
+                .unwrap_or_default();
+            let currency = if tenant.currency == "USD" {
+                "USD"
+            } else {
+                "INR"
+            };
 
             let packs = storage::get_active_credit_packs(&db).await?;
             let pack = match packs.iter().find(|p| p.replies == credits) {

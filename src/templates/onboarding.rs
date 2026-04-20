@@ -811,8 +811,8 @@ pub fn pricing_html(packs: &[crate::types::CreditPackRow]) -> String {
                 r##"<div class="rt-row" style="grid-template-columns:1fr 1fr 1fr 1fr">
   <div><strong>{name}</strong></div>
   <div>{replies}</div>
-  <div>&#x20B9;{inr} / ${usd}</div>
-  <div>&#x20B9;{per_inr:.2} / ${per_usd:.4}</div>
+  <div><span class="p-inr">&#x20B9;{inr}</span><span class="p-usd" style="display:none">${usd}</span></div>
+  <div><span class="p-inr">&#x20B9;{per_inr:.2}</span><span class="p-usd" style="display:none">${per_usd:.4}</span></div>
 </div>"##,
                 name = html_escape(&p.name),
                 replies = p.replies,
@@ -833,7 +833,13 @@ pub fn pricing_html(packs: &[crate::types::CreditPackRow]) -> String {
   </div>
 </header>
 <article class="legal">
-  <h1>Simple pricing. Pay per reply.</h1>
+  <div class="between">
+    <h1>Simple pricing. Pay per reply.</h1>
+    <div style="display:flex;border:1px solid var(--hair);border-radius:999px;overflow:hidden;font-size:13px">
+      <button id="btn-inr" onclick="setCurrency('inr')" style="padding:6px 14px;border:none;background:var(--ink);color:var(--cream);cursor:pointer">&#x20B9; INR</button>
+      <button id="btn-usd" onclick="setCurrency('usd')" style="padding:6px 14px;border:none;background:transparent;color:var(--ink);cursor:pointer">$ USD</button>
+    </div>
+  </div>
   <p class="muted">Every account gets 100 free replies each month. After that, buy a pack. Bigger packs cost less per reply.</p>
 
   <div class="card" style="padding:0;overflow:hidden;margin:24px 0">
@@ -855,10 +861,29 @@ pub fn pricing_html(packs: &[crate::types::CreditPackRow]) -> String {
   <p class="muted">Get a dedicated email address like <code>hello@yourname.cncg.email</code> with smart routing, forwarding, and AI replies.</p>
 
   <div class="card" style="padding:18px;margin:24px 0">
-    <p style="margin:0"><strong>&#x20B9;199 / $2 per subdomain per month.</strong></p>
+    <p style="margin:0"><strong><span class="p-inr">&#x20B9;199</span><span class="p-usd" style="display:none">$2</span> per subdomain per month.</strong></p>
     <p class="muted" style="margin:8px 0 0">Includes unlimited inbound email, routing rules, forwarding, and Discord relay. AI-generated replies use 1 reply credit each (from your pack above).</p>
   </div>
-</article>"##,
+</article>
+<script>
+function setCurrency(c) {{
+  var inr = document.querySelectorAll('.p-inr');
+  var usd = document.querySelectorAll('.p-usd');
+  var btnI = document.getElementById('btn-inr');
+  var btnU = document.getElementById('btn-usd');
+  if (c === 'usd') {{
+    inr.forEach(function(el) {{ el.style.display = 'none'; }});
+    usd.forEach(function(el) {{ el.style.display = ''; }});
+    btnI.style.background = 'transparent'; btnI.style.color = 'var(--ink)';
+    btnU.style.background = 'var(--ink)'; btnU.style.color = 'var(--cream)';
+  }} else {{
+    inr.forEach(function(el) {{ el.style.display = ''; }});
+    usd.forEach(function(el) {{ el.style.display = 'none'; }});
+    btnI.style.background = 'var(--ink)'; btnI.style.color = 'var(--cream)';
+    btnU.style.background = 'transparent'; btnU.style.color = 'var(--ink)';
+  }}
+}}
+</script>"##,
         brand = brand_mark(),
     );
 

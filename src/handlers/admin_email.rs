@@ -108,11 +108,22 @@ pub async fn handle_email_admin(
             let key_id = env.secret("RAZORPAY_KEY_ID")?.to_string();
             let key_secret = env.secret("RAZORPAY_KEY_SECRET")?.to_string();
 
-            // Price: ₹199/$2 per subdomain per month
-            // Plan amount = (current count + 1) * per-unit price
+            // Price per subdomain: ₹199 (19900 paise) or $2 (200 cents)
+            let tenant =
+                get_tenant(&db, tenant_id)
+                    .await?
+                    .unwrap_or_else(|| crate::types::Tenant {
+                        id: tenant_id.to_string(),
+                        currency: "INR".to_string(),
+                        ..Default::default()
+                    });
             let new_count = (subdomains.len() + 1) as i64;
-            // TODO: detect currency from tenant's locale/preference
-            let (amount, currency) = (199_00 * new_count, "INR"); // paise
+            let (per_unit, currency): (i64, &str) = if tenant.currency == "USD" {
+                (200, "USD")
+            } else {
+                (19900, "INR")
+            };
+            let amount = per_unit * new_count;
 
             let plan_key = format!("razorpay_plan:email:{currency}:{amount}");
             let plan_id = match kv.get(&plan_key).text().await? {
