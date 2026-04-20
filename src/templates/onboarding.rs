@@ -403,51 +403,146 @@ fn channel_icon(key: &str) -> &'static str {
     }
 }
 
-pub fn admin_pick_html(selected: &str, base_url: &str) -> String {
-    let discord_sel = if selected == "discord" {
+pub fn notifications_html(config: &crate::types::NotificationConfig, base_url: &str) -> String {
+    let ad = if config.approval_discord {
         " selected"
     } else {
         ""
     };
-    let email_sel = if selected == "email" { " selected" } else { "" };
-    let disabled = if selected.is_empty() { " disabled" } else { "" };
+    let ae = if config.approval_email {
+        " selected"
+    } else {
+        ""
+    };
+    let dd = if config.digest_discord {
+        " selected"
+    } else {
+        ""
+    };
+    let de = if config.digest_email { " selected" } else { "" };
+
+    let freq_options = |current: u32| -> String {
+        let opts = [
+            (5, "5 min"),
+            (15, "15 min"),
+            (30, "30 min"),
+            (60, "1 hour"),
+            (240, "4 hours"),
+            (1440, "Daily"),
+        ];
+        opts.iter()
+            .map(|(val, label)| {
+                let sel = if current == *val { " selected" } else { "" };
+                format!(r#"<option value="{val}"{sel}>{label}</option>"#)
+            })
+            .collect()
+    };
+
+    let approval_freq_html = freq_options(config.approval_email_frequency_minutes);
+    let digest_freq_html = freq_options(config.digest_email_frequency_minutes);
 
     let content = format!(
         r##"<section class="page narrow">
-  <div class="section-label"><span class="mono muted">02 / 04</span><span class="eyebrow">Admin channel</span></div>
-  <h2 class="display-md">Where should I ping you when things need a human?</h2>
-  <p class="lead">For handoffs, alerts, and the daily digest. Pick one - you can change it anytime.</p>
-  <div class="admin-grid">
-    <button class="admin-card{discord_sel}" hx-post="{base_url}/admin/wizard/admin-pick" hx-vals='{{"v":"discord"}}' hx-target="body" hx-swap="innerHTML">
-      <div class="between"><span class="chip ok">Recommended</span></div>
-      <div class="row gap-12" style="margin-top:14px">
-        <div class="admin-mark">{discord_icon}</div>
-        <div><div class="serif" style="font-size:28px;line-height:1">Discord</div>
-        <div class="mono muted" style="font-size:11px">threaded &middot; real-time</div></div>
+  <div class="section-label"><span class="mono muted">03 / 06</span><span class="eyebrow">Heads up</span></div>
+  <h2 class="display-md">How should we notify you?</h2>
+  <p class="lead">Pick where you want to receive AI approval requests and activity digests. You can choose both.</p>
+
+  <form hx-post="{base_url}/admin/wizard/notifications" hx-target="body" hx-swap="innerHTML">
+    <div class="card" style="padding:22px;margin-bottom:16px">
+      <div class="eyebrow" style="margin-bottom:12px">AI reply approvals</div>
+      <p class="muted" style="margin-bottom:14px;font-size:14px">When the AI drafts a reply, where should we ask you to approve it?</p>
+      <div class="admin-grid">
+        <label class="admin-card{ad}" style="min-height:auto;cursor:pointer">
+          <input type="hidden" name="approval_discord" value="false">
+          <input type="checkbox" name="approval_discord" value="true" style="display:none" onchange="this.closest('.admin-card').classList.toggle('selected',this.checked)"{ad_checked}>
+          <div class="row gap-12">
+            <div class="admin-mark" style="width:40px;height:40px;border-radius:10px">{discord_icon}</div>
+            <div><div style="font-weight:600">Discord</div>
+            <div class="mono muted" style="font-size:11px">real-time threads</div></div>
+          </div>
+        </label>
+        <label class="admin-card{ae}" style="min-height:auto;cursor:pointer">
+          <input type="hidden" name="approval_email" value="false">
+          <input type="checkbox" name="approval_email" value="true" style="display:none" onchange="this.closest('.admin-card').classList.toggle('selected',this.checked);this.closest('.admin-card').querySelector('.freq-row').style.display=this.checked?'flex':'none'"{ae_checked}>
+          <div class="row gap-12">
+            <div class="admin-mark" style="width:40px;height:40px;border-radius:10px">{mail_icon}</div>
+            <div><div style="font-weight:600">Email</div>
+            <div class="mono muted" style="font-size:11px">batched digest</div></div>
+          </div>
+          <div class="freq-row row gap-8" style="margin-top:12px;display:{ae_display}">
+            <span class="mono muted" style="font-size:12px">Every</span>
+            <select class="select" name="approval_freq" style="width:auto;font-size:13px;padding:6px 10px">{approval_freq_html}</select>
+          </div>
+        </label>
       </div>
-      <p style="margin-top:14px;color:var(--ink-2)">Every conversation lands as a thread. Reply in Discord &rarr; flows back to the customer automatically.</p>
-    </button>
-    <button class="admin-card{email_sel}" hx-post="{base_url}/admin/wizard/admin-pick" hx-vals='{{"v":"email"}}' hx-target="body" hx-swap="innerHTML">
-      <div class="between"><span class="chip">Classic</span></div>
-      <div class="row gap-12" style="margin-top:14px">
-        <div class="admin-mark">{mail_icon}</div>
-        <div><div class="serif" style="font-size:28px;line-height:1">Email</div>
-        <div class="mono muted" style="font-size:11px">forwarded &middot; digested &middot; familiar</div></div>
+    </div>
+
+    <div class="card" style="padding:22px">
+      <div class="eyebrow" style="margin-bottom:12px">Activity digest</div>
+      <p class="muted" style="margin-bottom:14px;font-size:14px">A summary of messages handled, credits used, and anything that needs attention.</p>
+      <div class="admin-grid">
+        <label class="admin-card{dd}" style="min-height:auto;cursor:pointer">
+          <input type="hidden" name="digest_discord" value="false">
+          <input type="checkbox" name="digest_discord" value="true" style="display:none" onchange="this.closest('.admin-card').classList.toggle('selected',this.checked)"{dd_checked}>
+          <div class="row gap-12">
+            <div class="admin-mark" style="width:40px;height:40px;border-radius:10px">{discord_icon}</div>
+            <div><div style="font-weight:600">Discord</div>
+            <div class="mono muted" style="font-size:11px">channel post</div></div>
+          </div>
+        </label>
+        <label class="admin-card{de}" style="min-height:auto;cursor:pointer">
+          <input type="hidden" name="digest_email" value="false">
+          <input type="checkbox" name="digest_email" value="true" style="display:none" onchange="this.closest('.admin-card').classList.toggle('selected',this.checked);this.closest('.admin-card').querySelector('.freq-row').style.display=this.checked?'flex':'none'"{de_checked}>
+          <div class="row gap-12">
+            <div class="admin-mark" style="width:40px;height:40px;border-radius:10px">{mail_icon}</div>
+            <div><div style="font-weight:600">Email</div>
+            <div class="mono muted" style="font-size:11px">periodic summary</div></div>
+          </div>
+          <div class="freq-row row gap-8" style="margin-top:12px;display:{de_display}">
+            <span class="mono muted" style="font-size:12px">Every</span>
+            <select class="select" name="digest_freq" style="width:auto;font-size:13px;padding:6px 10px">{digest_freq_html}</select>
+          </div>
+        </label>
       </div>
-      <p style="margin-top:14px;color:var(--ink-2)">Forwarded to the address you already check. Daily digest at 8am so your inbox doesn't explode.</p>
-    </button>
-  </div>
-  <div class="between" style="margin-top:36px">
-    <button class="btn ghost" hx-post="{base_url}/admin/wizard/goto" hx-vals='{{"to":"channels"}}' hx-target="body" hx-swap="innerHTML">&larr; Back</button>
-    <button class="btn primary"{disabled} hx-post="{base_url}/admin/wizard/goto" hx-vals='{{"to":"persona"}}' hx-target="body" hx-swap="innerHTML">Continue &rarr;</button>
-  </div>
+    </div>
+
+    <div class="between" style="margin-top:36px">
+      <button type="button" class="btn ghost" hx-post="{base_url}/admin/wizard/goto" hx-vals='{{"to":"channels"}}' hx-target="body" hx-swap="innerHTML">&larr; Back</button>
+      <button type="submit" class="btn primary">Continue &rarr;</button>
+    </div>
+  </form>
 </section>"##,
         base_url = base_url,
-        discord_sel = discord_sel,
-        email_sel = email_sel,
-        disabled = disabled,
         discord_icon = channel_icon("discord"),
         mail_icon = channel_icon("mail"),
+        ad = ad,
+        ae = ae,
+        dd = dd,
+        de = de,
+        ad_checked = if config.approval_discord {
+            " checked"
+        } else {
+            ""
+        },
+        ae_checked = if config.approval_email {
+            " checked"
+        } else {
+            ""
+        },
+        dd_checked = if config.digest_discord {
+            " checked"
+        } else {
+            ""
+        },
+        de_checked = if config.digest_email { " checked" } else { "" },
+        ae_display = if config.approval_email {
+            "flex"
+        } else {
+            "none"
+        },
+        de_display = if config.digest_email { "flex" } else { "none" },
+        approval_freq_html = approval_freq_html,
+        digest_freq_html = digest_freq_html,
     );
 
     wizard_shell("notifications", base_url, &content)

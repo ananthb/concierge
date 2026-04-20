@@ -521,13 +521,9 @@ impl Default for NotificationConfig {
 pub struct OnboardingState {
     pub step: String,
     #[serde(default)]
-    pub biz_name: String, // backward compat
-    #[serde(default)]
     pub business: BusinessInfo,
     #[serde(default)]
     pub notifications: NotificationConfig,
-    #[serde(default)]
-    pub admin_channel: String, // backward compat, ignored
     pub persona: PersonaConfig,
     pub canned_replies: Vec<CannedReply>,
     pub completed: bool,

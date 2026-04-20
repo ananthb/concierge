@@ -27,13 +27,6 @@ pub async fn handle_wizard(
             let form: serde_json::Value = req.json().await?;
             let to = form.get("to").and_then(|v| v.as_str()).unwrap_or("basics");
 
-            // Save biz name if provided (backward compat)
-            if let Some(biz) = form.get("biz").and_then(|v| v.as_str()) {
-                if !biz.is_empty() {
-                    state.biz_name = biz.to_string();
-                }
-            }
-
             // Auto-save persona fields if present
             if let Some(v) = form.get("biz_type").and_then(|v| v.as_str()) {
                 if !v.is_empty() {
@@ -81,8 +74,6 @@ pub async fn handle_wizard(
             state.business.address = get("address");
             state.business.state = get("state");
             state.business.pincode = get("pincode");
-            // Sync biz_name for backward compat
-            state.biz_name = state.business.name.clone();
             state.step = "channels".to_string();
             save_onboarding(&kv, tenant_id, &state).await?;
 
@@ -149,14 +140,31 @@ pub async fn handle_wizard(
             render_step("channels", &state, &kv, tenant_id, base_url).await
         }
 
-        // Admin channel selection (legacy, kept for backward compat)
-        "admin-pick" => {
+        // Save notification preferences
+        "notifications" => {
             let form: serde_json::Value = req.json().await?;
-            let v = form.get("v").and_then(|v| v.as_str()).unwrap_or("");
-            state.admin_channel = v.to_string();
+            let is_true =
+                |key: &str| -> bool { form.get(key).and_then(|v| v.as_str()) == Some("true") };
+            let parse_freq = |key: &str, default: u32| -> u32 {
+                form.get(key)
+                    .and_then(|v| v.as_str())
+                    .and_then(|s| s.parse::<u32>().ok())
+                    .map(|v| v.clamp(5, 1440))
+                    .unwrap_or(default)
+            };
+
+            state.notifications = NotificationConfig {
+                approval_discord: is_true("approval_discord"),
+                approval_email: is_true("approval_email"),
+                approval_email_frequency_minutes: parse_freq("approval_freq", 60),
+                digest_discord: is_true("digest_discord"),
+                digest_email: is_true("digest_email"),
+                digest_email_frequency_minutes: parse_freq("digest_freq", 1440),
+            };
+            state.step = "persona".to_string();
             save_onboarding(&kv, tenant_id, &state).await?;
 
-            Response::from_html(admin_pick_html(&state.admin_channel, base_url))
+            render_step("persona", &state, &kv, tenant_id, base_url).await
         }
 
         // Persona save
@@ -277,7 +285,7 @@ async fn render_step(
                 base_url,
             ))
         }
-        "notifications" => Response::from_html(admin_pick_html(&state.admin_channel, base_url)),
+        "notifications" => Response::from_html(notifications_html(&state.notifications, base_url)),
         "persona" => Response::from_html(persona_html(&state.persona, base_url)),
         "replies" => Response::from_html(replies_html(&state.canned_replies, base_url)),
         "launch" => Response::from_html(test_html(base_url)),
