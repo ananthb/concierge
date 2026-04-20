@@ -64,6 +64,8 @@ jobs:
           CF_ACCESS_AUD = "${CF_ACCESS_AUD}"
           WHATSAPP_WABA_ID = "${WHATSAPP_WABA_ID}"
           WHATSAPP_SIGNUP_CONFIG_ID = "${WHATSAPP_SIGNUP_CONFIG_ID}"
+          EMAIL_ZONE_ID = "5cf43b684849d5805eb0a115a18dbee2"
+          EMAIL_BASE_DOMAIN = "cncg.email"
 
           [triggers]
           crons = ["0 6 * * *"]
