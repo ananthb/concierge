@@ -7,6 +7,28 @@ use crate::storage::*;
 pub async fn handle_scheduled(_event: ScheduledEvent, env: Env, _ctx: ScheduleContext) {
     console_log!("Scheduled job started");
 
+    // Verify email domain apex DNS records are correct
+    let zone_id = env
+        .var("EMAIL_ZONE_ID")
+        .map(|v| v.to_string())
+        .unwrap_or_default();
+    let base_domain = env
+        .var("EMAIL_BASE_DOMAIN")
+        .map(|v| v.to_string())
+        .unwrap_or_default();
+    let api_token = env
+        .secret("CF_DNS_API_TOKEN")
+        .map(|s| s.to_string())
+        .unwrap_or_default();
+    if !zone_id.is_empty() && !api_token.is_empty() && !base_domain.is_empty() {
+        if let Err(e) =
+            crate::cloudflare::dns::verify_apex_web_records(&zone_id, &base_domain, &api_token)
+                .await
+        {
+            console_log!("Email apex DNS verification failed: {:?}", e);
+        }
+    }
+
     // Refresh Instagram tokens
     if let Err(e) = refresh_instagram_tokens(&env).await {
         console_log!("Instagram token refresh error: {:?}", e);

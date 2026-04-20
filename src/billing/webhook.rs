@@ -116,7 +116,7 @@ pub async fn handle_razorpay_webhook(mut req: Request, env: Env) -> Result<Respo
                         .unwrap_or_default();
 
                     if !zone_id.is_empty() && !api_token.is_empty() {
-                        match crate::cloudflare::dns::create_mx_records(
+                        match crate::cloudflare::dns::create_subdomain_records(
                             &zone_id,
                             subdomain_label,
                             &base_domain,

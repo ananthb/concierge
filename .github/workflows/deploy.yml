@@ -47,10 +47,6 @@ jobs:
           pattern = "cncg.email"
           custom_domain = true
 
-          [[routes]]
-          pattern = "*.cncg.email"
-          custom_domain = true
-
           [[d1_databases]]
           binding = "DB"
           database_name = "concierge-worker"
