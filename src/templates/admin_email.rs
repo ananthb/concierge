@@ -66,31 +66,34 @@ fn criteria_summary(c: &MatchCriteria) -> String {
 }
 
 pub fn email_dashboard_html(
-    domains: &[EmailSubdomain],
+    subdomains: &[EmailSubdomain],
     metrics: &[serde_json::Value],
     base_url: &str,
 ) -> String {
-    let domain_rows: String = domains
+    let subdomain_rows: String = subdomains
         .iter()
         .map(|d| {
+            let status_badge = match d.status {
+                SubdomainStatus::Active => r#"<span class="chip ok">Active</span>"#,
+                SubdomainStatus::Suspended => r#"<span class="chip warn">Suspended</span>"#,
+            };
             format!(
-                "<tr>
-                    <td><a href=\"{base_url}/admin/email/domains/{domain}/rules\">{domain}</a></td>
-                    <td>{action}</td>
-                    <td>
-                        <a href=\"{base_url}/admin/email/domains/{domain}/rules\" class=\"btn btn-sm\">Rules</a>
-                        <button class=\"btn btn-sm btn-danger\" hx-delete=\"{base_url}/admin/email/domains/{domain}\" hx-confirm=\"Delete domain {domain} and all its rules?\" hx-target=\"closest tr\" hx-swap=\"outerHTML\">Delete</button>
-                    </td>
-                </tr>",
+                r#"<div class="rt-row" style="grid-template-columns:1fr 1fr auto auto">
+  <div><a href="{base_url}/admin/email/domains/{domain}/rules"><strong>{domain}</strong></a></div>
+  <div>{status}</div>
+  <div><a href="{base_url}/admin/email/domains/{domain}/rules" class="btn ghost sm">Rules</a></div>
+  <div><button class="btn ghost sm" style="color:var(--warn)" hx-delete="{base_url}/admin/email/subdomains/{label}" hx-confirm="Delete {domain} and all its rules?" hx-target="closest .rt-row" hx-swap="outerHTML">Delete</button></div>
+</div>"#,
                 base_url = base_url,
                 domain = html_escape(&d.domain),
-                action = action_label(&d.default_action),
+                label = html_escape(&d.label),
+                status = status_badge,
             )
         })
         .collect();
 
-    let domain_empty = if domains.is_empty() {
-        "<tr><td colspan=\"3\" class=\"text-muted\">No domains configured.</td></tr>"
+    let empty_state = if subdomains.is_empty() {
+        r#"<div style="padding:24px;text-align:center" class="muted">No email subdomains yet. Add one below.</div>"#
     } else {
         ""
     };
@@ -100,54 +103,66 @@ pub fn email_dashboard_html(
         .map(|m| {
             let action = m.get("action_type").and_then(|v| v.as_str()).unwrap_or("?");
             let total = m.get("total").and_then(|v| v.as_f64()).unwrap_or(0.0) as i64;
-            format!("<li><strong>{action}</strong>: {total}</li>")
+            format!(
+                r#"<div class="stat-row"><span class="mono muted">{action}</span><span class="stat-n serif">{total}</span></div>"#
+            )
         })
         .collect();
 
     let content = format!(
-        "<p><a href=\"{base_url}/admin\">&larr; Back to Dashboard</a></p>
-        <div style=\"display: flex; justify-content: space-between; align-items: center;\">
-            <h1>Email Routing</h1>
-            <div>
-                <a href=\"{base_url}/admin/email/log\" class=\"btn btn-secondary btn-sm\">View Log</a>
-                <a href=\"{base_url}/admin/email/settings\" class=\"btn btn-secondary btn-sm\">Settings</a>
-            </div>
-        </div>
+        r#"<div style="padding:24px 28px">
+  <div class="between" style="margin-bottom:24px">
+    <div>
+      <a href="{base_url}/admin" class="btn ghost sm" style="margin-bottom:8px">&larr; Dashboard</a>
+      <h2 class="display-sm">Email Routing</h2>
+    </div>
+    <div class="row gap-8">
+      <a href="{base_url}/admin/email/log" class="btn ghost sm">Log</a>
+      <a href="{base_url}/admin/email/settings" class="btn ghost sm">Settings</a>
+    </div>
+  </div>
 
-        <div class=\"card\">
-            <h2 style=\"margin-bottom: 0.5rem;\">Last 7 Days</h2>
-            {metrics_section}
-        </div>
+  <div class="card" style="padding:18px;margin-bottom:16px">
+    <div class="eyebrow" style="margin-bottom:8px">Last 7 days</div>
+    {metrics_section}
+  </div>
 
-        <div class=\"card\">
-            <div style=\"display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;\">
-                <h2>Domains</h2>
-            </div>
-            <table>
-                <thead><tr><th>Domain</th><th>Default Action</th><th>Actions</th></tr></thead>
-                <tbody>{domain_rows}{domain_empty}</tbody>
-            </table>
+  <div class="card" style="padding:0;overflow:hidden">
+    <div class="rt-head" style="grid-template-columns:1fr 1fr auto auto">
+      <div>Subdomain</div><div>Status</div><div></div><div></div>
+    </div>
+    {subdomain_rows}{empty_state}
+  </div>
 
-            <div id=\"toast\" style=\"margin-top: 1rem;\"></div>
-            <h3 style=\"margin-top: 1.5rem;\">Add Domain</h3>
-            <form hx-post=\"{base_url}/admin/email/domains\" hx-target=\"{hash}toast\" hx-swap=\"innerHTML\"
-                  style=\"display: flex; gap: 0.5rem; margin-top: 0.5rem;\">
-                <input type=\"text\" name=\"domain\" placeholder=\"example.com\" required style=\"flex: 1; padding: 0.5rem; border: 1px solid var(--border); border-radius: var(--cal-border-radius); background: var(--bg-card); color: var(--cal-text);\">
-                <button type=\"submit\" class=\"btn\">Add</button>
-            </form>
-        </div>",
+  <div class="card" style="padding:22px;margin-top:16px" hx-ext="json-enc">
+    <div class="between" style="margin-bottom:12px">
+      <div class="eyebrow">Add subdomain</div>
+      <span class="mono muted" style="font-size:11px">&#x20B9;199 / $2 per month</span>
+    </div>
+    <form hx-post="{base_url}/admin/email/subdomains" hx-target="body" hx-swap="innerHTML"
+          style="display:flex;gap:8px;align-items:center">
+      <input class="input" type="text" name="subdomain" placeholder="acme" required style="max-width:200px">
+      <span class="mono muted">.{base_domain}</span>
+      <button type="submit" class="btn primary sm" style="margin-left:auto">Add &rarr;</button>
+    </form>
+    <div id="toast" style="margin-top:8px"></div>
+  </div>
+</div>"#,
         base_url = base_url,
-        domain_rows = domain_rows,
-        domain_empty = domain_empty,
-        hash = HASH,
+        base_domain = html_escape(
+            &std::env::var("EMAIL_BASE_DOMAIN").unwrap_or_else(|_| "example.com".into())
+        ),
+        subdomain_rows = subdomain_rows,
+        empty_state = empty_state,
         metrics_section = if metrics_html.is_empty() {
-            "<p class=\"text-muted\">No email activity yet.</p>".to_string()
+            r#"<span class="muted">No email activity yet.</span>"#.to_string()
         } else {
-            format!("<ul style=\"list-style: none; padding: 0;\">{metrics_html}</ul>")
+            metrics_html
         },
     );
 
-    base_html("Email Routing - Concierge", &content)
+    let page = super::base::app_shell(&content, "Email Routing", base_url);
+    base_html("Email Routing - Concierge", &page)
 }
 
 pub fn email_rules_html(domain: &str, rules: &[RoutingRule], base_url: &str) -> String {
