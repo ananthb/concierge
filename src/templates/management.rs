@@ -140,7 +140,7 @@ pub fn tenant_detail_html(
     tenant: &Tenant,
     wa: &[WhatsAppAccount],
     ig: &[InstagramAccount],
-    domains: &[EmailDomain],
+    domains: &[EmailSubdomain],
     base_url: &str,
 ) -> String {
     let wa_list: String = wa

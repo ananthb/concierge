@@ -462,12 +462,12 @@ pub async fn delete_tenant_data(kv: &kv::KvStore, db: &D1Database, tenant_id: &s
     }
 
     // Delete email domains and rules (KV)
-    if let Ok(domains) = get_email_domains(kv, tenant_id).await {
+    if let Ok(domains) = get_email_subdomains(kv, tenant_id).await {
         for domain in &domains {
             let _ = delete_email_domain_index(kv, &domain.domain).await;
             let _ = save_email_rules(kv, tenant_id, &domain.domain, &[]).await;
         }
-        let _ = save_email_domains(kv, tenant_id, &[]).await;
+        let _ = save_email_subdomains(kv, tenant_id, &[]).await;
     }
 
     // Delete discord config (KV)
@@ -590,14 +590,17 @@ pub async fn save_instagram_message(
 // Email Routing Storage
 // ============================================================================
 
-use crate::types::{EmailDomain, EmailReverseAlias, RoutingRule};
+use crate::types::{EmailReverseAlias, EmailSubdomain, RoutingRule};
 
-/// Get all domains for a tenant.
-pub async fn get_email_domains(kv: &kv::KvStore, tenant_id: &str) -> Result<Vec<EmailDomain>> {
+/// Get all email subdomains for a tenant.
+pub async fn get_email_subdomains(
+    kv: &kv::KvStore,
+    tenant_id: &str,
+) -> Result<Vec<EmailSubdomain>> {
     let key = format!("email_domains:{tenant_id}");
     match kv
         .get(&key)
-        .json::<Vec<EmailDomain>>()
+        .json::<Vec<EmailSubdomain>>()
         .await
         .map_err(|e| Error::from(e.to_string()))?
     {
@@ -606,14 +609,14 @@ pub async fn get_email_domains(kv: &kv::KvStore, tenant_id: &str) -> Result<Vec<
     }
 }
 
-/// Save all domains for a tenant.
-pub async fn save_email_domains(
+/// Save all email subdomains for a tenant.
+pub async fn save_email_subdomains(
     kv: &kv::KvStore,
     tenant_id: &str,
-    domains: &[EmailDomain],
+    subdomains: &[EmailSubdomain],
 ) -> Result<()> {
     let key = format!("email_domains:{tenant_id}");
-    kv.put(&key, serde_json::to_string(domains)?)?
+    kv.put(&key, serde_json::to_string(subdomains)?)?
         .execute()
         .await?;
     Ok(())

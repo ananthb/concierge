@@ -50,7 +50,7 @@ pub async fn handle_command(interaction: &DiscordInteraction, env: &Env) -> Resu
 async fn handle_status(kv: &kv::KvStore, env: &Env, tenant_id: &str) -> Result<Response> {
     let wa_accounts = list_whatsapp_accounts(kv, tenant_id).await?;
     let ig_accounts = list_instagram_accounts(kv, tenant_id).await?;
-    let domains = get_email_domains(kv, tenant_id).await?;
+    let domains = get_email_subdomains(kv, tenant_id).await?;
 
     let db = env.d1("DB")?;
     let metrics = get_email_metrics(&db, tenant_id, None).await?;
@@ -103,78 +103,19 @@ async fn handle_domains(
 
     match subcommand {
         "list" => {
-            let domains = get_email_domains(kv, tenant_id).await?;
-            if domains.is_empty() {
-                return ephemeral("No email domains configured.");
+            let subdomains = get_email_subdomains(kv, tenant_id).await?;
+            if subdomains.is_empty() {
+                return ephemeral("No email subdomains configured. Add one from the admin panel.");
             }
-            let list: String = domains
+            let list: String = subdomains
                 .iter()
-                .map(|d| format!("- **{}**", d.domain))
+                .map(|d| format!("- **{}** ({:?})", d.domain, d.status))
                 .collect::<Vec<_>>()
                 .join("\n");
-            ephemeral(&format!("**Email Domains**\n{list}"))
+            ephemeral(&format!("**Email Subdomains**\n{list}"))
         }
-        "add" => {
-            let domain = interaction
-                .data
-                .as_ref()
-                .and_then(|d| d.options.as_ref())
-                .and_then(|opts| opts.first())
-                .and_then(|o| o.options.first())
-                .and_then(|o| o.value.as_ref())
-                .and_then(|v| v.as_str())
-                .unwrap_or("");
-
-            if domain.is_empty() {
-                return ephemeral("Please provide a domain name.");
-            }
-
-            let domain = domain.to_lowercase();
-            let mut domains = get_email_domains(kv, tenant_id).await?;
-
-            if domains.iter().any(|d| d.domain == domain) {
-                return ephemeral(&format!("Domain `{domain}` already exists."));
-            }
-
-            domains.push(EmailDomain {
-                domain: domain.clone(),
-                tenant_id: tenant_id.to_string(),
-                default_action: EmailAction::Drop,
-                created_at: crate::helpers::now_iso(),
-            });
-            save_email_domains(kv, tenant_id, &domains).await?;
-            set_email_domain_index(kv, &domain, tenant_id).await?;
-
-            ephemeral(&format!("Domain `{domain}` added."))
-        }
-        "remove" => {
-            let domain = interaction
-                .data
-                .as_ref()
-                .and_then(|d| d.options.as_ref())
-                .and_then(|opts| opts.first())
-                .and_then(|o| o.options.first())
-                .and_then(|o| o.value.as_ref())
-                .and_then(|v| v.as_str())
-                .unwrap_or("");
-
-            if domain.is_empty() {
-                return ephemeral("Please provide a domain name.");
-            }
-
-            let mut domains = get_email_domains(kv, tenant_id).await?;
-            let before = domains.len();
-            domains.retain(|d| d.domain != domain);
-
-            if domains.len() == before {
-                return ephemeral(&format!("Domain `{domain}` not found."));
-            }
-
-            save_email_domains(kv, tenant_id, &domains).await?;
-            delete_email_domain_index(kv, domain).await?;
-            save_email_rules(kv, tenant_id, domain, &[]).await?;
-
-            ephemeral(&format!("Domain `{domain}` removed."))
+        "add" | "remove" => {
+            ephemeral("Email subdomains are managed from the admin panel (billing required).")
         }
         _ => {
             ephemeral("Usage: `/domains list`, `/domains add <domain>`, `/domains remove <domain>`")

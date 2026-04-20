@@ -118,7 +118,7 @@ pub async fn handle_admin(req: Request, env: Env, path: &str, method: Method) ->
         let whatsapp_accounts = list_whatsapp_accounts(&kv, &tenant_id).await?;
         let instagram_accounts = list_instagram_accounts(&kv, &tenant_id).await?;
         let lead_forms = list_lead_forms(&kv, &tenant_id).await?;
-        let email_domains = crate::storage::get_email_domains(&kv, &tenant_id).await?;
+        let email_domains = crate::storage::get_email_subdomains(&kv, &tenant_id).await?;
         let db = env.d1("DB")?;
         let mut billing = crate::storage::get_tenant_billing(&db, &tenant_id).await?;
         crate::billing::refresh_billing(&mut billing);

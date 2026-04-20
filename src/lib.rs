@@ -27,6 +27,7 @@ use worker::*;
 mod ai;
 mod billing;
 mod channel;
+pub mod cloudflare;
 mod crypto;
 mod discord;
 mod email;

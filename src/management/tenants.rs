@@ -40,7 +40,7 @@ pub async fn handle_tenants(
             };
             let wa = list_whatsapp_accounts(kv, id).await?;
             let ig = list_instagram_accounts(kv, id).await?;
-            let domains = get_email_domains(kv, id).await?;
+            let domains = get_email_subdomains(kv, id).await?;
             Response::from_html(tmpl::tenant_detail_html(
                 &tenant, &wa, &ig, &domains, base_url,
             ))

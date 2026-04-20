@@ -38,6 +38,11 @@ AI_MODEL = ""                    # Workers AI model for replies (default: llama-
 AI_FAST_MODEL = ""               # Workers AI model for injection scanning (default: llama-3.1-8b-instruct-fast)
 WHATSAPP_WABA_ID = ""           # Your WhatsApp Business Account ID
 WHATSAPP_SIGNUP_CONFIG_ID = ""  # Meta Embedded Signup config ID
+EMAIL_ZONE_ID = ""              # Cloudflare zone ID for the email domain
+EMAIL_BASE_DOMAIN = ""          # Base domain for tenant subdomains (e.g. "conciergemail.co")
+EMAIL_MX_PRIMARY = ""           # Primary MX server (e.g. "isaac.mx.cloudflare.net")
+EMAIL_MX_SECONDARY = ""         # Secondary MX server (e.g. "linda.mx.cloudflare.net")
+RAZORPAY_EMAIL_PLAN_ID = ""     # Razorpay plan ID for email subdomain subscription
 
 # ============================================================================
 # Cron triggers — daily at 6AM UTC for Instagram token refresh
@@ -78,3 +83,6 @@ invocation_logs = true
 #   RAZORPAY_KEY_ID         - Razorpay key ID
 #   RAZORPAY_KEY_SECRET     - Razorpay key secret
 #   RAZORPAY_WEBHOOK_SECRET - Razorpay webhook secret (for payment.captured events)
+#
+# Cloudflare DNS (email subdomain provisioning):
+#   CF_DNS_API_TOKEN        - Cloudflare API token scoped to DNS edit on the email zone

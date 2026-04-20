@@ -75,7 +75,7 @@ pub async fn handle_email(
         Some(rule) => (Some(rule.id.as_str()), rule.name.as_str(), &rule.action),
         None => {
             // Use domain default action
-            let domains = get_email_domains(&kv, &tenant_id).await?;
+            let domains = get_email_subdomains(&kv, &tenant_id).await?;
             let domain_config = domains.iter().find(|d| d.domain == domain);
             let default = domain_config
                 .map(|d| d.default_action.clone())

@@ -246,12 +246,34 @@ pub struct InstagramDm {
 // Email Routing Types
 // ============================================================================
 
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum SubdomainStatus {
+    Active,
+    Suspended,
+}
+
+impl Default for SubdomainStatus {
+    fn default() -> Self {
+        Self::Active
+    }
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct EmailDomain {
+pub struct EmailSubdomain {
+    pub label: String,
     pub domain: String,
     pub tenant_id: String,
     pub default_action: EmailAction,
+    #[serde(default)]
+    pub dns_record_ids: Vec<String>,
+    #[serde(default)]
+    pub subscription_id: Option<String>,
+    #[serde(default)]
+    pub status: SubdomainStatus,
     pub created_at: String,
+    #[serde(default)]
+    pub updated_at: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]

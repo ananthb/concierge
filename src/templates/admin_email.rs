@@ -66,7 +66,7 @@ fn criteria_summary(c: &MatchCriteria) -> String {
 }
 
 pub fn email_dashboard_html(
-    domains: &[EmailDomain],
+    domains: &[EmailSubdomain],
     metrics: &[serde_json::Value],
     base_url: &str,
 ) -> String {

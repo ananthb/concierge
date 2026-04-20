@@ -29,11 +29,11 @@ pub async fn handle_email_admin(
     let method = req.method();
 
     match (method, path_parts.as_slice()) {
-        // Dashboard: list domains + metrics
+        // Dashboard: list subdomains + metrics
         (Method::Get, []) => {
-            let domains = get_email_domains(&kv, tenant_id).await?;
+            let subdomains = get_email_subdomains(&kv, tenant_id).await?;
             let metrics = get_email_metrics(&db, tenant_id, None).await?;
-            Response::from_html(email_dashboard_html(&domains, &metrics, base_url))
+            Response::from_html(email_dashboard_html(&subdomains, &metrics, base_url))
         }
 
         // Log viewer
@@ -57,45 +57,83 @@ pub async fn handle_email_admin(
             Response::from_html("<div class=\"success\">Settings saved</div>".to_string())
         }
 
-        // Add domain
-        (Method::Post, ["domains"]) => {
+        // Add subdomain (TODO: Phase 5 — add CF API provisioning + Razorpay billing)
+        (Method::Post, ["subdomains"]) => {
             let form: serde_json::Value = req.json().await?;
-            let domain = form
-                .get("domain")
+            let label = form
+                .get("subdomain")
                 .and_then(|v| v.as_str())
                 .unwrap_or("")
                 .trim()
                 .to_lowercase();
 
-            if domain.is_empty()
-                || !domain.contains('.')
-                || domain.starts_with('.')
-                || domain.ends_with('.')
-                || domain.contains("..")
-                || !domain
-                    .chars()
-                    .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '.')
-            {
+            let base_domain = env
+                .var("EMAIL_BASE_DOMAIN")
+                .map(|v| v.to_string())
+                .unwrap_or_default();
+
+            if let Err(e) = crate::cloudflare::dns::validate_subdomain_label(&label) {
+                return Response::from_html(format!(
+                    "<div class=\"error\">{}</div>",
+                    crate::helpers::html_escape(e)
+                ));
+            }
+
+            let domain = format!("{label}.{base_domain}");
+
+            let mut subdomains = get_email_subdomains(&kv, tenant_id).await?;
+            if subdomains.iter().any(|d| d.domain == domain) {
                 return Response::from_html(
-                    "<div class=\"error\">Invalid domain format</div>".to_string(),
+                    "<div class=\"error\">Subdomain already exists</div>".to_string(),
                 );
             }
 
-            let mut domains = get_email_domains(&kv, tenant_id).await?;
-            if domains.iter().any(|d| d.domain == domain) {
+            // Check global uniqueness
+            if get_tenant_by_domain(&kv, &domain).await?.is_some() {
                 return Response::from_html(
-                    "<div class=\"error\">Domain already exists</div>".to_string(),
+                    "<div class=\"error\">Subdomain is already taken</div>".to_string(),
                 );
             }
 
-            let email_domain = EmailDomain {
+            // Provision MX records via Cloudflare API
+            let zone_id = env
+                .var("EMAIL_ZONE_ID")
+                .map(|v| v.to_string())
+                .unwrap_or_default();
+            let mx_primary = env
+                .var("EMAIL_MX_PRIMARY")
+                .map(|v| v.to_string())
+                .unwrap_or_default();
+            let mx_secondary = env
+                .var("EMAIL_MX_SECONDARY")
+                .map(|v| v.to_string())
+                .unwrap_or_default();
+            let api_token = env.secret("CF_DNS_API_TOKEN")?.to_string();
+
+            let record_ids = crate::cloudflare::dns::create_mx_records(
+                &zone_id,
+                &label,
+                &base_domain,
+                &mx_primary,
+                &mx_secondary,
+                &api_token,
+            )
+            .await?;
+
+            let now = now_iso();
+            let subdomain = EmailSubdomain {
+                label: label.clone(),
                 domain: domain.clone(),
                 tenant_id: tenant_id.to_string(),
                 default_action: EmailAction::Drop,
-                created_at: now_iso(),
+                dns_record_ids: record_ids,
+                subscription_id: None,
+                status: SubdomainStatus::Active,
+                created_at: now.clone(),
+                updated_at: now,
             };
-            domains.push(email_domain);
-            save_email_domains(&kv, tenant_id, &domains).await?;
+            subdomains.push(subdomain);
+            save_email_subdomains(&kv, tenant_id, &subdomains).await?;
             set_email_domain_index(&kv, &domain, tenant_id).await?;
 
             let headers = Headers::new();
@@ -103,14 +141,32 @@ pub async fn handle_email_admin(
             Ok(Response::empty()?.with_status(200).with_headers(headers))
         }
 
-        // Delete domain
-        (Method::Delete, ["domains", domain]) => {
-            let mut domains = get_email_domains(&kv, tenant_id).await?;
-            domains.retain(|d| d.domain != *domain);
-            save_email_domains(&kv, tenant_id, &domains).await?;
-            delete_email_domain_index(&kv, domain).await?;
-            // Clear rules for this domain too
-            save_email_rules(&kv, tenant_id, domain, &[]).await?;
+        // Delete subdomain
+        (Method::Delete, ["subdomains", label]) => {
+            let mut subdomains = get_email_subdomains(&kv, tenant_id).await?;
+            let removed = subdomains.iter().find(|d| d.label == *label).cloned();
+            subdomains.retain(|d| d.label != *label);
+            save_email_subdomains(&kv, tenant_id, &subdomains).await?;
+
+            if let Some(sub) = removed {
+                delete_email_domain_index(&kv, &sub.domain).await?;
+                save_email_rules(&kv, tenant_id, &sub.domain, &[]).await?;
+
+                // Delete MX records from Cloudflare
+                if !sub.dns_record_ids.is_empty() {
+                    let zone_id = env
+                        .var("EMAIL_ZONE_ID")
+                        .map(|v| v.to_string())
+                        .unwrap_or_default();
+                    let api_token = env.secret("CF_DNS_API_TOKEN")?.to_string();
+                    let _ = crate::cloudflare::dns::delete_dns_records(
+                        &zone_id,
+                        &sub.dns_record_ids,
+                        &api_token,
+                    )
+                    .await;
+                }
+            }
 
             Ok(Response::empty()?.with_status(200))
         }
