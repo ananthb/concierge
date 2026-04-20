@@ -4,83 +4,49 @@
 
 # Concierge
 
-Automated customer engagement for small businesses. Auto-replies across WhatsApp, Instagram DMs, and email, with a unified Discord inbox for everything that needs a human.
+Automated customer messaging for small businesses. Auto-replies across WhatsApp, Instagram DMs, and email. Managed email subdomains on `cncg.email`. Unified Discord inbox for everything that needs a human.
 
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/ananthb/concierge-worker)
 
-**[Live Demo](https://concierge.calculon.tech)** · **[Documentation](https://ananthb.github.io/concierge-worker/)** · **[Pricing](https://concierge.calculon.tech/pricing)**
+**[Hosted Service](https://concierge.calculon.tech)** · **[Documentation](https://ananthb.github.io/concierge-worker/)**
+
+## Hosted Service
+
+Don't want to self-host? [concierge.calculon.tech](https://concierge.calculon.tech) runs this exact stack as a managed service. Sign up, connect your channels, and start auto-replying in minutes. 100 free replies every month.
 
 ## Features
 
-- **WhatsApp Auto-Reply**: static or AI-powered replies to every message
+- **WhatsApp Auto-Reply**: static or AI-powered replies to every message via Meta Business API
 - **Instagram DM Auto-Reply**: connect your business account, reply automatically
-- **Email Routing**: catch-all email with routing rules (glob patterns). Forward, drop, AI-draft, or relay to Discord
+- **Managed Email Subdomains**: each tenant gets `*.cncg.email` addresses with smart routing rules (glob patterns). Forward, drop, AI-draft, or relay to Discord. MX records provisioned automatically via Cloudflare API
 - **Discord Relay**: unified inbox. Messages from any channel land in Discord with Reply/Approve/Drop buttons. Reply in Discord and it flows back to the customer
 - **Lead Capture Forms**: embeddable phone number forms that trigger WhatsApp messages
-- **Onboarding Wizard**: 6-step guided setup (channels, admin, voice persona, canned replies)
+- **Onboarding Wizard**: 5-step guided setup (business info, channels, notifications, replies, billing)
+- **Notification Preferences**: configurable approval + digest delivery via Discord and/or Email with batching frequency
 - **Management Panel**: Cloudflare Access-protected admin for tenant management, billing, audit log
-- **Billing**: prepaid reply credits. 100 free/month, then volume-priced packs via Razorpay. Purchased credits never expire
+- **Billing**: prepaid reply credits (100 free/month, volume packs via Razorpay) + recurring email subdomain subscriptions (₹199/$2 per month, auto-provisioned)
 - **Privacy-first**: no message content stored. Metadata only. GDPR data deletion
 
 ## Deploy
 
-Click the button above to deploy to Cloudflare Workers. The deploy flow will fork the repo and provision the Worker, D1 database, and KV namespace automatically.
-
-After deploy, you still need to:
-
-1. **Run the D1 migration** to create tables and seed credit packs:
-   ```bash
-   wrangler d1 execute concierge-worker --remote --file=migrations/0001_create_schema.sql
-   ```
-
-2. **Set secrets** (at minimum for Google login):
-   ```bash
-   wrangler secret put ENCRYPTION_KEY          # openssl rand -hex 32
-   wrangler secret put GOOGLE_OAUTH_CLIENT_ID
-   wrangler secret put GOOGLE_OAUTH_CLIENT_SECRET
-   ```
-
-3. **Configure channels** as needed:
-   ```bash
-   # Meta (WhatsApp + Instagram)
-   wrangler secret put META_APP_ID
-   wrangler secret put META_APP_SECRET
-   wrangler secret put WHATSAPP_ACCESS_TOKEN
-   wrangler secret put WHATSAPP_VERIFY_TOKEN
-   wrangler secret put INSTAGRAM_VERIFY_TOKEN
-
-   # Discord
-   wrangler secret put DISCORD_PUBLIC_KEY
-   wrangler secret put DISCORD_APPLICATION_ID
-   wrangler secret put DISCORD_BOT_TOKEN
-
-   # Razorpay (billing)
-   wrangler secret put RAZORPAY_KEY_ID
-   wrangler secret put RAZORPAY_KEY_SECRET
-   wrangler secret put RAZORPAY_WEBHOOK_SECRET
-   ```
-
-4. **Set environment variables** in `wrangler.toml`:
-   - `CF_ACCESS_TEAM` and `CF_ACCESS_AUD` for the management panel
-   - `WHATSAPP_WABA_ID` and `WHATSAPP_SIGNUP_CONFIG_ID` for WhatsApp
-
-See the [setup guide](https://ananthb.github.io/concierge-worker/setup.html) for full instructions.
+Click the button above to deploy to Cloudflare Workers. See the [setup guide](https://ananthb.github.io/concierge-worker/setup.html) for configuration.
 
 ## Architecture
 
 - [Cloudflare Workers](https://workers.cloudflare.com/) (Rust compiled to WebAssembly)
 - [Cloudflare D1](https://developers.cloudflare.com/d1/) (SQLite for metadata logs and billing)
 - [Cloudflare KV](https://developers.cloudflare.com/kv/) (account configs, sessions, billing state)
-- [Cloudflare Workers AI](https://developers.cloudflare.com/workers-ai/) (AI auto-replies via Llama 3.1 8B)
-- [Cloudflare Email Routing](https://developers.cloudflare.com/email-routing/) (catch-all email handling)
+- [Cloudflare Workers AI](https://developers.cloudflare.com/workers-ai/) (AI auto-replies)
+- [Cloudflare Email Routing](https://developers.cloudflare.com/email-routing/) (inbound email handling)
+- [Cloudflare DNS API](https://developers.cloudflare.com/api/resources/dns/) (MX + A/AAAA record provisioning for tenant subdomains)
 - Meta WhatsApp Business API + Instagram Graph API
 - Discord Interactions API (slash commands + cross-channel relay)
-- Razorpay (payment processing for credit packs)
+- Razorpay (credit packs + email subdomain subscriptions)
 
 ## Development
 
 ```bash
-nix develop        # enter dev shell
+nix develop        # enter dev shell with all tools
 cargo test         # run tests
 wrangler dev       # local dev server
 wrangler deploy    # deploy to Cloudflare

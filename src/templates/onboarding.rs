@@ -787,7 +787,7 @@ pub fn pricing_html(packs: &[crate::types::CreditPackRow]) -> String {
     let content = format!(
         r##"<header style="display:flex;align-items:center;gap:28px;padding:18px 28px;border-bottom:1px solid var(--hair);background:var(--paper)">
   {brand}
-  <div style="margin-left:auto"><a href="/" class="btn ghost sm">&larr; Home</a></div>
+  <div style="margin-left:auto"><a href="/auth/login" class="btn ghost sm">Sign in</a></div>
 </header>
 <article class="legal">
   <h1>Simple pricing. Pay per reply.</h1>
