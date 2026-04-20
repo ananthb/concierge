@@ -144,11 +144,13 @@ pub fn business_html(biz_name: &str, base_url: &str) -> String {
   var btn = document.getElementById('biz-continue');
   var fill = document.querySelector('.rail .seg.active .fill');
   if (input && btn) {{
-    input.addEventListener('input', function() {{
+    function update() {{
       var hasValue = input.value.trim().length > 0;
       btn.disabled = !hasValue;
       if (fill) fill.style.width = hasValue ? '90%' : '55%';
-    }});
+    }}
+    input.addEventListener('input', update);
+    update();
   }}
 }})();
 </script>"#,
