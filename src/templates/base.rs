@@ -26,8 +26,8 @@ html, body { margin:0; padding:0; background:var(--cream); color:var(--ink);
 body::before { content:""; position:fixed; inset:0; pointer-events:none; z-index:1; opacity:.35;
   background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.1  0 0 0 0 0.09  0 0 0 0 0.07  0 0 0 .05 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
   mix-blend-mode:multiply; }
-.app-root { position:relative; z-index:2; min-height:100vh; display:flex; flex-direction:column; }
-.app-root > *:first-child { flex:1; }
+.app-root { position:relative; z-index:2; min-height:100vh; }
+.site-header { flex:none; }
 .mono { font-family:var(--f-mono); letter-spacing:.02em; }
 .serif { font-family:var(--f-display); }
 .eyebrow { font-family:var(--f-mono); font-size:11px; letter-spacing:.18em; text-transform:uppercase; color:var(--muted); }
