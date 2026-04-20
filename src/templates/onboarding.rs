@@ -229,7 +229,14 @@ pub fn basics_html(business: &crate::types::BusinessInfo, base_url: &str) -> Str
     wizard_shell("basics", base_url, &content)
 }
 
-pub fn connect_html(ig_connected: bool, wa_connected: bool, base_url: &str) -> String {
+pub fn connect_html(
+    ig_connected: bool,
+    wa_connected: bool,
+    email_subdomains: &[crate::types::EmailSubdomain],
+    suggested_slug: &str,
+    email_base_domain: &str,
+    base_url: &str,
+) -> String {
     let ig_card = channel_card(
         "ig",
         "Instagram DMs",
@@ -247,8 +254,60 @@ pub fn connect_html(ig_connected: bool, wa_connected: bool, base_url: &str) -> S
         base_url,
     );
 
-    let ready = ig_connected || wa_connected;
-    let continue_label = if ready {
+    let email_rows: String = email_subdomains
+        .iter()
+        .map(|d| {
+            format!(
+                r#"<div class="side-row" style="padding:10px 14px">
+  <span>{mail_icon}</span>
+  <div style="flex:1"><span class="mono" style="font-size:13px">{domain}</span></div>
+  <button class="btn ghost sm" style="color:var(--warn)" hx-post="{base_url}/admin/wizard/email/remove" hx-vals='{{"label":"{label}"}}' hx-target="body" hx-swap="innerHTML">Remove</button>
+</div>"#,
+                mail_icon = channel_icon("mail"),
+                domain = html_escape(&d.domain),
+                label = html_escape(&d.label),
+                base_url = base_url,
+            )
+        })
+        .collect();
+
+    let email_empty = if email_subdomains.is_empty() && email_base_domain.is_empty() {
+        ""
+    } else {
+        ""
+    };
+
+    let email_section = if email_base_domain.is_empty() {
+        String::new()
+    } else {
+        format!(
+            r#"<div class="channel" style="grid-column:1/-1">
+  <div class="channel-head">
+    <div class="channel-mark">{mail_icon}</div>
+    <div><div class="channel-name">Email</div></div>
+  </div>
+  <div class="channel-body">
+    <p class="muted" style="margin:0 0 12px">Get a dedicated email address. Route, forward, or auto-reply with AI.</p>
+    {email_rows}
+    <form hx-post="{base_url}/admin/wizard/email/add" hx-target="body" hx-swap="innerHTML"
+          style="display:flex;gap:8px;align-items:center;margin-top:8px">
+      <input class="input" type="text" name="label" value="{slug}" placeholder="your-name" style="max-width:160px;font-size:13px">
+      <span class="mono muted" style="font-size:13px">.{base_domain}</span>
+      <button type="submit" class="btn sm" style="margin-left:auto">Add</button>
+    </form>
+    <div class="mono muted" style="font-size:11px;margin-top:6px">&#x20B9;199 / $2 per month per subdomain. Billed at the end.</div>
+  </div>
+</div>"#,
+            mail_icon = channel_icon("mail"),
+            email_rows = email_rows,
+            base_url = base_url,
+            slug = html_escape(suggested_slug),
+            base_domain = html_escape(email_base_domain),
+        )
+    };
+
+    let has_anything = ig_connected || wa_connected || !email_subdomains.is_empty();
+    let continue_label = if has_anything {
         "Continue &rarr;"
     } else {
         "Skip &rarr;"
@@ -256,26 +315,18 @@ pub fn connect_html(ig_connected: bool, wa_connected: bool, base_url: &str) -> S
 
     let content = format!(
         r#"<section class="page narrow">
-  <div class="section-label"><span class="mono muted">01 / 04</span><span class="eyebrow">Connect your channels</span></div>
+  <div class="section-label"><span class="mono muted">02 / 06</span><span class="eyebrow">Plug in</span></div>
   <h2 class="display-md">Where do your customers already talk to you?</h2>
-  <p class="lead">We listen on these. Skip anything you don't use - you can wire them up later from the dashboard.</p>
-  <div class="channels-grid">{ig_card}{wa_card}</div>
-  <div class="note">
-    <div class="note-icon">&#x2709;</div>
-    <div style="flex:1">
-      <div style="font-weight:600">Got a catch-all email? Add it from the dashboard.</div>
-      <div class="mono muted" style="font-size:12px">Email routing comes after the wizard, where the fun rule-builder lives.</div>
-    </div>
-  </div>
+  <p class="lead">Connect your channels. Skip anything you don't use &mdash; you can add more from the dashboard later.</p>
+  <div class="channels-grid">{ig_card}{wa_card}{email_section}</div>
   <div class="between" style="margin-top:36px">
     <button class="btn ghost" hx-post="{base_url}/admin/wizard/goto" hx-vals='{{"to":"basics"}}' hx-target="body" hx-swap="innerHTML">&larr; Back</button>
-    <div class="row gap-12">
-      <button class="btn primary" hx-post="{base_url}/admin/wizard/goto" hx-vals='{{"to":"notifications"}}' hx-target="body" hx-swap="innerHTML">{continue_label}</button>
-    </div>
+    <button class="btn primary" hx-post="{base_url}/admin/wizard/goto" hx-vals='{{"to":"notifications"}}' hx-target="body" hx-swap="innerHTML">{continue_label}</button>
   </div>
 </section>"#,
         ig_card = ig_card,
         wa_card = wa_card,
+        email_section = email_section,
         base_url = base_url,
         continue_label = continue_label,
     );

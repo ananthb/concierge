@@ -89,6 +89,66 @@ pub async fn handle_wizard(
             render_step("channels", &state, &kv, tenant_id, base_url).await
         }
 
+        // Add email subdomain in wizard (no billing yet — deferred to Ship it)
+        "email/add" => {
+            let form: serde_json::Value = req.json().await?;
+            let label = form
+                .get("label")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .trim()
+                .to_lowercase();
+
+            let base_domain = env
+                .var("EMAIL_BASE_DOMAIN")
+                .map(|v| v.to_string())
+                .unwrap_or_default();
+
+            if !base_domain.is_empty() && !label.is_empty() {
+                if crate::cloudflare::dns::validate_subdomain_label(&label).is_ok() {
+                    let domain = format!("{label}.{base_domain}");
+                    let mut subs = get_email_subdomains(&kv, tenant_id).await?;
+
+                    // Check uniqueness
+                    if !subs.iter().any(|s| s.domain == domain)
+                        && get_tenant_by_domain(&kv, &domain).await?.is_none()
+                    {
+                        subs.push(EmailSubdomain {
+                            label: label.clone(),
+                            domain,
+                            tenant_id: tenant_id.to_string(),
+                            default_action: EmailAction::Drop,
+                            dns_record_ids: vec![],
+                            subscription_id: None,
+                            status: SubdomainStatus::Suspended,
+                            created_at: crate::helpers::now_iso(),
+                            updated_at: crate::helpers::now_iso(),
+                        });
+                        save_email_subdomains(&kv, tenant_id, &subs).await?;
+                    }
+                }
+            }
+
+            render_step("channels", &state, &kv, tenant_id, base_url).await
+        }
+
+        // Remove email subdomain (only if not yet subscribed)
+        "email/remove" => {
+            let form: serde_json::Value = req.json().await?;
+            let label = form
+                .get("label")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .trim()
+                .to_lowercase();
+
+            let mut subs = get_email_subdomains(&kv, tenant_id).await?;
+            subs.retain(|s| !(s.label == label && s.subscription_id.is_none()));
+            save_email_subdomains(&kv, tenant_id, &subs).await?;
+
+            render_step("channels", &state, &kv, tenant_id, base_url).await
+        }
+
         // Admin channel selection (legacy, kept for backward compat)
         "admin-pick" => {
             let form: serde_json::Value = req.json().await?;
@@ -205,7 +265,17 @@ async fn render_step(
         "channels" => {
             let wa = list_whatsapp_accounts(kv, tenant_id).await?;
             let ig = list_instagram_accounts(kv, tenant_id).await?;
-            Response::from_html(connect_html(!ig.is_empty(), !wa.is_empty(), base_url))
+            let email_subs = get_email_subdomains(kv, tenant_id).await?;
+            let slug = crate::helpers::generate_slug().unwrap_or_else(|_| "my-biz".into());
+            let base_domain = std::env::var("EMAIL_BASE_DOMAIN").unwrap_or_default();
+            Response::from_html(connect_html(
+                !ig.is_empty(),
+                !wa.is_empty(),
+                &email_subs,
+                &slug,
+                &base_domain,
+                base_url,
+            ))
         }
         "notifications" => Response::from_html(admin_pick_html(&state.admin_channel, base_url)),
         "persona" => Response::from_html(persona_html(&state.persona, base_url)),
