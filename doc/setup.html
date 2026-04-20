@@ -159,16 +159,24 @@ wrangler secret put RAZORPAY_WEBHOOK_SECRET</code></pre>
 
 <h2>9. Set Up Email Routing</h2>
 
+<p>The email domain <code>cncg.email</code> is already configured (zone ID <code>5cf43b684849d5805eb0a115a18dbee2</code>). To complete setup:</p>
+
 <ol>
-  <li>Add your email domain (e.g. <code>cncg.email</code>) to your Cloudflare account</li>
-  <li>In the Cloudflare dashboard, go to <strong>Email Routing</strong> for that domain</li>
-  <li>Enable Email Routing and add a <strong>catch-all</strong> rule that routes to your Worker (<code>concierge-worker</code>)</li>
-  <li>Set the environment variables: <code>EMAIL_ZONE_ID</code> (zone ID from the Overview page) and <code>EMAIL_BASE_DOMAIN</code></li>
-  <li>Create a Cloudflare API token with <strong>DNS Edit</strong> permission scoped to the email zone</li>
-  <li>Set the token: <code>wrangler secret put CF_DNS_API_TOKEN</code></li>
+  <li>In the Cloudflare dashboard, go to <strong>Email Routing</strong> for <code>cncg.email</code></li>
+  <li>Add a <strong>catch-all</strong> routing rule: Action → <strong>Send to a Worker</strong> → select <code>concierge-worker</code></li>
+  <li>Set the DNS API token: <code>wrangler secret put CF_DNS_API_TOKEN</code> (a CF API token with DNS Edit on the cncg.email zone)</li>
 </ol>
 
-<p>Tenant subdomains (e.g. <code>acme.cncg.email</code>) are provisioned automatically via the admin panel. See <a href="email-routing.html">Email Routing</a> for details.</p>
+<p>Tenant subdomains (e.g. <code>acme.cncg.email</code>) are provisioned automatically via the admin panel. MX records are auto-discovered from the apex domain. See <a href="email-routing.html">Email Routing</a> for details.</p>
+
+<h3>Razorpay Email Plan (for subscription billing)</h3>
+
+<ol>
+  <li>In the <a href="https://dashboard.razorpay.com">Razorpay Dashboard</a>, go to <strong>Products &gt; Subscriptions &gt; Plans</strong></li>
+  <li>Create a plan: Amount ₹199, Period: Monthly, Interval: 1</li>
+  <li>Copy the plan ID (starts with <code>plan_</code>)</li>
+  <li>Set it as <code>RAZORPAY_EMAIL_PLAN_ID</code> in your Worker vars</li>
+</ol>
 
 <h2>10. Set Up Cloudflare Access for Management</h2>
 

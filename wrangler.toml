@@ -38,7 +38,7 @@ AI_MODEL = ""                    # Workers AI model for replies (default: llama-
 AI_FAST_MODEL = ""               # Workers AI model for injection scanning (default: llama-3.1-8b-instruct-fast)
 WHATSAPP_WABA_ID = ""           # Your WhatsApp Business Account ID
 WHATSAPP_SIGNUP_CONFIG_ID = ""  # Meta Embedded Signup config ID
-EMAIL_ZONE_ID = ""              # Cloudflare zone ID for cncg.email
+EMAIL_ZONE_ID = "5cf43b684849d5805eb0a115a18dbee2" # Cloudflare zone ID for cncg.email
 EMAIL_BASE_DOMAIN = "cncg.email" # Base domain for tenant subdomains
 RAZORPAY_EMAIL_PLAN_ID = ""     # Razorpay plan ID for email subdomain subscription
 
