@@ -681,29 +681,95 @@ pub fn replies_html(canned: &[CannedReply], base_url: &str) -> String {
     wizard_shell("replies", base_url, &content)
 }
 
-pub fn test_html(base_url: &str) -> String {
+pub fn launch_html(
+    email_subdomains: &[crate::types::EmailSubdomain],
+    packs: &[crate::types::CreditPackRow],
+    base_url: &str,
+) -> String {
+    let pending_emails: String = email_subdomains
+        .iter()
+        .filter(|s| s.subscription_id.is_none())
+        .map(|s| {
+            format!(
+                r#"<div class="side-row" style="padding:10px 14px">
+  <span>{mail_icon}</span>
+  <div style="flex:1"><span class="mono" style="font-size:13px">{domain}</span></div>
+  <span class="chip warn">&#x20B9;199/mo</span>
+</div>"#,
+                mail_icon = channel_icon("mail"),
+                domain = html_escape(&s.domain),
+            )
+        })
+        .collect();
+
+    let email_section = if pending_emails.is_empty() {
+        String::new()
+    } else {
+        format!(
+            r#"<div class="card" style="padding:22px;margin-bottom:16px">
+  <div class="eyebrow" style="margin-bottom:8px">Email subdomains</div>
+  <p class="muted" style="margin-bottom:12px;font-size:14px">These will be billed after you finish setup. You can manage subscriptions from the dashboard.</p>
+  {pending_emails}
+</div>"#
+        )
+    };
+
+    let pack_buttons: String = packs
+        .iter()
+        .map(|p| {
+            format!(
+                r#"<div class="card" style="padding:16px;text-align:center;min-width:140px">
+  <div class="stat-n serif">{replies}</div>
+  <div class="mono muted" style="font-size:11px;margin-bottom:8px">replies</div>
+  <div style="font-weight:600;margin-bottom:4px">&#x20B9;{inr} / ${usd}</div>
+  <div class="mono muted" style="font-size:10px">never expire</div>
+</div>"#,
+                replies = p.replies,
+                inr = p.price_inr / 100,
+                usd = p.price_usd / 100,
+            )
+        })
+        .collect();
+
+    let packs_section = if packs.is_empty() {
+        String::new()
+    } else {
+        format!(
+            r#"<div class="card" style="padding:22px;margin-bottom:16px">
+  <div class="eyebrow" style="margin-bottom:8px">Reply credit packs</div>
+  <p class="muted" style="margin-bottom:12px;font-size:14px">You get 100 free replies every month. Buy more if you need them — purchased credits never expire.</p>
+  <div class="row gap-12" style="flex-wrap:wrap;justify-content:center">{pack_buttons}</div>
+  <p class="mono muted" style="font-size:11px;margin-top:12px;text-align:center">You can buy packs anytime from the billing page.</p>
+</div>"#
+        )
+    };
+
     let content = format!(
         r#"<section class="page narrow">
-  <div class="section-label"><span class="eyebrow">Final check</span></div>
-  <h2 class="display-md">Let's fake a customer and make sure I work.</h2>
-  <p class="lead">We'll push a test message through the pipeline, route it, draft a reply, and confirm your admin channel receives the handoff.</p>
-  <div class="terminal">
-    <div class="term-chrome">
-      <span class="term-dot" style="background:#C46B1A"></span>
-      <span class="term-dot" style="background:#5C6B3A"></span>
-      <span class="term-dot" style="background:#6B5C3A"></span>
-      <span class="term-title mono">concierge://test-run</span>
-      <span id="test-status" class="mono" style="margin-left:auto;color:#8A7E6B">&#x25CB; ready</span>
-    </div>
-    <div id="term-body">
-      <div class="term-idle">&gt; Setup complete. Hit "Finish" to go to the dashboard.</div>
+  <div class="section-label"><span class="mono muted">06 / 06</span><span class="eyebrow">Ship it</span></div>
+  <h2 class="display-md">You're all set.</h2>
+  <p class="lead">Your concierge is configured and ready to handle messages. Here's a summary of what's next.</p>
+
+  {email_section}
+  {packs_section}
+
+  <div class="card" style="padding:22px;border-color:var(--ok);background:linear-gradient(135deg,var(--paper),#E8F0DE)">
+    <div class="row gap-12">
+      <span class="dot ok"></span>
+      <div>
+        <div style="font-weight:600">Ready to go live</div>
+        <p class="muted" style="margin:4px 0 0;font-size:14px">Hit finish to open your dashboard. Connect channels, set up email rules, and start receiving auto-replies.</p>
+      </div>
     </div>
   </div>
-  <div class="between" style="margin-top:24px">
+
+  <div class="between" style="margin-top:36px">
     <button class="btn ghost" hx-post="{base_url}/admin/wizard/goto" hx-vals='{{"to":"replies"}}' hx-target="body" hx-swap="innerHTML">&larr; Back</button>
-    <a href="{base_url}/admin" class="btn primary">Open dashboard &rarr;</a>
+    <button class="btn primary" hx-post="{base_url}/admin/wizard/complete" hx-target="body">Finish setup &rarr;</button>
   </div>
 </section>"#,
+        email_section = email_section,
+        packs_section = packs_section,
         base_url = base_url,
     );
 

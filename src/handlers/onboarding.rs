@@ -52,7 +52,7 @@ pub async fn handle_wizard(
             state.step = to.to_string();
             save_onboarding(&kv, tenant_id, &state).await?;
 
-            render_step(to, &state, &kv, tenant_id, base_url).await
+            render_step(to, &state, &kv, &env, tenant_id, base_url).await
         }
 
         // Save business info (The basics step)
@@ -77,7 +77,7 @@ pub async fn handle_wizard(
             state.step = "channels".to_string();
             save_onboarding(&kv, tenant_id, &state).await?;
 
-            render_step("channels", &state, &kv, tenant_id, base_url).await
+            render_step("channels", &state, &kv, &env, tenant_id, base_url).await
         }
 
         // Add email subdomain in wizard (no billing yet — deferred to Ship it)
@@ -120,7 +120,7 @@ pub async fn handle_wizard(
                 }
             }
 
-            render_step("channels", &state, &kv, tenant_id, base_url).await
+            render_step("channels", &state, &kv, &env, tenant_id, base_url).await
         }
 
         // Remove email subdomain (only if not yet subscribed)
@@ -137,7 +137,7 @@ pub async fn handle_wizard(
             subs.retain(|s| !(s.label == label && s.subscription_id.is_none()));
             save_email_subdomains(&kv, tenant_id, &subs).await?;
 
-            render_step("channels", &state, &kv, tenant_id, base_url).await
+            render_step("channels", &state, &kv, &env, tenant_id, base_url).await
         }
 
         // Save notification preferences
@@ -164,7 +164,7 @@ pub async fn handle_wizard(
             state.step = "persona".to_string();
             save_onboarding(&kv, tenant_id, &state).await?;
 
-            render_step("persona", &state, &kv, tenant_id, base_url).await
+            render_step("persona", &state, &kv, &env, tenant_id, base_url).await
         }
 
         // Persona save
@@ -242,7 +242,18 @@ pub async fn handle_wizard(
             state.step = "launch".to_string();
             save_onboarding(&kv, tenant_id, &state).await?;
 
-            Response::from_html(test_html(base_url))
+            render_step("launch", &state, &kv, &env, tenant_id, base_url).await
+        }
+
+        // Complete the wizard
+        "complete" => {
+            state.completed = true;
+            state.step = "launch".to_string();
+            save_onboarding(&kv, tenant_id, &state).await?;
+
+            let headers = Headers::new();
+            headers.set("Location", &format!("{base_url}/admin"))?;
+            Ok(Response::empty()?.with_status(302).with_headers(headers))
         }
 
         // Default: show current step (resume from where user left off)
@@ -256,7 +267,7 @@ pub async fn handle_wizard(
                 } else {
                     &state.step
                 };
-            render_step(step, &state, &kv, tenant_id, base_url).await
+            render_step(step, &state, &kv, &env, tenant_id, base_url).await
         }
     }
 }
@@ -265,6 +276,7 @@ async fn render_step(
     step: &str,
     state: &OnboardingState,
     kv: &kv::KvStore,
+    env: &Env,
     tenant_id: &str,
     base_url: &str,
 ) -> Result<Response> {
@@ -288,7 +300,14 @@ async fn render_step(
         "notifications" => Response::from_html(notifications_html(&state.notifications, base_url)),
         "persona" => Response::from_html(persona_html(&state.persona, base_url)),
         "replies" => Response::from_html(replies_html(&state.canned_replies, base_url)),
-        "launch" => Response::from_html(test_html(base_url)),
+        "launch" => {
+            let email_subs = get_email_subdomains(kv, tenant_id).await?;
+            let db = env.d1("DB")?;
+            let packs = crate::storage::get_active_credit_packs(&db)
+                .await
+                .unwrap_or_default();
+            Response::from_html(launch_html(&email_subs, &packs, base_url))
+        }
         _ => Response::from_html(basics_html(&state.business, base_url)),
     }
 }
