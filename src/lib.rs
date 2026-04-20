@@ -73,7 +73,7 @@ extern "C" {
 }
 
 #[wasm_bindgen]
-pub async fn email_handler(
+pub async fn email(
     message: IncomingEmailMessage,
     env: JsValue,
     _ctx: JsValue,
