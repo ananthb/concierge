@@ -13,8 +13,16 @@ pub async fn handle_wizard(
     base_url: &str,
     tenant_id: &str,
 ) -> Result<Response> {
+    worker::console_log!("Wizard: path={} tenant={}", path, tenant_id);
     let kv = env.kv("KV")?;
-    let mut state = get_onboarding(&kv, tenant_id).await?;
+    let mut state = match get_onboarding(&kv, tenant_id).await {
+        Ok(s) => s,
+        Err(e) => {
+            worker::console_log!("Wizard: get_onboarding error: {:?}", e);
+            return Response::error(format!("Onboarding error: {e}"), 500);
+        }
+    };
+    worker::console_log!("Wizard: state.step={}", state.step);
 
     let sub = path
         .strip_prefix("/admin/wizard")
@@ -309,8 +317,12 @@ async fn render_step(
     tenant_id: &str,
     base_url: &str,
 ) -> Result<Response> {
+    worker::console_log!("render_step: {}", step);
     match step {
-        "basics" => Response::from_html(basics_html(&state.business, base_url)),
+        "basics" => {
+            worker::console_log!("render_step: rendering basics_html");
+            Response::from_html(basics_html(&state.business, base_url))
+        }
         "channels" => {
             let wa = list_whatsapp_accounts(kv, tenant_id).await?;
             let ig = list_instagram_accounts(kv, tenant_id).await?;
