@@ -126,11 +126,14 @@ pub fn basics_html(business: &crate::types::BusinessInfo, base_url: &str) -> Str
 
     let biz_type_options = [
         ("", "Select type..."),
+        ("unregistered", "Unregistered / Individual"),
         ("sole_proprietorship", "Sole Proprietorship"),
         ("partnership", "Partnership"),
         ("pvt_ltd", "Private Limited"),
         ("llp", "LLP"),
     ];
+    let is_registered =
+        !business.business_type.is_empty() && business.business_type != "unregistered";
     let biz_type_html: String = biz_type_options
         .iter()
         .map(|(val, label)| {
@@ -143,30 +146,34 @@ pub fn basics_html(business: &crate::types::BusinessInfo, base_url: &str) -> Str
         })
         .collect();
 
+    let reg_display = if is_registered { "grid" } else { "none" };
+
     let content = format!(
         r#"<section class="page narrow">
-  <div class="section-label"><span class="mono muted">01 / 06</span><span class="eyebrow">The basics</span></div>
-  <h2 class="display-md">Tell us about your business.</h2>
-  <p class="lead">We need this for invoicing and Indian regulatory compliance. Your details are never shared.</p>
+  <div class="section-label"><span class="mono muted">01 / 05</span><span class="eyebrow">The basics</span></div>
+  <h2 class="display-md">Tell us about you.</h2>
+  <p class="lead">For invoicing and compliance. Your details are never shared.</p>
   <form hx-post="{base_url}/admin/wizard/basics" hx-target="body" hx-swap="innerHTML">
     <div class="card" style="padding:24px">
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
         <div>
-          <label class="eyebrow" style="display:block;margin-bottom:6px">Business name *</label>
+          <label class="eyebrow" style="display:block;margin-bottom:6px">Brand name *</label>
           <input class="input" name="name" value="{name}" placeholder="Blossom Florist" required>
         </div>
         <div>
-          <label class="eyebrow" style="display:block;margin-bottom:6px">Contact name *</label>
-          <input class="input" name="contact_name" value="{contact_name}" placeholder="Your name">
+          <label class="eyebrow" style="display:block;margin-bottom:6px">Your name *</label>
+          <input class="input" name="contact_name" value="{contact_name}" placeholder="Full name">
         </div>
         <div>
           <label class="eyebrow" style="display:block;margin-bottom:6px">Phone *</label>
           <input class="input" type="tel" name="phone" value="{phone}" placeholder="+91 98765 43210" required>
         </div>
         <div>
-          <label class="eyebrow" style="display:block;margin-bottom:6px">Business type</label>
-          <select class="select" name="business_type">{biz_type_html}</select>
+          <label class="eyebrow" style="display:block;margin-bottom:6px">Entity type</label>
+          <select class="select" name="business_type" id="entity-type" onchange="document.getElementById('reg-fields').style.display=this.value&amp;&amp;this.value!=='unregistered'?'grid':'none'">{biz_type_html}</select>
         </div>
+      </div>
+      <div id="reg-fields" style="display:{reg_display};grid-template-columns:1fr 1fr;gap:16px;margin-top:16px">
         <div>
           <label class="eyebrow" style="display:block;margin-bottom:6px">PAN</label>
           <input class="input" name="pan" value="{pan}" placeholder="ABCDE1234F" style="text-transform:uppercase">
@@ -175,12 +182,10 @@ pub fn basics_html(business: &crate::types::BusinessInfo, base_url: &str) -> Str
           <label class="eyebrow" style="display:block;margin-bottom:6px">GSTIN <span class="muted">(optional)</span></label>
           <input class="input" name="gstin" value="{gstin}" placeholder="22AAAAA0000A1Z5" style="text-transform:uppercase">
         </div>
-      </div>
-      <div style="margin-top:16px">
-        <label class="eyebrow" style="display:block;margin-bottom:6px">Registered address</label>
-        <textarea class="textarea" name="address" rows="2" placeholder="Shop 12, Main Road...">{address}</textarea>
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px">
+        <div style="grid-column:1/-1">
+          <label class="eyebrow" style="display:block;margin-bottom:6px">Registered address</label>
+          <textarea class="textarea" name="address" rows="2" placeholder="Shop 12, Main Road...">{address}</textarea>
+        </div>
         <div>
           <label class="eyebrow" style="display:block;margin-bottom:6px">State</label>
           <input class="input" name="state" value="{state}" placeholder="Tamil Nadu">
@@ -217,6 +222,7 @@ pub fn basics_html(business: &crate::types::BusinessInfo, base_url: &str) -> Str
         contact_name = html_escape(&business.contact_name),
         phone = html_escape(&business.phone),
         biz_type_html = biz_type_html,
+        reg_display = reg_display,
         pan = html_escape(&business.pan),
         gstin = html_escape(&business.gstin),
         address = html_escape(&business.address),
