@@ -181,11 +181,10 @@ pub fn connect_html(ig_connected: bool, wa_connected: bool, base_url: &str) -> S
     );
 
     let ready = ig_connected || wa_connected;
-    let disabled = if ready { "" } else { " disabled" };
-    let hint = if ready {
-        ""
+    let continue_label = if ready {
+        "Continue &rarr;"
     } else {
-        r#"<span class="mono muted">connect at least one to continue</span>"#
+        "Skip &rarr;"
     };
 
     let content = format!(
@@ -204,16 +203,14 @@ pub fn connect_html(ig_connected: bool, wa_connected: bool, base_url: &str) -> S
   <div class="between" style="margin-top:36px">
     <button class="btn ghost" hx-post="{base_url}/admin/wizard/goto" hx-vals='{{"to":"business"}}' hx-target="body" hx-swap="innerHTML">&larr; Back</button>
     <div class="row gap-12">
-      {hint}
-      <button class="btn primary"{disabled} hx-post="{base_url}/admin/wizard/goto" hx-vals='{{"to":"notifications"}}' hx-target="body" hx-swap="innerHTML">Continue &rarr;</button>
+      <button class="btn primary" hx-post="{base_url}/admin/wizard/goto" hx-vals='{{"to":"notifications"}}' hx-target="body" hx-swap="innerHTML">{continue_label}</button>
     </div>
   </div>
 </section>"#,
         ig_card = ig_card,
         wa_card = wa_card,
         base_url = base_url,
-        hint = hint,
-        disabled = disabled,
+        continue_label = continue_label,
     );
 
     wizard_shell("channels", base_url, &content)
