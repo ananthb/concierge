@@ -185,6 +185,7 @@ pub fn admin_dashboard_html(
     instagram_accounts: &[InstagramAccount],
     lead_forms: &[LeadCaptureForm],
     billing: &TenantBilling,
+    has_email_domains: bool,
     base_url: &str,
 ) -> String {
     use super::base::app_shell;
@@ -277,15 +278,15 @@ pub fn admin_dashboard_html(
         </div>
       </div>
     </div>
-    <div class="card" style="padding:22px;margin-top:16px">
+    <div class="card" style="padding:22px;margin-top:16px{email_highlight}">
       <div class="between" style="margin-bottom:12px">
         <div>
           <div class="eyebrow">Email Routing</div>
-          <h3 class="display-sm" style="margin:4px 0 0">Rules for the mail that comes in.</h3>
+          <h3 class="display-sm" style="margin:4px 0 0">{email_headline}</h3>
         </div>
-        <a href="{base_url}/admin/email" class="btn sm">Manage rules</a>
+        <a href="{base_url}/admin/email" class="btn sm">{email_cta}</a>
       </div>
-      <p class="muted">Configure domains and routing rules to forward, drop, or AI-reply to incoming email.</p>
+      <p class="muted">{email_desc}</p>
     </div>
   </main>
 </div>"#,
@@ -302,6 +303,26 @@ pub fn admin_dashboard_html(
             ";border-color:var(--warn);background:var(--accent-soft)"
         } else {
             ""
+        },
+        email_highlight = if has_email_domains {
+            ""
+        } else {
+            ";border-color:var(--accent);background:linear-gradient(135deg,var(--paper),var(--accent-soft))"
+        },
+        email_headline = if has_email_domains {
+            "Rules for the mail that comes in."
+        } else {
+            "Route your business email with AI."
+        },
+        email_cta = if has_email_domains {
+            "Manage rules"
+        } else {
+            "Set up email &rarr;"
+        },
+        email_desc = if has_email_domains {
+            "Configure domains and routing rules to forward, drop, or AI-reply to incoming email."
+        } else {
+            "Add a domain to auto-forward, AI-reply, or relay emails to Discord. Takes under a minute."
         },
     );
 
