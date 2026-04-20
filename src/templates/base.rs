@@ -416,6 +416,7 @@ pub fn base_html_with_meta(title: &str, content: &str, meta: &PageMeta) -> Strin
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://unpkg.com/htmx.org@1.9.10" integrity="sha384-YwQSRkoBOUtKKVfHQ8C2zCPslUZHuxiPHts6X/xQCuGHipTtRXd7ImqS1VTLlpiT" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/htmx.org@1.9.10/dist/ext/json-enc.js"></script>
 <style>{css}</style>
 </head>
 <body>

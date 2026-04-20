@@ -55,7 +55,7 @@ fn wizard_shell(step: &str, base_url: &str, content: &str) -> String {
     let idx = STEPS.iter().position(|(id, _)| *id == step).unwrap_or(0);
 
     let inner = format!(
-        r#"<div class="wizard">
+        r#"<div class="wizard" hx-ext="json-enc">
   <header class="top">
     {brand}
     <div class="rail-wrap">{rail}<div class="rail-counter mono muted">{step_num}/{total}</div></div>
@@ -76,8 +76,17 @@ fn wizard_shell(step: &str, base_url: &str, content: &str) -> String {
 }
 
 pub fn welcome_html(_base_url: &str) -> String {
+    let header = format!(
+        r#"<header style="display:flex;align-items:center;gap:28px;padding:18px 28px;border-bottom:1px solid var(--hair);background:var(--paper)">
+  {brand}
+  <div style="margin-left:auto"><a href="/auth/login" class="btn ghost sm">Sign in</a></div>
+</header>"#,
+        brand = brand_mark(),
+    );
+
     let content = format!(
-        r#"<section class="page welcome">
+        r#"{header}
+<section class="page welcome">
   <div class="welcome-left">
     <div class="eyebrow">// automated customer engagement</div>
     <h1 class="display">Hello. I'll be answering <br>every <em>DM, WhatsApp &amp; email</em> <br>so you don't have to.</h1>
@@ -102,6 +111,7 @@ pub fn welcome_html(_base_url: &str) -> String {
     <div class="stamp">ON<br>DUTY<br>24/7</div>
   </aside>
 </section>"#,
+        header = header,
         hash = HASH,
     );
 
@@ -129,9 +139,12 @@ pub fn business_html(biz_name: &str, base_url: &str) -> String {
 (function() {{
   var input = document.getElementById('biz-input');
   var btn = document.getElementById('biz-continue');
+  var fill = document.querySelector('.rail .seg.active .fill');
   if (input && btn) {{
     input.addEventListener('input', function() {{
-      btn.disabled = input.value.trim().length === 0;
+      var hasValue = input.value.trim().length > 0;
+      btn.disabled = !hasValue;
+      if (fill) fill.style.width = hasValue ? '90%' : '55%';
     }});
   }}
 }})();
