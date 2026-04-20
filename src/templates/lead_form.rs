@@ -37,7 +37,7 @@ pub fn lead_form_html(form: &LeadCaptureForm) -> String {
 <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
 <meta name="theme-color" content="#F38020">
 <title>{name}</title>
-<script src="https://unpkg.com/htmx.org@1.9.10"></script>
+<script src="https://unpkg.com/htmx.org@2.0.8/dist/htmx.min.js"></script>
 <style>
 *{{margin:0;padding:0;box-sizing:border-box}}
 :root{{--lf-primary:{primary};--lf-text:{text};--lf-bg:{bg};--lf-radius:{radius}}}

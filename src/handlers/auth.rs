@@ -122,22 +122,6 @@ pub async fn handle_auth(req: Request, env: Env, path: &str, method: Method) -> 
             let kv = env.kv("KV")?;
             let db = env.d1("DB")?;
 
-            // Check if this is a link request (user already signed in)
-            if let Some(tenant_id) = resolve_tenant_id(&req, &kv).await {
-                // Link Google to existing account
-                if let Some(mut tenant) = get_tenant(&db, &tenant_id).await? {
-                    tenant.email = user.email;
-                    if tenant.name.is_none() {
-                        tenant.name = user.name;
-                    }
-                    tenant.updated_at = now_iso();
-                    save_tenant(&db, &tenant).await?;
-                }
-                let headers = Headers::new();
-                headers.set("Location", "/admin/settings?success=google_linked")?;
-                return Ok(Response::empty()?.with_status(302).with_headers(headers));
-            }
-
             // Find or create tenant
             let tenant = match get_tenant_by_email(&db, &user.email).await? {
                 Some(t) => t,
@@ -243,21 +227,6 @@ pub async fn handle_auth(req: Request, env: Env, path: &str, method: Method) -> 
 
             let kv = env.kv("KV")?;
             let db = env.d1("DB")?;
-
-            // Check if this is a link request (user already signed in)
-            if let Some(tenant_id) = resolve_tenant_id(&req, &kv).await {
-                if let Some(mut tenant) = get_tenant(&db, &tenant_id).await? {
-                    tenant.facebook_id = Some(fb_id);
-                    if tenant.name.is_none() {
-                        tenant.name = fb_name;
-                    }
-                    tenant.updated_at = now_iso();
-                    save_tenant(&db, &tenant).await?;
-                }
-                let headers = Headers::new();
-                headers.set("Location", "/admin/settings?success=facebook_linked")?;
-                return Ok(Response::empty()?.with_status(302).with_headers(headers));
-            }
 
             // Find tenant by facebook_id, then by email, then create
             let tenant = if let Some(t) = get_tenant_by_facebook_id(&db, &fb_id).await? {

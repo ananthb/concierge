@@ -47,18 +47,17 @@ pub fn auth_login_html(
     };
 
     let content = format!(
-        r#"<header style="display:flex;align-items:center;gap:28px;padding:18px 28px;border-bottom:1px solid var(--hair);background:var(--paper)">
-  {brand}
-  <div style="margin-left:auto"><a href="/" class="btn ghost sm">&larr; Home</a></div>
-</header>
-<div style="max-width:360px;margin:4rem auto;text-align:center;padding:0 1rem">
+        r#"<div style="max-width:360px;margin:4rem auto;text-align:center;padding:0 1rem">
+    <div style="margin-bottom:2rem">{logo}
+    <div class="serif" style="font-size:28px;margin-top:8px">Concierge</div></div>
     <p class="muted" style="margin-bottom:2rem">Sign in to manage your messaging channels.</p>
     <div class="stack gap-12">
       {primary_btn}
       {secondary_btn}
     </div>
+    <a href="/" class="btn ghost sm" style="margin-top:24px">&larr; Back</a>
 </div>"#,
-        brand = super::base::brand_mark(),
+        logo = super::base::LOGO_INLINE,
         primary_btn = primary_btn,
         secondary_btn = secondary_btn,
     );

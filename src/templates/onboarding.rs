@@ -60,7 +60,7 @@ fn wizard_shell(step: &str, base_url: &str, content: &str) -> String {
     {brand}
     <div class="rail-wrap">{rail}<div class="rail-counter mono muted">{step_num}/{total}</div></div>
     <div class="top-right">
-      <a href="/auth/login" class="btn ghost sm">Sign in</a>
+      <a href="/auth/logout" class="btn ghost sm">Sign out</a>
     </div>
   </header>
   <main>{content}</main>
@@ -126,14 +126,17 @@ pub fn business_html(biz_name: &str, base_url: &str) -> String {
   <div class="section-label"><span class="mono muted">01 / 05</span><span class="eyebrow">About you</span></div>
   <h2 class="display-md">What's your business called?</h2>
   <p class="lead">This helps the AI understand who it's representing when it replies to your customers.</p>
-  <div class="card" style="padding:28px">
-    <label class="eyebrow" style="display:block;margin-bottom:8px">Business name</label>
-    <input class="input" name="biz" id="biz-input" value="{biz_name}" placeholder="e.g. Blossom Florist, Joe's Coffee..." style="font-size:18px;padding:14px 16px" autofocus>
-  </div>
-  <div class="between" style="margin-top:36px">
-    <a href="/" class="btn ghost">&larr; Back</a>
-    <button id="biz-continue" class="btn primary"{disabled} hx-post="{base_url}/admin/wizard/goto" hx-vals='{{"to":"channels"}}' hx-target="body" hx-swap="innerHTML" hx-include="[name=biz]">Continue &rarr;</button>
-  </div>
+  <form hx-post="{base_url}/admin/wizard/goto" hx-target="body" hx-swap="innerHTML">
+    <input type="hidden" name="to" value="channels">
+    <div class="card" style="padding:28px">
+      <label class="eyebrow" style="display:block;margin-bottom:8px">Business name</label>
+      <input class="input" name="biz" id="biz-input" value="{biz_name}" placeholder="e.g. Blossom Florist, Joe's Coffee..." style="font-size:18px;padding:14px 16px" autofocus>
+    </div>
+    <div class="between" style="margin-top:36px">
+      <a href="/" class="btn ghost">&larr; Back</a>
+      <button id="biz-continue" class="btn primary" type="submit"{disabled}>Continue &rarr;</button>
+    </div>
+  </form>
 </section>
 <script>
 (function() {{
