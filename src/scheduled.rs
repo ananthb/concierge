@@ -29,12 +29,116 @@ pub async fn handle_scheduled(_event: ScheduledEvent, env: Env, _ctx: ScheduleCo
         }
     }
 
+    // Check subscription health for email subdomains
+    if let Err(e) = check_email_subscriptions(&env).await {
+        console_log!("Email subscription check error: {:?}", e);
+    }
+
     // Refresh Instagram tokens
     if let Err(e) = refresh_instagram_tokens(&env).await {
         console_log!("Instagram token refresh error: {:?}", e);
     }
 
     console_log!("Scheduled job completed");
+}
+
+/// Check all active email subdomain subscriptions against Razorpay.
+/// Suspends any that have gone halted/cancelled (catches missed webhooks).
+async fn check_email_subscriptions(env: &Env) -> Result<()> {
+    let key_id = env
+        .secret("RAZORPAY_KEY_ID")
+        .map(|s| s.to_string())
+        .unwrap_or_default();
+    let key_secret = env
+        .secret("RAZORPAY_KEY_SECRET")
+        .map(|s| s.to_string())
+        .unwrap_or_default();
+
+    if key_id.is_empty() || key_secret.is_empty() {
+        return Ok(());
+    }
+
+    let kv = env.kv("KV")?;
+    let zone_id = env
+        .var("EMAIL_ZONE_ID")
+        .map(|v| v.to_string())
+        .unwrap_or_default();
+    let base_domain = env
+        .var("EMAIL_BASE_DOMAIN")
+        .map(|v| v.to_string())
+        .unwrap_or_default();
+    let api_token = env
+        .secret("CF_DNS_API_TOKEN")
+        .map(|s| s.to_string())
+        .unwrap_or_default();
+
+    // Iterate all tenants with email subdomains via KV list
+    // KV list prefix "email_domains:" gives us all tenant email configs
+    let list = kv
+        .list()
+        .prefix("email_domains:".to_string())
+        .execute()
+        .await?;
+
+    for key in &list.keys {
+        let tenant_id = key.name.strip_prefix("email_domains:").unwrap_or("");
+        if tenant_id.is_empty() {
+            continue;
+        }
+
+        let mut subdomains = get_email_subdomains(&kv, tenant_id).await?;
+        let mut changed = false;
+
+        for sub in subdomains.iter_mut() {
+            // Only check active subdomains with a subscription
+            if sub.status != crate::types::SubdomainStatus::Active {
+                continue;
+            }
+            let sub_id = match &sub.subscription_id {
+                Some(id) => id.clone(),
+                None => continue,
+            };
+
+            let status =
+                crate::billing::razorpay::get_subscription_status(&key_id, &key_secret, &sub_id)
+                    .await
+                    .unwrap_or_else(|_| "unknown".into());
+
+            if status == "halted" || status == "cancelled" || status == "expired" {
+                console_log!(
+                    "Subscription {} for {}.{} is {} — suspending",
+                    sub_id,
+                    sub.label,
+                    base_domain,
+                    status
+                );
+
+                sub.status = crate::types::SubdomainStatus::Suspended;
+                sub.updated_at = crate::helpers::now_iso();
+
+                // Remove MX + web records
+                if !sub.dns_record_ids.is_empty() && !zone_id.is_empty() && !api_token.is_empty() {
+                    let _ = crate::cloudflare::dns::delete_dns_records(
+                        &zone_id,
+                        &sub.dns_record_ids,
+                        &api_token,
+                    )
+                    .await;
+                    sub.dns_record_ids.clear();
+                }
+
+                // Remove domain index
+                let _ = delete_email_domain_index(&kv, &sub.domain).await;
+                changed = true;
+            }
+        }
+
+        if changed {
+            save_email_subdomains(&kv, tenant_id, &subdomains).await?;
+        }
+    }
+
+    Ok(())
 }
 
 async fn refresh_instagram_tokens(env: &Env) -> Result<()> {

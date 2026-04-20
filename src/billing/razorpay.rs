@@ -161,7 +161,51 @@ pub async fn cancel_subscription(
     resp.json().await
 }
 
+/// Fetch a subscription's current status from Razorpay.
+pub async fn get_subscription_status(
+    key_id: &str,
+    key_secret: &str,
+    subscription_id: &str,
+) -> Result<String> {
+    let resp = razorpay_get(
+        key_id,
+        key_secret,
+        &format!("/subscriptions/{subscription_id}"),
+    )
+    .await?;
+    Ok(resp
+        .get("status")
+        .and_then(|v| v.as_str())
+        .unwrap_or("unknown")
+        .to_string())
+}
+
 // --- Internal helpers ---
+
+async fn razorpay_get(key_id: &str, key_secret: &str, path: &str) -> Result<serde_json::Value> {
+    let url = format!("{RAZORPAY_API}{path}");
+    let auth = base64_encode(&format!("{key_id}:{key_secret}"));
+
+    let headers = Headers::new();
+    headers.set("Authorization", &format!("Basic {auth}"))?;
+
+    let mut init = RequestInit::new();
+    init.with_method(Method::Get).with_headers(headers);
+
+    let request = Request::new_with_init(&url, &init)?;
+    let mut resp = Fetch::Request(request).send().await?;
+
+    if resp.status_code() >= 400 {
+        let err = resp.text().await.unwrap_or_default();
+        return Err(Error::from(format!(
+            "Razorpay API error {}: {}",
+            resp.status_code(),
+            err
+        )));
+    }
+
+    resp.json().await
+}
 
 async fn razorpay_post(
     key_id: &str,
