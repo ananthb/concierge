@@ -109,7 +109,7 @@ pub fn billing_overview_html(
                 format!("${}", p.price_usd / 100)
             };
             format!(
-                r##"<form hx-post="{base_url}/admin/billing/checkout" hx-target="body" hx-swap="innerHTML" style="display:inline">
+                r##"<form hx-post="{base_url}/admin/billing/checkout" hx-ext="json-enc" hx-target="body" hx-swap="innerHTML" style="display:inline">
   <input type="hidden" name="credits" value="{credits}">
   <button class="btn sm" type="submit">{name}: {credits} replies, {price}</button>
 </form>"##,
@@ -184,6 +184,7 @@ pub fn checkout_html(
     credits: i64,
     razorpay_key: &str,
     tenant_id: &str,
+    return_to: &str,
     base_url: &str,
 ) -> String {
     let display_amount = if currency == "INR" {
@@ -192,7 +193,6 @@ pub fn checkout_html(
         format!("${}", amount / 100)
     };
 
-    // Using r##" to avoid issues with JS single quotes
     let content = format!(
         r##"<div style="max-width:480px;margin:4rem auto;text-align:center;padding:0 1rem">
   <div class="card" style="padding:28px">
@@ -202,7 +202,7 @@ pub fn checkout_html(
     <button id="pay-btn" class="btn primary lg" style="width:100%">Pay with Razorpay</button>
     <p class="mono muted" style="font-size:11px;margin-top:12px">Secure payment via Razorpay</p>
   </div>
-  <a href="{base_url}/admin/billing" class="btn ghost sm" style="margin-top:16px">&larr; Cancel</a>
+  <a href="{base_url}{return_to}" class="btn ghost sm" style="margin-top:16px">&larr; Cancel</a>
 </div>
 <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
 <script>
@@ -225,7 +225,7 @@ document.getElementById("pay-btn").addEventListener("click", function() {{
           razorpay_signature: response.razorpay_signature,
           credits: "{credits}"
         }})
-      }}).then(function() {{ window.location.href = "{base_url}/admin/billing"; }});
+      }}).then(function() {{ window.location.href = "{base_url}{return_to}"; }});
     }},
     theme: {{ color: "#E86A2C" }}
   }};
@@ -240,6 +240,7 @@ document.getElementById("pay-btn").addEventListener("click", function() {{
         key = html_escape(razorpay_key),
         tenant_id = html_escape(tenant_id),
         base_url = base_url,
+        return_to = return_to,
     );
 
     base_html("Checkout - Concierge", &content)

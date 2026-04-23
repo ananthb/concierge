@@ -707,14 +707,27 @@ pub fn launch_html(
     base_url: &str,
 ) -> String {
     let subdomain_price = if currency == "USD" { "$2" } else { "₹199" };
-    let pending_emails: String = email_subdomains
+
+    let unpaid_subdomains: Vec<&crate::types::EmailSubdomain> = email_subdomains
         .iter()
-        .filter(|s| s.subscription_id.is_none())
+        .filter(|s| s.status != crate::types::SubdomainStatus::Active)
+        .collect();
+
+    let email_rows: String = unpaid_subdomains
+        .iter()
         .map(|s| {
+            let label_text = if s.subscription_id.is_some() {
+                "Awaiting payment"
+            } else {
+                "Not subscribed"
+            };
             format!(
                 r#"<div class="side-row" style="padding:10px 14px">
   <span>{mail_icon}</span>
-  <div style="flex:1"><span class="mono" style="font-size:13px">{domain}</span></div>
+  <div style="flex:1">
+    <span class="mono" style="font-size:13px">{domain}</span>
+    <div class="mono muted" style="font-size:11px">{label_text}</div>
+  </div>
   <form hx-post="{base_url}/admin/email/subdomains" hx-target="body" style="display:inline" hx-ext="json-enc">
     <input type="hidden" name="subdomain" value="{label}">
     <button type="submit" class="btn sm primary">Subscribe {price}/mo</button>
@@ -725,18 +738,19 @@ pub fn launch_html(
                 label = html_escape(&s.label),
                 base_url = base_url,
                 price = subdomain_price,
+                label_text = label_text,
             )
         })
         .collect();
 
-    let email_section = if pending_emails.is_empty() {
+    let email_section = if unpaid_subdomains.is_empty() {
         String::new()
     } else {
         format!(
-            r#"<div class="card" style="padding:22px;margin-bottom:16px">
-  <div class="eyebrow" style="margin-bottom:8px">Email subdomains</div>
-  <p class="muted" style="margin-bottom:12px;font-size:14px">Subscribe to activate your email addresses. You'll be redirected to Razorpay.</p>
-  {pending_emails}
+            r#"<div class="card" style="padding:22px;margin-bottom:16px;border-color:var(--warn)">
+  <div class="eyebrow" style="margin-bottom:8px">Email subdomains — subscription required</div>
+  <p class="muted" style="margin-bottom:12px;font-size:14px">Subscribe to activate each address. You'll be redirected to Razorpay, then come back here to finish setup.</p>
+  {email_rows}
 </div>"#
         )
     };
@@ -744,20 +758,25 @@ pub fn launch_html(
     let pack_buttons: String = packs
         .iter()
         .map(|p| {
+            let price = if currency == "USD" {
+                format!("${}", p.price_usd / 100)
+            } else {
+                format!("₹{}", p.price_inr / 100)
+            };
             format!(
                 r#"<form hx-post="{base_url}/admin/billing/checkout" hx-target="body" hx-swap="innerHTML" style="display:inline" hx-ext="json-enc">
   <input type="hidden" name="credits" value="{replies}">
+  <input type="hidden" name="return_to" value="/admin/wizard/launch">
   <button type="submit" class="card" style="padding:16px;text-align:center;min-width:140px;cursor:pointer;border:1px solid var(--hair)">
     <div class="stat-n serif">{replies}</div>
     <div class="mono muted" style="font-size:11px;margin-bottom:8px">replies</div>
-    <div style="font-weight:600;margin-bottom:4px">&#x20B9;{inr} / ${usd}</div>
+    <div style="font-weight:600;margin-bottom:4px">{price}</div>
     <div class="mono muted" style="font-size:10px">never expire</div>
   </button>
 </form>"#,
                 base_url = base_url,
                 replies = p.replies,
-                inr = p.price_inr / 100,
-                usd = p.price_usd / 100,
+                price = price,
             )
         })
         .collect();
@@ -767,23 +786,16 @@ pub fn launch_html(
     } else {
         format!(
             r#"<div class="card" style="padding:22px;margin-bottom:16px">
-  <div class="eyebrow" style="margin-bottom:8px">Reply credit packs</div>
-  <p class="muted" style="margin-bottom:12px;font-size:14px">You get 100 free replies every month. Buy more if you need them — purchased credits never expire.</p>
+  <div class="eyebrow" style="margin-bottom:8px">Reply credit packs <span class="muted">(optional)</span></div>
+  <p class="muted" style="margin-bottom:12px;font-size:14px">You get 100 free replies every month. Buy more if you need them — purchased credits never expire. You can always buy credits later from the Billing page.</p>
   <div class="row gap-12" style="flex-wrap:wrap;justify-content:center">{pack_buttons}</div>
 </div>"#
         )
     };
 
-    let content = format!(
-        r#"<section class="page narrow">
-  <div class="section-label"><span class="mono muted">06 / 06</span><span class="eyebrow">Ship it</span></div>
-  <h2 class="display-md">You're all set.</h2>
-  <p class="lead">Your concierge is configured and ready to handle messages. Here's a summary of what's next.</p>
-
-  {email_section}
-  {packs_section}
-
-  <div class="card" style="padding:22px;border-color:var(--ok);background:linear-gradient(135deg,var(--paper),#E8F0DE)">
+    let (status_card, finish_disabled) = if unpaid_subdomains.is_empty() {
+        (
+            r#"<div class="card" style="padding:22px;border-color:var(--ok);background:linear-gradient(135deg,var(--paper),#E8F0DE)">
     <div class="row gap-12">
       <span class="dot ok"></span>
       <div>
@@ -791,16 +803,46 @@ pub fn launch_html(
         <p class="muted" style="margin:4px 0 0;font-size:14px">Hit finish to open your dashboard. Connect channels, set up email rules, and start receiving auto-replies.</p>
       </div>
     </div>
-  </div>
+  </div>"#.to_string(),
+            "",
+        )
+    } else {
+        (
+            r#"<div class="card" style="padding:22px;border-color:var(--warn)">
+    <div class="row gap-12">
+      <span class="dot" style="background:var(--warn)"></span>
+      <div>
+        <div style="font-weight:600">Finish blocked</div>
+        <p class="muted" style="margin:4px 0 0;font-size:14px">Subscribe to every pending email subdomain above before you can finish setup.</p>
+      </div>
+    </div>
+  </div>"#.to_string(),
+            " disabled",
+        )
+    };
+
+    let content = format!(
+        r##"<section class="page narrow">
+  <div class="section-label"><span class="mono muted">05 / 05</span><span class="eyebrow">Ship it</span></div>
+  <h2 class="display-md">You're all set.</h2>
+  <p class="lead">Your concierge is configured and ready to handle messages. Here's a summary of what's next.</p>
+
+  {email_section}
+  {packs_section}
+
+  {status_card}
 
   <div class="between" style="margin-top:36px">
     <button class="btn ghost" hx-post="{base_url}/admin/wizard/goto" hx-vals='{{"to":"replies"}}' hx-target="body" hx-swap="innerHTML">&larr; Back</button>
-    <button class="btn primary" hx-post="{base_url}/admin/wizard/complete" hx-target="body">Finish setup &rarr;</button>
+    <button id="wizard-finish" class="btn primary" hx-post="{base_url}/admin/wizard/complete" hx-target="#finish-toast"{finish_disabled}>Finish setup &rarr;</button>
   </div>
-</section>"#,
+  <div id="finish-toast" style="margin-top:12px"></div>
+</section>"##,
         email_section = email_section,
         packs_section = packs_section,
+        status_card = status_card,
         base_url = base_url,
+        finish_disabled = finish_disabled,
     );
 
     wizard_shell("launch", base_url, &content)

@@ -69,8 +69,10 @@ pub fn email_dashboard_html(
     subdomains: &[EmailSubdomain],
     metrics: &[serde_json::Value],
     email_base_domain: &str,
+    currency: &str,
     base_url: &str,
 ) -> String {
+    let subdomain_price = if currency == "USD" { "$2" } else { "₹199" };
     let subdomain_rows: String = subdomains
         .iter()
         .map(|d| {
@@ -138,7 +140,7 @@ pub fn email_dashboard_html(
   <div class="card" style="padding:22px;margin-top:16px" hx-ext="json-enc">
     <div class="between" style="margin-bottom:12px">
       <div class="eyebrow">Add subdomain</div>
-      <span class="mono muted" style="font-size:11px">&#x20B9;199 / $2 per month</span>
+      <span class="mono muted" style="font-size:11px">{subdomain_price} per month</span>
     </div>
     <form hx-post="{base_url}/admin/email/subdomains" hx-target="body" hx-swap="innerHTML"
           style="display:flex;gap:8px;align-items:center">
@@ -223,22 +225,24 @@ pub fn email_rules_html(domain: &str, rules: &[RoutingRule], base_url: &str) -> 
     };
 
     let content = format!(
-        "<p><a href=\"{base_url}/admin/email\">&larr; Back to Email Routing</a></p>
-        <h1>Rules for {domain}</h1>
+        "<div style=\"padding:24px 28px\">
+        <p><a href=\"{base_url}/admin/email\" class=\"btn ghost sm\">&larr; Email Routing</a></p>
+        <h1 class=\"display-sm\" style=\"margin:8px 0 16px\">Rules for {domain}</h1>
 
         {templates_section}
 
-        <div class=\"card\">
-            <table>
+        <div class=\"card\" style=\"padding:0;overflow:hidden\">
+            <div class=\"table-wrap\"><table>
                 <thead><tr><th>Priority</th><th>Name</th><th>Criteria</th><th>Action</th><th>Status</th><th></th></tr></thead>
                 <tbody>{rule_rows}{empty}</tbody>
-            </table>
+            </table></div>
         </div>
 
-        <div class=\"card\">
+        <div class=\"card\" style=\"padding:22px;margin-top:16px\">
             <h2>Add Rule</h2>
             <div id=\"toast\"></div>
             {rule_form}
+        </div>
         </div>",
         base_url = base_url,
         domain = html_escape(domain),
@@ -248,16 +252,19 @@ pub fn email_rules_html(domain: &str, rules: &[RoutingRule], base_url: &str) -> 
         rule_form = rule_form_html(domain, None, base_url),
     );
 
-    base_html(&format!("Rules: {} - Concierge", domain), &content)
+    let page = super::base::app_shell(&content, "Email Routing", base_url);
+    base_html(&format!("Rules: {} - Concierge", domain), &page)
 }
 
 pub fn email_rule_edit_html(domain: &str, rule: &RoutingRule, base_url: &str) -> String {
     let content = format!(
-        "<p><a href=\"{base_url}/admin/email/domains/{domain}/rules\">&larr; Back to Rules</a></p>
-        <h1>Edit Rule: {name}</h1>
-        <div class=\"card\">
+        "<div style=\"padding:24px 28px\">
+        <p><a href=\"{base_url}/admin/email/domains/{domain}/rules\" class=\"btn ghost sm\">&larr; Rules</a></p>
+        <h1 class=\"display-sm\" style=\"margin:8px 0 16px\">Edit Rule: {name}</h1>
+        <div class=\"card\" style=\"padding:22px\">
             <div id=\"toast\"></div>
             {form}
+        </div>
         </div>",
         base_url = base_url,
         domain = html_escape(domain),
@@ -265,7 +272,8 @@ pub fn email_rule_edit_html(domain: &str, rule: &RoutingRule, base_url: &str) ->
         form = rule_form_html(domain, Some(rule), base_url),
     );
 
-    base_html(&format!("Edit Rule - Concierge"), &content)
+    let page = super::base::app_shell(&content, "Email Routing", base_url);
+    base_html(&format!("Edit Rule - Concierge"), &page)
 }
 
 fn rule_form_html(domain: &str, rule: Option<&RoutingRule>, base_url: &str) -> String {
@@ -538,32 +546,36 @@ pub fn email_log_html(log: &[serde_json::Value], base_url: &str) -> String {
     };
 
     let content = format!(
-        "<p><a href=\"{base_url}/admin/email\">&larr; Back to Email Routing</a></p>
-        <h1>Email Log</h1>
-        <div class=\"card\" style=\"overflow-x: auto;\">
-            <table>
+        "<div style=\"padding:24px 28px\">
+        <p><a href=\"{base_url}/admin/email\" class=\"btn ghost sm\">&larr; Email Routing</a></p>
+        <h1 class=\"display-sm\" style=\"margin:8px 0 16px\">Email Log</h1>
+        <div class=\"card\" style=\"padding:0;overflow:hidden\">
+            <div class=\"table-wrap\" style=\"overflow-x:auto\"><table>
                 <thead><tr><th>Time</th><th>Domain</th><th>From</th><th>To</th><th>Subject</th><th>Status</th></tr></thead>
                 <tbody>{rows}{empty}</tbody>
-            </table>
+            </table></div>
+        </div>
         </div>",
         base_url = base_url,
         rows = rows,
         empty = empty,
     );
 
-    base_html("Email Log - Concierge", &content)
+    let page = super::base::app_shell(&content, "Email Routing", base_url);
+    base_html("Email Log - Concierge", &page)
 }
 
 pub fn email_settings_html(discord_token: Option<&str>, base_url: &str) -> String {
     let token_value = discord_token.unwrap_or("");
 
     let content = format!(
-        "<p><a href=\"{base_url}/admin/email\">&larr; Back to Email Routing</a></p>
-        <h1>Email Settings</h1>
-        <div class=\"card\">
+        "<div style=\"padding:24px 28px\">
+        <p><a href=\"{base_url}/admin/email\" class=\"btn ghost sm\">&larr; Email Routing</a></p>
+        <h1 class=\"display-sm\" style=\"margin:8px 0 16px\">Email Settings</h1>
+        <div class=\"card\" style=\"padding:22px\">
             <div id=\"toast\"></div>
             <h2>Discord Bot</h2>
-            <p class=\"text-muted\" style=\"margin-bottom: 1rem;\">Bot token for forwarding emails to Discord channels.</p>
+            <p class=\"muted\" style=\"margin-bottom: 1rem;\">Bot token for forwarding emails to Discord channels.</p>
             <form hx-put=\"{base_url}/admin/email/settings\" hx-target=\"{hash}toast\" hx-swap=\"innerHTML\">
                 <div class=\"form-group\">
                     <label>Bot Token</label>
@@ -571,11 +583,13 @@ pub fn email_settings_html(discord_token: Option<&str>, base_url: &str) -> Strin
                 </div>
                 <button type=\"submit\" class=\"btn\">Save</button>
             </form>
+        </div>
         </div>",
         base_url = base_url,
         hash = HASH,
         token = html_escape(token_value),
     );
 
-    base_html("Email Settings - Concierge", &content)
+    let page = super::base::app_shell(&content, "Email Routing", base_url);
+    base_html("Email Settings - Concierge", &page)
 }

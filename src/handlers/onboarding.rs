@@ -266,15 +266,26 @@ pub async fn handle_wizard(
             Ok(Response::empty()?.with_status(200).with_headers(headers))
         }
 
-        // Complete the wizard
+        // Complete the wizard — gated on every added email subdomain being
+        // active (paid). Credit packs are optional, so there's no gate on them.
         "complete" => {
+            let subdomains = get_email_subdomains(&kv, tenant_id).await?;
+            let has_unpaid = subdomains
+                .iter()
+                .any(|s| s.status != SubdomainStatus::Active);
+            if has_unpaid {
+                return Response::from_html(
+                    r#"<div class="error">Subscribe to every email subdomain before finishing setup.</div>"#.to_string(),
+                );
+            }
+
             state.completed = true;
             state.step = "launch".to_string();
             save_onboarding(&kv, tenant_id, &state).await?;
 
             let headers = Headers::new();
-            headers.set("Location", &format!("{base_url}/admin"))?;
-            Ok(Response::empty()?.with_status(302).with_headers(headers))
+            headers.set("HX-Redirect", &format!("{base_url}/admin"))?;
+            Ok(Response::empty()?.with_status(200).with_headers(headers))
         }
 
         // Default: show current step (resume from where user left off)

@@ -148,8 +148,8 @@ pub fn admin_settings_html(
     };
 
     let content = format!(
-        "<p><a href=\"{base_url}/admin\">&larr; Back to Dashboard</a></p>
-        <h1>Settings</h1>
+        "<div style=\"padding:24px 28px\">
+        <h1 class=\"display-sm\" style=\"margin:0 0 16px\">Settings</h1>
         <div class=\"card\" style=\"padding:22px\">
             <h2>Linked Accounts</h2>
             <p style=\"margin-bottom: 1rem;\" class=\"muted\">Sign-in providers connected to your account.</p>
@@ -185,6 +185,7 @@ pub fn admin_settings_html(
                     hx-delete=\"{base_url}/admin/delete-account\"
                     hx-confirm=\"Are you sure? This will permanently delete your account and ALL data. This cannot be undone.\"
                     >Delete My Account</button>
+        </div>
         </div>",
         base_url = base_url,
         hash = HASH,
@@ -194,7 +195,8 @@ pub fn admin_settings_html(
         usd_sel = if tenant.currency == "USD" { " selected" } else { "" },
     );
 
-    base_html("Settings - Concierge", &content)
+    let page = super::base::app_shell(&content, "Settings", base_url);
+    base_html("Settings - Concierge", &page)
 }
 
 pub fn admin_dashboard_html(
@@ -380,9 +382,9 @@ pub fn admin_whatsapp_list_html(accounts: &[WhatsAppAccount], base_url: &str) ->
     };
 
     let content = format!(
-        "<p><a href=\"{base_url}/admin\">&larr; Back to Dashboard</a></p>
-        <div style=\"display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;\">
-            <h1>WhatsApp Accounts</h1>
+        "<div style=\"padding:24px 28px\">
+        <div class=\"between\" style=\"margin-bottom:16px\">
+            <h1 class=\"display-sm\" style=\"margin:0\">WhatsApp Accounts</h1>
             <a href=\"{base_url}/admin/whatsapp/new\" class=\"btn\">+ Connect WhatsApp Number</a>
         </div>
         <div id=\"toast\"></div>
@@ -391,13 +393,15 @@ pub fn admin_whatsapp_list_html(accounts: &[WhatsAppAccount], base_url: &str) ->
                 <thead><tr><th scope=\"col\">Name</th><th scope=\"col\">Phone</th><th scope=\"col\">Auto-Reply</th><th></th></tr></thead>
                 <tbody>{rows}{empty}</tbody>
             </table></div>
+        </div>
         </div>",
         base_url = base_url,
         rows = rows,
         empty = empty,
     );
 
-    base_html("WhatsApp Accounts - Concierge", &content)
+    let page = super::base::app_shell(&content, "Channels", base_url);
+    base_html("WhatsApp Accounts - Concierge", &page)
 }
 
 pub fn admin_whatsapp_signup_html(
@@ -407,8 +411,9 @@ pub fn admin_whatsapp_signup_html(
     state: &str,
 ) -> String {
     let content = format!(
-        r#"<p><a href="{base_url}/admin/whatsapp">&larr; Back to WhatsApp Accounts</a></p>
-        <h1>Connect WhatsApp Number</h1>
+        r#"<div style="padding:24px 28px">
+        <p><a href="{base_url}/admin/whatsapp" class="btn ghost sm">&larr; WhatsApp Accounts</a></p>
+        <h1 class="display-sm" style="margin:8px 0 16px">Connect WhatsApp Number</h1>
         <div class="card" style="text-align: center; padding: 2rem;">
             <p class="muted" style="margin-bottom: 1.5rem;">Click the button below to register your phone number through Meta's WhatsApp setup flow.</p>
             <div id="signup-error" style="color: var(--warn); margin-bottom: 1rem;"></div>
@@ -489,7 +494,8 @@ pub fn admin_whatsapp_signup_html(
                     }}
                 }}, loginConfig);
             }}
-        </script>"#,
+        </script>
+        </div>"#,
         base_url = html_escape(base_url),
         app_id = html_escape(app_id),
         config_id = html_escape(config_id),
@@ -497,7 +503,8 @@ pub fn admin_whatsapp_signup_html(
         api_version = crate::META_API_VERSION,
     );
 
-    base_html("Connect WhatsApp - Concierge", &content)
+    let page = super::base::app_shell(&content, "Channels", base_url);
+    base_html("Connect WhatsApp - Concierge", &page)
 }
 
 pub fn admin_whatsapp_edit_html(account: &WhatsAppAccount, base_url: &str) -> String {
@@ -518,8 +525,9 @@ pub fn admin_whatsapp_edit_html(account: &WhatsAppAccount, base_url: &str) -> St
     };
 
     let content = format!(
-        "<p><a href=\"{base_url}/admin/whatsapp\">&larr; Back to WhatsApp Accounts</a></p>
-        <h1>Edit WhatsApp Account</h1>
+        "<div style=\"padding:24px 28px\">
+        <p><a href=\"{base_url}/admin/whatsapp\" class=\"btn ghost sm\">&larr; WhatsApp Accounts</a></p>
+        <h1 class=\"display-sm\" style=\"margin:8px 0 16px\">Edit WhatsApp Account</h1>
         <div id=\"toast\"></div>
         <div class=\"card\" style=\"padding:22px\">
             <form hx-put=\"{base_url}/admin/whatsapp/{id}\" hx-target=\"{hash}toast\" hx-swap=\"innerHTML\">
@@ -554,6 +562,7 @@ pub fn admin_whatsapp_edit_html(account: &WhatsAppAccount, base_url: &str) -> St
                     <button type=\"submit\" class=\"btn\">Save</button>
                 </div>
             </form>
+        </div>
         </div>",
         base_url = base_url,
         id = html_escape(&account.id),
@@ -567,7 +576,8 @@ pub fn admin_whatsapp_edit_html(account: &WhatsAppAccount, base_url: &str) -> St
         hash = HASH,
     );
 
-    base_html("Edit WhatsApp Account - Concierge", &content)
+    let page = super::base::app_shell(&content, "Channels", base_url);
+    base_html("Edit WhatsApp Account - Concierge", &page)
 }
 
 pub fn admin_instagram_list_html(
@@ -609,9 +619,9 @@ pub fn admin_instagram_list_html(
     };
 
     let content = format!(
-        "<p><a href=\"{base_url}/admin\">&larr; Back to Dashboard</a></p>
-        <div style=\"display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;\">
-            <h1>Instagram Accounts</h1>
+        "<div style=\"padding:24px 28px\">
+        <div class=\"between\" style=\"margin-bottom:16px\">
+            <h1 class=\"display-sm\" style=\"margin:0\">Instagram Accounts</h1>
             <a href=\"{base_url}/instagram/auth/{tenant_id}\" class=\"btn\">+ Connect Account</a>
         </div>
         <div id=\"toast\"></div>
@@ -620,6 +630,7 @@ pub fn admin_instagram_list_html(
                 <thead><tr><th scope=\"col\">Username</th><th scope=\"col\">Status</th><th scope=\"col\">Auto-Reply</th><th></th></tr></thead>
                 <tbody>{rows}{empty}</tbody>
             </table></div>
+        </div>
         </div>",
         base_url = base_url,
         tenant_id = html_escape(tenant_id),
@@ -627,7 +638,8 @@ pub fn admin_instagram_list_html(
         empty = empty,
     );
 
-    base_html("Instagram Accounts - Concierge", &content)
+    let page = super::base::app_shell(&content, "Channels", base_url);
+    base_html("Instagram Accounts - Concierge", &page)
 }
 
 pub fn admin_instagram_edit_html(account: &InstagramAccount, base_url: &str) -> String {
@@ -649,8 +661,9 @@ pub fn admin_instagram_edit_html(account: &InstagramAccount, base_url: &str) -> 
     };
 
     let content = format!(
-        "<p><a href=\"{base_url}/admin/instagram\">&larr; Back to Instagram Accounts</a></p>
-        <h1>Edit Instagram Account</h1>
+        "<div style=\"padding:24px 28px\">
+        <p><a href=\"{base_url}/admin/instagram\" class=\"btn ghost sm\">&larr; Instagram Accounts</a></p>
+        <h1 class=\"display-sm\" style=\"margin:8px 0 4px\">Edit Instagram Account</h1>
         <p class=\"muted\" style=\"margin-bottom: 1rem;\">@{username}</p>
         <div id=\"toast\"></div>
         <div class=\"card\" style=\"padding:22px\">
@@ -677,6 +690,7 @@ pub fn admin_instagram_edit_html(account: &InstagramAccount, base_url: &str) -> 
                     <button type=\"submit\" class=\"btn\">Save</button>
                 </div>
             </form>
+        </div>
         </div>",
         base_url = base_url,
         id = html_escape(&account.id),
@@ -689,7 +703,8 @@ pub fn admin_instagram_edit_html(account: &InstagramAccount, base_url: &str) -> 
         hash = HASH,
     );
 
-    base_html("Edit Instagram Account - Concierge", &content)
+    let page = super::base::app_shell(&content, "Channels", base_url);
+    base_html("Edit Instagram Account - Concierge", &page)
 }
 
 pub fn admin_lead_forms_list_html(forms: &[LeadCaptureForm], base_url: &str) -> String {

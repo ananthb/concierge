@@ -55,6 +55,16 @@ pub async fn handle_billing_admin(
                 .and_then(|s| s.parse::<i64>().ok())
                 .unwrap_or(500);
 
+            // Accept a return_to path (used by the wizard to send users back
+            // to /admin/wizard/launch after payment). Restrict to same-origin
+            // paths to avoid open redirects.
+            let return_to = form
+                .get("return_to")
+                .and_then(|v| v.as_str())
+                .filter(|p| p.starts_with('/') && !p.starts_with("//"))
+                .unwrap_or("/admin/billing")
+                .to_string();
+
             let tenant = storage::get_tenant(&db, tenant_id)
                 .await?
                 .unwrap_or_default();
@@ -81,7 +91,7 @@ pub async fn handle_billing_admin(
             let order_id = order.get("id").and_then(|v| v.as_str()).unwrap_or("");
 
             Response::from_html(tmpl::checkout_html(
-                order_id, amount, currency, credits, &key_id, tenant_id, base_url,
+                order_id, amount, currency, credits, &key_id, tenant_id, &return_to, base_url,
             ))
         }
 

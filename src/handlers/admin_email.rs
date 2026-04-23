@@ -37,10 +37,15 @@ pub async fn handle_email_admin(
                 .var("EMAIL_BASE_DOMAIN")
                 .map(|v| v.to_string())
                 .unwrap_or_default();
+            let currency = get_tenant(&db, tenant_id)
+                .await?
+                .map(|t| t.currency)
+                .unwrap_or_else(|| "INR".to_string());
             Response::from_html(email_dashboard_html(
                 &subdomains,
                 &metrics,
                 &email_base_domain,
+                &currency,
                 base_url,
             ))
         }
@@ -66,7 +71,10 @@ pub async fn handle_email_admin(
             Response::from_html("<div class=\"success\">Settings saved</div>".to_string())
         }
 
-        // Add subdomain — validate, create Razorpay subscription, redirect to payment
+        // Add or subscribe to a subdomain. The wizard's "channels" step can
+        // pre-create a subdomain with no subscription yet — so if a row for
+        // this label already exists without a subscription, resume it here
+        // instead of erroring.
         (Method::Post, ["subdomains"]) => {
             let form: serde_json::Value = req.json().await?;
             let label = form
@@ -91,14 +99,15 @@ pub async fn handle_email_admin(
             let domain = format!("{label}.{base_domain}");
 
             let mut subdomains = get_email_subdomains(&kv, tenant_id).await?;
-            if subdomains.iter().any(|d| d.domain == domain) {
-                return Response::from_html(
-                    "<div class=\"error\">Subdomain already exists</div>".to_string(),
-                );
-            }
-
-            // Check global uniqueness
-            if get_tenant_by_domain(&kv, &domain).await?.is_some() {
+            let existing_idx = subdomains.iter().position(|d| d.domain == domain);
+            if let Some(idx) = existing_idx {
+                if subdomains[idx].subscription_id.is_some() {
+                    return Response::from_html(
+                        "<div class=\"error\">Subdomain already subscribed</div>".to_string(),
+                    );
+                }
+            } else if get_tenant_by_domain(&kv, &domain).await?.is_some() {
+                // Only check global uniqueness when creating fresh
                 return Response::from_html(
                     "<div class=\"error\">Subdomain is already taken</div>".to_string(),
                 );
@@ -183,20 +192,29 @@ pub async fn handle_email_admin(
                 );
             }
 
-            // Save subdomain as Pending (MX records provisioned on payment confirmation)
+            // Record the subscription against an existing pending row, or
+            // create a fresh Suspended row. MX records are provisioned by the
+            // Razorpay webhook on payment confirmation.
             let now = now_iso();
-            let subdomain = EmailSubdomain {
-                label: label.clone(),
-                domain: domain.clone(),
-                tenant_id: tenant_id.to_string(),
-                default_action: EmailAction::Drop,
-                dns_record_ids: vec![],
-                subscription_id: Some(subscription_id),
-                status: SubdomainStatus::Suspended, // not active until paid
-                created_at: now.clone(),
-                updated_at: now,
-            };
-            subdomains.push(subdomain);
+            match existing_idx {
+                Some(idx) => {
+                    subdomains[idx].subscription_id = Some(subscription_id);
+                    subdomains[idx].updated_at = now.clone();
+                }
+                None => {
+                    subdomains.push(EmailSubdomain {
+                        label: label.clone(),
+                        domain: domain.clone(),
+                        tenant_id: tenant_id.to_string(),
+                        default_action: EmailAction::Drop,
+                        dns_record_ids: vec![],
+                        subscription_id: Some(subscription_id),
+                        status: SubdomainStatus::Suspended,
+                        created_at: now.clone(),
+                        updated_at: now,
+                    });
+                }
+            }
             save_email_subdomains(&kv, tenant_id, &subdomains).await?;
 
             // Redirect to Razorpay payment page
