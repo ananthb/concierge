@@ -27,35 +27,35 @@ pub fn auth_login_html(
     let (primary_btn, secondary_btn) = if last_provider == Some("facebook") {
         (
             format!(
-                r#"<a href="{fb_url}" class="btn primary lg" style="width:100%;justify-content:center">{fb_svg} Continue with Facebook</a>"#,
+                r#"<a href="{fb_url}" class="btn primary lg w-full jc-center">{fb_svg} Continue with Facebook</a>"#,
             ),
             format!(
-                r#"<a href="{google_url}" class="btn ghost" style="width:100%;justify-content:center">{google_svg} Sign in with Google</a>"#,
+                r#"<a href="{google_url}" class="btn ghost w-full jc-center">{google_svg} Sign in with Google</a>"#,
                 google_url = html_escape(&google_url),
             ),
         )
     } else {
         (
             format!(
-                r#"<a href="{google_url}" class="btn primary lg" style="width:100%;justify-content:center">{google_svg} Sign in with Google</a>"#,
+                r#"<a href="{google_url}" class="btn primary lg w-full jc-center">{google_svg} Sign in with Google</a>"#,
                 google_url = html_escape(&google_url),
             ),
             format!(
-                r#"<a href="{fb_url}" class="btn ghost" style="width:100%;justify-content:center">{fb_svg} Sign in with Facebook</a>"#,
+                r#"<a href="{fb_url}" class="btn ghost w-full jc-center">{fb_svg} Sign in with Facebook</a>"#,
             ),
         )
     };
 
     let content = format!(
-        r#"<div style="max-width:360px;margin:4rem auto;text-align:center;padding:0 1rem">
+        r#"<div class="ta-center" style="max-width:360px;margin:4rem auto;padding:0 1rem">
     <div style="margin-bottom:2rem">{logo}
-    <div class="serif" style="font-size:28px;margin-top:8px">Concierge</div></div>
+    <div class="serif mt-8" style="font-size:28px">Concierge</div></div>
     <p class="muted" style="margin-bottom:2rem">Sign in to manage your messaging channels.</p>
     <div class="stack gap-12">
       {primary_btn}
       {secondary_btn}
     </div>
-    <a href="/" class="btn ghost sm" style="margin-top:24px">&larr; Back</a>
+    <a href="/" class="btn ghost sm mt-24">&larr; Back</a>
 </div>"#,
         logo = super::base::LOGO_INLINE,
         primary_btn = primary_btn,
@@ -77,8 +77,8 @@ pub fn admin_settings_html(
     let google_row = if has_google {
         let unlink = if has_facebook {
             format!(
-                "<button class=\"btn sm\"
-                        style=\"border-color:var(--warn);color:var(--warn)\"
+                "<button class=\"btn sm text-warn\"
+                        style=\"border-color:var(--warn)\"
                         hx-delete=\"{base_url}/auth/unlink/google\"
                         hx-confirm=\"Unlink Google? You can still sign in with Facebook.\"
                         hx-target=\"{hash}linked-providers\" hx-swap=\"innerHTML\">Unlink</button>",
@@ -114,8 +114,8 @@ pub fn admin_settings_html(
     let facebook_row = if has_facebook {
         let unlink = if has_google {
             format!(
-                "<button class=\"btn sm\"
-                        style=\"border-color:var(--warn);color:var(--warn)\"
+                "<button class=\"btn sm text-warn\"
+                        style=\"border-color:var(--warn)\"
                         hx-delete=\"{base_url}/auth/unlink/facebook\"
                         hx-confirm=\"Unlink Facebook? You can still sign in with Google.\"
                         hx-target=\"{hash}linked-providers\" hx-swap=\"innerHTML\">Unlink</button>",
@@ -148,11 +148,11 @@ pub fn admin_settings_html(
     };
 
     let content = format!(
-        "<div style=\"padding:24px 28px\">
-        <h1 class=\"display-sm\" style=\"margin:0 0 16px\">Settings</h1>
-        <div class=\"card\" style=\"padding:22px\">
+        "<div class=\"page-pad\">
+        <h1 class=\"display-sm m-0 mb-16\">Settings</h1>
+        <div class=\"card p-22\">
             <h2>Linked Accounts</h2>
-            <p style=\"margin-bottom: 1rem;\" class=\"muted\">Sign-in providers connected to your account.</p>
+            <p class=\"muted mb-16\">Sign-in providers connected to your account.</p>
             <div id=\"linked-providers\" role=\"region\" aria-label=\"Linked accounts\">
                 <div class=\"table-wrap\"><table>
                     <thead><tr><th scope=\"col\">Provider</th><th scope=\"col\">Details</th><th></th></tr></thead>
@@ -160,9 +160,9 @@ pub fn admin_settings_html(
                 </table></div>
             </div>
         </div>
-        <div class=\"card\" style=\"padding:22px\" hx-ext=\"json-enc\">
+        <div class=\"card p-22\" hx-ext=\"json-enc\">
             <h2>Billing Currency</h2>
-            <p style=\"margin-bottom:1rem\" class=\"muted\">All future charges will be in this currency.</p>
+            <p class=\"muted mb-16\">All future charges will be in this currency.</p>
             <form hx-put=\"{base_url}/admin/settings/currency\" hx-target=\"{hash}currency-toast\" hx-swap=\"innerHTML\">
                 <div class=\"row gap-12\">
                     <select class=\"select\" name=\"currency\" style=\"width:auto\">
@@ -172,15 +172,15 @@ pub fn admin_settings_html(
                     <button type=\"submit\" class=\"btn sm\">Save</button>
                 </div>
             </form>
-            <div id=\"currency-toast\" style=\"margin-top:8px\"></div>
+            <div id=\"currency-toast\" class=\"mt-8\"></div>
         </div>
-        <div class=\"card\" style=\"padding:22px\">
+        <div class=\"card p-22\">
             <h2>Session</h2>
             <a href=\"{base_url}/auth/logout\" class=\"btn ghost\">Sign Out</a>
         </div>
-        <div class=\"card\" style=\"padding:22px;border-color:var(--warn)\">
-            <h2 style=\"color:var(--warn)\">Delete Account</h2>
-            <p style=\"margin-bottom: 1rem;\" class=\"muted\">Permanently delete your account and all associated data. This cannot be undone.</p>
+        <div class=\"card card-warn p-22\">
+            <h2 class=\"text-warn\">Delete Account</h2>
+            <p class=\"muted mb-16\">Permanently delete your account and all associated data. This cannot be undone.</p>
             <button class=\"btn\" style=\"background:var(--warn);border-color:var(--warn);color:#fff\"
                     hx-delete=\"{base_url}/admin/delete-account\"
                     hx-confirm=\"Are you sure? This will permanently delete your account and ALL data. This cannot be undone.\"
@@ -225,12 +225,12 @@ pub fn admin_dashboard_html(
             .collect::<Vec<_>>()
             .join(", ");
         format!(
-            r#"<div class="card" style="padding:16px 20px;margin:0 0 16px;border-color:var(--warn);background:linear-gradient(135deg,var(--paper),#FFF4E6)">
+            r#"<div class="card card-warn card-soft mb-16" style="padding:16px 20px">
   <div class="row gap-12" style="align-items:flex-start">
-    <span class="dot" style="background:var(--warn);margin-top:6px"></span>
-    <div style="flex:1">
-      <div style="font-weight:600">Email subdomains awaiting subscription</div>
-      <p class="muted" style="margin:4px 0 0;font-size:13px">{list} won't receive mail until you subscribe.</p>
+    <span class="dot mt-6" style="background:var(--warn)"></span>
+    <div class="flex-1">
+      <div class="fw-600">Email subdomains awaiting subscription</div>
+      <p class="muted fs-13 m-0 mt-4">{list} won't receive mail until you subscribe.</p>
     </div>
     <a href="{base_url}/admin/email" class="btn sm">Subscribe</a>
   </div>
@@ -276,7 +276,7 @@ pub fn admin_dashboard_html(
         .collect();
 
     let empty_hint = if whatsapp_accounts.is_empty() && instagram_accounts.is_empty() {
-        r#"<div class="side-row"><span class="muted" style="font-size:13px">No channels connected yet. <a href="/admin/whatsapp">Add one</a>.</span></div>"#
+        r#"<div class="side-row"><span class="muted fs-13">No channels connected yet. <a href="/admin/whatsapp">Add one</a>.</span></div>"#
     } else {
         ""
     };
@@ -284,54 +284,54 @@ pub fn admin_dashboard_html(
     let content = format!(
         r#"<div class="dash-grid">
   <aside class="dash-side">
-    <div class="card" style="padding:16px">
+    <div class="card p-16">
       <div class="eyebrow">Connected channels</div>
       <div class="side-list">
         {channel_rows}{ig_rows}{empty_hint}
         <a href="{base_url}/admin/email" class="side-row"><span>{mail_icon}</span><div><div>Email Routing</div><div class="mono muted">Configure rules</div></div></a>
       </div>
     </div>
-    <div class="card" style="padding:16px;margin-top:14px">
+    <div class="card p-16 mt-14">
       <div class="eyebrow">Quick links</div>
       <div class="side-list">
-        <a href="{base_url}/admin/lead-forms" class="side-row" style="text-decoration:none;color:inherit"><div style="flex:1;font-size:13px">Lead Forms ({lf_count})</div></a>
-        <a href="{base_url}/admin/email/log" class="side-row" style="text-decoration:none;color:inherit"><div style="flex:1;font-size:13px">Email Log</div></a>
+        <a href="{base_url}/admin/lead-forms" class="side-row link-reset"><div class="flex-1 fs-13">Lead Forms ({lf_count})</div></a>
+        <a href="{base_url}/admin/email/log" class="side-row link-reset"><div class="flex-1 fs-13">Email Log</div></a>
       </div>
     </div>
   </aside>
   <main class="dash-main">
     {suspended_banner}
-    <div class="card" style="padding:22px">
-      <div class="between" style="margin-bottom:16px">
+    <div class="card p-22">
+      <div class="between mb-16">
         <div>
           <div class="eyebrow">Overview</div>
-          <h3 class="display-sm" style="margin:4px 0 0">Your concierge is on duty.</h3>
+          <h3 class="display-sm m-0 mt-4">Your concierge is on duty.</h3>
         </div>
       </div>
       <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px">
-        <div class="card" style="padding:16px;text-align:center">
+        <div class="card p-16 ta-center">
           <div class="stat-n serif">{wa_count}</div>
-          <div class="mono muted" style="font-size:11px">WhatsApp</div>
+          <div class="mono muted fs-11">WhatsApp</div>
         </div>
-        <div class="card" style="padding:16px;text-align:center">
+        <div class="card p-16 ta-center">
           <div class="stat-n serif">{ig_count}</div>
-          <div class="mono muted" style="font-size:11px">Instagram</div>
+          <div class="mono muted fs-11">Instagram</div>
         </div>
-        <div class="card" style="padding:16px;text-align:center">
+        <div class="card p-16 ta-center">
           <div class="stat-n serif">{lf_count}</div>
-          <div class="mono muted" style="font-size:11px">Lead Forms</div>
+          <div class="mono muted fs-11">Lead Forms</div>
         </div>
-        <div class="card" style="padding:16px;text-align:center{credit_warn_style}">
+        <div class="card p-16 ta-center{credit_warn_cls}" style="{credit_warn_style}">
           <div class="stat-n serif">{credits}</div>
-          <div class="mono muted" style="font-size:11px">Reply Credits</div>
+          <div class="mono muted fs-11">Reply Credits</div>
         </div>
       </div>
     </div>
-    <div class="card" style="padding:22px;margin-top:16px{email_highlight}">
-      <div class="between" style="margin-bottom:12px">
+    <div class="card p-22 mt-16{email_highlight_cls}">
+      <div class="between mb-12">
         <div>
           <div class="eyebrow">Email Routing</div>
-          <h3 class="display-sm" style="margin:4px 0 0">{email_headline}</h3>
+          <h3 class="display-sm m-0 mt-4">{email_headline}</h3>
         </div>
         <a href="{base_url}/admin/email" class="btn sm">{email_cta}</a>
       </div>
@@ -349,15 +349,20 @@ pub fn admin_dashboard_html(
         ig_count = instagram_accounts.len(),
         lf_count = lead_forms.len(),
         credits = billing.total_remaining(),
-        credit_warn_style = if billing.total_remaining() <= 10 {
-            ";border-color:var(--warn);background:var(--accent-soft)"
+        credit_warn_cls = if billing.total_remaining() <= 10 {
+            " card-warn"
         } else {
             ""
         },
-        email_highlight = if has_email_domains {
+        credit_warn_style = if billing.total_remaining() <= 10 {
+            "background:var(--accent-soft)"
+        } else {
+            ""
+        },
+        email_highlight_cls = if has_email_domains {
             ""
         } else {
-            ";border-color:var(--accent);background:linear-gradient(135deg,var(--paper),var(--accent-soft))"
+            " card-accent"
         },
         email_headline = if has_email_domains {
             "Rules for the mail that comes in."
@@ -392,7 +397,7 @@ pub fn admin_whatsapp_list_html(accounts: &[WhatsAppAccount], base_url: &str) ->
                     <td>{enabled}</td>
                     <td>
                         <a href=\"{base_url}/admin/whatsapp/{id}\" class=\"btn sm\">Edit</a>
-                        <button class=\"btn sm\" style=\"border-color:var(--warn);color:var(--warn)\"
+                        <button class=\"btn sm text-warn\" style=\"border-color:var(--warn)\"
                                 hx-delete=\"{base_url}/admin/whatsapp/{id}\"
                                 hx-confirm=\"Delete this WhatsApp account?\"
                                 hx-target=\"closest tr\" hx-swap=\"outerHTML\">Delete</button>
@@ -414,13 +419,13 @@ pub fn admin_whatsapp_list_html(accounts: &[WhatsAppAccount], base_url: &str) ->
     };
 
     let content = format!(
-        "<div style=\"padding:24px 28px\">
-        <div class=\"between\" style=\"margin-bottom:16px\">
-            <h1 class=\"display-sm\" style=\"margin:0\">WhatsApp Accounts</h1>
+        "<div class=\"page-pad\">
+        <div class=\"between mb-16\">
+            <h1 class=\"display-sm m-0\">WhatsApp Accounts</h1>
             <a href=\"{base_url}/admin/whatsapp/new\" class=\"btn\">+ Connect WhatsApp Number</a>
         </div>
         <div id=\"toast\"></div>
-        <div class=\"card\" style=\"padding:22px\">
+        <div class=\"card p-22\">
             <div class=\"table-wrap\"><table>
                 <thead><tr><th scope=\"col\">Name</th><th scope=\"col\">Phone</th><th scope=\"col\">Auto-Reply</th><th></th></tr></thead>
                 <tbody>{rows}{empty}</tbody>
@@ -443,16 +448,16 @@ pub fn admin_whatsapp_signup_html(
     state: &str,
 ) -> String {
     let content = format!(
-        r#"<div style="padding:24px 28px">
+        r#"<div class="page-pad">
         <p><a href="{base_url}/admin/whatsapp" class="btn ghost sm">&larr; WhatsApp Accounts</a></p>
         <h1 class="display-sm" style="margin:8px 0 16px">Connect WhatsApp Number</h1>
-        <div class="card" style="text-align: center; padding: 2rem;">
-            <p class="muted" style="margin-bottom: 1.5rem;">Click the button below to register your phone number through Meta's WhatsApp setup flow.</p>
-            <div id="signup-error" style="color: var(--warn); margin-bottom: 1rem;"></div>
+        <div class="card ta-center" style="padding: 2rem;">
+            <p class="muted" style="margin-bottom: 1.5rem">Click the button below to register your phone number through Meta's WhatsApp setup flow.</p>
+            <div id="signup-error" class="text-warn mb-16"></div>
             <button id="signup-btn" class="btn" style="padding: 0.75rem 2rem; font-size: 1rem;" onclick="launchSignup()">
                 Connect WhatsApp Number
             </button>
-            <p class="muted" style="margin-top: 1.5rem; font-size: 0.85rem;">
+            <p class="muted" style="margin-top: 1.5rem; font-size: 0.85rem">
                 Or <a href="{base_url}/admin/whatsapp/manual">enter phone number ID manually</a>
             </p>
         </div>
@@ -557,11 +562,11 @@ pub fn admin_whatsapp_edit_html(account: &WhatsAppAccount, base_url: &str) -> St
     };
 
     let content = format!(
-        "<div style=\"padding:24px 28px\">
+        "<div class=\"page-pad\">
         <p><a href=\"{base_url}/admin/whatsapp\" class=\"btn ghost sm\">&larr; WhatsApp Accounts</a></p>
         <h1 class=\"display-sm\" style=\"margin:8px 0 16px\">Edit WhatsApp Account</h1>
         <div id=\"toast\"></div>
-        <div class=\"card\" style=\"padding:22px\">
+        <div class=\"card p-22\">
             <form hx-put=\"{base_url}/admin/whatsapp/{id}\" hx-target=\"{hash}toast\" hx-swap=\"innerHTML\">
                 <div class=\"form-group\">
                     <label for=\"wa-name\">Name</label>
@@ -573,7 +578,7 @@ pub fn admin_whatsapp_edit_html(account: &WhatsAppAccount, base_url: &str) -> St
                 </div>
                 <div class=\"form-group\">
                     <label for=\"wa-phone-id\">Phone Number ID</label>
-                    <input type=\"text\" id=\"wa-phone-id\" name=\"phone_number_id\" value=\"{phone_id}\" placeholder=\"Meta phone number ID\" required style=\"font-family: monospace;\">
+                    <input type=\"text\" id=\"wa-phone-id\" name=\"phone_number_id\" value=\"{phone_id}\" placeholder=\"Meta phone number ID\" required class=\"mono\">
                 </div>
                 <h3 style=\"margin: 1rem 0 0.5rem;\">Auto-Reply</h3>
                 <div class=\"form-group\">
@@ -629,7 +634,7 @@ pub fn admin_instagram_list_html(
                     <td>{auto}</td>
                     <td>
                         <a href=\"{base_url}/admin/instagram/{id}\" class=\"btn sm\">Edit</a>
-                        <button class=\"btn sm\" style=\"border-color:var(--warn);color:var(--warn)\"
+                        <button class=\"btn sm text-warn\" style=\"border-color:var(--warn)\"
                                 hx-delete=\"{base_url}/admin/instagram/{id}\"
                                 hx-confirm=\"Remove this Instagram account?\"
                                 hx-target=\"closest tr\" hx-swap=\"outerHTML\">Remove</button>
@@ -651,13 +656,13 @@ pub fn admin_instagram_list_html(
     };
 
     let content = format!(
-        "<div style=\"padding:24px 28px\">
-        <div class=\"between\" style=\"margin-bottom:16px\">
-            <h1 class=\"display-sm\" style=\"margin:0\">Instagram Accounts</h1>
+        "<div class=\"page-pad\">
+        <div class=\"between mb-16\">
+            <h1 class=\"display-sm m-0\">Instagram Accounts</h1>
             <a href=\"{base_url}/instagram/auth/{tenant_id}\" class=\"btn\">+ Connect Account</a>
         </div>
         <div id=\"toast\"></div>
-        <div class=\"card\" style=\"padding:22px\">
+        <div class=\"card p-22\">
             <div class=\"table-wrap\"><table>
                 <thead><tr><th scope=\"col\">Username</th><th scope=\"col\">Status</th><th scope=\"col\">Auto-Reply</th><th></th></tr></thead>
                 <tbody>{rows}{empty}</tbody>
@@ -693,12 +698,12 @@ pub fn admin_instagram_edit_html(account: &InstagramAccount, base_url: &str) -> 
     };
 
     let content = format!(
-        "<div style=\"padding:24px 28px\">
+        "<div class=\"page-pad\">
         <p><a href=\"{base_url}/admin/instagram\" class=\"btn ghost sm\">&larr; Instagram Accounts</a></p>
         <h1 class=\"display-sm\" style=\"margin:8px 0 4px\">Edit Instagram Account</h1>
-        <p class=\"muted\" style=\"margin-bottom: 1rem;\">@{username}</p>
+        <p class=\"muted mb-16\">@{username}</p>
         <div id=\"toast\"></div>
-        <div class=\"card\" style=\"padding:22px\">
+        <div class=\"card p-22\">
             <form hx-put=\"{base_url}/admin/instagram/{id}\" hx-target=\"{hash}toast\" hx-swap=\"innerHTML\">
                 <div class=\"form-group\">
                     <label><input type=\"checkbox\" name=\"enabled\" value=\"true\"{enabled_checked}> Account Enabled</label>
@@ -751,7 +756,7 @@ pub fn admin_lead_forms_list_html(forms: &[LeadCaptureForm], base_url: &str) -> 
                     <td>{status}</td>
                     <td>
                         <a href=\"{base_url}/admin/lead-forms/{id}\" class=\"btn sm\">Edit</a>
-                        <button class=\"btn sm\" style=\"border-color:var(--warn);color:var(--warn)\"
+                        <button class=\"btn sm text-warn\" style=\"border-color:var(--warn)\"
                                 hx-delete=\"{base_url}/admin/lead-forms/{id}\"
                                 hx-confirm=\"Delete this lead form?\"
                                 hx-target=\"closest tr\" hx-swap=\"outerHTML\">Delete</button>
@@ -774,12 +779,12 @@ pub fn admin_lead_forms_list_html(forms: &[LeadCaptureForm], base_url: &str) -> 
 
     let content = format!(
         "<p><a href=\"{base_url}/admin\">&larr; Back to Dashboard</a></p>
-        <div style=\"display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;\">
+        <div class=\"between mb-16\">
             <h1>Lead Forms</h1>
             <a href=\"{base_url}/admin/lead-forms/new\" class=\"btn\">+ New Form</a>
         </div>
         <div id=\"toast\"></div>
-        <div class=\"card\" style=\"padding:22px\">
+        <div class=\"card p-22\">
             <div class=\"table-wrap\"><table>
                 <thead><tr><th scope=\"col\">Name</th><th scope=\"col\">Slug</th><th scope=\"col\">Status</th><th></th></tr></thead>
                 <tbody>{rows}{empty}</tbody>
@@ -840,7 +845,7 @@ pub fn admin_lead_form_edit_html(
         "<p><a href=\"{base_url}/admin/lead-forms\">&larr; Back to Lead Forms</a></p>
         <h1>Edit Lead Form</h1>
         <div id=\"toast\"></div>
-        <div class=\"card\" style=\"padding:22px\">
+        <div class=\"card p-22\">
             <form hx-put=\"{base_url}/admin/lead-forms/{id}\" hx-target=\"{hash}toast\" hx-swap=\"innerHTML\">
                 <div class=\"form-group\">
                     <label>Name</label>
@@ -908,11 +913,11 @@ pub fn admin_lead_form_edit_html(
             </form>
         </div>
 
-        <div class=\"card\" style=\"padding:22px\">
+        <div class=\"card p-22\">
             <h3>Embed Code</h3>
-            <p class=\"muted\" style=\"margin-bottom: 0.5rem;\">Copy and paste this into your website:</p>
-            <div style=\"display:flex;gap:8px;align-items:center\">
-                <code style=\"display: block; padding: 0.5rem; flex: 1; overflow-x: auto; white-space: nowrap;\">{embed_code}</code>
+            <p class=\"muted mb-8\">Copy and paste this into your website:</p>
+            <div class=\"row gap-8\">
+                <code class=\"block flex-1\" style=\"padding: 0.5rem; overflow-x: auto; white-space: nowrap;\">{embed_code}</code>
                 <button class=\"btn sm\" onclick=\"copyUrl(this, '{embed_raw}')\">Copy</button>
             </div>
         </div>",

@@ -69,6 +69,38 @@ a { color:var(--accent); }
 .stack { display:flex; flex-direction:column; }
 .gap-4{gap:4px} .gap-6{gap:6px} .gap-8{gap:8px} .gap-12{gap:12px}
 .gap-16{gap:16px} .gap-20{gap:20px} .gap-24{gap:24px}
+
+/* Utility atoms — used instead of inline style attributes. */
+.p-12{padding:12px} .p-14{padding:14px} .p-16{padding:16px} .p-18{padding:18px}
+.p-20{padding:20px} .p-22{padding:22px} .p-24{padding:24px} .p-28{padding:28px}
+.page-pad{padding:24px 28px}
+.mt-4{margin-top:4px} .mt-6{margin-top:6px} .mt-8{margin-top:8px}
+.mt-12{margin-top:12px} .mt-14{margin-top:14px} .mt-16{margin-top:16px}
+.mt-22{margin-top:22px} .mt-24{margin-top:24px} .mt-32{margin-top:32px} .mt-36{margin-top:36px}
+.mb-4{margin-bottom:4px} .mb-6{margin-bottom:6px} .mb-8{margin-bottom:8px}
+.mb-12{margin-bottom:12px} .mb-14{margin-bottom:14px} .mb-16{margin-bottom:16px}
+.mb-24{margin-bottom:24px}
+.m-0{margin:0}
+.ml-auto{margin-left:auto}
+.fs-10{font-size:10px} .fs-11{font-size:11px} .fs-12{font-size:12px}
+.fs-13{font-size:13px} .fs-14{font-size:14px}
+.fw-600{font-weight:600}
+.ta-center{text-align:center} .ta-right{text-align:right}
+.flex-1{flex:1}
+.wrap{flex-wrap:wrap}
+.jc-center{justify-content:center}
+.link-reset{text-decoration:none;color:inherit}
+.inline{display:inline} .block{display:block} .hidden{display:none}
+.w-full{width:100%}
+.text-warn{color:var(--warn)} .text-ok{color:var(--ok)}
+.lbl{display:block;margin-bottom:6px}
+.card-warn{border-color:var(--warn)}
+.card-ok{border-color:var(--ok);background:linear-gradient(135deg,var(--paper),#E8F0DE)}
+.card-accent{border-color:var(--accent);background:linear-gradient(135deg,var(--paper),var(--accent-soft))}
+.card-soft{background:linear-gradient(135deg,var(--paper),#FFF4E6)}
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:16px}
+.icon-chip{width:40px;height:40px;border-radius:10px}
+
 .muted { color:var(--muted); }
 .success { background:#E8F0DE; color:#3E5A26; padding:1rem; border-radius:var(--r-sm); margin-bottom:1rem; animation: fadeOut 3s ease 2s forwards; }
 @keyframes fadeOut { to { opacity: 0; height: 0; padding: 0; margin: 0; overflow: hidden; } }
@@ -354,7 +386,7 @@ pub const LOGO_INLINE: &str = r##"<svg width="30" height="30" viewBox="0 0 100 1
 
 pub fn brand_mark() -> String {
     format!(
-        r#"<a href="/" class="brand" style="text-decoration:none;color:inherit">{}<span class="serif">Concierge</span></a>"#,
+        r#"<a href="/" class="brand link-reset">{}<span class="serif">Concierge</span></a>"#,
         LOGO_INLINE
     )
 }
@@ -362,11 +394,11 @@ pub fn brand_mark() -> String {
 /// Shared footer for all pages.
 pub fn footer() -> &'static str {
     r##"<footer class="site-footer">
-  <a href="https://github.com/ananthb/concierge-worker" style="color:var(--muted)">Open-source</a> &middot;
-  Licensed under <a href="https://www.gnu.org/licenses/agpl-3.0.html" style="color:var(--muted)">AGPL-3.0</a> &middot;
-  <a href="https://ananthb.github.io/concierge-worker/" style="color:var(--muted)">Docs</a> &middot;
-  <a href="/terms" style="color:var(--muted)">Terms</a> &middot;
-  <a href="/privacy" style="color:var(--muted)">Privacy</a>
+  <a href="https://github.com/ananthb/concierge-worker" class="muted">Open-source</a> &middot;
+  Licensed under <a href="https://www.gnu.org/licenses/agpl-3.0.html" class="muted">AGPL-3.0</a> &middot;
+  <a href="https://ananthb.github.io/concierge-worker/" class="muted">Docs</a> &middot;
+  <a href="/terms" class="muted">Terms</a> &middot;
+  <a href="/privacy" class="muted">Privacy</a>
 </footer>"##
 }
 

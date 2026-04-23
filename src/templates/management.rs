@@ -43,32 +43,32 @@ fn manage_shell(title: &str, content: &str, active: &str, base_url: &str) -> Str
 
 pub fn dashboard_html(email: &str, tenant_count: usize, base_url: &str) -> String {
     let content = format!(
-        r##"<div style="padding:24px 28px">
-  <div class="between" style="margin-bottom:24px">
+        r##"<div class="page-pad">
+  <div class="between mb-24">
     <div>
       <div class="eyebrow">Management Panel</div>
-      <h2 class="display-sm" style="margin:4px 0 0">Welcome, {email}</h2>
+      <h2 class="display-sm m-0 mt-4">Welcome, {email}</h2>
     </div>
   </div>
-  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:24px">
-    <div class="card" style="padding:18px;text-align:center">
+  <div class="mb-24" style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px">
+    <div class="card p-18 ta-center">
       <div class="stat-n serif">{tenant_count}</div>
-      <div class="mono muted" style="font-size:11px">Tenants</div>
+      <div class="mono muted fs-11">Tenants</div>
     </div>
-    <div class="card" style="padding:18px;text-align:center">
+    <div class="card p-18 ta-center">
       <div class="stat-n serif">—</div>
-      <div class="mono muted" style="font-size:11px">MRR</div>
+      <div class="mono muted fs-11">MRR</div>
     </div>
-    <div class="card" style="padding:18px;text-align:center">
+    <div class="card p-18 ta-center">
       <div class="stat-n serif">—</div>
-      <div class="mono muted" style="font-size:11px">Active</div>
+      <div class="mono muted fs-11">Active</div>
     </div>
   </div>
-  <div class="card" style="padding:18px">
+  <div class="card p-18">
     <div class="between">
       <div class="eyebrow">Quick actions</div>
     </div>
-    <div class="row gap-12" style="margin-top:12px">
+    <div class="row gap-12 mt-12">
       <a href="{base_url}/manage/tenants" class="btn sm">View tenants</a>
       <a href="{base_url}/manage/audit" class="btn ghost sm">Audit log</a>
     </div>
@@ -91,7 +91,7 @@ pub fn tenants_list_html(tenants: &[Tenant], base_url: &str) -> String {
   <div><a href="{base_url}/manage/tenants/{id}"><strong>{email}</strong></a></div>
   <div class="muted">{name}</div>
   <div><span class="chip">{plan}</span></div>
-  <div class="mono muted" style="font-size:11px">{created}</div>
+  <div class="mono muted fs-11">{created}</div>
   <div>
     <button class="btn ghost sm btn-danger" hx-delete="{base_url}/manage/tenants/{id}" hx-confirm="Delete tenant {email} and ALL their data?" hx-target="closest .rt-row" hx-swap="outerHTML">Delete</button>
   </div>
@@ -107,17 +107,17 @@ pub fn tenants_list_html(tenants: &[Tenant], base_url: &str) -> String {
         .collect();
 
     let empty = if tenants.is_empty() {
-        r##"<div style="padding:20px;text-align:center" class="muted">No tenants yet.</div>"##
+        r##"<div class="muted p-20 ta-center">No tenants yet.</div>"##
     } else {
         ""
     };
 
     let content = format!(
-        r##"<div style="padding:24px 28px">
-  <div class="between" style="margin-bottom:16px">
+        r##"<div class="page-pad">
+  <div class="between mb-16">
     <div>
       <div class="eyebrow">All tenants</div>
-      <h2 class="display-sm" style="margin:4px 0 0">{count} tenant{s}</h2>
+      <h2 class="display-sm m-0 mt-4">{count} tenant{s}</h2>
     </div>
   </div>
   <div class="card" style="padding:0;overflow:hidden">
@@ -147,7 +147,7 @@ pub fn tenant_detail_html(
         .iter()
         .map(|a| {
             format!(
-                r##"<div class="side-row"><div style="flex:1;font-size:13px">{name} <span class="mono muted">{phone}</span></div></div>"##,
+                r##"<div class="side-row"><div class="flex-1 fs-13">{name} <span class="mono muted">{phone}</span></div></div>"##,
                 name = html_escape(&a.name),
                 phone = html_escape(&a.phone_number),
             )
@@ -158,7 +158,7 @@ pub fn tenant_detail_html(
         .iter()
         .map(|a| {
             format!(
-                r##"<div class="side-row"><div style="flex:1;font-size:13px">@{username}</div></div>"##,
+                r##"<div class="side-row"><div class="flex-1 fs-13">@{username}</div></div>"##,
                 username = html_escape(&a.instagram_username),
             )
         })
@@ -168,14 +168,14 @@ pub fn tenant_detail_html(
         .iter()
         .map(|d| {
             format!(
-                r##"<div class="side-row"><div style="flex:1;font-size:13px">{domain}</div></div>"##,
+                r##"<div class="side-row"><div class="flex-1 fs-13">{domain}</div></div>"##,
                 domain = html_escape(&d.domain),
             )
         })
         .collect();
 
     let content = format!(
-        r##"<div style="padding:24px 28px">
+        r##"<div class="page-pad">
   <p><a href="{base_url}/manage/tenants">&larr; Back to tenants</a></p>
   <div class="between" style="margin:16px 0">
     <div>
@@ -186,8 +186,8 @@ pub fn tenant_detail_html(
     <button class="btn ghost sm btn-danger" hx-delete="{base_url}/manage/tenants/{id}" hx-confirm="Delete this tenant and ALL their data?">Delete tenant</button>
   </div>
   <div id="toast"></div>
-  <div class="card" style="padding:18px;margin-bottom:16px">
-    <h3 style="margin-bottom:12px">Plan</h3>
+  <div class="card p-18 mb-16">
+    <h3 class="mb-12">Plan</h3>
     <form hx-put="{base_url}/manage/tenants/{id}" hx-target="{hash}toast" hx-swap="innerHTML">
       <div class="row gap-12">
         <select class="select" name="plan" style="max-width:200px">
@@ -201,15 +201,15 @@ pub fn tenant_detail_html(
     </form>
   </div>
   <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px">
-    <div class="card" style="padding:16px">
+    <div class="card p-16">
       <div class="eyebrow">WhatsApp ({wa_count})</div>
       <div class="side-list">{wa_list}</div>
     </div>
-    <div class="card" style="padding:16px">
+    <div class="card p-16">
       <div class="eyebrow">Instagram ({ig_count})</div>
       <div class="side-list">{ig_list}</div>
     </div>
-    <div class="card" style="padding:16px">
+    <div class="card p-16">
       <div class="eyebrow">Email Domains ({domain_count})</div>
       <div class="side-list">{domain_list}</div>
     </div>
@@ -246,17 +246,17 @@ pub fn tenant_detail_html(
         ig_count = ig.len(),
         domain_count = domains.len(),
         wa_list = if wa_list.is_empty() {
-            r#"<div class="muted" style="font-size:13px">None</div>"#.to_string()
+            r#"<div class="muted fs-13">None</div>"#.to_string()
         } else {
             wa_list
         },
         ig_list = if ig_list.is_empty() {
-            r#"<div class="muted" style="font-size:13px">None</div>"#.to_string()
+            r#"<div class="muted fs-13">None</div>"#.to_string()
         } else {
             ig_list
         },
         domain_list = if domain_list.is_empty() {
-            r#"<div class="muted" style="font-size:13px">None</div>"#.to_string()
+            r#"<div class="muted fs-13">None</div>"#.to_string()
         } else {
             domain_list
         },
@@ -294,11 +294,11 @@ pub fn audit_html(log: &[serde_json::Value], base_url: &str) -> String {
 
             format!(
                 r##"<div class="rt-row" style="grid-template-columns:0.8fr 1fr 0.6fr 0.6fr 0.5fr">
-  <div class="mono muted" style="font-size:11px">{created}</div>
+  <div class="mono muted fs-11">{created}</div>
   <div>{actor}</div>
   <div><span class="chip">{action}</span></div>
   <div class="mono muted">{resource}</div>
-  <div class="mono muted" style="font-size:11px">{rid}</div>
+  <div class="mono muted fs-11">{rid}</div>
 </div>"##,
                 created = html_escape(created.get(..19).unwrap_or(created)),
                 actor = html_escape(actor),
@@ -310,13 +310,13 @@ pub fn audit_html(log: &[serde_json::Value], base_url: &str) -> String {
         .collect();
 
     let empty = if log.is_empty() {
-        r##"<div style="padding:20px;text-align:center" class="muted">No audit entries yet.</div>"##
+        r##"<div class="muted p-20 ta-center">No audit entries yet.</div>"##
     } else {
         ""
     };
 
     let content = format!(
-        r##"<div style="padding:24px 28px">
+        r##"<div class="page-pad">
   <div class="eyebrow">Audit Log</div>
   <h2 class="display-sm" style="margin:4px 0 16px">Management actions</h2>
   <div class="card" style="padding:0;overflow:hidden">
@@ -364,18 +364,18 @@ pub fn billing_overview_html(packs: &[CreditPackRow], base_url: &str) -> String 
         .collect();
 
     let content = format!(
-        r##"<div style="padding:24px 28px">
+        r##"<div class="page-pad">
   <div class="eyebrow">Billing</div>
   <h2 class="display-sm" style="margin:4px 0 16px">Credit packs &amp; grants</h2>
 
-  <div class="card" style="padding:0;overflow:hidden;margin-bottom:16px">
+  <div class="card mb-16" style="padding:0;overflow:hidden">
     <div class="rt-head" style="grid-template-columns:0.5fr 1fr 0.6fr 0.6fr 0.6fr 0.4fr 80px">
       <div>ID</div><div>Name</div><div>Replies</div><div>INR</div><div>USD</div><div>Status</div><div></div>
     </div>
     {pack_rows}
     <div style="padding:14px 20px;background:var(--cream-2)">
-      <div class="eyebrow" style="margin-bottom:8px">Add pack</div>
-      <form hx-post="{base_url}/manage/billing/packs" style="display:flex;gap:8px;flex-wrap:wrap;align-items:end">
+      <div class="eyebrow mb-8">Add pack</div>
+      <form class="row gap-8 wrap" hx-post="{base_url}/manage/billing/packs" style="align-items:end">
         <input class="input" name="name" placeholder="Name" required style="max-width:150px">
         <input class="input" name="replies" placeholder="Replies" type="number" min="1" required style="max-width:100px">
         <input class="input" name="price_inr" placeholder="INR (paise)" type="number" required style="max-width:120px">
@@ -386,13 +386,13 @@ pub fn billing_overview_html(packs: &[CreditPackRow], base_url: &str) -> String 
     </div>
   </div>
 
-  <div class="card" style="padding:18px">
-    <h3 style="margin-bottom:8px">Grant free replies</h3>
-    <p class="muted" style="margin-bottom:12px">Give a tenant reply credits directly.</p>
+  <div class="card p-18">
+    <h3 class="mb-8">Grant free replies</h3>
+    <p class="muted mb-12">Give a tenant reply credits directly.</p>
     <div id="grant-toast"></div>
     <form hx-post="" hx-target="{hash}grant-toast" hx-swap="innerHTML"
           onsubmit="this.setAttribute('hx-post', '{base_url}/manage/billing/grant/' + this.querySelector('[name=tenant_id]').value); htmx.process(this); return false;">
-      <div class="row gap-12" style="flex-wrap:wrap">
+      <div class="row gap-12 wrap">
         <input class="input" name="tenant_id" placeholder="Tenant ID" required style="max-width:300px">
         <input class="input" name="replies" placeholder="Replies" type="number" min="1" required style="max-width:140px">
         <input class="input" name="expires_days" placeholder="Expires in (days)" type="number" min="1" value="365" style="max-width:160px">

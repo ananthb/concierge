@@ -88,7 +88,7 @@ pub fn email_dashboard_html(
                 )
             } else {
                 format!(
-                    r#"<form hx-post="{base_url}/admin/email/subdomains" hx-ext="json-enc" hx-target="body" hx-swap="innerHTML" style="display:inline">
+                    r#"<form hx-post="{base_url}/admin/email/subdomains" hx-ext="json-enc" hx-target="body" hx-swap="innerHTML" class="inline">
   <input type="hidden" name="subdomain" value="{label}">
   <button type="submit" class="btn sm primary">Subscribe {price}/mo</button>
 </form>"#,
@@ -102,7 +102,7 @@ pub fn email_dashboard_html(
   <div><a href="{base_url}/admin/email/domains/{domain}/rules"><strong>{domain}</strong></a></div>
   <div>{status}</div>
   <div>{action_cell}</div>
-  <div><button class="btn ghost sm" style="color:var(--warn)" hx-delete="{base_url}/admin/email/subdomains/{label}" hx-confirm="Delete {domain} and all its rules?" hx-target="closest .rt-row" hx-swap="outerHTML">Delete</button></div>
+  <div><button class="btn ghost sm text-warn" hx-delete="{base_url}/admin/email/subdomains/{label}" hx-confirm="Delete {domain} and all its rules?" hx-target="closest .rt-row" hx-swap="outerHTML">Delete</button></div>
 </div>"#,
                 base_url = base_url,
                 domain = html_escape(&d.domain),
@@ -114,7 +114,7 @@ pub fn email_dashboard_html(
         .collect();
 
     let empty_state = if subdomains.is_empty() {
-        r#"<div style="padding:24px;text-align:center" class="muted">No email subdomains yet. Add one below.</div>"#
+        r#"<div class="muted p-24 ta-center">No email subdomains yet. Add one below.</div>"#
     } else {
         ""
     };
@@ -131,10 +131,10 @@ pub fn email_dashboard_html(
         .collect();
 
     let content = format!(
-        r#"<div style="padding:24px 28px">
-  <div class="between" style="margin-bottom:24px">
+        r#"<div class="page-pad">
+  <div class="between mb-24">
     <div>
-      <a href="{base_url}/admin" class="btn ghost sm" style="margin-bottom:8px">&larr; Dashboard</a>
+      <a href="{base_url}/admin" class="btn ghost sm mb-8">&larr; Dashboard</a>
       <h2 class="display-sm">Email Routing</h2>
     </div>
     <div class="row gap-8">
@@ -143,8 +143,8 @@ pub fn email_dashboard_html(
     </div>
   </div>
 
-  <div class="card" style="padding:18px;margin-bottom:16px">
-    <div class="eyebrow" style="margin-bottom:8px">Last 7 days</div>
+  <div class="card p-18 mb-16">
+    <div class="eyebrow mb-8">Last 7 days</div>
     {metrics_section}
   </div>
 
@@ -155,18 +155,18 @@ pub fn email_dashboard_html(
     {subdomain_rows}{empty_state}
   </div>
 
-  <div class="card" style="padding:22px;margin-top:16px" hx-ext="json-enc">
-    <div class="between" style="margin-bottom:12px">
+  <div class="card p-22 mt-16" hx-ext="json-enc">
+    <div class="between mb-12">
       <div class="eyebrow">Add subdomain</div>
-      <span class="mono muted" style="font-size:11px">{subdomain_price} per month</span>
+      <span class="mono muted fs-11">{subdomain_price} per month</span>
     </div>
     <form hx-post="{base_url}/admin/email/subdomains" hx-target="body" hx-swap="innerHTML"
-          style="display:flex;gap:8px;align-items:center">
+          class="row gap-8" style="align-items:center">
       <input class="input" type="text" name="subdomain" placeholder="acme" required style="max-width:200px">
       <span class="mono muted">.{base_domain}</span>
-      <button type="submit" class="btn primary sm" style="margin-left:auto">Add &rarr;</button>
+      <button type="submit" class="btn primary sm ml-auto">Add &rarr;</button>
     </form>
-    <div id="toast" style="margin-top:8px"></div>
+    <div id="toast" class="mt-8"></div>
   </div>
 </div>"#,
         base_url = base_url,
@@ -189,7 +189,7 @@ pub fn email_rules_html(domain: &str, rules: &[RoutingRule], base_url: &str) -> 
         .iter()
         .map(|r| {
             let enabled_badge = if r.enabled {
-                "<span style=\"color: var(--success-text);\">On</span>"
+                "<span class=\"text-ok\">On</span>"
             } else {
                 "<span class=\"text-muted\">Off</span>"
             };
@@ -226,10 +226,10 @@ pub fn email_rules_html(domain: &str, rules: &[RoutingRule], base_url: &str) -> 
 
     let templates_section = if rules.is_empty() {
         format!(
-            r#"<div class="card" style="padding:22px;margin-bottom:16px;border-color:var(--accent);background:linear-gradient(135deg,var(--paper),var(--accent-soft))">
-            <div class="eyebrow" style="margin-bottom:12px">Quick start</div>
-            <p style="margin-bottom:14px" class="muted">No rules yet. Pick a template to get started:</p>
-            <div class="row gap-8" style="flex-wrap:wrap" hx-ext="json-enc">
+            r#"<div class="card p-22 mb-16" style="border-color:var(--accent);background:linear-gradient(135deg,var(--paper),var(--accent-soft))">
+            <div class="eyebrow mb-12">Quick start</div>
+            <p class="muted mb-14">No rules yet. Pick a template to get started:</p>
+            <div class="row gap-8 wrap" hx-ext="json-enc">
                 <button class="btn sm" hx-post="{base_url}/admin/email/domains/{domain}/rules" hx-vals='{{"name":"Forward all to inbox","priority":"0","enabled":"true","action_type":"forward_email","destination":"you@example.com"}}' hx-target="body" hx-swap="innerHTML">Forward all to inbox</button>
                 <button class="btn sm" hx-post="{base_url}/admin/email/domains/{domain}/rules" hx-vals='{{"name":"Relay to Discord","priority":"0","enabled":"true","action_type":"forward_discord","channel_id":""}}' hx-target="body" hx-swap="innerHTML">Relay to Discord</button>
                 <button class="btn sm" hx-post="{base_url}/admin/email/domains/{domain}/rules" hx-vals='{{"name":"AI auto-reply","priority":"0","enabled":"true","action_type":"ai_reply"}}' hx-target="body" hx-swap="innerHTML">AI auto-reply</button>
@@ -243,9 +243,9 @@ pub fn email_rules_html(domain: &str, rules: &[RoutingRule], base_url: &str) -> 
     };
 
     let content = format!(
-        "<div style=\"padding:24px 28px\">
+        "<div class=\"page-pad\">
         <p><a href=\"{base_url}/admin/email\" class=\"btn ghost sm\">&larr; Email Routing</a></p>
-        <h1 class=\"display-sm\" style=\"margin:8px 0 16px\">Rules for {domain}</h1>
+        <h1 class=\"display-sm mt-8 mb-16\">Rules for {domain}</h1>
 
         {templates_section}
 
@@ -256,7 +256,7 @@ pub fn email_rules_html(domain: &str, rules: &[RoutingRule], base_url: &str) -> 
             </table></div>
         </div>
 
-        <div class=\"card\" style=\"padding:22px;margin-top:16px\">
+        <div class=\"card p-22 mt-16\">
             <h2>Add Rule</h2>
             <div id=\"toast\"></div>
             {rule_form}
@@ -276,10 +276,10 @@ pub fn email_rules_html(domain: &str, rules: &[RoutingRule], base_url: &str) -> 
 
 pub fn email_rule_edit_html(domain: &str, rule: &RoutingRule, base_url: &str) -> String {
     let content = format!(
-        "<div style=\"padding:24px 28px\">
+        "<div class=\"page-pad\">
         <p><a href=\"{base_url}/admin/email/domains/{domain}/rules\" class=\"btn ghost sm\">&larr; Rules</a></p>
-        <h1 class=\"display-sm\" style=\"margin:8px 0 16px\">Edit Rule: {name}</h1>
-        <div class=\"card\" style=\"padding:22px\">
+        <h1 class=\"display-sm mt-8 mb-16\">Edit Rule: {name}</h1>
+        <div class=\"card p-22\">
             <div id=\"toast\"></div>
             {form}
         </div>
@@ -402,18 +402,18 @@ fn rule_form_html(domain: &str, rule: Option<&RoutingRule>, base_url: &str) -> S
                 <label>Name</label>
                 <input type=\"text\" name=\"name\" value=\"{name}\" placeholder=\"Newsletter filter\" required>
             </div>
-            <div style=\"display: flex; gap: 1rem;\">
-                <div class=\"form-group\" style=\"flex: 1;\">
+            <div class=\"row gap-16\">
+                <div class=\"form-group flex-1\">
                     <label>Priority</label>
-                    <input type=\"number\" name=\"priority\" value=\"{priority}\" style=\"width: 100%;\">
+                    <input type=\"number\" name=\"priority\" value=\"{priority}\" class=\"w-full\">
                 </div>
-                <div class=\"form-group\" style=\"flex: 1;\">
+                <div class=\"form-group flex-1\">
                     <label><input type=\"checkbox\" name=\"enabled\" value=\"true\"{enabled_checked}> Enabled</label>
                 </div>
             </div>
 
             <h3 style=\"margin: 1rem 0 0.5rem;\">Match Criteria</h3>
-            <p class=\"muted\" style=\"margin-bottom:12px\"><small>Patterns: <code>*</code> matches anything, <code>?</code> matches one character. Example: <code>*@newsletter.com</code> matches all emails from newsletter.com</small></p>
+            <p class=\"muted mb-12\"><small>Patterns: <code>*</code> matches anything, <code>?</code> matches one character. Example: <code>*@newsletter.com</code> matches all emails from newsletter.com</small></p>
             <div class=\"form-group\">
                 <label>From</label>
                 <input type=\"text\" name=\"from_pattern\" value=\"{from_pattern}\" placeholder=\"*@newsletter.com\">
@@ -475,7 +475,7 @@ fn rule_form_html(domain: &str, rule: Option<&RoutingRule>, base_url: &str) -> S
                 </div>
             </div>
 
-            <div style=\"display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem;\">
+            <div class=\"row gap-8 mt-16\" style=\"justify-content: flex-end\">
                 <button type=\"submit\" class=\"btn\">Save</button>
             </div>
         </form>",
@@ -529,10 +529,10 @@ pub fn email_log_html(log: &[serde_json::Value], base_url: &str) -> String {
                 .unwrap_or("");
 
             let status = if error.is_empty() {
-                format!("<span style=\"color: var(--success-text);\">{action}</span>")
+                format!("<span class=\"text-ok\">{action}</span>")
             } else {
                 format!(
-                    "<span style=\"color: var(--error-text);\">{action}: {error}</span>",
+                    "<span class=\"text-warn\">{action}: {error}</span>",
                     action = html_escape(action),
                     error = html_escape(error)
                 )
@@ -564,9 +564,9 @@ pub fn email_log_html(log: &[serde_json::Value], base_url: &str) -> String {
     };
 
     let content = format!(
-        "<div style=\"padding:24px 28px\">
+        "<div class=\"page-pad\">
         <p><a href=\"{base_url}/admin/email\" class=\"btn ghost sm\">&larr; Email Routing</a></p>
-        <h1 class=\"display-sm\" style=\"margin:8px 0 16px\">Email Log</h1>
+        <h1 class=\"display-sm mt-8 mb-16\">Email Log</h1>
         <div class=\"card\" style=\"padding:0;overflow:hidden\">
             <div class=\"table-wrap\" style=\"overflow-x:auto\"><table>
                 <thead><tr><th>Time</th><th>Domain</th><th>From</th><th>To</th><th>Subject</th><th>Status</th></tr></thead>
@@ -587,17 +587,17 @@ pub fn email_settings_html(discord_token: Option<&str>, base_url: &str) -> Strin
     let token_value = discord_token.unwrap_or("");
 
     let content = format!(
-        "<div style=\"padding:24px 28px\">
+        "<div class=\"page-pad\">
         <p><a href=\"{base_url}/admin/email\" class=\"btn ghost sm\">&larr; Email Routing</a></p>
-        <h1 class=\"display-sm\" style=\"margin:8px 0 16px\">Email Settings</h1>
-        <div class=\"card\" style=\"padding:22px\">
+        <h1 class=\"display-sm mt-8 mb-16\">Email Settings</h1>
+        <div class=\"card p-22\">
             <div id=\"toast\"></div>
             <h2>Discord Bot</h2>
-            <p class=\"muted\" style=\"margin-bottom: 1rem;\">Bot token for forwarding emails to Discord channels.</p>
+            <p class=\"muted mb-16\">Bot token for forwarding emails to Discord channels.</p>
             <form hx-put=\"{base_url}/admin/email/settings\" hx-target=\"{hash}toast\" hx-swap=\"innerHTML\">
                 <div class=\"form-group\">
                     <label>Bot Token</label>
-                    <input type=\"password\" name=\"discord_bot_token\" value=\"{token}\" placeholder=\"Bot token\" style=\"font-family: monospace;\">
+                    <input type=\"password\" name=\"discord_bot_token\" value=\"{token}\" placeholder=\"Bot token\" class=\"mono\">
                 </div>
                 <button type=\"submit\" class=\"btn\">Save</button>
             </form>

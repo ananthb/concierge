@@ -74,15 +74,11 @@ pub fn billing_overview_html(
 ) -> String {
     let summary = summarize(billing);
 
-    let total_style = if summary.total <= 0 {
-        r#"style="color:var(--warn)""#
-    } else {
-        ""
-    };
+    let total_class = if summary.total <= 0 { " text-warn" } else { "" };
 
     let free_detail = match &summary.free_expires {
         Some(exp) => format!(
-            r#"<div class="mono muted" style="font-size:11px">expires {}</div>"#,
+            r#"<div class="mono muted fs-11">expires {}</div>"#,
             format_expiry(exp)
         ),
         None => String::new(),
@@ -91,7 +87,7 @@ pub fn billing_overview_html(
     let granted_detail = if summary.granted > 0 {
         match &summary.granted_earliest_expiry {
             Some(exp) => format!(
-                r#"<div class="mono muted" style="font-size:11px">earliest expiry {}</div>"#,
+                r#"<div class="mono muted fs-11">earliest expiry {}</div>"#,
                 format_expiry(exp)
             ),
             None => String::new(),
@@ -109,7 +105,7 @@ pub fn billing_overview_html(
                 format!("${}", p.price_usd / 100)
             };
             format!(
-                r##"<form hx-post="{base_url}/admin/billing/checkout" hx-ext="json-enc" hx-target="body" hx-swap="innerHTML" style="display:inline">
+                r##"<form class="inline" hx-post="{base_url}/admin/billing/checkout" hx-ext="json-enc" hx-target="body" hx-swap="innerHTML">
   <input type="hidden" name="credits" value="{credits}">
   <button class="btn sm" type="submit">{name}: {credits} replies, {price}</button>
 </form>"##,
@@ -122,48 +118,48 @@ pub fn billing_overview_html(
         .collect();
 
     let content = format!(
-        r##"<div style="padding:24px 28px">
+        r##"<div class="page-pad">
   <p><a href="{base_url}/admin">&larr; Back to Dashboard</a></p>
   <div class="eyebrow">Billing</div>
-  <h2 class="display-sm" style="margin:4px 0 16px">Reply credits</h2>
+  <h2 class="display-sm m-0 mt-4 mb-16">Reply credits</h2>
 
-  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:16px;margin-bottom:24px">
-    <div class="card" style="padding:18px;text-align:center">
-      <div class="stat-n serif" {total_style}>{total}</div>
-      <div class="mono muted" style="font-size:11px">Total remaining</div>
+  <div class="stats-grid mb-24">
+    <div class="card p-18 ta-center">
+      <div class="stat-n serif{total_class}">{total}</div>
+      <div class="mono muted fs-11">Total remaining</div>
     </div>
-    <div class="card" style="padding:18px;text-align:center">
+    <div class="card p-18 ta-center">
       <div class="stat-n serif">{free}</div>
-      <div class="mono muted" style="font-size:11px">Free this month</div>
+      <div class="mono muted fs-11">Free this month</div>
       {free_detail}
     </div>
-    <div class="card" style="padding:18px;text-align:center">
+    <div class="card p-18 ta-center">
       <div class="stat-n serif">{purchased}</div>
-      <div class="mono muted" style="font-size:11px">Purchased</div>
-      <div class="mono muted" style="font-size:11px">never expire</div>
+      <div class="mono muted fs-11">Purchased</div>
+      <div class="mono muted fs-11">never expire</div>
     </div>
-    <div class="card" style="padding:18px;text-align:center">
+    <div class="card p-18 ta-center">
       <div class="stat-n serif">{granted}</div>
-      <div class="mono muted" style="font-size:11px">Granted</div>
+      <div class="mono muted fs-11">Granted</div>
       {granted_detail}
     </div>
-    <div class="card" style="padding:18px;text-align:center">
+    <div class="card p-18 ta-center">
       <div class="stat-n serif">{used}</div>
-      <div class="mono muted" style="font-size:11px">Replies sent</div>
+      <div class="mono muted fs-11">Replies sent</div>
     </div>
   </div>
 
-  <div class="card" style="padding:22px">
-    <h3 style="margin-bottom:8px">Buy reply credits</h3>
-    <p class="muted" style="margin-bottom:16px">Purchase a pack to top up your balance. Purchased credits never expire. First 100 replies each month are free.</p>
-    <div class="row gap-12" style="flex-wrap:wrap">
+  <div class="card p-22">
+    <h3 class="mb-8">Buy reply credits</h3>
+    <p class="muted mb-16">Purchase a pack to top up your balance. Purchased credits never expire. First 100 replies each month are free.</p>
+    <div class="row gap-12 wrap">
       {pack_buttons}
     </div>
   </div>
 </div>"##,
         base_url = base_url,
         total = summary.total,
-        total_style = total_style,
+        total_class = total_class,
         free = summary.free,
         free_detail = free_detail,
         purchased = summary.purchased,
@@ -194,15 +190,15 @@ pub fn checkout_html(
     };
 
     let content = format!(
-        r##"<div style="max-width:480px;margin:4rem auto;text-align:center;padding:0 1rem">
-  <div class="card" style="padding:28px">
+        r##"<div class="ta-center" style="max-width:480px;margin:4rem auto;padding:0 1rem">
+  <div class="card p-28">
     <h2 class="display-sm">Complete purchase</h2>
-    <p class="muted" style="margin:8px 0 24px">Buying <strong>{credits}</strong> reply credits</p>
-    <div class="stat-n serif" style="margin-bottom:24px">{display_amount}</div>
-    <button id="pay-btn" class="btn primary lg" style="width:100%">Pay with Razorpay</button>
-    <p class="mono muted" style="font-size:11px;margin-top:12px">Secure payment via Razorpay</p>
+    <p class="muted m-0 mt-8 mb-24">Buying <strong>{credits}</strong> reply credits</p>
+    <div class="stat-n serif mb-24">{display_amount}</div>
+    <button id="pay-btn" class="btn primary lg w-full">Pay with Razorpay</button>
+    <p class="mono muted fs-11 mt-12">Secure payment via Razorpay</p>
   </div>
-  <a href="{base_url}{return_to}" class="btn ghost sm" style="margin-top:16px">&larr; Cancel</a>
+  <a href="{base_url}{return_to}" class="btn ghost sm mt-16">&larr; Cancel</a>
 </div>
 <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
 <script>

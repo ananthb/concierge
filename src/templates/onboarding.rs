@@ -78,7 +78,7 @@ pub fn welcome_html(_base_url: &str) -> String {
     let header = format!(
         r#"<header class="site-header">
   {brand}
-  <div style="margin-left:auto"><a href="/auth/login" class="btn ghost sm">Sign in</a></div>
+  <div class="ml-auto"><a href="/auth/login" class="btn ghost sm">Sign in</a></div>
 </header>"#,
         brand = brand_mark(),
     );
@@ -92,8 +92,8 @@ pub fn welcome_html(_base_url: &str) -> String {
     <p class="lead">Connect your channels, set a tone, and your concierge handles the rest. Auto-replies across WhatsApp, Instagram, and email. 100 replies free every month.</p>
     <a href="/auth/login" class="btn primary lg">Get started &rarr;</a>
     <div class="mono fineprint" style="margin-top:18px">
-      &#x25E6; <a href="/pricing" style="color:var(--muted)">pricing</a>
-      &nbsp; &#x25E6; <a href="https://github.com/ananthb/concierge-worker" style="color:var(--muted)">open-source</a>
+      &#x25E6; <a href="/pricing" class="muted">pricing</a>
+      &nbsp; &#x25E6; <a href="https://github.com/ananthb/concierge-worker" class="muted">open-source</a>
     </div>
   </div>
   <aside class="postcard" aria-hidden="true">
@@ -105,7 +105,7 @@ pub fn welcome_html(_base_url: &str) -> String {
       <div class="log-row"><span class="log-a">&rarr; &nbsp;concierge</span><span class="log-b">Yes - what day works better for you?</span></div>
       <div class="log-row"><span class="log-a">&nbsp;&#x2709; &nbsp;orders@</span><span class="log-b">invoice {hash}8821</span></div>
       <div class="log-row"><span class="log-a">&rarr; &nbsp;discord</span><span class="log-b">forwarded &middot; silent</span></div>
-      <div class="mono muted" style="margin-top:10px;font-size:10px;letter-spacing:.18em">142 handled today &middot; 0 sent to you</div>
+      <div class="mono muted fs-10" style="margin-top:10px;letter-spacing:.18em">142 handled today &middot; 0 sent to you</div>
     </div>
     <div class="stamp">ON<br>DUTY<br>24/7</div>
   </aside>
@@ -154,49 +154,49 @@ pub fn basics_html(business: &crate::types::BusinessInfo, base_url: &str) -> Str
   <h2 class="display-md">Tell us about you.</h2>
   <p class="lead">For invoicing and compliance. Your details are never shared.</p>
   <form hx-post="{base_url}/admin/wizard/basics" hx-target="body" hx-swap="innerHTML">
-    <div class="card" style="padding:24px">
+    <div class="card p-24">
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
         <div>
-          <label class="eyebrow" style="display:block;margin-bottom:6px">Brand name *</label>
+          <label class="eyebrow lbl">Brand name *</label>
           <input class="input" name="name" value="{name}" placeholder="Blossom Florist" required>
         </div>
         <div>
-          <label class="eyebrow" style="display:block;margin-bottom:6px">Your name *</label>
+          <label class="eyebrow lbl">Your name *</label>
           <input class="input" name="contact_name" value="{contact_name}" placeholder="Full name">
         </div>
         <div>
-          <label class="eyebrow" style="display:block;margin-bottom:6px">Phone *</label>
+          <label class="eyebrow lbl">Phone *</label>
           <input class="input" type="tel" name="phone" value="{phone}" placeholder="+91 98765 43210" required>
         </div>
         <div>
-          <label class="eyebrow" style="display:block;margin-bottom:6px">Entity type</label>
+          <label class="eyebrow lbl">Entity type</label>
           <select class="select" name="business_type" id="entity-type" onchange="document.getElementById('reg-fields').style.display=this.value&amp;&amp;this.value!=='unregistered'?'grid':'none'">{biz_type_html}</select>
         </div>
       </div>
-      <div id="reg-fields" style="display:{reg_display};grid-template-columns:1fr 1fr;gap:16px;margin-top:16px">
+      <div id="reg-fields" class="mt-16" style="display:{reg_display};grid-template-columns:1fr 1fr;gap:16px">
         <div>
-          <label class="eyebrow" style="display:block;margin-bottom:6px">PAN</label>
+          <label class="eyebrow lbl">PAN</label>
           <input class="input" name="pan" value="{pan}" placeholder="ABCDE1234F" style="text-transform:uppercase">
         </div>
         <div>
-          <label class="eyebrow" style="display:block;margin-bottom:6px">GSTIN <span class="muted">(optional)</span></label>
+          <label class="eyebrow lbl">GSTIN <span class="muted">(optional)</span></label>
           <input class="input" name="gstin" value="{gstin}" placeholder="22AAAAA0000A1Z5" style="text-transform:uppercase">
         </div>
         <div style="grid-column:1/-1">
-          <label class="eyebrow" style="display:block;margin-bottom:6px">Registered address</label>
+          <label class="eyebrow lbl">Registered address</label>
           <textarea class="textarea" name="address" rows="2" placeholder="Shop 12, Main Road...">{address}</textarea>
         </div>
         <div>
-          <label class="eyebrow" style="display:block;margin-bottom:6px">State</label>
+          <label class="eyebrow lbl">State</label>
           <input class="input" name="state" value="{state}" placeholder="Tamil Nadu">
         </div>
         <div>
-          <label class="eyebrow" style="display:block;margin-bottom:6px">Pincode</label>
+          <label class="eyebrow lbl">Pincode</label>
           <input class="input" name="pincode" value="{pincode}" placeholder="600001" pattern="[0-9]{{6}}" maxlength="6">
         </div>
       </div>
     </div>
-    <div class="between" style="margin-top:36px">
+    <div class="between mt-36">
       <a href="/" class="btn ghost">&larr; Back</a>
       <button id="basics-continue" class="btn primary" type="submit"{disabled}>Continue &rarr;</button>
     </div>
@@ -267,8 +267,8 @@ pub fn connect_html(
             format!(
                 r#"<div class="side-row" style="padding:10px 14px">
   <span>{mail_icon}</span>
-  <div style="flex:1"><span class="mono" style="font-size:13px">{domain}</span></div>
-  <button class="btn ghost sm" style="color:var(--warn)" hx-post="{base_url}/admin/wizard/email/remove" hx-vals='{{"label":"{label}"}}' hx-target="body" hx-swap="innerHTML">Remove</button>
+  <div class="flex-1"><span class="mono fs-13">{domain}</span></div>
+  <button class="btn ghost sm text-warn" hx-post="{base_url}/admin/wizard/email/remove" hx-vals='{{"label":"{label}"}}' hx-target="body" hx-swap="innerHTML">Remove</button>
 </div>"#,
                 mail_icon = channel_icon("mail"),
                 domain = html_escape(&d.domain),
@@ -294,15 +294,15 @@ pub fn connect_html(
     <div><div class="channel-name">Email</div></div>
   </div>
   <div class="channel-body">
-    <p class="muted" style="margin:0 0 12px">Get a dedicated email address. Route, forward, or auto-reply with AI.</p>
+    <p class="muted m-0 mb-12">Get a dedicated email address. Route, forward, or auto-reply with AI.</p>
     {email_rows}
     <form hx-post="{base_url}/admin/wizard/email/add" hx-target="body" hx-swap="innerHTML"
-          style="display:flex;gap:8px;align-items:center;margin-top:8px">
-      <input class="input" type="text" name="label" value="{slug}" placeholder="your-name" style="max-width:160px;font-size:13px">
-      <span class="mono muted" style="font-size:13px">.{base_domain}</span>
-      <button type="submit" class="btn sm" style="margin-left:auto">Add</button>
+          class="row gap-8 mt-8">
+      <input class="input fs-13" type="text" name="label" value="{slug}" placeholder="your-name" style="max-width:160px">
+      <span class="mono muted fs-13">.{base_domain}</span>
+      <button type="submit" class="btn sm ml-auto">Add</button>
     </form>
-    <div class="mono muted" style="font-size:11px;margin-top:6px">{price} per month per subdomain. Billed at the end.</div>
+    <div class="mono muted fs-11 mt-6">{price} per month per subdomain. Billed at the end.</div>
   </div>
 </div>"#,
             mail_icon = channel_icon("mail"),
@@ -327,7 +327,7 @@ pub fn connect_html(
   <h2 class="display-md">Where do your customers already talk to you?</h2>
   <p class="lead">Connect your channels. Skip anything you don't use &mdash; you can add more from the dashboard later.</p>
   <div class="channels-grid">{ig_card}{wa_card}{email_section}</div>
-  <div class="between" style="margin-top:36px">
+  <div class="between mt-36">
     <button class="btn ghost" hx-post="{base_url}/admin/wizard/goto" hx-vals='{{"to":"basics"}}' hx-target="body" hx-swap="innerHTML">&larr; Back</button>
     <button class="btn primary" hx-post="{base_url}/admin/wizard/goto" hx-vals='{{"to":"notifications"}}' hx-target="body" hx-swap="innerHTML">{continue_label}</button>
   </div>
@@ -357,11 +357,11 @@ fn channel_card(
   <div class="channel-head">
     <div class="channel-mark">{icon}</div>
     <div><div class="channel-name">{name}</div></div>
-    <span class="dot ok" style="margin-left:auto"></span>
+    <span class="dot ok ml-auto"></span>
   </div>
   <div class="channel-body">
-    <div class="mono" style="color:var(--ok);font-size:12px">&#x25CF; active</div>
-    <div class="serif" style="font-size:22px;line-height:1.1;margin-top:4px">{handle}</div>
+    <div class="mono text-ok fs-12">&#x25CF; active</div>
+    <div class="serif mt-4" style="font-size:22px;line-height:1.1">{handle}</div>
   </div>
   <div class="row gap-8">
     <a href="{base_url}/admin/{key_path}" class="btn ghost sm">Manage</a>
@@ -379,9 +379,9 @@ fn channel_card(
   <div class="channel-head">
     <div class="channel-mark">{icon}</div>
     <div><div class="channel-name">{name}</div></div>
-    <span class="dot" style="margin-left:auto"></span>
+    <span class="dot ml-auto"></span>
   </div>
-  <div class="channel-body"><p class="muted" style="margin:0">{flavor}</p></div>
+  <div class="channel-body"><p class="muted m-0">{flavor}</p></div>
   <a href="{base_url}/admin/{key_path}" class="btn">Connect &rarr;</a>
 </div>"#,
             icon = channel_icon(key),
@@ -459,65 +459,65 @@ pub fn notifications_html(config: &crate::types::NotificationConfig, base_url: &
   <p class="lead">Pick where you want to receive AI approval requests and activity digests. You can choose both.</p>
 
   <form hx-post="{base_url}/admin/wizard/notifications" hx-target="body" hx-swap="innerHTML">
-    <div class="card" style="padding:22px;margin-bottom:16px">
-      <div class="eyebrow" style="margin-bottom:12px">AI reply approvals</div>
-      <p class="muted" style="margin-bottom:14px;font-size:14px">When the AI drafts a reply, where should we ask you to approve it?</p>
+    <div class="card p-22 mb-16">
+      <div class="eyebrow mb-12">AI reply approvals</div>
+      <p class="muted mb-14 fs-14">When the AI drafts a reply, where should we ask you to approve it?</p>
       <div class="admin-grid">
         <label class="admin-card{ad}" style="min-height:auto;cursor:pointer">
           <input type="hidden" name="approval_discord" value="false">
-          <input type="checkbox" name="approval_discord" value="true" style="display:none" onchange="this.closest('.admin-card').classList.toggle('selected',this.checked)"{ad_checked}>
+          <input type="checkbox" name="approval_discord" value="true" class="hidden" onchange="this.closest('.admin-card').classList.toggle('selected',this.checked)"{ad_checked}>
           <div class="row gap-12">
-            <div class="admin-mark" style="width:40px;height:40px;border-radius:10px">{discord_icon}</div>
-            <div><div style="font-weight:600">Discord</div>
-            <div class="mono muted" style="font-size:11px">real-time threads</div></div>
+            <div class="admin-mark icon-chip">{discord_icon}</div>
+            <div><div class="fw-600">Discord</div>
+            <div class="mono muted fs-11">real-time threads</div></div>
           </div>
         </label>
         <label class="admin-card{ae}" style="min-height:auto;cursor:pointer">
           <input type="hidden" name="approval_email" value="false">
-          <input type="checkbox" name="approval_email" value="true" style="display:none" onchange="this.closest('.admin-card').classList.toggle('selected',this.checked);this.closest('.admin-card').querySelector('.freq-row').style.display=this.checked?'flex':'none'"{ae_checked}>
+          <input type="checkbox" name="approval_email" value="true" class="hidden" onchange="this.closest('.admin-card').classList.toggle('selected',this.checked);this.closest('.admin-card').querySelector('.freq-row').style.display=this.checked?'flex':'none'"{ae_checked}>
           <div class="row gap-12">
-            <div class="admin-mark" style="width:40px;height:40px;border-radius:10px">{mail_icon}</div>
-            <div><div style="font-weight:600">Email</div>
-            <div class="mono muted" style="font-size:11px">batched digest</div></div>
+            <div class="admin-mark icon-chip">{mail_icon}</div>
+            <div><div class="fw-600">Email</div>
+            <div class="mono muted fs-11">batched digest</div></div>
           </div>
-          <div class="freq-row row gap-8" style="margin-top:12px;display:{ae_display}">
-            <span class="mono muted" style="font-size:12px">Every</span>
-            <select class="select" name="approval_freq" style="width:auto;font-size:13px;padding:6px 10px">{approval_freq_html}</select>
+          <div class="freq-row row gap-8 mt-12" style="display:{ae_display}">
+            <span class="mono muted fs-12">Every</span>
+            <select class="select fs-13" name="approval_freq" style="width:auto;padding:6px 10px">{approval_freq_html}</select>
           </div>
         </label>
       </div>
     </div>
 
-    <div class="card" style="padding:22px">
-      <div class="eyebrow" style="margin-bottom:12px">Activity digest</div>
-      <p class="muted" style="margin-bottom:14px;font-size:14px">A summary of messages handled, credits used, and anything that needs attention.</p>
+    <div class="card p-22">
+      <div class="eyebrow mb-12">Activity digest</div>
+      <p class="muted mb-14 fs-14">A summary of messages handled, credits used, and anything that needs attention.</p>
       <div class="admin-grid">
         <label class="admin-card{dd}" style="min-height:auto;cursor:pointer">
           <input type="hidden" name="digest_discord" value="false">
-          <input type="checkbox" name="digest_discord" value="true" style="display:none" onchange="this.closest('.admin-card').classList.toggle('selected',this.checked)"{dd_checked}>
+          <input type="checkbox" name="digest_discord" value="true" class="hidden" onchange="this.closest('.admin-card').classList.toggle('selected',this.checked)"{dd_checked}>
           <div class="row gap-12">
-            <div class="admin-mark" style="width:40px;height:40px;border-radius:10px">{discord_icon}</div>
-            <div><div style="font-weight:600">Discord</div>
-            <div class="mono muted" style="font-size:11px">channel post</div></div>
+            <div class="admin-mark icon-chip">{discord_icon}</div>
+            <div><div class="fw-600">Discord</div>
+            <div class="mono muted fs-11">channel post</div></div>
           </div>
         </label>
         <label class="admin-card{de}" style="min-height:auto;cursor:pointer">
           <input type="hidden" name="digest_email" value="false">
-          <input type="checkbox" name="digest_email" value="true" style="display:none" onchange="this.closest('.admin-card').classList.toggle('selected',this.checked);this.closest('.admin-card').querySelector('.freq-row').style.display=this.checked?'flex':'none'"{de_checked}>
+          <input type="checkbox" name="digest_email" value="true" class="hidden" onchange="this.closest('.admin-card').classList.toggle('selected',this.checked);this.closest('.admin-card').querySelector('.freq-row').style.display=this.checked?'flex':'none'"{de_checked}>
           <div class="row gap-12">
-            <div class="admin-mark" style="width:40px;height:40px;border-radius:10px">{mail_icon}</div>
-            <div><div style="font-weight:600">Email</div>
-            <div class="mono muted" style="font-size:11px">periodic summary</div></div>
+            <div class="admin-mark icon-chip">{mail_icon}</div>
+            <div><div class="fw-600">Email</div>
+            <div class="mono muted fs-11">periodic summary</div></div>
           </div>
-          <div class="freq-row row gap-8" style="margin-top:12px;display:{de_display}">
-            <span class="mono muted" style="font-size:12px">Every</span>
-            <select class="select" name="digest_freq" style="width:auto;font-size:13px;padding:6px 10px">{digest_freq_html}</select>
+          <div class="freq-row row gap-8 mt-12" style="display:{de_display}">
+            <span class="mono muted fs-12">Every</span>
+            <select class="select fs-13" name="digest_freq" style="width:auto;padding:6px 10px">{digest_freq_html}</select>
           </div>
         </label>
       </div>
     </div>
 
-    <div class="between" style="margin-top:36px">
+    <div class="between mt-36">
       <button type="button" class="btn ghost" hx-post="{base_url}/admin/wizard/goto" hx-vals='{{"to":"channels"}}' hx-target="body" hx-swap="innerHTML">&larr; Back</button>
       <button id="notif-continue" type="submit" class="btn primary"{notif_disabled}>Continue &rarr;</button>
     </div>
@@ -610,7 +610,7 @@ pub fn replies_html(persona: &PersonaConfig, canned: &[CannedReply], base_url: &
         .collect();
 
     let empty = if canned.is_empty() {
-        r#"<div class="replies-row"><span class="muted" style="grid-column:1/-1;text-align:center">No canned replies yet. Add one below — or just let the AI handle everything.</span></div>"#
+        r#"<div class="replies-row"><span class="muted ta-center" style="grid-column:1/-1">No canned replies yet. Add one below — or just let the AI handle everything.</span></div>"#
     } else {
         ""
     };
@@ -623,19 +623,19 @@ pub fn replies_html(persona: &PersonaConfig, canned: &[CannedReply], base_url: &
   <h2 class="display-md">How should your concierge respond?</h2>
   <p class="lead">Configure the AI voice for general replies, then add canned overrides for specific questions.</p>
 
-  <div class="card" style="padding:22px;margin-bottom:16px">
-    <div class="eyebrow" style="margin-bottom:12px">AI persona</div>
+  <div class="card p-22 mb-16">
+    <div class="eyebrow mb-12">AI persona</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
       <div>
-        <label class="eyebrow" style="display:block;margin-bottom:6px">Type of business</label>
+        <label class="eyebrow lbl">Type of business</label>
         <input class="input" name="biz_type" value="{biz_type}" placeholder="florist, hair salon, coffee shop...">
       </div>
       <div>
-        <label class="eyebrow" style="display:block;margin-bottom:6px">City</label>
+        <label class="eyebrow lbl">City</label>
         <input class="input" name="city" value="{city}" placeholder="Chennai, Berlin...">
       </div>
       <div>
-        <label class="eyebrow" style="display:block;margin-bottom:6px">Tone</label>
+        <label class="eyebrow lbl">Tone</label>
         <select class="select" name="tone">
           <option value="">Choose a tone...</option>
           <option value="warm &amp; chatty"{tone_wc}>warm &amp; chatty</option>
@@ -645,7 +645,7 @@ pub fn replies_html(persona: &PersonaConfig, canned: &[CannedReply], base_url: &
         </select>
       </div>
       <div>
-        <label class="eyebrow" style="display:block;margin-bottom:6px">Never do this</label>
+        <label class="eyebrow lbl">Never do this</label>
         <select class="select" name="never">
           <option value="">Choose a boundary...</option>
           <option value="quote prices"{never_qp}>quote prices</option>
@@ -654,9 +654,9 @@ pub fn replies_html(persona: &PersonaConfig, canned: &[CannedReply], base_url: &
         </select>
       </div>
     </div>
-    <div class="card" style="padding:14px;background:var(--ink);color:var(--cream);margin-top:16px;border-color:var(--ink);border-radius:var(--r-sm)">
-      <div class="mono" style="font-size:10px;letter-spacing:.18em;color:var(--accent-soft);margin-bottom:6px">SYSTEM PROMPT</div>
-      <pre class="mono" style="margin:0;white-space:pre-wrap;font-size:11px;color:var(--cream);line-height:1.5">{prompt}</pre>
+    <div class="card p-14 mt-16" style="background:var(--ink);color:var(--cream);border-color:var(--ink);border-radius:var(--r-sm)">
+      <div class="mono fs-10 mb-6" style="letter-spacing:.18em;color:var(--accent-soft)">SYSTEM PROMPT</div>
+      <pre class="mono m-0 fs-11" style="white-space:pre-wrap;color:var(--cream);line-height:1.5">{prompt}</pre>
     </div>
   </div>
 
@@ -667,14 +667,14 @@ pub fn replies_html(persona: &PersonaConfig, canned: &[CannedReply], base_url: &
     <input type="hidden" name="never" value="{never_raw}">
     <div class="card replies-card">
       <div class="eyebrow" style="padding:14px 20px 0">Canned replies <span class="muted">(optional)</span></div>
-      <p class="muted" style="padding:4px 20px 0;font-size:13px">These fire before the AI. Glob patterns work &mdash; <span class="mono">*</span> matches anything.</p>
-      <div class="replies-head" style="margin-top:12px"><div>When message matches</div><div>Reply with</div><div></div></div>
+      <p class="muted fs-13" style="padding:4px 20px 0">These fire before the AI. Glob patterns work &mdash; <span class="mono">*</span> matches anything.</p>
+      <div class="replies-head mt-12"><div>When message matches</div><div>Reply with</div><div></div></div>
       {rows}{empty}
       <div class="replies-add">
         <button type="button" class="btn ghost sm" hx-post="{base_url}/admin/wizard/replies/add" hx-target="body" hx-swap="innerHTML">+ Add reply</button>
       </div>
     </div>
-    <div class="between" style="margin-top:32px">
+    <div class="between mt-32">
       <button type="button" class="btn ghost" hx-post="{base_url}/admin/wizard/goto" hx-vals='{{"to":"notifications"}}' hx-target="body" hx-swap="innerHTML">&larr; Back</button>
       <button type="submit" class="btn primary">Continue &rarr;</button>
     </div>
@@ -724,11 +724,11 @@ pub fn launch_html(
             format!(
                 r#"<div class="side-row" style="padding:10px 14px">
   <span>{mail_icon}</span>
-  <div style="flex:1">
-    <span class="mono" style="font-size:13px">{domain}</span>
-    <div class="mono muted" style="font-size:11px">{label_text}</div>
+  <div class="flex-1">
+    <span class="mono fs-13">{domain}</span>
+    <div class="mono muted fs-11">{label_text}</div>
   </div>
-  <form hx-post="{base_url}/admin/email/subdomains" hx-target="body" style="display:inline" hx-ext="json-enc">
+  <form hx-post="{base_url}/admin/email/subdomains" hx-target="body" class="inline" hx-ext="json-enc">
     <input type="hidden" name="subdomain" value="{label}">
     <button type="submit" class="btn sm primary">Subscribe {price}/mo</button>
   </form>
@@ -747,9 +747,9 @@ pub fn launch_html(
         String::new()
     } else {
         format!(
-            r#"<div class="card" style="padding:22px;margin-bottom:16px">
-  <div class="eyebrow" style="margin-bottom:8px">Email subdomains</div>
-  <p class="muted" style="margin-bottom:12px;font-size:14px">These addresses won't receive mail until you subscribe. You can pay now, or skip and subscribe later from Email Routing on the dashboard.</p>
+            r#"<div class="card p-22 mb-16">
+  <div class="eyebrow mb-8">Email subdomains</div>
+  <p class="muted mb-12 fs-14">These addresses won't receive mail until you subscribe. You can pay now, or skip and subscribe later from Email Routing on the dashboard.</p>
   {email_rows}
 </div>"#
         )
@@ -764,14 +764,14 @@ pub fn launch_html(
                 format!("₹{}", p.price_inr / 100)
             };
             format!(
-                r#"<form hx-post="{base_url}/admin/billing/checkout" hx-target="body" hx-swap="innerHTML" style="display:inline" hx-ext="json-enc">
+                r#"<form hx-post="{base_url}/admin/billing/checkout" hx-target="body" hx-swap="innerHTML" class="inline" hx-ext="json-enc">
   <input type="hidden" name="credits" value="{replies}">
   <input type="hidden" name="return_to" value="/admin/wizard/launch">
-  <button type="submit" class="card" style="padding:16px;text-align:center;min-width:140px;cursor:pointer;border:1px solid var(--hair)">
+  <button type="submit" class="card ta-center" style="padding:16px;min-width:140px;cursor:pointer;border:1px solid var(--hair)">
     <div class="stat-n serif">{replies}</div>
-    <div class="mono muted" style="font-size:11px;margin-bottom:8px">replies</div>
-    <div style="font-weight:600;margin-bottom:4px">{price}</div>
-    <div class="mono muted" style="font-size:10px">never expire</div>
+    <div class="mono muted fs-11 mb-8">replies</div>
+    <div class="fw-600 mb-4">{price}</div>
+    <div class="mono muted fs-10">never expire</div>
   </button>
 </form>"#,
                 base_url = base_url,
@@ -785,20 +785,20 @@ pub fn launch_html(
         String::new()
     } else {
         format!(
-            r#"<div class="card" style="padding:22px;margin-bottom:16px">
-  <div class="eyebrow" style="margin-bottom:8px">Reply credit packs <span class="muted">(optional)</span></div>
-  <p class="muted" style="margin-bottom:12px;font-size:14px">You get 100 free replies every month. Buy more if you need them — purchased credits never expire. You can always buy credits later from the Billing page.</p>
-  <div class="row gap-12" style="flex-wrap:wrap;justify-content:center">{pack_buttons}</div>
+            r#"<div class="card p-22 mb-16">
+  <div class="eyebrow mb-8">Reply credit packs <span class="muted">(optional)</span></div>
+  <p class="muted mb-12 fs-14">You get 100 free replies every month. Buy more if you need them — purchased credits never expire. You can always buy credits later from the Billing page.</p>
+  <div class="row gap-12 wrap" style="justify-content:center">{pack_buttons}</div>
 </div>"#
         )
     };
 
-    let status_card = r#"<div class="card" style="padding:22px;border-color:var(--ok);background:linear-gradient(135deg,var(--paper),#E8F0DE)">
+    let status_card = r#"<div class="card p-22" style="border-color:var(--ok);background:linear-gradient(135deg,var(--paper),#E8F0DE)">
     <div class="row gap-12">
       <span class="dot ok"></span>
       <div>
-        <div style="font-weight:600">Ready to go live</div>
-        <p class="muted" style="margin:4px 0 0;font-size:14px">Hit finish to open your dashboard. Connect channels, set up email rules, and start receiving auto-replies.</p>
+        <div class="fw-600">Ready to go live</div>
+        <p class="muted fs-14 m-0 mt-4">Hit finish to open your dashboard. Connect channels, set up email rules, and start receiving auto-replies.</p>
       </div>
     </div>
   </div>"#;
@@ -814,7 +814,7 @@ pub fn launch_html(
 
   {status_card}
 
-  <div class="between" style="margin-top:36px">
+  <div class="between mt-36">
     <button class="btn ghost" hx-post="{base_url}/admin/wizard/goto" hx-vals='{{"to":"replies"}}' hx-target="body" hx-swap="innerHTML">&larr; Back</button>
     <button class="btn primary" hx-post="{base_url}/admin/wizard/complete" hx-target="body">Finish setup &rarr;</button>
   </div>
@@ -839,8 +839,8 @@ pub fn pricing_html(packs: &[crate::types::CreditPackRow], default_currency: &st
                 r##"<div class="rt-row" style="grid-template-columns:1fr 1fr 1fr 1fr">
   <div><strong>{name}</strong></div>
   <div>{replies}</div>
-  <div><span class="p-inr">&#x20B9;{inr}</span><span class="p-usd" style="display:none">${usd}</span></div>
-  <div><span class="p-inr">&#x20B9;{per_inr:.2}</span><span class="p-usd" style="display:none">${per_usd:.4}</span></div>
+  <div><span class="p-inr">&#x20B9;{inr}</span><span class="p-usd hidden">${usd}</span></div>
+  <div><span class="p-inr">&#x20B9;{per_inr:.2}</span><span class="p-usd hidden">${per_usd:.4}</span></div>
 </div>"##,
                 name = html_escape(&p.name),
                 replies = p.replies,
@@ -855,7 +855,7 @@ pub fn pricing_html(packs: &[crate::types::CreditPackRow], default_currency: &st
     let content = format!(
         r##"<header class="site-header">
   {brand}
-  <div class="row gap-12" style="margin-left:auto">
+  <div class="row gap-12 ml-auto">
     <a href="/" class="btn ghost sm">&larr; Back</a>
     <a href="/auth/login" class="btn ghost sm">Sign in</a>
   </div>
@@ -880,16 +880,16 @@ pub fn pricing_html(packs: &[crate::types::CreditPackRow], default_currency: &st
     {pack_rows}
   </div>
 
-  <div class="card" style="padding:18px">
-    <div class="eyebrow" style="margin-bottom:8px">What counts as a reply?</div>
-    <p class="muted" style="margin:0">Every auto-reply sent by the concierge on WhatsApp, Instagram, or email uses one reply credit. Inbound messages, email forwarding, and Discord relay are free.</p>
+  <div class="card p-18">
+    <div class="eyebrow mb-8">What counts as a reply?</div>
+    <p class="muted m-0">Every auto-reply sent by the concierge on WhatsApp, Instagram, or email uses one reply credit. Inbound messages, email forwarding, and Discord relay are free.</p>
   </div>
 
   <h2 style="margin-top:2rem">Email</h2>
   <p class="muted">Get a dedicated email address like <code>hello@yourname.cncg.email</code> with smart routing, forwarding, and AI replies.</p>
 
-  <div class="card" style="padding:18px;margin:24px 0">
-    <p style="margin:0"><strong><span class="p-inr">&#x20B9;199</span><span class="p-usd" style="display:none">$2</span> per subdomain per month.</strong></p>
+  <div class="card p-18" style="margin:24px 0">
+    <p class="m-0"><strong><span class="p-inr">&#x20B9;199</span><span class="p-usd hidden">$2</span> per subdomain per month.</strong></p>
     <p class="muted" style="margin:8px 0 0">Includes unlimited inbound email, routing rules, forwarding, and Discord relay. AI-generated replies use 1 reply credit each (from your pack above).</p>
   </div>
 </article>
