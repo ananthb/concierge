@@ -13,21 +13,36 @@ pub async fn handle_wizard(
     base_url: &str,
     tenant_id: &str,
 ) -> Result<Response> {
-    worker::console_log!("Wizard: path={} tenant={}", path, tenant_id);
     let kv = env.kv("KV")?;
-    let mut state = match get_onboarding(&kv, tenant_id).await {
-        Ok(s) => s,
-        Err(e) => {
-            worker::console_log!("Wizard: get_onboarding error: {:?}", e);
-            return Response::error(format!("Onboarding error: {e}"), 500);
-        }
-    };
-    worker::console_log!("Wizard: state.step={}", state.step);
+    let mut state = get_onboarding(&kv, tenant_id).await?;
 
     let sub = path
         .strip_prefix("/admin/wizard")
         .unwrap_or("")
         .trim_start_matches('/');
+
+    // Direct step access via URL (GET) — allow going back, block skipping ahead.
+    // Must come before the form-submit arms below, which share step names with
+    // POST handlers ("basics", "notifications") and would otherwise try to
+    // parse a non-existent JSON body on GET.
+    if req.method() == Method::Get
+        && matches!(
+            sub,
+            "basics" | "channels" | "notifications" | "replies" | "launch"
+        )
+    {
+        let requested_idx = step_index(sub);
+        let current_idx = step_index(&state.step);
+        if requested_idx <= current_idx {
+            return render_step(sub, &state, &kv, &env, tenant_id, base_url).await;
+        }
+        let headers = Headers::new();
+        headers.set(
+            "Location",
+            &format!("{base_url}/admin/wizard/{}", state.step),
+        )?;
+        return Ok(Response::empty()?.with_status(302).with_headers(headers));
+    }
 
     match sub {
         // Navigation between steps
@@ -262,25 +277,6 @@ pub async fn handle_wizard(
             Ok(Response::empty()?.with_status(302).with_headers(headers))
         }
 
-        // Direct step access via URL — allow going back, block skipping ahead
-        "basics" | "channels" | "notifications" | "replies" | "launch" => {
-            let requested_idx = step_index(sub);
-            let current_idx = step_index(&state.step);
-
-            if requested_idx <= current_idx {
-                // Going back or revisiting current — allowed
-                render_step(sub, &state, &kv, &env, tenant_id, base_url).await
-            } else {
-                // Trying to skip ahead — redirect to current step
-                let headers = Headers::new();
-                headers.set(
-                    "Location",
-                    &format!("{base_url}/admin/wizard/{}", state.step),
-                )?;
-                Ok(Response::empty()?.with_status(302).with_headers(headers))
-            }
-        }
-
         // Default: show current step (resume from where user left off)
         _ => {
             let step =
@@ -317,12 +313,8 @@ async fn render_step(
     tenant_id: &str,
     base_url: &str,
 ) -> Result<Response> {
-    worker::console_log!("render_step: {}", step);
     match step {
-        "basics" => {
-            worker::console_log!("render_step: rendering basics_html");
-            Response::from_html(basics_html(&state.business, base_url))
-        }
+        "basics" => Response::from_html(basics_html(&state.business, base_url)),
         "channels" => {
             let wa = list_whatsapp_accounts(kv, tenant_id).await?;
             let ig = list_instagram_accounts(kv, tenant_id).await?;

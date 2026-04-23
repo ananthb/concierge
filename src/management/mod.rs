@@ -60,7 +60,7 @@ pub async fn handle_management(
 /// Verify the Cloudflare Access JWT and return the authenticated email.
 ///
 /// 1. Reads the `Cf-Access-Jwt-Assertion` header
-/// 2. Fetches the team JWKS from `https://<team>.cloudflare.com/cdn-cgi/access/certs`
+/// 2. Fetches the team JWKS from `https://<team>.cloudflareaccess.com/cdn-cgi/access/certs`
 /// 3. Verifies the RS256 signature via Web Crypto
 /// 4. Checks `aud` matches CF_ACCESS_AUD
 ///
@@ -122,7 +122,7 @@ async fn verify_cf_jwt(token: &str, expected_aud: &str, team_domain: &str) -> Re
     }
 
     // Fetch JWKS and find the matching key
-    let certs_url = format!("https://{team_domain}.cloudflare.com/cdn-cgi/access/certs");
+    let certs_url = format!("https://{team_domain}.cloudflareaccess.com/cdn-cgi/access/certs");
     let mut resp = Fetch::Url(Url::parse(&certs_url).map_err(|_| Error::from("Bad certs URL"))?)
         .send()
         .await?;
