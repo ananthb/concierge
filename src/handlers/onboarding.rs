@@ -168,13 +168,20 @@ pub async fn handle_wizard(
                     .unwrap_or(default)
             };
 
+            let approval_discord = is_true("approval_discord");
+            let approval_email = is_true("approval_email");
+            if !approval_discord && !approval_email {
+                return Response::from_html(
+                    r#"<div class="error">Pick at least one approval channel — Discord or Email — so the AI knows where to ask before sending.</div>"#.to_string(),
+                );
+            }
             state.notifications = NotificationConfig {
-                approval_discord: is_true("approval_discord"),
-                approval_email: is_true("approval_email"),
+                approval_discord,
+                approval_email,
                 approval_email_frequency_minutes: parse_freq("approval_freq", 5, 60, 15),
                 digest_discord: is_true("digest_discord"),
                 digest_email: is_true("digest_email"),
-                digest_email_frequency_minutes: parse_freq("digest_freq", 60, 1440, 1440),
+                digest_email_frequency_minutes: parse_freq("digest_freq", 1440, 129600, 1440),
             };
             state.step = "replies".to_string();
             save_onboarding(&kv, tenant_id, &state).await?;
@@ -338,6 +345,7 @@ async fn render_step(
                 &slug,
                 &base_domain,
                 &currency,
+                tenant_id,
                 base_url,
             ))
         }

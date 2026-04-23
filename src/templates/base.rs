@@ -222,7 +222,7 @@ code {
 .rail .seg { height:4px; flex:1; background:var(--hair); border-radius:999px; overflow:hidden; }
 .rail .seg .fill { display:block; height:100%; background:var(--ink); width:0; transition:width .4s ease; }
 .rail .seg.done .fill { width:100%; }
-.rail .seg.active .fill { width:55%; background:var(--accent); }
+.rail .seg.active .fill { background:var(--accent); width:8%; }
 .rail-wrap { max-width:520px; width:100%; }
 .rail-counter { text-align:right; margin-top:4px; font-size:10px; letter-spacing:.12em; }
 .rail-labels { display:flex; justify-content:space-between; margin-top:6px;

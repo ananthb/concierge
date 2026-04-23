@@ -121,8 +121,13 @@ pub async fn handle_whatsapp_signup(
             };
             save_whatsapp_account(&kv, &account).await?;
 
+            // If the user is mid-wizard, send them back to the channels step.
+            let dest = match get_onboarding(&kv, &account.tenant_id).await {
+                Ok(s) if !s.completed => "/admin/wizard/channels",
+                _ => "/admin/whatsapp?success=connected",
+            };
             let headers = Headers::new();
-            headers.set("Location", "/admin/whatsapp?success=connected")?;
+            headers.set("Location", dest)?;
             Ok(Response::empty()?.with_status(302).with_headers(headers))
         }
 

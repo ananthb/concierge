@@ -179,11 +179,13 @@ pub async fn handle_instagram(
                 .execute()
                 .await?;
 
+            // If the user is mid-wizard, send them back to the channels step.
+            let dest = match get_onboarding(&kv, &account.tenant_id).await {
+                Ok(s) if !s.completed => format!("{}/admin/wizard/channels", base_url),
+                _ => format!("{}/admin/instagram?success=connected", base_url),
+            };
             let headers = Headers::new();
-            headers.set(
-                "Location",
-                &format!("{}/admin/instagram?success=connected", base_url),
-            )?;
+            headers.set("Location", &dest)?;
             Ok(Response::empty()?.with_status(302).with_headers(headers))
         }
 

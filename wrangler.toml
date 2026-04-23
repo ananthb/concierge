@@ -11,12 +11,14 @@ command = "worker-build --release"
 [[d1_databases]]
 binding = "DB"
 database_name = "concierge-worker"
+database_id = "332c2ee6-05c9-4293-9df3-51e61238b61a"
 
 # ============================================================================
 # KV Namespace for configs
 # ============================================================================
 [[kv_namespaces]]
 binding = "KV"
+id = "2c2f474d22e04d1f8a4d12b37810390b"
 
 # ============================================================================
 # AI Binding for auto-reply generation

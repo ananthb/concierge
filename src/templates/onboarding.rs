@@ -6,6 +6,27 @@ use crate::types::*;
 use super::base::{base_html, base_html_with_meta, brand_mark, PageMeta};
 use super::HASH;
 
+/// Escape a string for safe embedding inside a single-quoted JS string in an
+/// HTML attribute. Handles backslashes, single quotes, newlines, and the
+/// HTML-meaningful `<`/`>`/`&`/`"` characters.
+fn js_attr_escape(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for c in s.chars() {
+        match c {
+            '\\' => out.push_str("\\\\"),
+            '\'' => out.push_str("\\'"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '<' => out.push_str("\\u003c"),
+            '>' => out.push_str("\\u003e"),
+            '&' => out.push_str("\\u0026"),
+            '"' => out.push_str("&quot;"),
+            c => out.push(c),
+        }
+    }
+    out
+}
+
 const STEPS: &[(&str, &str)] = &[
     ("basics", "The basics"),
     ("channels", "Plug in"),
@@ -14,21 +35,25 @@ const STEPS: &[(&str, &str)] = &[
     ("launch", "Ship it"),
 ];
 
-fn rail_html(current: &str) -> String {
+fn rail_html(current: &str, progress_expr: &str) -> String {
     let idx = STEPS.iter().position(|(id, _)| *id == current).unwrap_or(0);
 
     let segs: String = STEPS
         .iter()
         .enumerate()
         .map(|(i, _)| {
-            let class = if i < idx {
-                "seg done"
+            if i < idx {
+                r#"<div class="seg done"><span class="fill"></span></div>"#.to_string()
             } else if i == idx {
-                "seg active"
+                // Active segment: width reacts to the Alpine progress expression.
+                // Floor at 8% so it doesn't look empty on first paint.
+                format!(
+                    r#"<div class="seg active"><span class="fill" :style="`width: ${{Math.max(8, Math.min(100, ({progress_expr}) * 100))}}%`"></span></div>"#,
+                    progress_expr = progress_expr,
+                )
             } else {
-                "seg"
-            };
-            format!(r#"<div class="{class}"><span class="fill"></span></div>"#)
+                r#"<div class="seg"><span class="fill"></span></div>"#.to_string()
+            }
         })
         .collect();
 
@@ -50,11 +75,23 @@ fn rail_html(current: &str) -> String {
     format!(r#"<div class="rail">{segs}</div><div class="rail-labels">{labels}</div>"#)
 }
 
-fn wizard_shell(step: &str, base_url: &str, content: &str) -> String {
+/// Wrap step content with the wizard chrome.
+///
+/// `x_data` is an Alpine state expression (e.g. `"{ name: 'foo' }"`). Inputs
+/// inside `content` should `x-model` into it. `progress_expr` is a JS
+/// expression evaluating to a 0..1 float that drives the active rail
+/// segment's fill.
+fn wizard_shell(
+    step: &str,
+    _base_url: &str,
+    x_data: &str,
+    progress_expr: &str,
+    content: &str,
+) -> String {
     let idx = STEPS.iter().position(|(id, _)| *id == step).unwrap_or(0);
 
     let inner = format!(
-        r#"<div class="wizard" hx-ext="json-enc">
+        r#"<div class="wizard" x-data="{x_data}" hx-ext="json-enc">
   <header class="top">
     {brand}
     <div class="rail-wrap">{rail}<div class="rail-counter mono muted">{step_num}/{total}</div></div>
@@ -65,9 +102,10 @@ fn wizard_shell(step: &str, base_url: &str, content: &str) -> String {
   <main>{content}</main>
 </div>"#,
         brand = brand_mark(),
-        rail = rail_html(step),
+        rail = rail_html(step, progress_expr),
         step_num = idx + 1,
         total = STEPS.len(),
+        x_data = x_data,
         content = content,
     );
 
@@ -118,12 +156,6 @@ pub fn welcome_html(_base_url: &str) -> String {
 }
 
 pub fn basics_html(business: &crate::types::BusinessInfo, base_url: &str) -> String {
-    let disabled = if business.name.is_empty() || business.phone.is_empty() {
-        " disabled"
-    } else {
-        ""
-    };
-
     let biz_type_options = [
         ("", "Select type..."),
         ("unregistered", "Unregistered / Individual"),
@@ -132,8 +164,6 @@ pub fn basics_html(business: &crate::types::BusinessInfo, base_url: &str) -> Str
         ("pvt_ltd", "Private Limited"),
         ("llp", "LLP"),
     ];
-    let is_registered =
-        !business.business_type.is_empty() && business.business_type != "unregistered";
     let biz_type_html: String = biz_type_options
         .iter()
         .map(|(val, label)| {
@@ -146,8 +176,6 @@ pub fn basics_html(business: &crate::types::BusinessInfo, base_url: &str) -> Str
         })
         .collect();
 
-    let reg_display = if is_registered { "grid" } else { "none" };
-
     let content = format!(
         r#"<section class="page narrow">
   <div class="section-label"><span class="mono muted">01 / 05</span><span class="eyebrow">The basics</span></div>
@@ -158,7 +186,7 @@ pub fn basics_html(business: &crate::types::BusinessInfo, base_url: &str) -> Str
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
         <div>
           <label class="eyebrow lbl">Brand name *</label>
-          <input class="input" name="name" value="{name}" placeholder="Blossom Florist" required>
+          <input class="input" name="name" value="{name}" placeholder="Blossom Florist" required x-model="name">
         </div>
         <div>
           <label class="eyebrow lbl">Your name *</label>
@@ -166,14 +194,14 @@ pub fn basics_html(business: &crate::types::BusinessInfo, base_url: &str) -> Str
         </div>
         <div>
           <label class="eyebrow lbl">Phone *</label>
-          <input class="input" type="tel" name="phone" value="{phone}" placeholder="+91 98765 43210" required>
+          <input class="input" type="tel" name="phone" value="{phone}" placeholder="+91 98765 43210" required x-model="phone">
         </div>
         <div>
           <label class="eyebrow lbl">Entity type</label>
-          <select class="select" name="business_type" id="entity-type" onchange="document.getElementById('reg-fields').style.display=this.value&amp;&amp;this.value!=='unregistered'?'grid':'none'">{biz_type_html}</select>
+          <select class="select" name="business_type" x-model="bizType">{biz_type_html}</select>
         </div>
       </div>
-      <div id="reg-fields" class="mt-16" style="display:{reg_display};grid-template-columns:1fr 1fr;gap:16px">
+      <div class="mt-16" x-show="bizType &amp;&amp; bizType !== 'unregistered'" x-cloak style="grid-template-columns:1fr 1fr;gap:16px;display:grid">
         <div>
           <label class="eyebrow lbl">PAN</label>
           <input class="input" name="pan" value="{pan}" placeholder="ABCDE1234F" style="text-transform:uppercase">
@@ -198,40 +226,32 @@ pub fn basics_html(business: &crate::types::BusinessInfo, base_url: &str) -> Str
     </div>
     <div class="between mt-36">
       <a href="/" class="btn ghost">&larr; Back</a>
-      <button id="basics-continue" class="btn primary" type="submit"{disabled}>Continue &rarr;</button>
+      <button class="btn primary" type="submit" :disabled="!(name &amp;&amp; name.trim() &amp;&amp; phone &amp;&amp; phone.trim())">Continue &rarr;</button>
     </div>
   </form>
-</section>
-<script>
-(function() {{
-  var form = document.querySelector('form');
-  var btn = document.getElementById('basics-continue');
-  if (form && btn) {{
-    function update() {{
-      var name = form.querySelector('[name=name]').value.trim();
-      var phone = form.querySelector('[name=phone]').value.trim();
-      btn.disabled = name.length === 0 || phone.length === 0;
-    }}
-    form.addEventListener('input', update);
-    update();
-  }}
-}})();
-</script>"#,
+</section>"#,
         base_url = base_url,
         name = html_escape(&business.name),
         contact_name = html_escape(&business.contact_name),
         phone = html_escape(&business.phone),
         biz_type_html = biz_type_html,
-        reg_display = reg_display,
         pan = html_escape(&business.pan),
         gstin = html_escape(&business.gstin),
         address = html_escape(&business.address),
         state = html_escape(&business.state),
         pincode = html_escape(&business.pincode),
-        disabled = disabled,
     );
 
-    wizard_shell("basics", base_url, &content)
+    let x_data = format!(
+        "{{ name: '{}', phone: '{}', bizType: '{}' }}",
+        js_attr_escape(&business.name),
+        js_attr_escape(&business.phone),
+        js_attr_escape(&business.business_type),
+    );
+    let progress_expr =
+        "((name && name.trim() ? 0.4 : 0) + (phone && phone.trim() ? 0.4 : 0) + (bizType ? 0.2 : 0))";
+
+    wizard_shell("basics", base_url, &x_data, progress_expr, &content)
 }
 
 pub fn connect_html(
@@ -241,6 +261,7 @@ pub fn connect_html(
     suggested_slug: &str,
     email_base_domain: &str,
     currency: &str,
+    tenant_id: &str,
     base_url: &str,
 ) -> String {
     let subdomain_price = if currency == "USD" { "$2" } else { "₹199" };
@@ -250,6 +271,7 @@ pub fn connect_html(
         ig_connected,
         "@blossom.florist",
         "Meta login. We'll read DMs from your business account.",
+        tenant_id,
         base_url,
     );
     let wa_card = channel_card(
@@ -258,6 +280,7 @@ pub fn connect_html(
         wa_connected,
         "+61 431 555 019",
         "Uses your Meta Business access token + phone number ID.",
+        tenant_id,
         base_url,
     );
 
@@ -294,7 +317,7 @@ pub fn connect_html(
     <div><div class="channel-name">Email</div></div>
   </div>
   <div class="channel-body">
-    <p class="muted m-0 mb-12">Get a dedicated email address. Route, forward, or auto-reply with AI.</p>
+    <p class="muted m-0 mb-12">Get a dedicated email domain. Route, forward, or auto-reply with AI.</p>
     {email_rows}
     <form hx-post="{base_url}/admin/wizard/email/add" hx-target="body" hx-swap="innerHTML"
           class="row gap-8 mt-8">
@@ -323,7 +346,7 @@ pub fn connect_html(
 
     let content = format!(
         r#"<section class="page narrow">
-  <div class="section-label"><span class="mono muted">02 / 06</span><span class="eyebrow">Plug in</span></div>
+  <div class="section-label"><span class="mono muted">02 / 05</span><span class="eyebrow">Plug in</span></div>
   <h2 class="display-md">Where do your customers already talk to you?</h2>
   <p class="lead">Connect your channels. Skip anything you don't use &mdash; you can add more from the dashboard later.</p>
   <div class="channels-grid">{ig_card}{wa_card}{email_section}</div>
@@ -339,7 +362,16 @@ pub fn connect_html(
         continue_label = continue_label,
     );
 
-    wizard_shell("channels", base_url, &content)
+    // Progress: 40% Instagram, 40% WhatsApp, 20% any email subdomain added.
+    let x_data = format!(
+        "{{ ig: {}, wa: {}, emails: {} }}",
+        ig_connected,
+        wa_connected,
+        email_subdomains.len(),
+    );
+    let progress_expr = "((ig ? 0.4 : 0) + (wa ? 0.4 : 0) + (emails > 0 ? 0.2 : 0))";
+
+    wizard_shell("channels", base_url, &x_data, progress_expr, &content)
 }
 
 fn channel_card(
@@ -348,8 +380,20 @@ fn channel_card(
     connected: bool,
     handle: &str,
     flavor: &str,
+    tenant_id: &str,
     base_url: &str,
 ) -> String {
+    // For the wizard, send users straight into the connect flow instead of
+    // the dashboard-style list page — one fewer click.
+    let connect_href = if key == "ig" {
+        format!("{base_url}/instagram/auth/{}", html_escape(tenant_id))
+    } else {
+        format!("{base_url}/admin/whatsapp/new")
+    };
+    let manage_href = format!(
+        "{base_url}/admin/{}",
+        if key == "ig" { "instagram" } else { "whatsapp" }
+    );
     if connected {
         format!(
             r#"<div class="channel is-connected">
@@ -364,14 +408,13 @@ fn channel_card(
     <div class="serif mt-4" style="font-size:22px;line-height:1.1">{handle}</div>
   </div>
   <div class="row gap-8">
-    <a href="{base_url}/admin/{key_path}" class="btn ghost sm">Manage</a>
+    <a href="{manage_href}" class="btn ghost sm">Manage</a>
   </div>
 </div>"#,
             icon = channel_icon(key),
             name = html_escape(name),
             handle = html_escape(handle),
-            base_url = base_url,
-            key_path = if key == "ig" { "instagram" } else { "whatsapp" },
+            manage_href = manage_href,
         )
     } else {
         format!(
@@ -382,13 +425,12 @@ fn channel_card(
     <span class="dot ml-auto"></span>
   </div>
   <div class="channel-body"><p class="muted m-0">{flavor}</p></div>
-  <a href="{base_url}/admin/{key_path}" class="btn">Connect &rarr;</a>
+  <a href="{connect_href}" class="btn">Connect &rarr;</a>
 </div>"#,
             icon = channel_icon(key),
             name = html_escape(name),
             flavor = html_escape(flavor),
-            base_url = base_url,
-            key_path = if key == "ig" { "instagram" } else { "whatsapp" },
+            connect_href = connect_href,
         )
     }
 }
@@ -412,23 +454,6 @@ fn channel_icon(key: &str) -> &'static str {
 }
 
 pub fn notifications_html(config: &crate::types::NotificationConfig, base_url: &str) -> String {
-    let ad = if config.approval_discord {
-        " selected"
-    } else {
-        ""
-    };
-    let ae = if config.approval_email {
-        " selected"
-    } else {
-        ""
-    };
-    let dd = if config.digest_discord {
-        " selected"
-    } else {
-        ""
-    };
-    let de = if config.digest_email { " selected" } else { "" };
-
     let freq_options = |current: u32, opts: &[(u32, &str)]| -> String {
         opts.iter()
             .map(|(val, label)| {
@@ -445,42 +470,44 @@ pub fn notifications_html(config: &crate::types::NotificationConfig, base_url: &
     let digest_freq_html = freq_options(
         config.digest_email_frequency_minutes,
         &[
-            (60, "1 hour"),
-            (240, "4 hours"),
-            (720, "12 hours"),
             (1440, "Daily"),
+            (10080, "Weekly"),
+            (43200, "Monthly"),
+            (129600, "Quarterly"),
         ],
     );
 
+    let b = |v: bool| if v { "true" } else { "false" };
+
     let content = format!(
         r##"<section class="page narrow">
-  <div class="section-label"><span class="mono muted">03 / 06</span><span class="eyebrow">Heads up</span></div>
+  <div class="section-label"><span class="mono muted">03 / 05</span><span class="eyebrow">Heads up</span></div>
   <h2 class="display-md">How should we notify you?</h2>
-  <p class="lead">Pick where you want to receive AI approval requests and activity digests. You can choose both.</p>
+  <p class="lead">Approvals are required — that's how the AI asks you before sending. Digests are optional.</p>
 
-  <form hx-post="{base_url}/admin/wizard/notifications" hx-target="body" hx-swap="innerHTML">
+  <form hx-post="{base_url}/admin/wizard/notifications" hx-target="#notif-toast" hx-swap="innerHTML">
     <div class="card p-22 mb-16">
-      <div class="eyebrow mb-12">AI reply approvals</div>
-      <p class="muted mb-14 fs-14">When the AI drafts a reply, where should we ask you to approve it?</p>
+      <div class="eyebrow mb-12">AI reply approvals <span class="text-warn">*</span></div>
+      <p class="muted mb-14 fs-14">When the AI drafts a reply, where should we ask you to approve it? Pick at least one.</p>
       <div class="admin-grid">
-        <label class="admin-card{ad}" style="min-height:auto;cursor:pointer">
+        <label class="admin-card" :class="approval.discord ? 'selected' : ''" style="min-height:auto;cursor:pointer">
           <input type="hidden" name="approval_discord" value="false">
-          <input type="checkbox" name="approval_discord" value="true" class="hidden" onchange="this.closest('.admin-card').classList.toggle('selected',this.checked)"{ad_checked}>
+          <input type="checkbox" name="approval_discord" value="true" class="hidden" x-model="approval.discord">
           <div class="row gap-12">
             <div class="admin-mark icon-chip">{discord_icon}</div>
             <div><div class="fw-600">Discord</div>
             <div class="mono muted fs-11">real-time threads</div></div>
           </div>
         </label>
-        <label class="admin-card{ae}" style="min-height:auto;cursor:pointer">
+        <label class="admin-card" :class="approval.email ? 'selected' : ''" style="min-height:auto;cursor:pointer">
           <input type="hidden" name="approval_email" value="false">
-          <input type="checkbox" name="approval_email" value="true" class="hidden" onchange="this.closest('.admin-card').classList.toggle('selected',this.checked);this.closest('.admin-card').querySelector('.freq-row').style.display=this.checked?'flex':'none'"{ae_checked}>
+          <input type="checkbox" name="approval_email" value="true" class="hidden" x-model="approval.email">
           <div class="row gap-12">
             <div class="admin-mark icon-chip">{mail_icon}</div>
             <div><div class="fw-600">Email</div>
             <div class="mono muted fs-11">batched digest</div></div>
           </div>
-          <div class="freq-row row gap-8 mt-12" style="display:{ae_display}">
+          <div class="freq-row row gap-8 mt-12" x-show="approval.email" x-cloak>
             <span class="mono muted fs-12">Every</span>
             <select class="select fs-13" name="approval_freq" style="width:auto;padding:6px 10px">{approval_freq_html}</select>
           </div>
@@ -489,27 +516,27 @@ pub fn notifications_html(config: &crate::types::NotificationConfig, base_url: &
     </div>
 
     <div class="card p-22">
-      <div class="eyebrow mb-12">Activity digest</div>
-      <p class="muted mb-14 fs-14">A summary of messages handled, credits used, and anything that needs attention.</p>
+      <div class="eyebrow mb-12">Activity digest <span class="muted">(optional)</span></div>
+      <p class="muted mb-14 fs-14">A periodic summary of messages handled, credits used, and anything that needs attention.</p>
       <div class="admin-grid">
-        <label class="admin-card{dd}" style="min-height:auto;cursor:pointer">
+        <label class="admin-card" :class="digest.discord ? 'selected' : ''" style="min-height:auto;cursor:pointer">
           <input type="hidden" name="digest_discord" value="false">
-          <input type="checkbox" name="digest_discord" value="true" class="hidden" onchange="this.closest('.admin-card').classList.toggle('selected',this.checked)"{dd_checked}>
+          <input type="checkbox" name="digest_discord" value="true" class="hidden" x-model="digest.discord">
           <div class="row gap-12">
             <div class="admin-mark icon-chip">{discord_icon}</div>
             <div><div class="fw-600">Discord</div>
             <div class="mono muted fs-11">channel post</div></div>
           </div>
         </label>
-        <label class="admin-card{de}" style="min-height:auto;cursor:pointer">
+        <label class="admin-card" :class="digest.email ? 'selected' : ''" style="min-height:auto;cursor:pointer">
           <input type="hidden" name="digest_email" value="false">
-          <input type="checkbox" name="digest_email" value="true" class="hidden" onchange="this.closest('.admin-card').classList.toggle('selected',this.checked);this.closest('.admin-card').querySelector('.freq-row').style.display=this.checked?'flex':'none'"{de_checked}>
+          <input type="checkbox" name="digest_email" value="true" class="hidden" x-model="digest.email">
           <div class="row gap-12">
             <div class="admin-mark icon-chip">{mail_icon}</div>
             <div><div class="fw-600">Email</div>
             <div class="mono muted fs-11">periodic summary</div></div>
           </div>
-          <div class="freq-row row gap-8 mt-12" style="display:{de_display}">
+          <div class="freq-row row gap-8 mt-12" x-show="digest.email" x-cloak>
             <span class="mono muted fs-12">Every</span>
             <select class="select fs-13" name="digest_freq" style="width:auto;padding:6px 10px">{digest_freq_html}</select>
           </div>
@@ -519,67 +546,30 @@ pub fn notifications_html(config: &crate::types::NotificationConfig, base_url: &
 
     <div class="between mt-36">
       <button type="button" class="btn ghost" hx-post="{base_url}/admin/wizard/goto" hx-vals='{{"to":"channels"}}' hx-target="body" hx-swap="innerHTML">&larr; Back</button>
-      <button id="notif-continue" type="submit" class="btn primary"{notif_disabled}>Continue &rarr;</button>
+      <button type="submit" class="btn primary" :disabled="!approval.discord && !approval.email">Continue &rarr;</button>
     </div>
+    <div id="notif-toast" class="mt-12"></div>
   </form>
-</section>
-<script>
-(function() {{
-  var form = document.querySelector('form');
-  var btn = document.getElementById('notif-continue');
-  if (form && btn) {{
-    function check() {{
-      var boxes = form.querySelectorAll('input[type=checkbox]');
-      var any = Array.from(boxes).some(function(b) {{ return b.checked; }});
-      btn.disabled = !any;
-    }}
-    form.addEventListener('change', check);
-  }}
-}})();
-</script>"##,
+</section>"##,
         base_url = base_url,
         discord_icon = channel_icon("discord"),
         mail_icon = channel_icon("mail"),
-        ad = ad,
-        ae = ae,
-        dd = dd,
-        de = de,
-        ad_checked = if config.approval_discord {
-            " checked"
-        } else {
-            ""
-        },
-        ae_checked = if config.approval_email {
-            " checked"
-        } else {
-            ""
-        },
-        dd_checked = if config.digest_discord {
-            " checked"
-        } else {
-            ""
-        },
-        de_checked = if config.digest_email { " checked" } else { "" },
-        ae_display = if config.approval_email {
-            "flex"
-        } else {
-            "none"
-        },
-        de_display = if config.digest_email { "flex" } else { "none" },
         approval_freq_html = approval_freq_html,
         digest_freq_html = digest_freq_html,
-        notif_disabled = if config.approval_discord
-            || config.approval_email
-            || config.digest_discord
-            || config.digest_email
-        {
-            ""
-        } else {
-            " disabled"
-        },
     );
 
-    wizard_shell("notifications", base_url, &content)
+    let x_data = format!(
+        "{{ approval: {{ discord: {ad}, email: {ae} }}, digest: {{ discord: {dd}, email: {de} }} }}",
+        ad = b(config.approval_discord),
+        ae = b(config.approval_email),
+        dd = b(config.digest_discord),
+        de = b(config.digest_email),
+    );
+    // Required approval gives 60%; optional digest adds up to 40%.
+    let progress_expr =
+        "((approval.discord || approval.email) ? 0.6 : 0) + ((digest.discord || digest.email) ? 0.4 : 0)";
+
+    wizard_shell("notifications", base_url, &x_data, progress_expr, &content)
 }
 
 fn sel_attr(current: &str, value: &str) -> &'static str {
@@ -628,15 +618,15 @@ pub fn replies_html(persona: &PersonaConfig, canned: &[CannedReply], base_url: &
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
       <div>
         <label class="eyebrow lbl">Type of business</label>
-        <input class="input" name="biz_type" value="{biz_type}" placeholder="florist, hair salon, coffee shop...">
+        <input class="input" name="biz_type" value="{biz_type}" placeholder="florist, hair salon, coffee shop..." x-model="bizType">
       </div>
       <div>
         <label class="eyebrow lbl">City</label>
-        <input class="input" name="city" value="{city}" placeholder="Chennai, Berlin...">
+        <input class="input" name="city" value="{city}" placeholder="Chennai, Berlin..." x-model="city">
       </div>
       <div>
         <label class="eyebrow lbl">Tone</label>
-        <select class="select" name="tone">
+        <select class="select" name="tone" x-model="tone">
           <option value="">Choose a tone...</option>
           <option value="warm &amp; chatty"{tone_wc}>warm &amp; chatty</option>
           <option value="concise &amp; professional"{tone_cp}>concise &amp; professional</option>
@@ -646,7 +636,7 @@ pub fn replies_html(persona: &PersonaConfig, canned: &[CannedReply], base_url: &
       </div>
       <div>
         <label class="eyebrow lbl">Never do this</label>
-        <select class="select" name="never">
+        <select class="select" name="never" x-model="never">
           <option value="">Choose a boundary...</option>
           <option value="quote prices"{never_qp}>quote prices</option>
           <option value="promise dates"{never_pd}>promise dates</option>
@@ -697,7 +687,17 @@ pub fn replies_html(persona: &PersonaConfig, canned: &[CannedReply], base_url: &
         empty = empty,
     );
 
-    wizard_shell("replies", base_url, &content)
+    let x_data = format!(
+        "{{ bizType: '{}', city: '{}', tone: '{}', never: '{}' }}",
+        js_attr_escape(&persona.biz_type),
+        js_attr_escape(&persona.city),
+        js_attr_escape(&persona.tone),
+        js_attr_escape(&persona.never),
+    );
+    let progress_expr =
+        "((bizType ? 0.35 : 0) + (tone ? 0.35 : 0) + (city ? 0.15 : 0) + (never ? 0.15 : 0))";
+
+    wizard_shell("replies", base_url, &x_data, progress_expr, &content)
 }
 
 pub fn launch_html(
@@ -825,7 +825,22 @@ pub fn launch_html(
         base_url = base_url,
     );
 
-    wizard_shell("launch", base_url, &content)
+    // Progress: on the launch page, any subdomain that's still Suspended
+    // pulls progress below 1. If nothing was selected to pay for, we're
+    // "done" — progress 1.
+    let total_emails = email_subdomains.len();
+    let paid_emails = email_subdomains
+        .iter()
+        .filter(|s| s.status == crate::types::SubdomainStatus::Active)
+        .count();
+    let x_data = format!(
+        "{{ paid: {paid_emails}, totalEmails: {total_emails} }}",
+        paid_emails = paid_emails,
+        total_emails = total_emails,
+    );
+    let progress_expr = "(totalEmails > 0 ? (paid / totalEmails) : 1)";
+
+    wizard_shell("launch", base_url, &x_data, progress_expr, &content)
 }
 
 /// Public pricing page at /pricing
@@ -886,7 +901,7 @@ pub fn pricing_html(packs: &[crate::types::CreditPackRow], default_currency: &st
   </div>
 
   <h2 style="margin-top:2rem">Email</h2>
-  <p class="muted">Get a dedicated email address like <code>hello@yourname.cncg.email</code> with smart routing, forwarding, and AI replies.</p>
+  <p class="muted">Get a dedicated email domain like <code>yourname.cncg.email</code> — receive mail at any address on it, with smart routing, forwarding, and AI replies.</p>
 
   <div class="card p-18" style="margin:24px 0">
     <p class="m-0"><strong><span class="p-inr">&#x20B9;199</span><span class="p-usd hidden">$2</span> per subdomain per month.</strong></p>
@@ -901,13 +916,13 @@ function setCurrency(c) {{
   var btnI = document.getElementById('btn-inr');
   var btnU = document.getElementById('btn-usd');
   if (c === 'usd') {{
-    inr.forEach(function(el) {{ el.style.display = 'none'; }});
-    usd.forEach(function(el) {{ el.style.display = ''; }});
+    inr.forEach(function(el) {{ el.classList.add('hidden'); }});
+    usd.forEach(function(el) {{ el.classList.remove('hidden'); }});
     btnI.style.background = 'transparent'; btnI.style.color = 'var(--ink)';
     btnU.style.background = 'var(--ink)'; btnU.style.color = 'var(--cream)';
   }} else {{
-    inr.forEach(function(el) {{ el.style.display = ''; }});
-    usd.forEach(function(el) {{ el.style.display = 'none'; }});
+    inr.forEach(function(el) {{ el.classList.remove('hidden'); }});
+    usd.forEach(function(el) {{ el.classList.add('hidden'); }});
     btnI.style.background = 'var(--ink)'; btnI.style.color = 'var(--cream)';
     btnU.style.background = 'transparent'; btnU.style.color = 'var(--ink)';
   }}
