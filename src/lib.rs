@@ -307,8 +307,14 @@ async fn handle_request(req: Request, env: Env) -> Result<Response> {
         return handlers::handle_webhook(req, env, path, method).await;
     }
 
-    // Landing → straight to onboarding step 1
+    // Landing → dashboard if already signed in, otherwise welcome page
     if path == "/" || path == "/index.html" {
+        let kv = env.kv("KV")?;
+        if handlers::auth::resolve_tenant_id(&req, &kv).await.is_some() {
+            let headers = Headers::new();
+            headers.set("Location", "/admin")?;
+            return Ok(Response::empty()?.with_status(302).with_headers(headers));
+        }
         return Response::from_html(templates::onboarding::welcome_html(""));
     }
 

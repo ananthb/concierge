@@ -32,6 +32,14 @@ pub async fn handle_auth(req: Request, env: Env, path: &str, method: Method) -> 
 
     match (method, path) {
         (Method::Get, "/auth/login") => {
+            // Already signed in — skip the login page.
+            let kv = env.kv("KV")?;
+            if resolve_tenant_id(&req, &kv).await.is_some() {
+                let headers = Headers::new();
+                headers.set("Location", "/admin")?;
+                return Ok(Response::empty()?.with_status(302).with_headers(headers));
+            }
+
             let google_client_id = env
                 .secret("GOOGLE_OAUTH_CLIENT_ID")
                 .map(|s| s.to_string())

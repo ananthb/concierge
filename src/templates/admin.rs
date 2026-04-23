@@ -264,7 +264,6 @@ pub fn admin_dashboard_html(
       <div class="side-list">
         <a href="{base_url}/admin/lead-forms" class="side-row" style="text-decoration:none;color:inherit"><div style="flex:1;font-size:13px">Lead Forms ({lf_count})</div></a>
         <a href="{base_url}/admin/email/log" class="side-row" style="text-decoration:none;color:inherit"><div style="flex:1;font-size:13px">Email Log</div></a>
-        <a href="{base_url}/admin/wizard" class="side-row" style="text-decoration:none;color:inherit"><div style="flex:1;font-size:13px">Replay Onboarding</div></a>
       </div>
     </div>
   </aside>
