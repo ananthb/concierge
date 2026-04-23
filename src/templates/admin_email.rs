@@ -80,17 +80,35 @@ pub fn email_dashboard_html(
                 SubdomainStatus::Active => r#"<span class="chip ok">Active</span>"#,
                 SubdomainStatus::Suspended => r#"<span class="chip warn">Suspended</span>"#,
             };
+            let action_cell = if d.status == SubdomainStatus::Active {
+                format!(
+                    r#"<a href="{base_url}/admin/email/domains/{domain}/rules" class="btn ghost sm">Rules</a>"#,
+                    base_url = base_url,
+                    domain = html_escape(&d.domain),
+                )
+            } else {
+                format!(
+                    r#"<form hx-post="{base_url}/admin/email/subdomains" hx-ext="json-enc" hx-target="body" hx-swap="innerHTML" style="display:inline">
+  <input type="hidden" name="subdomain" value="{label}">
+  <button type="submit" class="btn sm primary">Subscribe {price}/mo</button>
+</form>"#,
+                    base_url = base_url,
+                    label = html_escape(&d.label),
+                    price = subdomain_price,
+                )
+            };
             format!(
                 r#"<div class="rt-row" style="grid-template-columns:1fr 1fr auto auto">
   <div><a href="{base_url}/admin/email/domains/{domain}/rules"><strong>{domain}</strong></a></div>
   <div>{status}</div>
-  <div><a href="{base_url}/admin/email/domains/{domain}/rules" class="btn ghost sm">Rules</a></div>
+  <div>{action_cell}</div>
   <div><button class="btn ghost sm" style="color:var(--warn)" hx-delete="{base_url}/admin/email/subdomains/{label}" hx-confirm="Delete {domain} and all its rules?" hx-target="closest .rt-row" hx-swap="outerHTML">Delete</button></div>
 </div>"#,
                 base_url = base_url,
                 domain = html_escape(&d.domain),
                 label = html_escape(&d.label),
                 status = status_badge,
+                action_cell = action_cell,
             )
         })
         .collect();

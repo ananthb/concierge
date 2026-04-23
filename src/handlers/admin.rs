@@ -143,7 +143,7 @@ pub async fn handle_admin(req: Request, env: Env, path: &str, method: Method) ->
             &instagram_accounts,
             &lead_forms,
             &billing,
-            !email_domains.is_empty(),
+            &email_domains,
             &base_url,
         ))?;
         resp.headers_mut().set("Cache-Control", "no-store")?;

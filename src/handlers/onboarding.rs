@@ -266,19 +266,10 @@ pub async fn handle_wizard(
             Ok(Response::empty()?.with_status(200).with_headers(headers))
         }
 
-        // Complete the wizard — gated on every added email subdomain being
-        // active (paid). Credit packs are optional, so there's no gate on them.
+        // Complete the wizard. Email subdomains left unpaid stay Suspended —
+        // the dashboard surfaces them with a banner so the user can subscribe
+        // later from Email Routing.
         "complete" => {
-            let subdomains = get_email_subdomains(&kv, tenant_id).await?;
-            let has_unpaid = subdomains
-                .iter()
-                .any(|s| s.status != SubdomainStatus::Active);
-            if has_unpaid {
-                return Response::from_html(
-                    r#"<div class="error">Subscribe to every email subdomain before finishing setup.</div>"#.to_string(),
-                );
-            }
-
             state.completed = true;
             state.step = "launch".to_string();
             save_onboarding(&kv, tenant_id, &state).await?;

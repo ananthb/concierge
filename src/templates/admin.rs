@@ -204,11 +204,41 @@ pub fn admin_dashboard_html(
     instagram_accounts: &[InstagramAccount],
     lead_forms: &[LeadCaptureForm],
     billing: &TenantBilling,
-    has_email_domains: bool,
+    email_domains: &[EmailSubdomain],
     base_url: &str,
 ) -> String {
     use super::base::app_shell;
     use super::base::LOGO_INLINE;
+
+    let has_email_domains = !email_domains.is_empty();
+    let suspended: Vec<&EmailSubdomain> = email_domains
+        .iter()
+        .filter(|d| d.status != SubdomainStatus::Active)
+        .collect();
+
+    let suspended_banner = if suspended.is_empty() {
+        String::new()
+    } else {
+        let list: String = suspended
+            .iter()
+            .map(|d| format!("<code>{}</code>", html_escape(&d.domain)))
+            .collect::<Vec<_>>()
+            .join(", ");
+        format!(
+            r#"<div class="card" style="padding:16px 20px;margin:0 0 16px;border-color:var(--warn);background:linear-gradient(135deg,var(--paper),#FFF4E6)">
+  <div class="row gap-12" style="align-items:flex-start">
+    <span class="dot" style="background:var(--warn);margin-top:6px"></span>
+    <div style="flex:1">
+      <div style="font-weight:600">Email subdomains awaiting subscription</div>
+      <p class="muted" style="margin:4px 0 0;font-size:13px">{list} won't receive mail until you subscribe.</p>
+    </div>
+    <a href="{base_url}/admin/email" class="btn sm">Subscribe</a>
+  </div>
+</div>"#,
+            list = list,
+            base_url = base_url,
+        )
+    };
 
     // Sidebar: connected channels
     let ig_icon = r#"<svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-label="Instagram"><rect x="3" y="3" width="18" height="18" rx="5" stroke="currentColor" stroke-width="1.6"/><circle cx="12" cy="12" r="4.2" stroke="currentColor" stroke-width="1.6"/></svg>"#;
@@ -270,6 +300,7 @@ pub fn admin_dashboard_html(
     </div>
   </aside>
   <main class="dash-main">
+    {suspended_banner}
     <div class="card" style="padding:22px">
       <div class="between" style="margin-bottom:16px">
         <div>
@@ -313,6 +344,7 @@ pub fn admin_dashboard_html(
         ig_rows = ig_rows,
         empty_hint = empty_hint,
         mail_icon = mail_icon,
+        suspended_banner = suspended_banner,
         wa_count = whatsapp_accounts.len(),
         ig_count = instagram_accounts.len(),
         lf_count = lead_forms.len(),

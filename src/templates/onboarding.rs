@@ -747,9 +747,9 @@ pub fn launch_html(
         String::new()
     } else {
         format!(
-            r#"<div class="card" style="padding:22px;margin-bottom:16px;border-color:var(--warn)">
-  <div class="eyebrow" style="margin-bottom:8px">Email subdomains — subscription required</div>
-  <p class="muted" style="margin-bottom:12px;font-size:14px">Subscribe to activate each address. You'll be redirected to Razorpay, then come back here to finish setup.</p>
+            r#"<div class="card" style="padding:22px;margin-bottom:16px">
+  <div class="eyebrow" style="margin-bottom:8px">Email subdomains</div>
+  <p class="muted" style="margin-bottom:12px;font-size:14px">These addresses won't receive mail until you subscribe. You can pay now, or skip and subscribe later from Email Routing on the dashboard.</p>
   {email_rows}
 </div>"#
         )
@@ -793,9 +793,7 @@ pub fn launch_html(
         )
     };
 
-    let (status_card, finish_disabled) = if unpaid_subdomains.is_empty() {
-        (
-            r#"<div class="card" style="padding:22px;border-color:var(--ok);background:linear-gradient(135deg,var(--paper),#E8F0DE)">
+    let status_card = r#"<div class="card" style="padding:22px;border-color:var(--ok);background:linear-gradient(135deg,var(--paper),#E8F0DE)">
     <div class="row gap-12">
       <span class="dot ok"></span>
       <div>
@@ -803,23 +801,7 @@ pub fn launch_html(
         <p class="muted" style="margin:4px 0 0;font-size:14px">Hit finish to open your dashboard. Connect channels, set up email rules, and start receiving auto-replies.</p>
       </div>
     </div>
-  </div>"#.to_string(),
-            "",
-        )
-    } else {
-        (
-            r#"<div class="card" style="padding:22px;border-color:var(--warn)">
-    <div class="row gap-12">
-      <span class="dot" style="background:var(--warn)"></span>
-      <div>
-        <div style="font-weight:600">Finish blocked</div>
-        <p class="muted" style="margin:4px 0 0;font-size:14px">Subscribe to every pending email subdomain above before you can finish setup.</p>
-      </div>
-    </div>
-  </div>"#.to_string(),
-            " disabled",
-        )
-    };
+  </div>"#;
 
     let content = format!(
         r##"<section class="page narrow">
@@ -834,15 +816,13 @@ pub fn launch_html(
 
   <div class="between" style="margin-top:36px">
     <button class="btn ghost" hx-post="{base_url}/admin/wizard/goto" hx-vals='{{"to":"replies"}}' hx-target="body" hx-swap="innerHTML">&larr; Back</button>
-    <button id="wizard-finish" class="btn primary" hx-post="{base_url}/admin/wizard/complete" hx-target="#finish-toast"{finish_disabled}>Finish setup &rarr;</button>
+    <button class="btn primary" hx-post="{base_url}/admin/wizard/complete" hx-target="body">Finish setup &rarr;</button>
   </div>
-  <div id="finish-toast" style="margin-top:12px"></div>
 </section>"##,
         email_section = email_section,
         packs_section = packs_section,
         status_card = status_card,
         base_url = base_url,
-        finish_disabled = finish_disabled,
     );
 
     wizard_shell("launch", base_url, &content)
