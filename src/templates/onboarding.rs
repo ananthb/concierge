@@ -240,8 +240,10 @@ pub fn connect_html(
     email_subdomains: &[crate::types::EmailSubdomain],
     suggested_slug: &str,
     email_base_domain: &str,
+    currency: &str,
     base_url: &str,
 ) -> String {
+    let subdomain_price = if currency == "USD" { "$2" } else { "₹199" };
     let ig_card = channel_card(
         "ig",
         "Instagram DMs",
@@ -300,7 +302,7 @@ pub fn connect_html(
       <span class="mono muted" style="font-size:13px">.{base_domain}</span>
       <button type="submit" class="btn sm" style="margin-left:auto">Add</button>
     </form>
-    <div class="mono muted" style="font-size:11px;margin-top:6px">&#x20B9;199 / $2 per month per subdomain. Billed at the end.</div>
+    <div class="mono muted" style="font-size:11px;margin-top:6px">{price} per month per subdomain. Billed at the end.</div>
   </div>
 </div>"#,
             mail_icon = channel_icon("mail"),
@@ -308,6 +310,7 @@ pub fn connect_html(
             base_url = base_url,
             slug = html_escape(suggested_slug),
             base_domain = html_escape(email_base_domain),
+            price = subdomain_price,
         )
     };
 
@@ -700,8 +703,10 @@ pub fn replies_html(persona: &PersonaConfig, canned: &[CannedReply], base_url: &
 pub fn launch_html(
     email_subdomains: &[crate::types::EmailSubdomain],
     packs: &[crate::types::CreditPackRow],
+    currency: &str,
     base_url: &str,
 ) -> String {
+    let subdomain_price = if currency == "USD" { "$2" } else { "₹199" };
     let pending_emails: String = email_subdomains
         .iter()
         .filter(|s| s.subscription_id.is_none())
@@ -712,13 +717,14 @@ pub fn launch_html(
   <div style="flex:1"><span class="mono" style="font-size:13px">{domain}</span></div>
   <form hx-post="{base_url}/admin/email/subdomains" hx-target="body" style="display:inline" hx-ext="json-enc">
     <input type="hidden" name="subdomain" value="{label}">
-    <button type="submit" class="btn sm primary">Subscribe &#x20B9;199/mo</button>
+    <button type="submit" class="btn sm primary">Subscribe {price}/mo</button>
   </form>
 </div>"#,
                 mail_icon = channel_icon("mail"),
                 domain = html_escape(&s.domain),
                 label = html_escape(&s.label),
                 base_url = base_url,
+                price = subdomain_price,
             )
         })
         .collect();

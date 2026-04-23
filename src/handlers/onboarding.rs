@@ -324,12 +324,18 @@ async fn render_step(
                 .var("EMAIL_BASE_DOMAIN")
                 .map(|v| v.to_string())
                 .unwrap_or_default();
+            let db = env.d1("DB")?;
+            let currency = crate::storage::get_tenant(&db, tenant_id)
+                .await?
+                .map(|t| t.currency)
+                .unwrap_or_else(|| "INR".to_string());
             Response::from_html(connect_html(
                 !ig.is_empty(),
                 !wa.is_empty(),
                 &email_subs,
                 &slug,
                 &base_domain,
+                &currency,
                 base_url,
             ))
         }
@@ -345,7 +351,11 @@ async fn render_step(
             let packs = crate::storage::get_active_credit_packs(&db)
                 .await
                 .unwrap_or_default();
-            Response::from_html(launch_html(&email_subs, &packs, base_url))
+            let currency = crate::storage::get_tenant(&db, tenant_id)
+                .await?
+                .map(|t| t.currency)
+                .unwrap_or_else(|| "INR".to_string());
+            Response::from_html(launch_html(&email_subs, &packs, &currency, base_url))
         }
         _ => Response::from_html(basics_html(&state.business, base_url)),
     }
