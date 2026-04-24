@@ -201,23 +201,9 @@ footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--border
 
 <h2>Outbound Delivery (Email Service)</h2>
 
-<p>Inbound is handled by <strong>Cloudflare Email Routing</strong>. Outbound — forwarded mail, AI replies, reverse-alias replies back to original senders — goes through <strong>Cloudflare Email Service</strong>, which is a separate product with its own onboarding.</p>
+<p>Concierge forwards to arbitrary recipients, so the sender domain must be onboarded to Cloudflare Email Service. Onboard each email base domain in the dashboard under <strong>Email &rarr; Email Sending &rarr; Onboard Domain</strong>; Cloudflare adds SPF/DKIM/DMARC records on a dedicated <code>cf-bounce.&lt;your-domain&gt;</code> subdomain.</p>
 
-<p>The <code>send_email</code> binding can run in two modes depending on whether the sender domain is onboarded to Email Service:</p>
-
-<ul>
-  <li><strong>Email Routing only</strong> (default) — can only send to addresses pre-verified through Cloudflare's destination-verification flow. Accepts raw RFC 2822 bytes <em>or</em> the structured format.</li>
-  <li><strong>Email Service onboarded</strong> — can send to any recipient. Accepts <em>only</em> the structured format <code>{from, to, subject, text, html, replyTo, headers}</code>; raw bytes are rejected with "text or html must have content".</li>
-</ul>
-
-<p>Concierge uses the structured format unconditionally so the same code works in both modes. <strong>To forward to arbitrary destinations</strong> (the typical case), onboard <code>cncg.email</code> via the dashboard:</p>
-
-<ol>
-  <li>Cloudflare dashboard &rarr; <strong>Email &rarr; Email Sending &rarr; Onboard Domain</strong></li>
-  <li>Accept the SPF/DKIM/DMARC records added on the <code>cf-bounce.cncg.email</code> subdomain (independent of any root-domain mail config)</li>
-</ol>
-
-<p><strong>Fidelity caveat:</strong> the structured API rebuilds messages from <code>subject</code>, <code>text</code>, <code>html</code>, and a header map. Threading headers (<code>In-Reply-To</code>, <code>References</code>) and the loop-detection header are passed through. Attachments, inline <code>cid:</code> images, and exotic multipart structures from the original message are not preserved.</p>
+<p>Outbound goes through the <code>send_email</code> binding using Email Service's structured API. Forwarded messages carry the parsed <code>subject</code>, <code>text</code>, <code>html</code>, a <code>Reply-To</code> set to the reverse-alias, threading headers (<code>In-Reply-To</code>, <code>References</code>), and the loop-detection header.</p>
 
 <h2>Loop Detection</h2>
 

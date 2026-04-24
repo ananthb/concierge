@@ -171,14 +171,14 @@ wrangler secret put RAZORPAY_WEBHOOK_SECRET</code></pre>
 
 <h2>10. Set Up Email Service (outbound)</h2>
 
-<p>Email Routing's <code>send_email</code> binding alone only delivers to addresses pre-verified in Cloudflare. To forward to <strong>any</strong> recipient — which is the whole point of Concierge's email forwarding — onboard <code>cncg.email</code> to Cloudflare's Email Service:</p>
+<p>Concierge forwards mail to arbitrary recipients, so the sender domain must be onboarded to Cloudflare Email Service (separate from Email Routing):</p>
 
 <ol>
-  <li>Cloudflare dashboard &rarr; <strong>Email &rarr; Email Sending &rarr; Onboard Domain</strong></li>
-  <li>Accept the DNS records (MX / SPF / DKIM / DMARC) Cloudflare adds on the <code>cf-bounce.cncg.email</code> subdomain. These are independent of any root-domain SPF/DKIM you use for transactional mail elsewhere.</li>
+  <li>Cloudflare dashboard &rarr; <strong>Email &rarr; Email Sending &rarr; Onboard Domain</strong> for your email base domain</li>
+  <li>Accept the DNS records (MX / SPF / DKIM / DMARC) Cloudflare adds on the <code>cf-bounce.&lt;your-domain&gt;</code> subdomain. They sit on a dedicated subdomain and don't interfere with any existing mail config on the root.</li>
 </ol>
 
-<p>Outbound email is sent via Email Service's structured API (<code>{from, to, subject, text, html, replyTo, headers}</code>), not raw MIME bytes. Forwarded mail keeps subject, text/html bodies, and threading headers; attachments and exotic multipart structures are not preserved.</p>
+<p>Outbound email goes through the <code>send_email</code> binding using Email Service's structured API (<code>{from, to, subject, text, html, replyTo, headers}</code>).</p>
 
 <h3>Razorpay Webhook (for subscription billing)</h3>
 
