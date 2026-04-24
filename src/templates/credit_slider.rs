@@ -20,12 +20,12 @@ pub enum SliderMode<'a> {
 }
 
 pub fn slider_html(currency: &str, base_url: &str, mode: SliderMode<'_>) -> String {
-    let (sym, unit_price_smallest, price_js) = if currency == "USD" {
+    let (sym, per_reply_label, price_js) = if currency == "USD" {
         // Display dollars with two decimals.
-        ("$", UNIT_PRICE_CENTS, "(credits * 2 / 100).toFixed(2)")
+        ("$", "$0.02", "(credits * 2 / 100).toFixed(2)")
     } else {
         // Whole rupees only.
-        ("₹", UNIT_PRICE_PAISE, "(credits * 2).toLocaleString()")
+        ("₹", "₹2", "(credits * 2).toLocaleString()")
     };
     // Initial slider step value seeded server-side to match minimum.
     let initial = MIN_CREDITS.max(500); // start at a friendlier default
@@ -57,7 +57,7 @@ pub fn slider_html(currency: &str, base_url: &str, mode: SliderMode<'_>) -> Stri
   <div class="between mb-12">
     <div>
       <div class="eyebrow">Reply credits</div>
-      <p class="muted m-0 mt-4 fs-13">{sym}{unit_display} per reply. 100 free every month. Purchased credits never expire.</p>
+      <p class="muted m-0 mt-4 fs-13">{per_reply_label} per reply. 100 free every month. Purchased credits never expire.</p>
     </div>
     <div class="ta-right">
       <div class="serif" style="font-size:34px;line-height:1"><span x-text="credits.toLocaleString()"></span></div>
@@ -96,7 +96,7 @@ pub fn slider_html(currency: &str, base_url: &str, mode: SliderMode<'_>) -> Stri
 </div>"##,
         initial = initial,
         sym = sym,
-        unit_display = unit_price_smallest,
+        per_reply_label = per_reply_label,
         min = MIN_CREDITS,
         max = MAX_CREDITS,
         max_display = format_with_commas(MAX_CREDITS),

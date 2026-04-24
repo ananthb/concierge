@@ -217,16 +217,24 @@ async fn handle_request(req: Request, env: Env) -> Result<Response> {
         return Response::from_html(legal::privacy_policy_html());
     }
 
-    // Pricing page
+    // Pricing page. ?c=usd|inr overrides the geo-IP default so the toggle
+    // buttons work.
     if path == "/pricing" {
-        let country = req
-            .headers()
-            .get("cf-ipcountry")
-            .ok()
-            .flatten()
-            .unwrap_or_default();
-        let default_currency = if country == "IN" { "inr" } else { "usd" };
-        return Response::from_html(templates::onboarding::pricing_html(default_currency));
+        let query: std::collections::HashMap<_, _> = url.query_pairs().collect();
+        let currency = query.get("c").map(|s| s.to_string()).unwrap_or_else(|| {
+            let country = req
+                .headers()
+                .get("cf-ipcountry")
+                .ok()
+                .flatten()
+                .unwrap_or_default();
+            if country == "IN" {
+                "inr".into()
+            } else {
+                "usd".into()
+            }
+        });
+        return Response::from_html(templates::onboarding::pricing_html(&currency));
     }
 
     // Data deletion callback (Facebook requirement)

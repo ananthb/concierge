@@ -879,7 +879,8 @@ pub fn launch_html(
 /// Public pricing page at /pricing
 pub fn pricing_html(default_currency: &str) -> String {
     // Public pricing page. Visitors aren't logged in, so the slider's
-    // checkout button is replaced with a sign-in CTA.
+    // checkout button is replaced with a sign-in CTA. The ?c= query param
+    // carries the chosen currency so the toggle is shareable.
     let currency = if default_currency.eq_ignore_ascii_case("usd") {
         "USD"
     } else {
@@ -893,10 +894,15 @@ pub fn pricing_html(default_currency: &str) -> String {
             cta_label: "Sign in to buy",
         },
     );
-    let (sym, unit_display, sub_price) = if currency == "USD" {
-        ("$", "$0.02", "$2")
+    let (per_reply, sub_price) = if currency == "USD" {
+        ("$0.02", "$2")
     } else {
-        ("₹", "₹2", "₹199")
+        ("₹2", "₹199")
+    };
+    let (inr_cls, usd_cls) = if currency == "USD" {
+        ("btn ghost sm", "btn sm")
+    } else {
+        ("btn sm", "btn ghost sm")
     };
 
     let content = format!(
@@ -908,7 +914,13 @@ pub fn pricing_html(default_currency: &str) -> String {
   </div>
 </header>
 <article class="legal">
-  <h1>One price. {sym}{unit_display} per reply.</h1>
+  <div class="between">
+    <h1 class="m-0">One price. {per_reply} per reply.</h1>
+    <div class="row gap-8">
+      <a href="/pricing?c=inr" class="{inr_cls}">&#x20B9; INR</a>
+      <a href="/pricing?c=usd" class="{usd_cls}">$ USD</a>
+    </div>
+  </div>
   <p class="muted">100 free replies every account every month. After that, top up with as many credits as you want — no tiers, no contracts. Purchased credits never expire.</p>
 
   <div style="margin:24px 0">{slider}</div>
@@ -927,10 +939,11 @@ pub fn pricing_html(default_currency: &str) -> String {
   </div>
 </article>"##,
         brand = brand_mark(),
-        sym = sym,
-        unit_display = unit_display,
+        per_reply = per_reply,
         sub_price = sub_price,
         slider = slider,
+        inr_cls = inr_cls,
+        usd_cls = usd_cls,
     );
 
     base_html_with_meta(
