@@ -145,6 +145,7 @@ footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--border
   <li><strong>Cloudflare D1</strong>: SQLite database for message metadata logs, email metrics, lead form submissions, credit packs, payments, and audit logs</li>
   <li><strong>Cloudflare Workers AI</strong>: Powers AI-mode auto-replies and email draft generation</li>
   <li><strong>Cloudflare Email Routing</strong>: Triggers the Worker's email handler for inbound emails</li>
+  <li><strong>Cloudflare Email Service</strong>: Outbound delivery via the <code>send_email</code> binding using the structured-message API; required on the sender domain to forward to arbitrary recipients</li>
   <li><strong>Discord Interactions API</strong>: Slash commands, button interactions, and modal submissions via <code>POST /discord/interactions</code></li>
   <li><strong>Razorpay</strong>: Payment processing for credit pack purchases</li>
 </ul>

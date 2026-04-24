@@ -157,7 +157,7 @@ wrangler secret put RAZORPAY_WEBHOOK_SECRET</code></pre>
 
 <p>See <a href="discord.html">Discord Integration</a> for details.</p>
 
-<h2>9. Set Up Email Routing</h2>
+<h2>9. Set Up Email Routing (inbound)</h2>
 
 <p>The email domain <code>cncg.email</code> is already configured (zone ID <code>5cf43b684849d5805eb0a115a18dbee2</code>). To complete setup:</p>
 
@@ -168,6 +168,17 @@ wrangler secret put RAZORPAY_WEBHOOK_SECRET</code></pre>
 </ol>
 
 <p>Tenant subdomains (e.g. <code>acme.cncg.email</code>) are provisioned automatically via the admin panel. MX records are auto-discovered from the apex domain. See <a href="email-routing.html">Email Routing</a> for details.</p>
+
+<h2>10. Set Up Email Service (outbound)</h2>
+
+<p>Email Routing's <code>send_email</code> binding alone only delivers to addresses pre-verified in Cloudflare. To forward to <strong>any</strong> recipient — which is the whole point of Concierge's email forwarding — onboard <code>cncg.email</code> to Cloudflare's Email Service:</p>
+
+<ol>
+  <li>Cloudflare dashboard &rarr; <strong>Email &rarr; Email Sending &rarr; Onboard Domain</strong></li>
+  <li>Accept the DNS records (MX / SPF / DKIM / DMARC) Cloudflare adds on the <code>cf-bounce.cncg.email</code> subdomain. These are independent of any root-domain SPF/DKIM you use for transactional mail elsewhere.</li>
+</ol>
+
+<p>Outbound email is sent via Email Service's structured API (<code>{from, to, subject, text, html, replyTo, headers}</code>), not raw MIME bytes. Forwarded mail keeps subject, text/html bodies, and threading headers; attachments and exotic multipart structures are not preserved.</p>
 
 <h3>Razorpay Webhook (for subscription billing)</h3>
 
@@ -180,7 +191,7 @@ wrangler secret put RAZORPAY_WEBHOOK_SECRET</code></pre>
   <li>Copy the webhook secret and set it: <code>wrangler secret put RAZORPAY_WEBHOOK_SECRET</code></li>
 </ol>
 
-<h2>10. Set Up Cloudflare Access for Management</h2>
+<h2>11. Set Up Cloudflare Access for Management</h2>
 
 <ol>
   <li>In the Cloudflare dashboard, go to <strong>Zero Trust &gt; Access &gt; Applications</strong></li>
@@ -191,7 +202,7 @@ wrangler secret put RAZORPAY_WEBHOOK_SECRET</code></pre>
 
 <p>See <a href="management.html">Management Panel</a> for details.</p>
 
-<h2>11. Set Up Razorpay (Optional)</h2>
+<h2>12. Set Up Razorpay (Optional)</h2>
 
 <ol>
   <li>Create a Razorpay account and get your API keys</li>
