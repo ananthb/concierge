@@ -453,7 +453,7 @@ pub fn base_html_with_meta(title: &str, content: &str, meta: &PageMeta) -> Strin
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://unpkg.com/htmx.org@2.0.8/dist/htmx.min.js" integrity="sha384-/TgkGk7p307TH7EXJDuUlgG3Ce1UVolAOFopFekQkkXihi5u/6OCvVKyz1W+idaz" crossorigin="anonymous"></script>
-<script src="https://unpkg.com/htmx.org@2.0.8/dist/ext/json-enc.js"></script>
+<script src="https://unpkg.com/htmx-ext-json-enc@2.0.3/json-enc.js" crossorigin="anonymous"></script>
 <script src="https://unpkg.com/alpinejs@3.14.3/dist/cdn.min.js" defer></script>
 <style>{css}</style>
 </head>
