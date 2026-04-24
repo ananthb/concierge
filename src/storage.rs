@@ -2,8 +2,7 @@ use wasm_bindgen::JsValue;
 use worker::*;
 
 use crate::types::{
-    CreditEntry, CreditPackRow, InstagramAccount, LeadCaptureForm, Tenant, TenantBilling,
-    WhatsAppAccount,
+    CreditEntry, InstagramAccount, LeadCaptureForm, Tenant, TenantBilling, WhatsAppAccount,
 };
 
 // ============================================================================
@@ -1066,85 +1065,5 @@ pub async fn save_tenant_billing(
     ])?
     .run()
     .await?;
-    Ok(())
-}
-
-// ============================================================================
-// Credit Packs (D1)
-// ============================================================================
-
-pub async fn get_active_credit_packs(db: &D1Database) -> Result<Vec<CreditPackRow>> {
-    let stmt = db.prepare("SELECT * FROM credit_packs WHERE active = 1 ORDER BY sort_order ASC");
-    let result = stmt.all().await?;
-    result.results()
-}
-
-pub async fn get_all_credit_packs(db: &D1Database) -> Result<Vec<CreditPackRow>> {
-    let stmt = db.prepare("SELECT * FROM credit_packs ORDER BY sort_order ASC");
-    let result = stmt.all().await?;
-    result.results()
-}
-
-pub async fn get_credit_pack(db: &D1Database, id: i64) -> Result<Option<CreditPackRow>> {
-    let stmt = db.prepare("SELECT * FROM credit_packs WHERE id = ?");
-    stmt.bind(&[JsValue::from(id as f64)])?
-        .first::<CreditPackRow>(None)
-        .await
-}
-
-pub async fn save_credit_pack(
-    db: &D1Database,
-    name: &str,
-    replies: i64,
-    price_inr: i64,
-    price_usd: i64,
-    sort_order: i32,
-) -> Result<()> {
-    let stmt = db.prepare(
-        "INSERT INTO credit_packs (name, replies, price_inr, price_usd, sort_order)
-         VALUES (?, ?, ?, ?, ?)",
-    );
-    stmt.bind(&[
-        name.into(),
-        JsValue::from(replies as f64),
-        JsValue::from(price_inr as f64),
-        JsValue::from(price_usd as f64),
-        JsValue::from(sort_order as f64),
-    ])?
-    .run()
-    .await?;
-    Ok(())
-}
-
-pub async fn update_credit_pack(
-    db: &D1Database,
-    id: i64,
-    name: &str,
-    replies: i64,
-    price_inr: i64,
-    price_usd: i64,
-    active: bool,
-    sort_order: i32,
-) -> Result<()> {
-    let stmt = db.prepare(
-        "UPDATE credit_packs SET name=?, replies=?, price_inr=?, price_usd=?, active=?, sort_order=? WHERE id=?",
-    );
-    stmt.bind(&[
-        name.into(),
-        JsValue::from(replies as f64),
-        JsValue::from(price_inr as f64),
-        JsValue::from(price_usd as f64),
-        JsValue::from(if active { 1.0 } else { 0.0 }),
-        JsValue::from(sort_order as f64),
-        JsValue::from(id as f64),
-    ])?
-    .run()
-    .await?;
-    Ok(())
-}
-
-pub async fn delete_credit_pack(db: &D1Database, id: i64) -> Result<()> {
-    let stmt = db.prepare("DELETE FROM credit_packs WHERE id = ?");
-    stmt.bind(&[JsValue::from(id as f64)])?.run().await?;
     Ok(())
 }

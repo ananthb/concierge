@@ -367,14 +367,11 @@ async fn render_step(
         "launch" => {
             let email_subs = get_email_subdomains(kv, tenant_id).await?;
             let db = env.d1("DB")?;
-            let packs = crate::storage::get_active_credit_packs(&db)
-                .await
-                .unwrap_or_default();
             let currency = crate::storage::get_tenant(&db, tenant_id)
                 .await?
                 .map(|t| t.currency)
                 .unwrap_or_else(|| "INR".to_string());
-            Response::from_html(launch_html(&email_subs, &packs, &currency, base_url))
+            Response::from_html(launch_html(&email_subs, &currency, base_url))
         }
         _ => Response::from_html(basics_html(&state.business, base_url)),
     }

@@ -39,21 +39,24 @@ pub async fn handle_billing_admin(
             } else {
                 "INR"
             };
-            let packs = storage::get_active_credit_packs(&db).await?;
-
-            Response::from_html(tmpl::billing_overview_html(
-                &bill, &packs, currency, base_url,
-            ))
+            Response::from_html(tmpl::billing_overview_html(&bill, currency, base_url))
         }
 
-        // Create Razorpay order
+        // Create Razorpay order — flat per-reply rate, any quantity.
         (Method::Post, "checkout") => {
             let form: serde_json::Value = req.json().await?;
-            let credits = form
+            let credits_raw = form
                 .get("credits")
-                .and_then(|v| v.as_str())
-                .and_then(|s| s.parse::<i64>().ok())
-                .unwrap_or(500);
+                .and_then(|v| {
+                    v.as_str()
+                        .map(|s| s.to_string())
+                        .or_else(|| v.as_i64().map(|n| n.to_string()))
+                })
+                .unwrap_or_default();
+            let credits = credits_raw
+                .parse::<i64>()
+                .unwrap_or(billing::MIN_CREDITS)
+                .clamp(billing::MIN_CREDITS, billing::MAX_CREDITS);
 
             // Accept a return_to path (used by the wizard to send users back
             // to /admin/wizard/launch after payment). Restrict to same-origin
@@ -73,13 +76,7 @@ pub async fn handle_billing_admin(
             } else {
                 "INR"
             };
-
-            let packs = storage::get_active_credit_packs(&db).await?;
-            let pack = match packs.iter().find(|p| p.replies == credits) {
-                Some(p) => p,
-                None => return Response::error("Invalid pack", 400),
-            };
-            let amount = pack.price(currency);
+            let amount = credits * billing::unit_price(currency);
 
             let key_id = env.secret("RAZORPAY_KEY_ID")?.to_string();
             let key_secret = env.secret("RAZORPAY_KEY_SECRET")?.to_string();

@@ -760,7 +760,6 @@ pub fn replies_html(persona: &PersonaConfig, canned: &[CannedReply], base_url: &
 
 pub fn launch_html(
     email_subdomains: &[crate::types::EmailSubdomain],
-    packs: &[crate::types::CreditPackRow],
     currency: &str,
     base_url: &str,
 ) -> String {
@@ -813,43 +812,19 @@ pub fn launch_html(
         )
     };
 
-    let pack_buttons: String = packs
-        .iter()
-        .map(|p| {
-            let price = if currency == "USD" {
-                format!("${}", p.price_usd / 100)
-            } else {
-                format!("₹{}", p.price_inr / 100)
-            };
-            format!(
-                r#"<form hx-post="{base_url}/admin/billing/checkout" hx-target="body" hx-swap="innerHTML" class="inline" hx-ext="json-enc">
-  <input type="hidden" name="credits" value="{replies}">
-  <input type="hidden" name="return_to" value="/admin/wizard/launch">
-  <button type="submit" class="card ta-center" style="padding:16px;min-width:140px;cursor:pointer;border:1px solid var(--hair)">
-    <div class="stat-n serif">{replies}</div>
-    <div class="mono muted fs-11 mb-8">replies</div>
-    <div class="fw-600 mb-4">{price}</div>
-    <div class="mono muted fs-10">never expire</div>
-  </button>
-</form>"#,
-                base_url = base_url,
-                replies = p.replies,
-                price = price,
-            )
-        })
-        .collect();
-
-    let packs_section = if packs.is_empty() {
-        String::new()
-    } else {
-        format!(
-            r#"<div class="card p-22 mb-16">
-  <div class="eyebrow mb-8">Reply credit packs <span class="muted">(optional)</span></div>
-  <p class="muted mb-12 fs-14">You get 100 free replies every month. Buy more if you need them — purchased credits never expire. You can always buy credits later from the Billing page.</p>
-  <div class="row gap-12 wrap" style="justify-content:center">{pack_buttons}</div>
-</div>"#
-        )
-    };
+    let credits_section = format!(
+        r#"<div class="mb-16">
+  {slider}
+  <p class="muted ta-center mt-8 fs-12">Optional — 100 replies are free every month. Top up later from Billing if you need.</p>
+</div>"#,
+        slider = crate::templates::credit_slider::slider_html(
+            currency,
+            base_url,
+            crate::templates::credit_slider::SliderMode::Buy {
+                return_to: "/admin/wizard/launch",
+            },
+        ),
+    );
 
     let status_card = r#"<div class="card p-22" style="border-color:var(--ok);background:linear-gradient(135deg,var(--paper),#E8F0DE)">
     <div class="row gap-12">
@@ -868,7 +843,7 @@ pub fn launch_html(
   <p class="lead">Your concierge is configured and ready to handle messages. Here's a summary of what's next.</p>
 
   {email_section}
-  {packs_section}
+  {credits_section}
 
   {status_card}
 
@@ -878,7 +853,7 @@ pub fn launch_html(
   </div>
 </section>"##,
         email_section = email_section,
-        packs_section = packs_section,
+        credits_section = credits_section,
         status_card = status_card,
         base_url = base_url,
     );
@@ -902,28 +877,27 @@ pub fn launch_html(
 }
 
 /// Public pricing page at /pricing
-pub fn pricing_html(packs: &[crate::types::CreditPackRow], default_currency: &str) -> String {
-    let pack_rows: String = packs
-        .iter()
-        .map(|p| {
-            let per_inr = p.price_inr as f64 / p.replies as f64 / 100.0;
-            let per_usd = p.price_usd as f64 / p.replies as f64 / 100.0;
-            format!(
-                r##"<div class="rt-row" style="grid-template-columns:1fr 1fr 1fr 1fr">
-  <div><strong>{name}</strong></div>
-  <div>{replies}</div>
-  <div><span class="p-inr">&#x20B9;{inr}</span><span class="p-usd hidden">${usd}</span></div>
-  <div><span class="p-inr">&#x20B9;{per_inr:.2}</span><span class="p-usd hidden">${per_usd:.4}</span></div>
-</div>"##,
-                name = html_escape(&p.name),
-                replies = p.replies,
-                inr = p.price_inr / 100,
-                usd = p.price_usd / 100,
-                per_inr = per_inr,
-                per_usd = per_usd,
-            )
-        })
-        .collect();
+pub fn pricing_html(default_currency: &str) -> String {
+    // Public pricing page. Visitors aren't logged in, so the slider's
+    // checkout button is replaced with a sign-in CTA.
+    let currency = if default_currency.eq_ignore_ascii_case("usd") {
+        "USD"
+    } else {
+        "INR"
+    };
+    let slider = crate::templates::credit_slider::slider_html(
+        currency,
+        "",
+        crate::templates::credit_slider::SliderMode::Preview {
+            cta_href: "/auth/login",
+            cta_label: "Sign in to buy",
+        },
+    );
+    let (sym, unit_display, sub_price) = if currency == "USD" {
+        ("$", "$0.02", "$2")
+    } else {
+        ("₹", "₹2", "₹199")
+    };
 
     let content = format!(
         r##"<header class="site-header">
@@ -934,67 +908,36 @@ pub fn pricing_html(packs: &[crate::types::CreditPackRow], default_currency: &st
   </div>
 </header>
 <article class="legal">
-  <div class="between">
-    <h1>Simple pricing. Pay per reply.</h1>
-    <div style="display:flex;border:1px solid var(--hair);border-radius:999px;overflow:hidden;font-size:13px">
-      <button id="btn-inr" onclick="setCurrency('inr')" style="padding:6px 14px;border:none;background:var(--ink);color:var(--cream);cursor:pointer">&#x20B9; INR</button>
-      <button id="btn-usd" onclick="setCurrency('usd')" style="padding:6px 14px;border:none;background:transparent;color:var(--ink);cursor:pointer">$ USD</button>
-    </div>
-  </div>
-  <p class="muted">Every account gets 100 free replies each month. After that, buy a pack. Bigger packs cost less per reply.</p>
+  <h1>One price. {sym}{unit_display} per reply.</h1>
+  <p class="muted">100 free replies every account every month. After that, top up with as many credits as you want — no tiers, no contracts. Purchased credits never expire.</p>
 
-  <div class="card" style="padding:0;overflow:hidden;margin:24px 0">
-    <div class="rt-head" style="grid-template-columns:1fr 1fr 1fr 1fr">
-      <div>Pack</div><div>Replies</div><div>Price</div><div>Per reply</div>
-    </div>
-    <div class="rt-row" style="grid-template-columns:1fr 1fr 1fr 1fr;background:var(--cream-2)">
-      <div><strong>Free</strong></div><div>100 / month</div><div>$0</div><div>$0</div>
-    </div>
-    {pack_rows}
-  </div>
+  <div style="margin:24px 0">{slider}</div>
 
   <div class="card p-18">
     <div class="eyebrow mb-8">What counts as a reply?</div>
-    <p class="muted m-0">Every auto-reply sent by the concierge on WhatsApp, Instagram, or email uses one reply credit. Inbound messages, email forwarding, and Discord relay are free.</p>
+    <p class="muted m-0">Every auto-reply the concierge sends on WhatsApp, Instagram, or email uses one credit. Inbound messages, email forwarding, and Discord relay are always free.</p>
   </div>
 
   <h2 style="margin-top:2rem">Email</h2>
   <p class="muted">Get a dedicated email domain like <code>yourname.cncg.email</code> — receive mail at any address on it, with smart routing, forwarding, and AI replies.</p>
 
   <div class="card p-18" style="margin:24px 0">
-    <p class="m-0"><strong><span class="p-inr">&#x20B9;199</span><span class="p-usd hidden">$2</span> per subdomain per month.</strong></p>
-    <p class="muted" style="margin:8px 0 0">Includes unlimited inbound email, routing rules, forwarding, and Discord relay. AI-generated replies use 1 reply credit each (from your pack above).</p>
+    <p class="m-0"><strong>{sub_price} per subdomain per month.</strong></p>
+    <p class="muted" style="margin:8px 0 0">Includes unlimited inbound email, routing rules, forwarding, and Discord relay. AI-generated replies use 1 reply credit each (from your balance above).</p>
   </div>
-</article>
-<script>
-setCurrency('{default_currency}');
-function setCurrency(c) {{
-  var inr = document.querySelectorAll('.p-inr');
-  var usd = document.querySelectorAll('.p-usd');
-  var btnI = document.getElementById('btn-inr');
-  var btnU = document.getElementById('btn-usd');
-  if (c === 'usd') {{
-    inr.forEach(function(el) {{ el.classList.add('hidden'); }});
-    usd.forEach(function(el) {{ el.classList.remove('hidden'); }});
-    btnI.style.background = 'transparent'; btnI.style.color = 'var(--ink)';
-    btnU.style.background = 'var(--ink)'; btnU.style.color = 'var(--cream)';
-  }} else {{
-    inr.forEach(function(el) {{ el.classList.remove('hidden'); }});
-    usd.forEach(function(el) {{ el.classList.add('hidden'); }});
-    btnI.style.background = 'var(--ink)'; btnI.style.color = 'var(--cream)';
-    btnU.style.background = 'transparent'; btnU.style.color = 'var(--ink)';
-  }}
-}}
-</script>"##,
+</article>"##,
         brand = brand_mark(),
-        default_currency = default_currency,
+        sym = sym,
+        unit_display = unit_display,
+        sub_price = sub_price,
+        slider = slider,
     );
 
     base_html_with_meta(
         "Pricing - Concierge",
         &content,
         &PageMeta {
-            description: "Simple, prepaid pricing for Concierge. 100 free replies every month. Buy credit packs when you need more. Purchased credits never expire.",
+            description: "Simple, prepaid pricing for Concierge. ₹2 / $0.02 per reply, no tiers. 100 free every month. Buy any quantity. Credits never expire.",
             og_title: "Concierge Pricing",
             ..PageMeta::default()
         },

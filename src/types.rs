@@ -806,25 +806,3 @@ impl TenantBilling {
         self.credits.iter().map(|e| e.amount).sum()
     }
 }
-
-/// Credit pack row from D1 (management-configurable).
-#[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct CreditPackRow {
-    pub id: i64,
-    pub name: String,
-    pub replies: i64,
-    pub price_inr: i64, // paise
-    pub price_usd: i64, // cents
-    pub active: i32,
-    pub sort_order: i32,
-}
-
-impl CreditPackRow {
-    pub fn price(&self, currency: &str) -> i64 {
-        if currency == "INR" {
-            self.price_inr
-        } else {
-            self.price_usd
-        }
-    }
-}

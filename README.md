@@ -24,7 +24,7 @@ Don't want to self-host? [concierge.calculon.tech](https://concierge.calculon.te
 - **Onboarding Wizard**: 5-step guided setup (business info, channels, notifications, replies, billing)
 - **Notification Preferences**: configurable approval + digest delivery via Discord and/or Email with batching frequency
 - **Management Panel**: Cloudflare Access-protected admin for tenant management, billing, audit log
-- **Billing**: prepaid reply credits (100 free/month, volume packs via Razorpay) + recurring email subdomain subscriptions (₹199/$2 per month, auto-provisioned)
+- **Billing**: flat prepaid reply credits — **₹2 / $0.02 per reply**, 100 free every month. Buy any quantity (slider, no tiers, no packs). Email subdomains are a separate ₹199/$2 monthly subscription, auto-provisioned
 - **Privacy-first**: no message content stored. Metadata only. GDPR data deletion
 
 ## Deploy
@@ -42,7 +42,7 @@ Click the button above to deploy to Cloudflare Workers. See the [setup guide](ht
 - [Cloudflare DNS API](https://developers.cloudflare.com/api/resources/dns/) (MX + A/AAAA record provisioning for tenant subdomains)
 - Meta WhatsApp Business API + Instagram Graph API
 - Discord Interactions API (slash commands + cross-channel relay)
-- Razorpay (credit packs + email subdomain subscriptions)
+- Razorpay (one-shot credit purchases + email subdomain subscriptions)
 
 ## Development
 

@@ -20,6 +20,25 @@ use crate::types::{CreditEntry, CreditSource, TenantBilling};
 
 const FREE_MONTHLY_AMOUNT: i64 = 100;
 
+// ============================================================================
+// Pricing
+// ============================================================================
+//
+// Flat per-reply rate. No tiers, no discounts. The user picks any amount.
+pub const UNIT_PRICE_PAISE: i64 = 200; // ₹2.00 per reply
+pub const UNIT_PRICE_CENTS: i64 = 2; //   $0.02 per reply
+pub const MIN_CREDITS: i64 = 100;
+pub const MAX_CREDITS: i64 = 1_000_000;
+
+/// Per-reply price in the smallest currency unit (paise / cents).
+pub fn unit_price(currency: &str) -> i64 {
+    if currency == "USD" {
+        UNIT_PRICE_CENTS
+    } else {
+        UNIT_PRICE_PAISE
+    }
+}
+
 /// Try to deduct one reply credit. Returns true if credit was available
 /// and deducted. Returns false if out of credits.
 /// Must be called BEFORE sending the reply.

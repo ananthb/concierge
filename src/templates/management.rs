@@ -333,57 +333,14 @@ pub fn audit_html(log: &[serde_json::Value], base_url: &str) -> String {
     manage_shell("Audit Log - Concierge", &content, "Audit Log", base_url)
 }
 
-pub fn billing_overview_html(packs: &[CreditPackRow], base_url: &str) -> String {
-    let pack_rows: String = packs
-        .iter()
-        .map(|p| {
-            let status = if p.active == 1 { "Active" } else { "Inactive" };
-            let status_class = if p.active == 1 { "ok" } else { "warn" };
-            format!(
-                r##"<div class="rt-row" style="grid-template-columns:0.5fr 1fr 0.6fr 0.6fr 0.6fr 0.4fr 80px">
-  <div class="mono muted">{id}</div>
-  <div><strong>{name}</strong></div>
-  <div class="mono">{replies}</div>
-  <div class="mono">₹{inr}</div>
-  <div class="mono">${usd}</div>
-  <div><span class="chip {status_class}">{status}</span></div>
-  <div>
-    <button class="btn ghost sm btn-danger" hx-delete="{base_url}/manage/billing/packs/{id}" hx-confirm="Delete pack {name}?" hx-target="closest .rt-row" hx-swap="outerHTML">Delete</button>
-  </div>
-</div>"##,
-                id = p.id,
-                name = html_escape(&p.name),
-                replies = p.replies,
-                inr = p.price_inr / 100,
-                usd = p.price_usd / 100,
-                status = status,
-                status_class = status_class,
-                base_url = base_url,
-            )
-        })
-        .collect();
-
+pub fn billing_overview_html(base_url: &str) -> String {
     let content = format!(
         r##"<div class="page-pad">
   <div class="eyebrow">Billing</div>
-  <h2 class="display-sm" style="margin:4px 0 16px">Credit packs &amp; grants</h2>
+  <h2 class="display-sm m-0 mt-4 mb-16">Grant credits</h2>
 
-  <div class="card mb-16" style="padding:0;overflow:hidden">
-    <div class="rt-head" style="grid-template-columns:0.5fr 1fr 0.6fr 0.6fr 0.6fr 0.4fr 80px">
-      <div>ID</div><div>Name</div><div>Replies</div><div>INR</div><div>USD</div><div>Status</div><div></div>
-    </div>
-    {pack_rows}
-    <div style="padding:14px 20px;background:var(--cream-2)">
-      <div class="eyebrow mb-8">Add pack</div>
-      <form class="row gap-8 wrap" hx-post="{base_url}/manage/billing/packs" style="align-items:end">
-        <input class="input" name="name" placeholder="Name" required style="max-width:150px">
-        <input class="input" name="replies" placeholder="Replies" type="number" min="1" required style="max-width:100px">
-        <input class="input" name="price_inr" placeholder="INR (paise)" type="number" required style="max-width:120px">
-        <input class="input" name="price_usd" placeholder="USD (cents)" type="number" required style="max-width:120px">
-        <input class="input" name="sort_order" placeholder="Order" type="number" value="5" style="max-width:80px">
-        <button class="btn sm" type="submit">Add</button>
-      </form>
-    </div>
+  <div class="card p-22 mb-16">
+    <p class="muted m-0">Pricing is a flat <strong>₹2 / $0.02 per reply</strong>. Tenants top up via slider on /admin/billing — no packs to manage.</p>
   </div>
 
   <div class="card p-18">
@@ -403,7 +360,6 @@ pub fn billing_overview_html(packs: &[CreditPackRow], base_url: &str) -> String 
 </div>"##,
         base_url = base_url,
         hash = HASH,
-        pack_rows = pack_rows,
     );
 
     manage_shell("Billing - Concierge", &content, "Billing", base_url)

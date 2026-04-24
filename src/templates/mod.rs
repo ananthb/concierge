@@ -4,6 +4,7 @@ mod admin;
 pub mod admin_email;
 pub mod base;
 pub mod billing;
+pub mod credit_slider;
 pub mod discord;
 mod lead_form;
 pub mod management;

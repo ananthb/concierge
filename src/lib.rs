@@ -219,10 +219,6 @@ async fn handle_request(req: Request, env: Env) -> Result<Response> {
 
     // Pricing page
     if path == "/pricing" {
-        let db = env.d1("DB")?;
-        let packs = storage::get_active_credit_packs(&db)
-            .await
-            .unwrap_or_default();
         let country = req
             .headers()
             .get("cf-ipcountry")
@@ -230,10 +226,7 @@ async fn handle_request(req: Request, env: Env) -> Result<Response> {
             .flatten()
             .unwrap_or_default();
         let default_currency = if country == "IN" { "inr" } else { "usd" };
-        return Response::from_html(templates::onboarding::pricing_html(
-            &packs,
-            default_currency,
-        ));
+        return Response::from_html(templates::onboarding::pricing_html(default_currency));
     }
 
     // Data deletion callback (Facebook requirement)

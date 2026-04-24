@@ -106,25 +106,6 @@ CREATE INDEX IF NOT EXISTS idx_messages_tenant ON messages(tenant_id, created_at
 CREATE INDEX IF NOT EXISTS idx_messages_channel ON messages(channel, tenant_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_messages_channel_account ON messages(channel_account_id);
 
--- Credit packs (managed by management panel)
-CREATE TABLE IF NOT EXISTS credit_packs (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL UNIQUE,
-    replies INTEGER NOT NULL,
-    price_inr INTEGER NOT NULL DEFAULT 0,
-    price_usd INTEGER NOT NULL DEFAULT 0,
-    active INTEGER NOT NULL DEFAULT 1,
-    sort_order INTEGER NOT NULL DEFAULT 0,
-    created_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
-
--- Seed default packs
-INSERT OR IGNORE INTO credit_packs (name, replies, price_inr, price_usd, sort_order) VALUES
-    ('Starter', 500, 24900, 300, 1),
-    ('Growth', 2000, 49900, 500, 2),
-    ('Scale', 10000, 99900, 1000, 3),
-    ('Volume', 50000, 199900, 2000, 4);
-
 -- Payment history
 CREATE TABLE IF NOT EXISTS payments (
     id TEXT PRIMARY KEY,

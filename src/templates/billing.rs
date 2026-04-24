@@ -1,9 +1,10 @@
 //! Billing templates — tenant-facing credit balance + purchase
 
 use crate::helpers::html_escape;
-use crate::types::{CreditPackRow, CreditSource, TenantBilling};
+use crate::types::{CreditSource, TenantBilling};
 
 use super::base::{app_shell, base_html};
+use super::credit_slider::{slider_html, SliderMode};
 use super::HASH;
 
 /// Summary of credits by source, computed from the ledger.
@@ -66,12 +67,7 @@ fn format_expiry(iso: &str) -> String {
     }
 }
 
-pub fn billing_overview_html(
-    billing: &TenantBilling,
-    packs: &[CreditPackRow],
-    currency: &str,
-    base_url: &str,
-) -> String {
+pub fn billing_overview_html(billing: &TenantBilling, currency: &str, base_url: &str) -> String {
     let summary = summarize(billing);
 
     let total_class = if summary.total <= 0 { " text-warn" } else { "" };
@@ -96,26 +92,13 @@ pub fn billing_overview_html(
         String::new()
     };
 
-    let pack_buttons: String = packs
-        .iter()
-        .map(|p| {
-            let price = if currency == "INR" {
-                format!("₹{}", p.price_inr / 100)
-            } else {
-                format!("${}", p.price_usd / 100)
-            };
-            format!(
-                r##"<form class="inline" hx-post="{base_url}/admin/billing/checkout" hx-ext="json-enc" hx-target="body" hx-swap="innerHTML">
-  <input type="hidden" name="credits" value="{credits}">
-  <button class="btn sm" type="submit">{name}: {credits} replies, {price}</button>
-</form>"##,
-                base_url = base_url,
-                credits = p.replies,
-                name = html_escape(&p.name),
-                price = price,
-            )
-        })
-        .collect();
+    let slider = slider_html(
+        currency,
+        base_url,
+        SliderMode::Buy {
+            return_to: "/admin/billing",
+        },
+    );
 
     let content = format!(
         r##"<div class="page-pad">
@@ -149,13 +132,7 @@ pub fn billing_overview_html(
     </div>
   </div>
 
-  <div class="card p-22">
-    <h3 class="mb-8">Buy reply credits</h3>
-    <p class="muted mb-16">Purchase a pack to top up your balance. Purchased credits never expire. First 100 replies each month are free.</p>
-    <div class="row gap-12 wrap">
-      {pack_buttons}
-    </div>
-  </div>
+  {slider}
 </div>"##,
         base_url = base_url,
         total = summary.total,
@@ -166,7 +143,7 @@ pub fn billing_overview_html(
         granted = summary.granted,
         granted_detail = granted_detail,
         used = billing.replies_used,
-        pack_buttons = pack_buttons,
+        slider = slider,
     );
 
     let page = app_shell(&content, "Billing", base_url);
