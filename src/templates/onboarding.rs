@@ -867,10 +867,10 @@ pub fn pricing_html(default_currency: &str) -> String {
             cta_label: "Sign in to buy",
         },
     );
-    let (per_reply, sub_price) = if currency == "USD" {
-        ("$0.02", "$2")
+    let (per_reply, pack_price) = if currency == "USD" {
+        ("$0.02", "$0.50")
     } else {
-        ("₹2", "₹199")
+        ("₹2", "₹49")
     };
     let (inr_cls, usd_cls) = if currency == "USD" {
         ("btn ghost sm", "btn sm")
@@ -885,8 +885,8 @@ pub fn pricing_html(default_currency: &str) -> String {
   <div class="between">
     <h1 class="m-0">{per_reply} per AI reply. Everything else is free.</h1>
     <div class="row gap-8">
-      <a href="/pricing?c=inr" class="{inr_cls}">&#x20B9; INR</a>
-      <a href="/pricing?c=usd" class="{usd_cls}">$ USD</a>
+      <a href="/pricing?c=inr" class="{inr_cls}">INR</a>
+      <a href="/pricing?c=usd" class="{usd_cls}">USD</a>
     </div>
   </div>
   <p class="muted">100 free AI replies every account every month. After that, top up with as many credits as you want — no tiers, no contracts. Purchased credits never expire.</p>
@@ -896,23 +896,23 @@ pub fn pricing_html(default_currency: &str) -> String {
   <div class="card p-18">
     <div class="eyebrow mb-8">What costs a credit?</div>
     <ul class="muted m-0">
-      <li><strong>AI auto-replies</strong> on WhatsApp, Instagram, or email: <strong>1 credit each.</strong></li>
+      <li><strong>AI auto-replies</strong> on WhatsApp, Instagram, email, or Discord: <strong>1 credit each.</strong></li>
       <li><strong>Static auto-replies</strong> (canned text you wrote yourself): always <strong>free</strong>.</li>
-      <li>Inbound messages, email forwarding, Discord relay, slash commands: always <strong>free</strong>.</li>
+      <li>Inbound messages, notification CCs/BCCs, Discord relay, slash commands: always <strong>free</strong>.</li>
     </ul>
   </div>
 
-  <h2 style="margin-top:2rem">Email</h2>
-  <p class="muted">Get a dedicated email domain like <code>yourname.cncg.email</code> — receive mail at any address on it, with smart routing, forwarding, and AI replies.</p>
+  <h2 style="margin-top:2rem">Email addresses</h2>
+  <p class="muted">Each address you set up at <code>name@cncg.email</code> can auto-reply to inbound mail. Replies go to the original sender; you and your team get a copy via Cc/Bcc.</p>
 
   <div class="card p-18" style="margin:24px 0">
-    <p class="m-0"><strong>{sub_price} per subdomain per month.</strong></p>
-    <p class="muted" style="margin:8px 0 0">Includes unlimited inbound email, routing rules, forwarding, and Discord relay. Only AI-generated replies use a credit (from your balance above).</p>
+    <p class="m-0"><strong>1 address free per account.</strong> Need more? Buy a 5-pack for <strong>{pack_price}</strong> — one-time charge, never expires.</p>
+    <p class="muted" style="margin:8px 0 0">Static replies stay free; AI replies draw from your credit balance above.</p>
   </div>
 </article>"##,
         nav = nav,
         per_reply = per_reply,
-        sub_price = sub_price,
+        pack_price = pack_price,
         slider = slider,
         inr_cls = inr_cls,
         usd_cls = usd_cls,
@@ -922,7 +922,7 @@ pub fn pricing_html(default_currency: &str) -> String {
         "Pricing - Concierge",
         &content,
         &PageMeta {
-            description: "Simple, prepaid pricing for Concierge. ₹2 / $0.02 per AI reply, no tiers. Static auto-replies free. 100 free AI replies every month. Buy any quantity. Credits never expire.",
+            description: "Simple, prepaid pricing for Concierge. ₹2 / $0.02 per AI reply, no tiers. Static auto-replies free. 100 free AI replies every month. 1 free email address; 5-packs from ₹49 / $0.50.",
             og_title: "Concierge Pricing",
             ..PageMeta::default()
         },
