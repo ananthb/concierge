@@ -132,6 +132,25 @@ pub fn docs_html() -> String {
     <li>No per-message body storage. If you need a conversation web-view, that's a future feature requiring a schema change and ToS update.</li>
   </ul>
 
+  <h2>Discord developer-portal setup (one-time, per deployment)</h2>
+  <p>Concierge uses one shared Discord application across all tenants. Configure it once when you first deploy.</p>
+  <ol>
+    <li><strong>Create the app.</strong> Go to <a href="https://discord.com/developers/applications" target="_blank" rel="noopener">discord.com/developers/applications</a> and create a new application. Name it whatever your product is called.</li>
+    <li><strong>Bot user.</strong> Open the <em>Bot</em> tab → <em>Reset Token</em> and copy the token. Under <em>Privileged Gateway Intents</em>, enable <strong>Message Content Intent</strong> (required so <code>MESSAGE_CREATE</code> events carry the message body).</li>
+    <li><strong>Identifiers.</strong> On the <em>General Information</em> tab, copy the <em>Application ID</em> and <em>Public Key</em>.</li>
+    <li><strong>OAuth2 redirect.</strong> Open the <em>OAuth2</em> tab → <em>Redirects</em> → add <code>{{BASE_URL}}/auth/discord/callback</code>.</li>
+    <li><strong>Interactions endpoint.</strong> On the <em>General Information</em> tab, set <em>Interactions Endpoint URL</em> to <code>{{BASE_URL}}/discord/interactions</code>. Discord pings the URL on save; the worker must already be deployed with the secrets below for the handshake to succeed.</li>
+    <li><strong>Webhook events.</strong> On the <em>Webhooks</em> (or <em>Event Webhooks</em>) tab, set <em>Webhook Event URL</em> to <code>{{BASE_URL}}/discord/events</code> and subscribe to <code>message.create</code>. Same Ed25519 handshake as the interactions endpoint.</li>
+    <li><strong>Worker secrets.</strong> Run:
+      <pre class="mono"><code>wrangler secret put DISCORD_APPLICATION_ID
+wrangler secret put DISCORD_PUBLIC_KEY
+wrangler secret put DISCORD_BOT_TOKEN
+wrangler secret put DISCORD_APP_ID  # alias used by some handlers</code></pre>
+    </li>
+    <li><strong>Slash commands (optional).</strong> Register <code>/status</code>, <code>/domains list</code>, <code>/rules list &lt;domain&gt;</code> globally via <code>POST /applications/{{app_id}}/commands</code>. The interactions handler is already wired to dispatch them.</li>
+  </ol>
+  <p class="muted">After this, every tenant just clicks <em>Install</em> on <code>/admin/discord</code> (or the wizard's Channels step) — the OAuth flow handles per-tenant guild attribution and channel picking.</p>
+
   <h2>Self-hosting</h2>
   <p>The repo at <a href="https://github.com/ananthb/concierge-worker" target="_blank" rel="noopener">github.com/ananthb/concierge-worker</a> is AGPL-3.0. Required Cloudflare bindings: D1, KV, AI, EMAIL (Email Routing + Email Service), DURABLE_OBJECTS. Required env secrets are listed in <code>wrangler.toml</code>'s comment block. The setup walkthrough lives at <a href="https://ananthb.github.io/concierge-worker/" target="_blank" rel="noopener">ananthb.github.io/concierge-worker</a>.</p>
 </article>
