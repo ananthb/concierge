@@ -48,6 +48,32 @@ struct PublicHealth {
     generated_at: String,
 }
 
+/// Quick synchronous check for the secrets that are *required* to serve any
+/// user-facing flow at all (sessions and login). When any of these are
+/// missing the worker can't actually do anything useful — we surface a
+/// maintenance page rather than letting the user reach a broken OAuth
+/// redirect or a session that can't be encrypted.
+///
+/// The shallow `secrets_check` in `run_checks()` is more comprehensive but
+/// also flags optional integrations as `Error` when missing, which is too
+/// aggressive for the "are we open for business" question.
+pub fn essentials_missing(env: &Env) -> Vec<&'static str> {
+    let required: &[&str] = &[
+        "ENCRYPTION_KEY",
+        "GOOGLE_OAUTH_CLIENT_ID",
+        "GOOGLE_OAUTH_CLIENT_SECRET",
+    ];
+    required
+        .iter()
+        .filter(|name| {
+            env.secret(name)
+                .map(|s| s.to_string().is_empty())
+                .unwrap_or(true)
+        })
+        .copied()
+        .collect()
+}
+
 pub async fn handle_health(_req: Request, env: Env) -> Result<Response> {
     let report = run_checks(&env, false).await;
     let public = PublicHealth {

@@ -523,6 +523,21 @@ document.addEventListener("htmx:configRequest", function(e) {{
     )
 }
 
+/// Branded "we're temporarily offline" page. Used when essentials are
+/// missing — see `handlers::health::essentials_missing`.
+pub fn maintenance_html() -> String {
+    let body = format!(
+        r##"<header class="site-header">{brand}</header>
+<section class="page narrow ta-center">
+  <div class="display" style="margin-top:2rem">Be right back.</div>
+  <p class="lead" style="margin:0 auto 1.5rem;max-width:520px">Concierge is briefly unavailable while we finish a configuration change. We'll be back in a few minutes — thanks for your patience.</p>
+  <p class="muted fs-13">If this persists, please check back shortly.</p>
+</section>"##,
+        brand = brand_mark(),
+    );
+    base_html("Concierge is offline", &body)
+}
+
 /// Wrap content in the app shell (top nav + main area).
 pub fn app_shell(content: &str, active_nav: &str, base_url: &str) -> String {
     let nav_items = [

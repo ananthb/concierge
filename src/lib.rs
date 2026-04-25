@@ -216,6 +216,22 @@ async fn handle_request(req: Request, env: Env) -> Result<Response> {
         _ => {}
     }
 
+    // If essential secrets are missing, serve a branded maintenance page on
+    // every user-facing route. /manage/* is intentionally exempt so the
+    // operator can still log in and inspect the failure; /webhook/* is
+    // exempt so providers can keep delivering events (they'll be processed
+    // once secrets land and KV/D1 are ready).
+    if !handlers::health::essentials_missing(&env).is_empty()
+        && !path.starts_with("/manage")
+        && !path.starts_with("/webhook")
+    {
+        let mut resp = Response::from_html(templates::base::maintenance_html())?.with_status(503);
+        let h = resp.headers_mut();
+        h.set("Retry-After", "60")?;
+        h.set("Cache-Control", "no-store")?;
+        return Ok(resp);
+    }
+
     // Terms of Service
     if path == "/terms" {
         return Response::from_html(legal::terms_of_service_html());
