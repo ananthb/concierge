@@ -194,13 +194,13 @@ async fn handle_request(req: Request, env: Env) -> Result<Response> {
     match path {
         "/robots.txt" => {
             return serve_text(
-                "User-agent: *\nAllow: /\nAllow: /pricing\nAllow: /terms\nAllow: /privacy\nDisallow: /admin\nDisallow: /manage\nDisallow: /auth\nDisallow: /webhook\nDisallow: /discord\nDisallow: /instagram\nDisallow: /whatsapp\n\nSitemap: https://concierge.calculon.tech/sitemap.txt\n",
+                "User-agent: *\nAllow: /\nAllow: /features\nAllow: /pricing\nAllow: /docs\nAllow: /terms\nAllow: /privacy\nDisallow: /admin\nDisallow: /manage\nDisallow: /auth\nDisallow: /webhook\nDisallow: /discord\nDisallow: /instagram\nDisallow: /whatsapp\n\nSitemap: https://concierge.calculon.tech/sitemap.txt\n",
                 "text/plain",
             );
         }
         "/sitemap.txt" => {
             return serve_text(
-                "https://concierge.calculon.tech/\nhttps://concierge.calculon.tech/pricing\nhttps://concierge.calculon.tech/terms\nhttps://concierge.calculon.tech/privacy\nhttps://ananthb.github.io/concierge-worker/\n",
+                "https://concierge.calculon.tech/\nhttps://concierge.calculon.tech/features\nhttps://concierge.calculon.tech/pricing\nhttps://concierge.calculon.tech/docs\nhttps://concierge.calculon.tech/terms\nhttps://concierge.calculon.tech/privacy\nhttps://ananthb.github.io/concierge-worker/\n",
                 "text/plain",
             );
         }
@@ -225,6 +225,16 @@ async fn handle_request(req: Request, env: Env) -> Result<Response> {
     // Privacy Policy
     if path == "/privacy" {
         return Response::from_html(legal::privacy_policy_html());
+    }
+
+    // Marketing features overview
+    if path == "/features" {
+        return Response::from_html(templates::features::features_html());
+    }
+
+    // Technical docs
+    if path == "/docs" {
+        return Response::from_html(templates::docs::docs_html());
     }
 
     // Pricing page. ?c=usd|inr overrides the geo-IP default so the toggle

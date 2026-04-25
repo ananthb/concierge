@@ -6,6 +6,8 @@ pub mod base;
 pub mod billing;
 pub mod credit_slider;
 pub mod discord;
+pub mod docs;
+pub mod features;
 mod lead_form;
 pub mod management;
 pub mod onboarding;

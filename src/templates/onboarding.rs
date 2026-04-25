@@ -113,13 +113,7 @@ fn wizard_shell(
 }
 
 pub fn welcome_html(_base_url: &str) -> String {
-    let header = format!(
-        r#"<header class="site-header">
-  {brand}
-  <div class="ml-auto"><a href="/auth/login" class="btn ghost sm">Sign in</a></div>
-</header>"#,
-        brand = brand_mark(),
-    );
+    let header = super::base::public_nav_html("");
 
     let content = format!(
         r#"{header}
@@ -127,11 +121,10 @@ pub fn welcome_html(_base_url: &str) -> String {
   <div class="welcome-left">
     <div class="eyebrow">// automated customer engagement</div>
     <h1 class="display">Hello. I'll be answering <br>every <em>DM, WhatsApp &amp; email</em> <br>so you don't have to.</h1>
-    <p class="lead">Connect your channels, set a tone, and your concierge handles the rest. Auto-replies across WhatsApp, Instagram, and email. 100 replies free every month.</p>
-    <a href="/auth/login" class="btn primary lg">Get started &rarr;</a>
-    <div class="mono fineprint" style="margin-top:18px">
-      &#x25E6; <a href="/pricing" class="muted">pricing</a>
-      &nbsp; &#x25E6; <a href="https://github.com/ananthb/concierge-worker" class="muted">open-source</a>
+    <p class="lead">Connect your channels, set a tone, and your concierge handles the rest. Auto-replies across WhatsApp, Instagram, Discord, and email. 100 AI replies free every month — static replies always free.</p>
+    <div class="row gap-12 wrap mt-16">
+      <a href="/auth/login" class="btn primary lg">Get started &rarr;</a>
+      <a href="/features" class="btn ghost lg">See features</a>
     </div>
   </div>
   <aside class="postcard" aria-hidden="true">
@@ -921,14 +914,9 @@ pub fn pricing_html(default_currency: &str) -> String {
         ("btn sm", "btn ghost sm")
     };
 
+    let nav = super::base::public_nav_html("pricing");
     let content = format!(
-        r##"<header class="site-header">
-  {brand}
-  <div class="row gap-12 ml-auto">
-    <a href="/" class="btn ghost sm">&larr; Back</a>
-    <a href="/auth/login" class="btn ghost sm">Sign in</a>
-  </div>
-</header>
+        r##"{nav}
 <article class="legal">
   <div class="between">
     <h1 class="m-0">{per_reply} per AI reply. Everything else is free.</h1>
@@ -958,7 +946,7 @@ pub fn pricing_html(default_currency: &str) -> String {
     <p class="muted" style="margin:8px 0 0">Includes unlimited inbound email, routing rules, forwarding, and Discord relay. Only AI-generated replies use a credit (from your balance above).</p>
   </div>
 </article>"##,
-        brand = brand_mark(),
+        nav = nav,
         per_reply = per_reply,
         sub_price = sub_price,
         slider = slider,
