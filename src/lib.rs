@@ -216,15 +216,17 @@ async fn handle_request(req: Request, env: Env) -> Result<Response> {
         _ => {}
     }
 
-    // If essential secrets are missing, serve a branded maintenance page on
-    // every user-facing route. /manage/* is intentionally exempt so the
-    // operator can still log in and inspect the failure; /webhook/* is
-    // exempt so providers can keep delivering events (they'll be processed
-    // once secrets land and KV/D1 are ready).
-    if !handlers::health::essentials_missing(&env).is_empty()
-        && !path.starts_with("/manage")
-        && !path.starts_with("/webhook")
-    {
+    // Routes that actually need secrets to function (login + the signed-in
+    // app + the third-party install/auth callbacks) get a branded
+    // maintenance page when essentials are missing. Static marketing pages
+    // (/, /pricing, /features, /terms, /privacy), webhooks, /health, and
+    // /manage/* (Cloudflare Access protected — how the operator recovers)
+    // are unaffected.
+    let needs_essentials = path.starts_with("/auth")
+        || path.starts_with("/admin")
+        || path.starts_with("/whatsapp/signup")
+        || path.starts_with("/instagram/");
+    if needs_essentials && !handlers::health::essentials_missing(&env).is_empty() {
         let mut resp = Response::from_html(templates::base::maintenance_html())?.with_status(503);
         let h = resp.headers_mut();
         h.set("Retry-After", "60")?;
