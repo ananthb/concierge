@@ -1,4 +1,4 @@
-//! Public /features page — marketing-voiced overview of every capability.
+//! Public /features page — short, scannable overview of every capability.
 
 use super::base::{base_html_with_meta, footer, public_nav_html, PageMeta};
 
@@ -8,64 +8,81 @@ pub fn features_html() -> String {
 
     let content = format!(
         r##"{nav}
-<article class="legal">
-  <h1 class="display-md m-0">Everything Concierge does for your business.</h1>
-  <p class="lead">One assistant that lives where your customers already are — WhatsApp, Instagram, Discord, email — replying when you can't, escalating when it matters.</p>
+<article class="page narrow">
+  <h1 class="display-md m-0">One assistant. Every channel.</h1>
+  <p class="lead">Concierge replies for you on WhatsApp, Instagram, Discord, and email — instantly, in your voice, and only when it should.</p>
 
-  <section class="mt-32">
-    <h2>WhatsApp Auto-Reply</h2>
-    <p>Connect your WhatsApp Business number once. Every customer message gets an instant response — either a canned reply you wrote yourself or an AI-drafted answer in your voice. You stay in the loop on Discord; the AI does the typing.</p>
-  </section>
+  <h2 class="mt-32 mb-12">Channels</h2>
+  <div class="channels-grid">
+    <div class="card p-22">
+      <div class="eyebrow">WhatsApp Business</div>
+      <p class="m-0 mt-8">Connect a number, pick a tone, ship. Customer messages get an instant static or AI reply.</p>
+    </div>
+    <div class="card p-22">
+      <div class="eyebrow">Instagram DMs</div>
+      <p class="m-0 mt-8">Sign in with Meta, choose the business account. Replies go out through the official Graph API.</p>
+    </div>
+    <div class="card p-22">
+      <div class="eyebrow">Discord</div>
+      <p class="m-0 mt-8">Install the bot. The concierge replies when @-mentioned or in channels you designate.</p>
+    </div>
+    <div class="card p-22">
+      <div class="eyebrow">Email</div>
+      <p class="m-0 mt-8">Pick a name at <code>name@cncg.email</code>. Inbound mail gets a reply; you and your team get a copy via Cc/Bcc.</p>
+    </div>
+  </div>
 
-  <section class="mt-32">
-    <h2>Instagram DMs</h2>
-    <p>Same flow as WhatsApp, on the other half of your customer base. Sign in with Meta, pick the business account, done. Replies post via the Instagram Graph API; nothing scrapes the app.</p>
-  </section>
+  <h2 class="mt-32 mb-12">How it works</h2>
+  <div class="channels-grid">
+    <div class="card p-22">
+      <div class="eyebrow">1. Connect</div>
+      <p class="m-0 mt-8">5-minute wizard. OAuth into the channels you use; everything else stays untouched.</p>
+    </div>
+    <div class="card p-22">
+      <div class="eyebrow">2. Configure</div>
+      <p class="m-0 mt-8">Pick static or AI replies per channel. Set a persona — tone, business type, things to never say.</p>
+    </div>
+    <div class="card p-22">
+      <div class="eyebrow">3. Run</div>
+      <p class="m-0 mt-8">Inbound messages flow through. Bursts collapse into one reply (configurable wait — default 5s).</p>
+    </div>
+  </div>
 
-  <section class="mt-32">
-    <h2>Discord — relay and reply</h2>
-    <p>Install the Concierge bot in your team's server. Every WhatsApp / Instagram / Email message lands in a Discord channel with Reply, Approve, and Drop buttons. Reply right there and it flows back to the customer through the right channel. The bot can also answer customer messages directly when you @-mention it or in channels you designate.</p>
-  </section>
+  <h2 class="mt-32 mb-12">AI you can trust</h2>
+  <div class="channels-grid">
+    <div class="card p-22">
+      <div class="eyebrow">Voice and guardrails</div>
+      <p class="m-0 mt-8">Set tone, biz type, and things the AI must never do. Every reply respects those rules.</p>
+    </div>
+    <div class="card p-22">
+      <div class="eyebrow">Prompt-injection screening</div>
+      <p class="m-0 mt-8">Inbound text is scanned before it reaches the model. Suspicious messages are skipped, not auto-replied.</p>
+    </div>
+    <div class="card p-22">
+      <div class="eyebrow">Pay only for AI</div>
+      <p class="m-0 mt-8">Static auto-replies are free, forever. AI replies cost ₹2 / $0.02 each, with 100 free per month.</p>
+    </div>
+  </div>
 
-  <section class="mt-32">
-    <h2>Email routing on your own domain</h2>
-    <p>Get <code>yourname.cncg.email</code> in under a minute. Send mail to any address on it — <code>hello@</code>, <code>orders@</code>, <code>support+invoice@</code> — and write rules to forward, reject, AI-reply, or relay to Discord. Every routing rule is glob-pattern matched and prioritized; the first one that fits wins.</p>
-  </section>
-
-  <section class="mt-32">
-    <h2>AI replies with your voice</h2>
-    <p>Set a tone, a business type, and the things the AI should never do (quote prices, promise dates, handle refunds). Every AI draft respects those guardrails, and incoming text is scanned for prompt-injection attempts before it hits the model.</p>
-  </section>
-
-  <section class="mt-32">
-    <h2>Approval workflow</h2>
-    <p>The AI doesn't send anything you haven't seen. Drafts post to Discord (or arrive as an email digest) with Approve / Reject / Edit buttons. You stay in control; the AI just saves you the typing.</p>
-  </section>
-
-  <section class="mt-32">
-    <h2>Smart batching</h2>
-    <p>If a customer fires off five messages in a row, Concierge waits a few seconds for them to finish, then sends one combined reply. Configurable per channel; default 5 seconds. The AI sees the whole burst.</p>
-  </section>
-
-  <section class="mt-32">
-    <h2>Lead capture forms</h2>
-    <p>Drop an embeddable phone-number form on any page. When someone fills it in, the concierge messages them on WhatsApp instantly. Style it to match your brand; restrict where it can be embedded.</p>
-  </section>
-
-  <section class="mt-32">
-    <h2>Notifications you control</h2>
-    <p>Pick where AI approval requests show up — Discord, email digest, both. Same for activity summaries (daily / weekly / monthly / quarterly). Mute the channels you don't want, no all-or-nothing toggle.</p>
-  </section>
-
-  <section class="mt-32">
-    <h2>Privacy-first</h2>
-    <p>We don't store message content. Metadata only — who messaged whom, when, what action ran. Account deletion wipes everything we have on you, immediately, with no support ticket.</p>
-  </section>
-
-  <section class="mt-32">
-    <h2>Open source</h2>
-    <p>The whole thing is on <a href="https://github.com/ananthb/concierge" target="_blank" rel="noopener">GitHub</a> under AGPL-3.0. Self-host on your own Cloudflare account if you'd rather. Read the <a href="/docs">technical docs</a> for the full architecture.</p>
-  </section>
+  <h2 class="mt-32 mb-12">More that just works</h2>
+  <div class="channels-grid">
+    <div class="card p-22">
+      <div class="eyebrow">Lead capture</div>
+      <p class="m-0 mt-8">Embed a phone-number form on any page. Submissions trigger an instant WhatsApp message.</p>
+    </div>
+    <div class="card p-22">
+      <div class="eyebrow">Notification recipients</div>
+      <p class="m-0 mt-8">Add Cc/Bcc emails to any concierge address. We verify each one with a one-click link.</p>
+    </div>
+    <div class="card p-22">
+      <div class="eyebrow">Privacy by default</div>
+      <p class="m-0 mt-8">We log metadata, never message bodies. Account deletion wipes everything, immediately.</p>
+    </div>
+    <div class="card p-22">
+      <div class="eyebrow">Open source</div>
+      <p class="m-0 mt-8">AGPL-3.0 on <a href="https://github.com/ananthb/concierge" target="_blank" rel="noopener">GitHub</a>. Self-host if you'd rather. <a href="https://ananthb.github.io/concierge/" target="_blank" rel="noopener">Architecture docs</a>.</p>
+    </div>
+  </div>
 
   <section class="card p-22 mt-32 ta-center">
     <h2 class="m-0">Ready to set this up?</h2>
@@ -85,7 +102,7 @@ pub fn features_html() -> String {
         "Features - Concierge",
         &content,
         &PageMeta {
-            description: "Concierge handles WhatsApp, Instagram, Discord, and email auto-replies for small businesses. AI drafts, human approvals, smart batching, and a unified Discord inbox.",
+            description: "Concierge auto-replies on WhatsApp, Instagram, Discord, and email. Static replies free; AI replies ₹2 / $0.02 with 100 free per month. 5-minute setup. Open source.",
             og_title: "Concierge Features",
             ..PageMeta::default()
         },
