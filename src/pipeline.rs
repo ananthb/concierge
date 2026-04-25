@@ -56,9 +56,11 @@ async fn handle_auto_reply(
         _ => return Ok(()),
     };
 
-    // Deduct credit BEFORE generating/sending (prevents double-spend race)
-    if !billing::try_deduct(&db, &msg.tenant_id).await? {
-        console_log!("Tenant {} out of credits, skipping reply", msg.tenant_id);
+    // Only AI replies cost a credit. Static auto-replies are free, so we
+    // skip the deduction entirely on that branch.
+    let is_ai = matches!(config.mode, AutoReplyMode::Ai);
+    if is_ai && !billing::try_deduct(&db, &msg.tenant_id).await? {
+        console_log!("Tenant {} out of AI-reply credits, skipping", msg.tenant_id);
         return Ok(());
     }
 
@@ -103,9 +105,11 @@ async fn handle_auto_reply(
     };
 
     if reply.is_empty() {
-        // Restore credit — no reply to send
-        if let Err(e) = billing::restore_credit(&db, &msg.tenant_id).await {
-            console_log!("Failed to restore credit: {:?}", e);
+        // Restore credit if we deducted one (AI path only).
+        if is_ai {
+            if let Err(e) = billing::restore_credit(&db, &msg.tenant_id).await {
+                console_log!("Failed to restore credit: {:?}", e);
+            }
         }
         return Ok(());
     }
@@ -122,9 +126,10 @@ async fn handle_auto_reply(
     .await
     {
         console_log!("Auto-reply send error: {:?}", e);
-        // Restore credit — send failed
-        if let Err(re) = billing::restore_credit(&db, &msg.tenant_id).await {
-            console_log!("Failed to restore credit: {:?}", re);
+        if is_ai {
+            if let Err(re) = billing::restore_credit(&db, &msg.tenant_id).await {
+                console_log!("Failed to restore credit: {:?}", re);
+            }
         }
         return Ok(());
     }

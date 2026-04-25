@@ -56,8 +56,8 @@ pub fn slider_html(currency: &str, base_url: &str, mode: SliderMode<'_>) -> Stri
         r##"<div x-data="{{ credits: {initial}, custom: false }}" class="card p-22">
   <div class="between mb-12">
     <div>
-      <div class="eyebrow">Reply credits</div>
-      <p class="muted m-0 mt-4 fs-13">{per_reply_label} per reply. 100 free every month. Purchased credits never expire.</p>
+      <div class="eyebrow">AI reply credits</div>
+      <p class="muted m-0 mt-4 fs-13">{per_reply_label} per AI reply. Static auto-replies are always free. 100 AI replies free every month. Purchased credits never expire.</p>
     </div>
     <div class="ta-right">
       <div class="serif" style="font-size:34px;line-height:1"><span x-text="credits.toLocaleString()"></span></div>

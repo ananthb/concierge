@@ -915,19 +915,23 @@ pub fn pricing_html(default_currency: &str) -> String {
 </header>
 <article class="legal">
   <div class="between">
-    <h1 class="m-0">One price. {per_reply} per reply.</h1>
+    <h1 class="m-0">{per_reply} per AI reply. Everything else is free.</h1>
     <div class="row gap-8">
       <a href="/pricing?c=inr" class="{inr_cls}">&#x20B9; INR</a>
       <a href="/pricing?c=usd" class="{usd_cls}">$ USD</a>
     </div>
   </div>
-  <p class="muted">100 free replies every account every month. After that, top up with as many credits as you want — no tiers, no contracts. Purchased credits never expire.</p>
+  <p class="muted">100 free AI replies every account every month. After that, top up with as many credits as you want — no tiers, no contracts. Purchased credits never expire.</p>
 
   <div style="margin:24px 0">{slider}</div>
 
   <div class="card p-18">
-    <div class="eyebrow mb-8">What counts as a reply?</div>
-    <p class="muted m-0">Every auto-reply the concierge sends on WhatsApp, Instagram, or email uses one credit. Inbound messages, email forwarding, and Discord relay are always free.</p>
+    <div class="eyebrow mb-8">What costs a credit?</div>
+    <ul class="muted m-0">
+      <li><strong>AI auto-replies</strong> on WhatsApp, Instagram, or email: <strong>1 credit each.</strong></li>
+      <li><strong>Static auto-replies</strong> (canned text you wrote yourself): always <strong>free</strong>.</li>
+      <li>Inbound messages, email forwarding, Discord relay, slash commands: always <strong>free</strong>.</li>
+    </ul>
   </div>
 
   <h2 style="margin-top:2rem">Email</h2>
@@ -935,7 +939,7 @@ pub fn pricing_html(default_currency: &str) -> String {
 
   <div class="card p-18" style="margin:24px 0">
     <p class="m-0"><strong>{sub_price} per subdomain per month.</strong></p>
-    <p class="muted" style="margin:8px 0 0">Includes unlimited inbound email, routing rules, forwarding, and Discord relay. AI-generated replies use 1 reply credit each (from your balance above).</p>
+    <p class="muted" style="margin:8px 0 0">Includes unlimited inbound email, routing rules, forwarding, and Discord relay. Only AI-generated replies use a credit (from your balance above).</p>
   </div>
 </article>"##,
         brand = brand_mark(),
@@ -950,7 +954,7 @@ pub fn pricing_html(default_currency: &str) -> String {
         "Pricing - Concierge",
         &content,
         &PageMeta {
-            description: "Simple, prepaid pricing for Concierge. ₹2 / $0.02 per reply, no tiers. 100 free every month. Buy any quantity. Credits never expire.",
+            description: "Simple, prepaid pricing for Concierge. ₹2 / $0.02 per AI reply, no tiers. Static auto-replies free. 100 free AI replies every month. Buy any quantity. Credits never expire.",
             og_title: "Concierge Pricing",
             ..PageMeta::default()
         },

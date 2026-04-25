@@ -104,7 +104,7 @@ pub fn billing_overview_html(billing: &TenantBilling, currency: &str, base_url: 
         r##"<div class="page-pad">
   <p><a href="{base_url}/admin">&larr; Back to Dashboard</a></p>
   <div class="eyebrow">Billing</div>
-  <h2 class="display-sm m-0 mt-4 mb-16">Reply credits</h2>
+  <h2 class="display-sm m-0 mt-4 mb-16">AI reply credits</h2>
 
   <div class="stats-grid mb-24">
     <div class="card p-18 ta-center">
@@ -170,7 +170,7 @@ pub fn checkout_html(
         r##"<div class="ta-center" style="max-width:480px;margin:4rem auto;padding:0 1rem">
   <div class="card p-28">
     <h2 class="display-sm">Complete purchase</h2>
-    <p class="muted m-0 mt-8 mb-24">Buying <strong>{credits}</strong> reply credits</p>
+    <p class="muted m-0 mt-8 mb-24">Buying <strong>{credits}</strong> AI reply credits</p>
     <div class="stat-n serif mb-24">{display_amount}</div>
     <button id="pay-btn" class="btn primary lg w-full">Pay with Razorpay</button>
     <p class="mono muted fs-11 mt-12">Secure payment via Razorpay</p>
@@ -186,7 +186,7 @@ document.getElementById("pay-btn").addEventListener("click", function() {{
     currency: "{currency}",
     order_id: "{order_id}",
     name: "Concierge",
-    description: "{credits} reply credits",
+    description: "{credits} AI reply credits",
     notes: {{ tenant_id: "{tenant_id}", credits: "{credits}" }},
     handler: function(response) {{
       fetch("{base_url}/admin/billing/verify", {{
