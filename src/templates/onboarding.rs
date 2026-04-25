@@ -885,8 +885,8 @@ pub fn pricing_html(default_currency: &str) -> String {
   <div class="between">
     <h1 class="m-0">{per_reply} per AI reply. Everything else is free.</h1>
     <div class="row gap-8">
-      <a href="/pricing?c=inr" class="{inr_cls}">INR</a>
-      <a href="/pricing?c=usd" class="{usd_cls}">USD</a>
+      <a href="/pricing?c=inr" class="{inr_cls}" title="Indian rupees" aria-label="Indian rupees">&#x20B9;</a>
+      <a href="/pricing?c=usd" class="{usd_cls}" title="US dollars" aria-label="US dollars">$</a>
     </div>
   </div>
   <p class="muted">100 free AI replies every account every month. After that, top up with as many credits as you want — no tiers, no contracts. Purchased credits never expire.</p>
