@@ -21,7 +21,7 @@ binding = "KV"
 id = "2c2f474d22e04d1f8a4d12b37810390b"
 
 # ============================================================================
-# Durable Objects — buffer inbound messages so we can reply to a batch
+# Durable Objects: buffer inbound messages so we can reply to a batch
 # ============================================================================
 [[durable_objects.bindings]]
 name = "REPLY_BUFFER"
@@ -38,7 +38,7 @@ new_classes = ["ReplyBufferDO"]
 binding = "AI"
 
 # ============================================================================
-# Email Routing — send_email binding for outbound forwarding
+# Email Routing: send_email binding for outbound forwarding
 # ============================================================================
 [[send_email]]
 name = "EMAIL"
@@ -54,7 +54,7 @@ WHATSAPP_SIGNUP_CONFIG_ID = ""  # Meta Embedded Signup config ID
 EMAIL_BASE_DOMAIN = "cncg.email" # Single platform email domain. MX records on the apex.
 
 # ============================================================================
-# Cron triggers — daily at 6AM UTC for Instagram token refresh
+# Cron triggers: daily at 6AM UTC for Instagram token refresh
 # ============================================================================
 [triggers]
 crons = ["0 6 * * *"]

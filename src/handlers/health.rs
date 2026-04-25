@@ -4,9 +4,9 @@
 //! the same report as HTML (the management module owns that view).
 //!
 //! Two depths:
-//! - **shallow** — only checks bindings (D1, KV, Email, AI, DO) and which
+//! - **shallow**: only checks bindings (D1, KV, Email, AI, DO) and which
 //!   secrets are configured. Cheap, runs on every hit.
-//! - **deep**   — additionally pings external APIs (Discord, Cloudflare DNS).
+//! - **deep**  : additionally pings external APIs (Discord, Cloudflare DNS).
 //!   Cached in KV for 60s so /manage doesn't hammer providers.
 
 use serde::{Deserialize, Serialize};
@@ -38,7 +38,7 @@ pub struct HealthReport {
     pub checks: Vec<Check>,
 }
 
-/// Public health endpoint. Returns ONLY the rollup — no per-check detail,
+/// Public health endpoint. Returns ONLY the rollup: no per-check detail,
 /// no secret names. Detailed status lives on /manage (Cloudflare Access
 /// protected). Operators who need more from a public endpoint can lock
 /// /health down further with Access on their own zone.
@@ -50,7 +50,7 @@ struct PublicHealth {
 
 /// Quick synchronous check for the secrets that are *required* to serve any
 /// user-facing flow at all (sessions and login). When any of these are
-/// missing the worker can't actually do anything useful — we surface a
+/// missing the worker can't actually do anything useful: we surface a
 /// maintenance page rather than letting the user reach a broken OAuth
 /// redirect or a session that can't be encrypted.
 ///
@@ -207,7 +207,7 @@ fn binding_check(name: &str, present: bool) -> Check {
         Check {
             name: format!("{name} binding"),
             status: Status::Error,
-            detail: "missing — check wrangler.toml".into(),
+            detail: "missing: check wrangler.toml".into(),
         }
     }
 }
@@ -261,7 +261,7 @@ async fn check_kv(env: &Env) -> Check {
             }
         }
     };
-    // A get on a likely-missing key returns None — that's still "reachable".
+    // A get on a likely-missing key returns None: that's still "reachable".
     match kv.get("__healthcheck").text().await {
         Ok(_) => Check {
             name: "KV (KV binding)".into(),

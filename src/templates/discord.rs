@@ -1,4 +1,4 @@
-//! Discord management page — install CTA + channel picker + uninstall.
+//! Discord management page: install CTA + channel picker + uninstall.
 
 use crate::helpers::html_escape;
 use crate::types::DiscordConfig;
@@ -92,7 +92,7 @@ pub fn manage_html(
         .collect();
 
     let empty_note = if channels.is_empty() {
-        r#"<p class="muted mt-8 fs-13">No text channels found. The bot may not have access yet — check the server's permissions.</p>"#
+        r#"<p class="muted mt-8 fs-13">No text channels found. The bot may not have access yet: check the server's permissions.</p>"#
     } else {
         ""
     };
@@ -157,7 +157,7 @@ pub fn manage_html(
     <div class="form-group" x-show="ar_enabled" x-cloak>
       <label class="eyebrow lbl">Mode</label>
       <select class="select" name="auto_reply_mode" x-model="ar_mode">
-        <option value="static">Static (canned text — free)</option>
+        <option value="static">Static (canned text: free)</option>
         <option value="ai">AI (uses 1 credit per reply)</option>
       </select>
     </div>
@@ -168,7 +168,7 @@ pub fn manage_html(
     </div>
 
     <div class="form-group" x-show="ar_enabled" x-cloak>
-      <label class="eyebrow lbl">Wait before replying — <span x-text="wait_seconds === 0 ? 'instant' : wait_seconds + 's'"></span></label>
+      <label class="eyebrow lbl">Wait before replying: <span x-text="wait_seconds === 0 ? 'instant' : wait_seconds + 's'"></span></label>
       <input type="range" min="0" max="30" step="1" name="wait_seconds" x-model.number="wait_seconds" style="accent-color:var(--accent)">
       <small class="muted fs-12">0 = reply immediately. Higher values let users send a burst of messages and get one combined reply.</small>
     </div>

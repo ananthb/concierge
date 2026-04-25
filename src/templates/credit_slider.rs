@@ -1,4 +1,4 @@
-//! Credit-purchase slider — used on /pricing, /admin/billing, and the wizard
+//! Credit-purchase slider: used on /pricing, /admin/billing, and the wizard
 //! launch step so the buying experience is identical everywhere.
 //!
 //! Flat per-reply rate. Slider 100..10000 step 100. Past the right edge, a
@@ -7,11 +7,11 @@
 
 use crate::billing::{MAX_CREDITS, MIN_CREDITS, UNIT_PRICE_CENTS, UNIT_PRICE_PAISE};
 
-/// Variant of the slider — controls the bottom action area.
+/// Variant of the slider: controls the bottom action area.
 pub enum SliderMode<'a> {
     /// Renders a Buy button that POSTs to /admin/billing/checkout. Logged-in tenants.
     Buy { return_to: &'a str },
-    /// Renders no action — just shows the slider + price. Used on the public
+    /// Renders no action: just shows the slider + price. Used on the public
     /// pricing page where unauthenticated visitors can play with the slider.
     Preview {
         cta_href: &'a str,
@@ -35,7 +35,7 @@ pub fn slider_html(currency: &str, base_url: &str, mode: SliderMode<'_>) -> Stri
             r##"<form hx-post="{base_url}/admin/billing/checkout" hx-ext="json-enc" hx-target="body" hx-swap="innerHTML" class="mt-16">
   <input type="hidden" name="credits" :value="credits">
   <input type="hidden" name="return_to" value="{return_to}">
-  <button type="submit" class="btn primary lg w-full">Buy <span x-text="credits.toLocaleString()"></span> replies — {sym}<span x-text="{price_js}"></span></button>
+  <button type="submit" class="btn primary lg w-full">Buy <span x-text="credits.toLocaleString()"></span> replies: {sym}<span x-text="{price_js}"></span></button>
 </form>"##,
             base_url = base_url,
             return_to = return_to,

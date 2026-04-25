@@ -72,7 +72,7 @@ pub async fn handle_lead_form(
                     .and_then(|s| s.parse().ok())
                     .unwrap_or(0);
                 if count >= 10 {
-                    return Response::error("Too many submissions. Please try again later.", 429);
+                    return Response::error("Too many submissions. try again later.", 429);
                 }
                 let _ = kv
                     .put(&rl_key, (count + 1).to_string())?
@@ -95,7 +95,7 @@ pub async fn handle_lead_form(
                     if digits.len() < 7 || digits.len() > 15 {
                         let resp = Response::from_html(lead_form_error_html(
                             &form,
-                            "Please enter a valid phone number (7-15 digits).",
+                            "enter a valid phone number (7-15 digits).",
                         ))?;
                         return Ok(with_cors(resp, origin.as_deref(), &form.allowed_origins));
                     }
@@ -104,7 +104,7 @@ pub async fn handle_lead_form(
                 _ => {
                     let resp = Response::from_html(lead_form_error_html(
                         &form,
-                        "Please enter a valid phone number.",
+                        "enter a valid phone number.",
                     ))?;
                     return Ok(with_cors(resp, origin.as_deref(), &form.allowed_origins));
                 }

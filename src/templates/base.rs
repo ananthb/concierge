@@ -1,4 +1,4 @@
-//! Base HTML wrappers — new cream/paper design system
+//! Base HTML wrappers: new cream/paper design system
 
 use crate::helpers::html_escape;
 
@@ -68,7 +68,7 @@ a { color:var(--accent); }
 .gap-4{gap:4px} .gap-6{gap:6px} .gap-8{gap:8px} .gap-12{gap:12px}
 .gap-16{gap:16px} .gap-20{gap:20px} .gap-24{gap:24px}
 
-/* Utility atoms — used instead of inline style attributes. */
+/* Utility atoms: used instead of inline style attributes. */
 .p-12{padding:12px} .p-14{padding:14px} .p-16{padding:16px} .p-18{padding:18px}
 .p-20{padding:20px} .p-22{padding:22px} .p-24{padding:24px} .p-28{padding:28px}
 .page-pad{padding:24px 28px}
@@ -392,7 +392,7 @@ pub fn brand_mark() -> String {
 
 /// Shared header for public marketing pages (home, /features, /pricing,
 /// /docs). `active` is the slug of the current page so the matching nav
-/// item lights up — pass "" to highlight nothing.
+/// item lights up: pass "" to highlight nothing.
 pub fn public_nav_html(active: &str) -> String {
     let item = |slug: &str, label: &str, href: &str| -> String {
         let cls = if slug == active {
@@ -524,13 +524,13 @@ document.addEventListener("htmx:configRequest", function(e) {{
 }
 
 /// Branded "we're temporarily offline" page. Used when essentials are
-/// missing — see `handlers::health::essentials_missing`.
+/// missing: see `handlers::health::essentials_missing`.
 pub fn maintenance_html() -> String {
     let body = format!(
         r##"<header class="site-header">{brand}</header>
 <section class="page narrow ta-center">
   <div class="display" style="margin-top:2rem">Be right back.</div>
-  <p class="lead" style="margin:0 auto 1.5rem;max-width:520px">Concierge is briefly unavailable while we finish a configuration change. We'll be back in a few minutes — thanks for your patience.</p>
+  <p class="lead" style="margin:0 auto 1.5rem;max-width:520px">Concierge is briefly unavailable while we finish a configuration change. We'll be back in a few minutes: thanks for your patience.</p>
   <p class="muted fs-13">If this persists, please check back shortly.</p>
 </section>"##,
         brand = brand_mark(),

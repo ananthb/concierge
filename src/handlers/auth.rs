@@ -32,7 +32,7 @@ pub async fn handle_auth(req: Request, env: Env, path: &str, method: Method) -> 
 
     match (method, path) {
         (Method::Get, "/auth/login") => {
-            // Already signed in — skip the login page.
+            // Already signed in: skip the login page.
             let kv = env.kv("KV")?;
             if resolve_tenant_id(&req, &kv).await.is_some() {
                 let headers = Headers::new();
@@ -279,7 +279,7 @@ pub async fn handle_auth(req: Request, env: Env, path: &str, method: Method) -> 
                     tenant
                 }
             } else {
-                // No email from Facebook — cannot create account without email
+                // No email from Facebook: cannot create account without email
                 return Response::error(
                     "Facebook did not provide an email address. Please sign in with Google instead.",
                     400,

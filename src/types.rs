@@ -325,7 +325,7 @@ pub enum RecipientStatus {
     Verified,
 }
 
-/// Reverse alias mapping for reply routing — when Concierge forwards a
+/// Reverse alias mapping for reply routing: when Concierge forwards a
 /// message out of the platform, the recipient's `Reply-To` is set to a
 /// short-lived alias so their reply lands back here and can be re-routed.
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -684,10 +684,10 @@ mod tests {
 }
 
 // ============================================================================
-// Billing Types — Reply Credits
+// Billing Types: Reply Credits
 // ============================================================================
 
-/// Source of a credit entry — determines expiry behavior.
+/// Source of a credit entry: determines expiry behavior.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum CreditSource {
@@ -705,7 +705,7 @@ pub struct CreditEntry {
     pub granted_at: String,         // ISO 8601
 }
 
-/// Tenant billing state — credit ledger with expiry support.
+/// Tenant billing state: credit ledger with expiry support.
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct TenantBilling {
     #[serde(default)]

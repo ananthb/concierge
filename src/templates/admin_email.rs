@@ -52,7 +52,7 @@ pub fn email_dashboard_html(
         .collect();
 
     let address_table = if addrs.is_empty() {
-        r#"<p class="muted">No email addresses yet. Pick a name below — you can use it like <code>name@domain</code> from the moment you save.</p>"#.to_string()
+        r#"<p class="muted">No email addresses yet. Pick a name below: you can use it like <code>name@domain</code> from the moment you save.</p>"#.to_string()
     } else {
         format!(
             r#"<div class="card p-0" style="overflow:hidden">
@@ -77,7 +77,7 @@ pub fn email_dashboard_html(
         format!(
             r##"<div class="card p-18 mt-16">
                 <h2 class="display-sm m-0 mb-8">Add an address</h2>
-                <p class="muted mb-12">{used} of {quota} addresses used. Pick a memorable local-part — it can use a-z, 0-9, dot, dash, underscore.</p>
+                <p class="muted mb-12">{used} of {quota} addresses used. Pick a memorable local-part: it can use a-z, 0-9, dot, dash, underscore.</p>
                 <form hx-post="{base_url}/admin/email/addresses" hx-ext="json-enc" hx-target="{HASH}toast" hx-swap="innerHTML">
                     <div class="row gap-8 wrap">
                         <input class="input" name="local_part" placeholder="support" required style="max-width:240px">
@@ -108,7 +108,7 @@ pub fn email_dashboard_html(
     );
 
     let page = app_shell(&body, "Email", base_url);
-    base_html("Email — Concierge", &page)
+    base_html("Email: Concierge", &page)
 }
 
 /// Per-address edit page.
@@ -137,8 +137,8 @@ pub fn email_address_html(addr: &EmailAddress, base_domain: &str, base_url: &str
             <div class="form-group">
                 <label>Mode</label>
                 <select class="select" name="mode">
-                    <option value="static" {static_sel}>Static — same canned reply every time</option>
-                    <option value="ai" {ai_sel}>AI — generate a reply for each message (uses 1 credit)</option>
+                    <option value="static" {static_sel}>Static: same canned reply every time</option>
+                    <option value="ai" {ai_sel}>AI: generate a reply for each message (uses 1 credit)</option>
                 </select>
             </div>
             <div class="form-group">
@@ -247,7 +247,7 @@ pub fn email_address_html(addr: &EmailAddress, base_domain: &str, base_url: &str
     );
 
     let page = app_shell(&body, "Email", base_url);
-    base_html(&format!("{full} — Concierge"), &page)
+    base_html(&format!("{full}: Concierge"), &page)
 }
 
 /// Public verification page rendered when a recipient clicks the link
@@ -262,5 +262,5 @@ pub fn email_verify_result_html(message: &str) -> String {
         </div>"#,
         message = html_escape(message),
     );
-    base_html("Email verification — Concierge", &body)
+    base_html("Email verification: Concierge", &body)
 }

@@ -11,7 +11,7 @@
 //!      picker.
 //!   4. Picker is a small form on /admin/discord. PUT /admin/discord/config
 //!      saves approval/digest/relay channel IDs back to `DiscordConfig`.
-//!   5. DELETE /admin/discord uninstalls — removes KV entries and asks the
+//!   5. DELETE /admin/discord uninstalls: removes KV entries and asks the
 //!      bot to leave the guild.
 
 use worker::*;
@@ -25,7 +25,7 @@ const DISCORD_AUTHORIZE_URL: &str = "https://discord.com/api/oauth2/authorize";
 const BOT_PERMISSIONS: u64 = 76928;
 const OAUTH_STATE_TTL: u64 = 600;
 
-/// Handle /admin/discord/* — tenant-scoped Discord management.
+/// Handle /admin/discord/*: tenant-scoped Discord management.
 pub async fn handle_discord_admin(
     mut req: Request,
     env: Env,
@@ -50,7 +50,7 @@ pub async fn handle_discord_admin(
         // Save channel-id selections.
         (Method::Put, "config") => save_channels(&mut req, &kv, tenant_id).await,
 
-        // Uninstall — remove from KV and ask the bot to leave the guild.
+        // Uninstall: remove from KV and ask the bot to leave the guild.
         (Method::Delete, "" | "/") => uninstall(&env, &kv, base_url, tenant_id).await,
 
         _ => Response::error("Not Found", 404),
@@ -209,7 +209,7 @@ async fn show_manage_page(
 
     match cfg {
         None => {
-            // Not installed — render a simple CTA that kicks off the install.
+            // Not installed: render a simple CTA that kicks off the install.
             Response::from_html(crate::templates::discord::install_cta_html(&from, base_url))
         }
         Some(cfg) => {

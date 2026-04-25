@@ -7,7 +7,7 @@ use crate::pipeline;
 use crate::storage::*;
 use crate::types::*;
 
-/// Handle GET /webhook/instagram — Meta verification challenge
+/// Handle GET /webhook/instagram: Meta verification challenge
 pub fn handle_instagram_verify(req: &Request, env: &Env) -> Result<Response> {
     let url = req.url()?;
     let query_pairs: std::collections::HashMap<_, _> = url.query_pairs().collect();
@@ -31,7 +31,7 @@ pub fn handle_instagram_verify(req: &Request, env: &Env) -> Result<Response> {
     Response::error("Forbidden", 403)
 }
 
-/// Handle POST /webhook/instagram — incoming DM
+/// Handle POST /webhook/instagram: incoming DM
 pub async fn handle_instagram_dm(mut req: Request, env: Env) -> Result<Response> {
     let sig_header = req
         .headers()

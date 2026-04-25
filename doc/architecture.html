@@ -6,9 +6,9 @@
 <title>Concierge | Architecture</title>
 <link rel="icon" type="image/svg+xml" href="https://concierge.calculon.tech/logo.svg">
 <meta name="theme-color" content="#E86A2C">
-<meta name="description" content="Technical reference for Concierge — channels, AI pipeline, reply buffer Durable Object, storage layout, auth, outbound APIs, and known limits.">
+<meta name="description" content="Technical reference for Concierge: channels, AI pipeline, reply buffer Durable Object, storage layout, auth, outbound APIs, and known limits.">
 <meta property="og:title" content="Concierge Architecture">
-<meta property="og:description" content="Technical reference for Concierge — channels, AI pipeline, storage layout, auth, outbound APIs, and known limits.">
+<meta property="og:description" content="Technical reference for Concierge: channels, AI pipeline, storage layout, auth, outbound APIs, and known limits.">
 <meta property="og:type" content="article">
 <meta property="og:image" content="https://concierge.calculon.tech/logo-512.png">
 <style>
@@ -69,7 +69,7 @@ footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--border
   <li><strong>Auth:</strong> WhatsApp Embedded Signup OAuth → tenant exchanges code for system-user token, scoped to one phone number ID.</li>
   <li><strong>Tenant lookup:</strong> reverse index <code>wa_phone:{phone_number_id}</code> → WhatsApp account id → tenant id.</li>
   <li><strong>Outbound:</strong> Meta Graph API <code>POST /{phone_number_id}/messages</code> with the system-user token.</li>
-  <li><strong>Limits:</strong> no message-history endpoint, so post-hoc batching can't reconstruct text from older messages — see Reply Buffer below.</li>
+  <li><strong>Limits:</strong> no message-history endpoint, so post-hoc batching can't reconstruct text from older messages: see Reply Buffer below.</li>
 </ul>
 
 <h3>Instagram DMs</h3>
@@ -84,7 +84,7 @@ footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--border
 <ul>
   <li><strong>Install:</strong> OAuth2 <code>scope=bot+applications.commands</code>, permission bitfield <code>76928</code> (SEND_MESSAGES | VIEW_CHANNEL | READ_MESSAGE_HISTORY | ADD_REACTIONS | MANAGE_MESSAGES). Callback at <code>/auth/discord/callback</code> records <code>guild_id → tenant_id</code> in KV.</li>
   <li><strong>Inbound transport:</strong> Application Webhook Events at <code>POST /discord/events</code>. <code>MESSAGE_CREATE</code> events drive AI auto-reply.</li>
-  <li><strong>Triggers:</strong> per-tenant flags on <code>DiscordConfig</code> — <code>inbound_mentions</code> (reply when @-mentioned), <code>inbound_channel_ids[]</code> (reply to every message in these channels). DMs unsupported with the shared bot.</li>
+  <li><strong>Triggers:</strong> per-tenant flags on <code>DiscordConfig</code>: <code>inbound_mentions</code> (reply when @-mentioned), <code>inbound_channel_ids[]</code> (reply to every message in these channels). DMs unsupported with the shared bot.</li>
   <li><strong>Interactions:</strong> <code>POST /discord/interactions</code> handles slash commands (<code>/status</code>, <code>/domains list</code>, <code>/rules list</code>) and buttons (Reply, Approve, Reject, Drop).</li>
   <li><strong>Signature verification:</strong> Ed25519 over <code>timestamp + body</code> using <code>DISCORD_PUBLIC_KEY</code>; same scheme for both endpoints.</li>
   <li><strong>Outbound:</strong> shared bot token (<code>DISCORD_BOT_TOKEN</code> env secret), POST to <code>/channels/{id}/messages</code> via the <code>botrelay</code> crate.</li>
@@ -92,7 +92,7 @@ footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--border
 
 <h3>Email</h3>
 <ul>
-  <li><strong>Transport:</strong> Cloudflare Email Routing — every <code>*.cncg.email</code> subdomain gets MX records pointed at the worker. Inbound mail invokes the worker's <code>email</code> event handler with the raw RFC 2822 bytes.</li>
+  <li><strong>Transport:</strong> Cloudflare Email Routing: every <code>*.cncg.email</code> subdomain gets MX records pointed at the worker. Inbound mail invokes the worker's <code>email</code> event handler with the raw RFC 2822 bytes.</li>
   <li><strong>Tenant lookup:</strong> <code>email_domain:{domain}</code> KV reverse index.</li>
   <li><strong>Routing rules:</strong> per-domain ordered list in KV at <code>email_rules:{tenant}:{domain}</code>. Each rule has <code>MatchCriteria</code> (from, to, subject, body globs + has_attachment) and an <code>EmailAction</code> (drop, spam, forward_email, forward_discord, ai_reply).</li>
   <li><strong>Outbound:</strong> Cloudflare Email Service via the <code>EMAIL</code> binding's structured-message API. Sender domain must be onboarded in the Email Service dashboard.</li>
@@ -102,7 +102,7 @@ footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--border
 
 <h2>AI reply pipeline</h2>
 <ul>
-  <li><strong>Inference binding:</strong> Cloudflare Workers AI <code>AI</code> binding. Default models — <code>llama-4-scout-17b-16e-instruct</code> for replies, <code>llama-3.1-8b-instruct-fast</code> for prompt-injection scanning. Configurable via <code>AI_MODEL</code> / <code>AI_FAST_MODEL</code> env vars.</li>
+  <li><strong>Inference binding:</strong> Cloudflare Workers AI <code>AI</code> binding. Default models: <code>llama-4-scout-17b-16e-instruct</code> for replies, <code>llama-3.1-8b-instruct-fast</code> for prompt-injection scanning. Configurable via <code>AI_MODEL</code> / <code>AI_FAST_MODEL</code> env vars.</li>
   <li><strong>Prompt construction:</strong> <code>PersonaConfig::to_system_prompt()</code> emits the tenant's voice/tone/never-do prefix; per-channel prompt overrides via <code>AutoReplyConfig.prompt</code>; per-rule prompt overrides via <code>EmailAction::AiReply.system_prompt</code>.</li>
   <li><strong>Injection scan:</strong> incoming bodies are truncated to 1000 chars, then a fast classifier checks for instruction-override patterns. Rejected messages skip the AI call and restore the credit.</li>
   <li><strong>Billing:</strong> only AI replies deduct a credit; static replies are free. Deduction happens before the AI call (optimistic), restored on any failure path. Free monthly grant of 100 credits per tenant.</li>
@@ -136,24 +136,24 @@ footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--border
 
 <h3>D1 tables</h3>
 <ul>
-  <li><code>tenants</code> — id, email (UNIQUE), facebook_id, plan, currency.</li>
-  <li><code>messages</code> — unified inbound/outbound metadata (channel, direction, sender, recipient, action_taken). No body content.</li>
-  <li><code>whatsapp_messages</code>, <code>instagram_messages</code>, <code>email_messages</code>, <code>email_metrics</code>, <code>lead_form_submissions</code> — channel-specific logs.</li>
-  <li><code>tenant_billing</code> — credit ledger as JSON (entries with optional expiry).</li>
-  <li><code>payments</code> — Razorpay event log for compliance.</li>
-  <li><code>audit_log</code> — management-action history.</li>
+  <li><code>tenants</code>: id, email (UNIQUE), facebook_id, plan, currency.</li>
+  <li><code>messages</code>: unified inbound/outbound metadata (channel, direction, sender, recipient, action_taken). No body content.</li>
+  <li><code>whatsapp_messages</code>, <code>instagram_messages</code>, <code>email_messages</code>, <code>email_metrics</code>, <code>lead_form_submissions</code>: channel-specific logs.</li>
+  <li><code>tenant_billing</code>: credit ledger as JSON (entries with optional expiry).</li>
+  <li><code>payments</code>: Razorpay event log for compliance.</li>
+  <li><code>audit_log</code>: management-action history.</li>
 </ul>
 
 <h3>KV keys</h3>
 <ul>
-  <li><code>session:*</code>, <code>csrf:*</code> — auth cookies (TTL 7d).</li>
-  <li><code>whatsapp:{id}</code>, <code>instagram:{id}</code>, <code>lead_form:{id}</code> — per-resource configs.</li>
-  <li><code>tenant:{tenant}:whatsapp:{id}</code> etc. — per-tenant indexes (empty values; existence is the index).</li>
-  <li><code>wa_phone:*</code>, <code>ig_page:*</code>, <code>email_domain:*</code> — webhook → tenant reverse indexes.</li>
-  <li><code>email_domains:{tenant}</code>, <code>email_rules:{tenant}:{domain}</code>, <code>email_reverse:*</code> — email config + alias mapping.</li>
-  <li><code>discord_guild:{guild_id}</code>, <code>discord_config:{tenant}</code> — guild ↔ tenant.</li>
-  <li><code>onboarding:{tenant}</code> — wizard state.</li>
-  <li><code>conv:{id}</code> — approval-relay conversation context (TTL 7d).</li>
+  <li><code>session:*</code>, <code>csrf:*</code>: auth cookies (TTL 7d).</li>
+  <li><code>whatsapp:{id}</code>, <code>instagram:{id}</code>, <code>lead_form:{id}</code>: per-resource configs.</li>
+  <li><code>tenant:{tenant}:whatsapp:{id}</code> etc.: per-tenant indexes (empty values; existence is the index).</li>
+  <li><code>wa_phone:*</code>, <code>ig_page:*</code>, <code>email_domain:*</code>: webhook → tenant reverse indexes.</li>
+  <li><code>email_domains:{tenant}</code>, <code>email_rules:{tenant}:{domain}</code>, <code>email_reverse:*</code>: email config + alias mapping.</li>
+  <li><code>discord_guild:{guild_id}</code>, <code>discord_config:{tenant}</code>: guild ↔ tenant.</li>
+  <li><code>onboarding:{tenant}</code>: wizard state.</li>
+  <li><code>conv:{id}</code>: approval-relay conversation context (TTL 7d).</li>
 </ul>
 
 <h2>Auth</h2>
@@ -169,12 +169,12 @@ footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--border
   <li>Discord REST API (<code>discord.com/api/v10</code>) for messages, channels, guild lookup.</li>
   <li>Cloudflare DNS API for provisioning MX + A/AAAA records on tenant subdomains.</li>
   <li>Razorpay API for orders, subscriptions, payment verification.</li>
-  <li>Cloudflare Workers AI binding (no HTTP — direct binding call).</li>
+  <li>Cloudflare Workers AI binding (no HTTP: direct binding call).</li>
 </ul>
 
 <h2>Limits and known constraints</h2>
 <ul>
-  <li>Discord DM auto-reply is unsupported with the shared bot — incoming DMs hit the events endpoint with no <code>guild_id</code>, so we can't attribute them to a tenant.</li>
+  <li>Discord DM auto-reply is unsupported with the shared bot: incoming DMs hit the events endpoint with no <code>guild_id</code>, so we can't attribute them to a tenant.</li>
   <li>WhatsApp has no message-history API; the reply buffer relies on its own DO state to reconstruct bursts.</li>
   <li>Cloudflare Email Service requires sender domains to be onboarded in the dashboard before sends from them succeed; new tenant subdomains may need manual onboarding until that step is automated.</li>
   <li>No per-message body storage. If you need a conversation web-view, that's a future feature requiring a schema change and ToS update.</li>

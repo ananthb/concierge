@@ -777,7 +777,7 @@ pub async fn save_email_reverse_alias(
 
 use crate::types::{Channel, ConversationContext, DiscordConfig, InboundMessage, OnboardingState};
 
-/// Save a unified message to D1. No message content stored — metadata only.
+/// Save a unified message to D1. No message content stored: metadata only.
 pub async fn save_message(
     db: &D1Database,
     id: &str,

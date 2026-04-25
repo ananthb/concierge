@@ -10,7 +10,7 @@ use crate::templates::*;
 pub async fn handle_admin(req: Request, env: Env, path: &str, method: Method) -> Result<Response> {
     let kv = env.kv("KV")?;
 
-    // Resolve tenant from session cookie only — no header fallback
+    // Resolve tenant from session cookie only: no header fallback
     let tenant_id = match super::auth::resolve_tenant_id(&req, &kv).await {
         Some(id) => id,
         None => {

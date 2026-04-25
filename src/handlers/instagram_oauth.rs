@@ -43,7 +43,7 @@ pub async fn handle_instagram(
         .collect();
 
     match (method, path_parts.as_slice()) {
-        // Start OAuth flow — state carries tenant_id
+        // Start OAuth flow: state carries tenant_id
         (Method::Get, ["auth", tenant_id]) => {
             if app_id.is_empty() || app_secret.is_empty() {
                 return Response::error("Instagram integration not configured", 500);

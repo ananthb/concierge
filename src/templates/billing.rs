@@ -1,4 +1,4 @@
-//! Billing templates — tenant-facing credit balance + purchase
+//! Billing templates: tenant-facing credit balance + purchase
 
 use crate::helpers::html_escape;
 use crate::types::{CreditSource, TenantBilling};
@@ -116,7 +116,7 @@ pub fn billing_overview_with_addresses_html(
                     <div class="mono muted fs-11">used / total quota</div>
                 </div>
                 <form hx-post="{base_url}/admin/billing/address-packs" hx-target="body" hx-swap="innerHTML">
-                    <button class="btn primary" type="submit">Buy 5 more — {pack_price_label}</button>
+                    <button class="btn primary" type="submit">Buy 5 more: {pack_price_label}</button>
                 </form>
             </div>
         </div>"##,
@@ -308,5 +308,5 @@ document.getElementById("pay-btn").addEventListener("click", function() {{
         base_url = base_url,
     );
 
-    base_html("Email address pack — Concierge", &content)
+    base_html("Email address pack: Concierge", &content)
 }

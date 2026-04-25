@@ -121,7 +121,7 @@ pub fn welcome_html(_base_url: &str) -> String {
   <div class="welcome-left">
     <div class="eyebrow">// automated customer engagement</div>
     <h1 class="display">Hello. I'll be answering <br>every <em>DM, WhatsApp &amp; email</em> <br>so you don't have to.</h1>
-    <p class="lead">Connect your channels, set a tone, and your concierge handles the rest. Auto-replies across WhatsApp, Instagram, Discord, and email. 100 AI replies free every month — static replies always free.</p>
+    <p class="lead">Connect your channels, set a tone, and your concierge handles the rest. Auto-replies across WhatsApp, Instagram, Discord, and email. 100 AI replies free every month: static replies always free.</p>
     <div class="row gap-12 wrap mt-16">
       <a href="/auth/login" class="btn primary lg">Get started &rarr;</a>
       <a href="/features" class="btn ghost lg">See features</a>
@@ -520,7 +520,7 @@ pub fn notifications_html(
         r##"<section class="page narrow">
   <div class="section-label"><span class="mono muted">03 / 05</span><span class="eyebrow">Heads up</span></div>
   <h2 class="display-md">How should we notify you?</h2>
-  <p class="lead">Approvals are required — that's how the AI asks you before sending. Digests are optional.</p>
+  <p class="lead">Approvals are required: that's how the AI asks you before sending. Digests are optional.</p>
 
   <form hx-post="{base_url}/admin/wizard/notifications" hx-target="#notif-toast" hx-swap="innerHTML">
     <div class="card p-22 mb-16">
@@ -644,7 +644,7 @@ pub fn replies_html(persona: &PersonaConfig, canned: &[CannedReply], base_url: &
         .collect();
 
     let empty = if canned.is_empty() {
-        r#"<div class="replies-row"><span class="muted ta-center" style="grid-column:1/-1">No canned replies yet. Add one below — or just let the AI handle everything.</span></div>"#
+        r#"<div class="replies-row"><span class="muted ta-center" style="grid-column:1/-1">No canned replies yet. Add one below: or just let the AI handle everything.</span></div>"#
     } else {
         ""
     };
@@ -796,7 +796,7 @@ pub fn launch_html(
     let credits_section = format!(
         r#"<div class="mb-16">
   {slider}
-  <p class="muted ta-center mt-8 fs-12">Optional — 100 replies are free every month. Top up later from Billing if you need.</p>
+  <p class="muted ta-center mt-8 fs-12">Optional: 100 replies are free every month. Top up later from Billing if you need.</p>
 </div>"#,
         slider = crate::templates::credit_slider::slider_html(
             currency,
@@ -889,7 +889,7 @@ pub fn pricing_html(default_currency: &str) -> String {
       <a href="/pricing?c=usd" class="{usd_cls}" title="US dollars" aria-label="US dollars">$</a>
     </div>
   </div>
-  <p class="muted">100 free AI replies every account every month. After that, top up with as many credits as you want — no tiers, no contracts. Purchased credits never expire.</p>
+  <p class="muted">100 free AI replies every account every month. After that, top up with as many credits as you want: no tiers, no contracts. Purchased credits never expire.</p>
 
   <div style="margin:24px 0">{slider}</div>
 
@@ -906,7 +906,7 @@ pub fn pricing_html(default_currency: &str) -> String {
   <p class="muted">Each address you set up at <code>name@cncg.email</code> can auto-reply to inbound mail. Replies go to the original sender; you and your team get a copy via Cc/Bcc.</p>
 
   <div class="card p-18" style="margin:24px 0">
-    <p class="m-0"><strong>1 address free per account.</strong> Need more? Buy a 5-pack for <strong>{pack_price}</strong> — one-time charge, never expires.</p>
+    <p class="m-0"><strong>1 address free per account.</strong> Need more? Buy a 5-pack for <strong>{pack_price}</strong>: one-time charge, never expires.</p>
     <p class="muted" style="margin:8px 0 0">Static replies stay free; AI replies draw from your credit balance above.</p>
   </div>
 </article>"##,

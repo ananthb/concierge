@@ -1,4 +1,4 @@
-//! Tenant-facing billing — view balance, buy credits via Razorpay.
+//! Tenant-facing billing: view balance, buy credits via Razorpay.
 
 use worker::*;
 
@@ -50,7 +50,7 @@ pub async fn handle_billing_admin(
             ))
         }
 
-        // Create Razorpay order — flat per-reply rate, any quantity.
+        // Create Razorpay order: flat per-reply rate, any quantity.
         (Method::Post, "checkout") => {
             let form: serde_json::Value = req.json().await?;
             let credits_raw = form
@@ -137,7 +137,7 @@ pub async fn handle_billing_admin(
             ))
         }
 
-        // Payment verification — only validates signature, does NOT grant credits.
+        // Payment verification: only validates signature, does NOT grant credits.
         // Credits are granted exclusively by the Razorpay webhook handler.
         (Method::Post, "verify") => {
             let form: serde_json::Value = req.json().await?;

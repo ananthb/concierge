@@ -1,4 +1,4 @@
-//! Management panel templates — super-admin UI
+//! Management panel templates: super-admin UI
 
 use crate::helpers::html_escape;
 use crate::types::*;
@@ -129,7 +129,7 @@ fn health_panel_html(report: &crate::handlers::health::HealthReport) -> String {
   <div class="between p-18">
     <div>
       <div class="eyebrow">Connection status</div>
-      <p class="muted m-0 mt-4 fs-13">External providers + bindings — refreshed every 60s. Generated {ts}.</p>
+      <p class="muted m-0 mt-4 fs-13">External providers + bindings: refreshed every 60s. Generated {ts}.</p>
     </div>
     {chip}
   </div>
@@ -399,7 +399,7 @@ pub fn billing_overview_html(base_url: &str) -> String {
   <h2 class="display-sm m-0 mt-4 mb-16">Grant credits</h2>
 
   <div class="card p-22 mb-16">
-    <p class="muted m-0">Pricing is a flat <strong>₹2 / $0.02 per reply</strong>. Tenants top up via slider on /admin/billing — no packs to manage.</p>
+    <p class="muted m-0">Pricing is a flat <strong>₹2 / $0.02 per reply</strong>. Tenants top up via slider on /admin/billing: no packs to manage.</p>
   </div>
 
   <div class="card p-18">

@@ -1,4 +1,4 @@
-//! Public /features page — short, scannable overview of every capability.
+//! Public /features page: short, scannable overview of every capability.
 
 use super::base::{base_html_with_meta, footer, public_nav_html, PageMeta};
 
@@ -10,7 +10,7 @@ pub fn features_html() -> String {
         r##"{nav}
 <article class="page narrow">
   <h1 class="display-md m-0">One assistant. Every channel.</h1>
-  <p class="lead">Concierge replies for you on WhatsApp, Instagram, Discord, and email — instantly, in your voice, and only when it should.</p>
+  <p class="lead">Concierge replies for you on WhatsApp, Instagram, Discord, and email: instantly, in your voice, and only when it should.</p>
 
   <h2 class="mt-32 mb-12">Channels</h2>
   <div class="channels-grid">
@@ -40,11 +40,11 @@ pub fn features_html() -> String {
     </div>
     <div class="card p-22">
       <div class="eyebrow">2. Configure</div>
-      <p class="m-0 mt-8">Pick static or AI replies per channel. Set a persona — tone, business type, things to never say.</p>
+      <p class="m-0 mt-8">Pick static or AI replies per channel. Set a persona: tone, business type, things to never say.</p>
     </div>
     <div class="card p-22">
       <div class="eyebrow">3. Run</div>
-      <p class="m-0 mt-8">Inbound messages flow through. Bursts collapse into one reply (configurable wait — default 5s).</p>
+      <p class="m-0 mt-8">Inbound messages flow through. Bursts collapse into one reply (configurable wait: default 5s).</p>
     </div>
   </div>
 

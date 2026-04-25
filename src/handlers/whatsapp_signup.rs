@@ -21,7 +21,7 @@ pub async fn handle_whatsapp_signup(
         .collect();
 
     match (method, path_parts.as_slice()) {
-        // POST /whatsapp/signup/callback — receive code from JS SDK
+        // POST /whatsapp/signup/callback: receive code from JS SDK
         (Method::Post, ["callback"]) => {
             let kv = env.kv("KV")?;
 
@@ -83,7 +83,7 @@ pub async fn handle_whatsapp_signup(
             // Exchange code for short-lived token
             let _token = exchange_code(&code, &app_id, &app_secret).await?;
 
-            // Discover the phone number — either from JS SDK or by querying the WABA
+            // Discover the phone number: either from JS SDK or by querying the WABA
             let (phone_number, phone_number_id) = if let Some(pnid) = js_phone_number_id {
                 // Verify it exists on the WABA
                 match get_phone_number_details(&waba_id, &pnid, &platform_token).await? {

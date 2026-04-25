@@ -1,7 +1,7 @@
 //! Admin handlers for the email feature: addresses, auto-reply config,
 //! notification recipients (with verification email).
 //!
-//! Per-customer subdomains and the legacy routing-rule engine are gone — see
+//! Per-customer subdomains and the legacy routing-rule engine are gone: see
 //! `doc/architecture.html` for the new model.
 
 use worker::*;
@@ -77,7 +77,7 @@ pub async fn handle_email_admin(
                 );
             }
 
-            // Global uniqueness — local-parts are shared across the platform.
+            // Global uniqueness: local-parts are shared across the platform.
             if get_tenant_by_address(&kv, &label).await?.is_some() {
                 return Response::from_html(
                     r#"<div class="error">That address is already taken.</div>"#.to_string(),
@@ -250,7 +250,7 @@ pub async fn handle_email_admin(
                 let concierge_addr = format!("{label}@{base_domain}");
                 let verify_url = format!("{base_url}/email/verify/{token}");
                 let body = format!(
-                    "Concierge sends customer replies from {concierge_addr}. To start receiving notifications, confirm this address by opening:\n\n{verify_url}\n\nIf you weren't expecting this, you can ignore the message — the request will expire in 7 days.\n",
+                    "Concierge sends customer replies from {concierge_addr}. To start receiving notifications, confirm this address by opening:\n\n{verify_url}\n\nIf you weren't expecting this, you can ignore the message: the request will expire in 7 days.\n",
                 );
                 let outbound = OutboundEmail {
                     from,

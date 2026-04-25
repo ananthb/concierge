@@ -1,5 +1,5 @@
 {
-  description = "Messaging automation for small businesses — WhatsApp, Instagram DM, lead capture";
+  description = "Messaging automation for small businesses: WhatsApp, Instagram DM, lead capture";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";

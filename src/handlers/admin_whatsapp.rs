@@ -57,7 +57,7 @@ pub async fn handle_whatsapp_admin(
             ))
         }
 
-        // Manual fallback — create blank account
+        // Manual fallback: create blank account
         (Method::Get, ["manual"]) | (Method::Post, []) => {
             let now = now_iso();
             let account = WhatsAppAccount {

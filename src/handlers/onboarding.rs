@@ -1,4 +1,4 @@
-//! Onboarding wizard handler — /admin/wizard/* routes
+//! Onboarding wizard handler: /admin/wizard/* routes
 
 use worker::*;
 
@@ -22,7 +22,7 @@ pub async fn handle_wizard(
         .unwrap_or("")
         .trim_start_matches('/');
 
-    // Direct step access via URL (GET) — allow going back, block skipping ahead.
+    // Direct step access via URL (GET): allow going back, block skipping ahead.
     // Must come before the form-submit arms below, which share step names with
     // POST handlers ("basics", "notifications") and would otherwise try to
     // parse a non-existent JSON body on GET.
@@ -96,7 +96,7 @@ pub async fn handle_wizard(
             Ok(Response::empty()?.with_status(200).with_headers(headers))
         }
 
-        // Add an email address in the wizard. No payment gate — every tenant
+        // Add an email address in the wizard. No payment gate: every tenant
         // gets one free address; later additions go through Billing.
         "email/add" => {
             let form: serde_json::Value = req.json().await?;
@@ -176,7 +176,7 @@ pub async fn handle_wizard(
             let approval_email = is_true("approval_email");
             if !approval_discord && !approval_email {
                 return Response::from_html(
-                    r#"<div class="error">Pick at least one approval channel — Discord or Email — so the AI knows where to ask before sending.</div>"#.to_string(),
+                    r#"<div class="error">Pick at least one approval channel: Discord or Email: so the AI knows where to ask before sending.</div>"#.to_string(),
                 );
             }
             state.notifications = NotificationConfig {
@@ -230,7 +230,7 @@ pub async fn handle_wizard(
 
         // Save persona + canned replies, advance to launch
         "replies/save" => {
-            // Parse the form — triggers and replies come as trigger_0, reply_0, etc.
+            // Parse the form: triggers and replies come as trigger_0, reply_0, etc.
             let form: serde_json::Value = req.json().await?;
             let mut replies = Vec::new();
             let mut i = 0;
