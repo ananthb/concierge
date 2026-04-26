@@ -149,6 +149,7 @@ pub fn manage_html(
     </div>
 
     <h3 class="m-0 mt-24 mb-12">AI auto-reply</h3>
+    <p class="muted fs-13 mb-12">This is the default reply when no rule matches. Manage the full rules list at <a href="{base_url}/admin/rules/discord/_">Reply rules</a>.</p>
 
     <div class="form-group">
       <label><input type="checkbox" name="auto_reply_enabled" value="true" x-model="ar_enabled"> Enabled</label>
@@ -157,13 +158,13 @@ pub fn manage_html(
     <div class="form-group" x-show="ar_enabled" x-cloak>
       <label class="eyebrow lbl">Mode</label>
       <select class="select" name="auto_reply_mode" x-model="ar_mode">
-        <option value="static">Static (canned text: free)</option>
-        <option value="ai">AI (uses 1 credit per reply)</option>
+        <option value="canned">Static (canned text: free)</option>
+        <option value="prompt">AI (uses 1 credit per reply)</option>
       </select>
     </div>
 
     <div class="form-group" x-show="ar_enabled" x-cloak>
-      <label class="eyebrow lbl"><span x-text="ar_mode === 'ai' ? 'System prompt' : 'Reply text'"></span></label>
+      <label class="eyebrow lbl"><span x-text="ar_mode === 'prompt' ? 'System prompt' : 'Reply text'"></span></label>
       <textarea class="textarea" name="auto_reply_prompt" rows="3">{ar_prompt}</textarea>
     </div>
 
@@ -196,11 +197,12 @@ pub fn manage_html(
         } else {
             "false"
         },
-        ar_mode = match cfg.auto_reply.mode {
-            crate::types::AutoReplyMode::Ai => "ai",
-            crate::types::AutoReplyMode::Static => "static",
+        ar_mode = if cfg.auto_reply.default_is_canned() {
+            "canned"
+        } else {
+            "prompt"
         },
-        ar_prompt = html_escape(&cfg.auto_reply.prompt),
+        ar_prompt = html_escape(cfg.auto_reply.default_text()),
         wait = cfg.auto_reply.wait_seconds,
         inbound_mentions = if cfg.inbound_mentions {
             "true"

@@ -596,16 +596,9 @@ pub fn admin_whatsapp_signup_html(
 }
 
 pub fn admin_whatsapp_edit_html(account: &WhatsAppAccount, base_url: &str) -> String {
-    let mode_static_sel = if account.auto_reply.mode == AutoReplyMode::Static {
-        " selected"
-    } else {
-        ""
-    };
-    let mode_ai_sel = if account.auto_reply.mode == AutoReplyMode::Ai {
-        " selected"
-    } else {
-        ""
-    };
+    let canned = account.auto_reply.default_is_canned();
+    let mode_static_sel = if canned { " selected" } else { "" };
+    let mode_ai_sel = if !canned { " selected" } else { "" };
     let enabled_checked = if account.auto_reply.enabled {
         " checked"
     } else {
@@ -632,18 +625,19 @@ pub fn admin_whatsapp_edit_html(account: &WhatsAppAccount, base_url: &str) -> St
                     <input type=\"text\" id=\"wa-phone-id\" name=\"phone_number_id\" value=\"{phone_id}\" placeholder=\"Meta phone number ID\" required class=\"mono\">
                 </div>
                 <h3 style=\"margin: 1rem 0 0.5rem;\">Auto-Reply</h3>
+                <p class=\"muted fs-13 mb-12\">This is the default reply when no rule matches. Manage the full rules list at <a href=\"{base_url}/admin/rules/whatsapp/{id}\">Reply rules</a>.</p>
                 <div class=\"form-group\">
                     <label><input type=\"checkbox\" name=\"auto_reply_enabled\" value=\"true\"{enabled_checked}> Enabled</label>
                 </div>
                 <div class=\"form-group\">
-                    <label for=\"wa-mode\">Mode</label>
+                    <label for=\"wa-mode\">Default reply mode</label>
                     <select id=\"wa-mode\" name=\"auto_reply_mode\">
-                        <option value=\"Static\"{mode_static_sel}>Static</option>
-                        <option value=\"Ai\"{mode_ai_sel}>AI</option>
+                        <option value=\"canned\"{mode_static_sel}>Static</option>
+                        <option value=\"prompt\"{mode_ai_sel}>AI</option>
                     </select>
                 </div>
                 <div class=\"form-group\">
-                    <label for=\"wa-prompt\">Prompt / Message</label>
+                    <label for=\"wa-prompt\">Default reply text / prompt</label>
                     <textarea id=\"wa-prompt\" name=\"auto_reply_prompt\" rows=\"3\">{prompt}</textarea>
                 </div>
                 <div class=\"form-group\">
@@ -662,7 +656,7 @@ pub fn admin_whatsapp_edit_html(account: &WhatsAppAccount, base_url: &str) -> St
         name = html_escape(&account.name),
         phone = html_escape(&account.phone_number),
         phone_id = html_escape(&account.phone_number_id),
-        prompt = html_escape(&account.auto_reply.prompt),
+        prompt = html_escape(account.auto_reply.default_text()),
         enabled_checked = enabled_checked,
         mode_static_sel = mode_static_sel,
         mode_ai_sel = mode_ai_sel,
@@ -743,16 +737,9 @@ pub fn admin_instagram_edit_html(account: &InstagramAccount, base_url: &str) -> 
     } else {
         ""
     };
-    let mode_static_sel = if account.auto_reply.mode == AutoReplyMode::Static {
-        " selected"
-    } else {
-        ""
-    };
-    let mode_ai_sel = if account.auto_reply.mode == AutoReplyMode::Ai {
-        " selected"
-    } else {
-        ""
-    };
+    let canned = account.auto_reply.default_is_canned();
+    let mode_static_sel = if canned { " selected" } else { "" };
+    let mode_ai_sel = if !canned { " selected" } else { "" };
 
     let content = format!(
         "<div class=\"page-pad\">
@@ -766,18 +753,19 @@ pub fn admin_instagram_edit_html(account: &InstagramAccount, base_url: &str) -> 
                     <label><input type=\"checkbox\" name=\"enabled\" value=\"true\"{enabled_checked}> Account Enabled</label>
                 </div>
                 <h3 style=\"margin: 1rem 0 0.5rem;\">Auto-Reply</h3>
+                <p class=\"muted fs-13 mb-12\">This is the default reply when no rule matches. Manage the full rules list at <a href=\"{base_url}/admin/rules/instagram/{id}\">Reply rules</a>.</p>
                 <div class=\"form-group\">
                     <label><input type=\"checkbox\" name=\"auto_reply_enabled\" value=\"true\"{ar_enabled_checked}> Enabled</label>
                 </div>
                 <div class=\"form-group\">
-                    <label>Mode</label>
+                    <label>Default reply mode</label>
                     <select name=\"auto_reply_mode\">
-                        <option value=\"Static\"{mode_static_sel}>Static</option>
-                        <option value=\"Ai\"{mode_ai_sel}>AI</option>
+                        <option value=\"canned\"{mode_static_sel}>Static</option>
+                        <option value=\"prompt\"{mode_ai_sel}>AI</option>
                     </select>
                 </div>
                 <div class=\"form-group\">
-                    <label>Prompt / Message</label>
+                    <label>Default reply text / prompt</label>
                     <textarea name=\"auto_reply_prompt\" rows=\"3\">{prompt}</textarea>
                 </div>
                 <div class=\"form-group\">
@@ -798,7 +786,7 @@ pub fn admin_instagram_edit_html(account: &InstagramAccount, base_url: &str) -> 
         ar_enabled_checked = ar_enabled_checked,
         mode_static_sel = mode_static_sel,
         mode_ai_sel = mode_ai_sel,
-        prompt = html_escape(&account.auto_reply.prompt),
+        prompt = html_escape(account.auto_reply.default_text()),
         wait = account.auto_reply.wait_seconds,
         hash = HASH,
     );
@@ -884,15 +872,11 @@ pub fn admin_lead_form_edit_html(
         })
         .collect();
 
-    let mode_static_sel = if form.reply_mode == AutoReplyMode::Static {
-        " selected"
-    } else {
-        ""
-    };
-    let mode_ai_sel = if form.reply_mode == AutoReplyMode::Ai {
-        " selected"
-    } else {
-        ""
+    let canned = matches!(form.reply, ReplyResponse::Canned { .. });
+    let mode_static_sel = if canned { " selected" } else { "" };
+    let mode_ai_sel = if !canned { " selected" } else { "" };
+    let reply_text = match &form.reply {
+        ReplyResponse::Canned { text } | ReplyResponse::Prompt { text } => text.as_str(),
     };
     let enabled_checked = if form.enabled { " checked" } else { "" };
     let origins = form.allowed_origins.join("\n");
@@ -924,8 +908,8 @@ pub fn admin_lead_form_edit_html(
                 <div class=\"form-group\">
                     <label>Reply Mode</label>
                     <select name=\"reply_mode\">
-                        <option value=\"Static\"{mode_static_sel}>Static</option>
-                        <option value=\"Ai\"{mode_ai_sel}>AI</option>
+                        <option value=\"canned\"{mode_static_sel}>Static</option>
+                        <option value=\"prompt\"{mode_ai_sel}>AI</option>
                     </select>
                 </div>
                 <div class=\"form-group\">
@@ -991,7 +975,7 @@ pub fn admin_lead_form_edit_html(
         wa_options = wa_options,
         mode_static_sel = mode_static_sel,
         mode_ai_sel = mode_ai_sel,
-        reply_prompt = html_escape(&form.reply_prompt),
+        reply_prompt = html_escape(reply_text),
         s_primary = html_escape(&form.style.primary_color),
         s_text = html_escape(&form.style.text_color),
         s_bg = html_escape(&form.style.background_color),

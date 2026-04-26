@@ -127,7 +127,7 @@ pub async fn handle_wizard(
                     let new_addr = EmailAddress {
                         local_part: label.clone(),
                         tenant_id: tenant_id.to_string(),
-                        auto_reply: AutoReplyConfig::default(),
+                        auto_reply: ReplyConfig::default(),
                         notification_recipients: vec![owner],
                         created_at: now.clone(),
                         updated_at: now,
@@ -195,90 +195,41 @@ pub async fn handle_wizard(
             Ok(Response::empty()?.with_status(200).with_headers(headers))
         }
 
-        // Add canned reply
-        "replies/add" => {
-            state.canned_replies.push(CannedReply {
-                trigger: String::new(),
-                reply: String::new(),
-            });
-            save_onboarding(&kv, tenant_id, &state).await?;
-            Response::from_html(replies_html(
-                &state.persona,
-                &state.canned_replies,
-                base_url,
-            ))
-        }
-
-        // Delete canned reply
-        "replies/del" => {
-            let form: serde_json::Value = req.json().await?;
-            let i = form
-                .get("i")
-                .and_then(|v| v.as_str())
-                .and_then(|s| s.parse::<usize>().ok())
-                .unwrap_or(0);
-            if i < state.canned_replies.len() {
-                state.canned_replies.remove(i);
-            }
-            save_onboarding(&kv, tenant_id, &state).await?;
-            Response::from_html(replies_html(
-                &state.persona,
-                &state.canned_replies,
-                base_url,
-            ))
-        }
-
-        // Save persona + canned replies, advance to launch
+        // Save persona preset choice + default wait, advance to launch.
+        // Detailed persona editing lives at /admin/persona.
         "replies/save" => {
-            // Parse the form: triggers and replies come as trigger_0, reply_0, etc.
             let form: serde_json::Value = req.json().await?;
-            let mut replies = Vec::new();
-            let mut i = 0;
-            loop {
-                let trigger_key = format!("trigger_{i}");
-                let reply_key = format!("reply_{i}");
-                match (
-                    form.get(&trigger_key).and_then(|v| v.as_str()),
-                    form.get(&reply_key).and_then(|v| v.as_str()),
-                ) {
-                    (Some(trigger), Some(reply)) => {
-                        if !trigger.is_empty() || !reply.is_empty() {
-                            replies.push(CannedReply {
-                                trigger: trigger.to_string(),
-                                reply: reply.to_string(),
-                            });
-                        }
-                    }
-                    _ => break,
-                }
-                i += 1;
-            }
-            state.canned_replies = replies;
 
-            // Save persona fields from hidden inputs
-            if let Some(v) = form.get("biz_type").and_then(|v| v.as_str()) {
-                state.persona.biz_type = v.to_string();
-            }
-            if let Some(v) = form.get("city").and_then(|v| v.as_str()) {
-                state.persona.city = v.to_string();
-            }
-            if let Some(v) = form.get("tone").and_then(|v| v.as_str()) {
-                state.persona.tone = v.to_string();
-            }
-            if let Some(v) = form.get("never").and_then(|v| v.as_str()) {
-                state.persona.never = v.to_string();
-            }
-            // Default wait_seconds applies to every channel account this
-            // tenant connects later. Range 0..=30.
+            let preset_slug = form.get("preset_id").and_then(|v| v.as_str()).unwrap_or("");
+            let preset =
+                PersonaPreset::from_slug(preset_slug).unwrap_or(PersonaPreset::FriendlyFlorist);
+
+            state.persona = PersonaConfig {
+                source: PersonaSource::Preset(preset),
+                safety: PersonaSafety::default(),
+            };
+
             if let Some(n) = form.get("default_wait_seconds").and_then(|v| {
                 v.as_i64()
                     .or_else(|| v.as_str().and_then(|s| s.parse().ok()))
             }) {
-                state.persona.default_wait_seconds = (n as u32).min(30);
+                state.default_wait_seconds = (n as u32).min(30);
             }
 
+            // Apply the preset's bundled default rules to every channel
+            // account this tenant has already connected. (New connections
+            // pick up the same defaults via channel handler creation paths.)
+            apply_preset_to_channels(&kv, tenant_id, preset, state.default_wait_seconds).await?;
+
+            // Enqueue safety check for the preset's prompt.
+            let job = crate::safety_queue::SafetyJob {
+                tenant_id: tenant_id.to_string(),
+                prompt_hash: state.persona.active_prompt_hash(),
+            };
+            state.persona.safety.status = PersonaSafetyStatus::Pending;
             state.step = "launch".to_string();
             save_onboarding(&kv, tenant_id, &state).await?;
+            let _ = crate::safety_queue::enqueue(&env, job).await;
 
             let headers = Headers::new();
             headers.set("HX-Redirect", &format!("{base_url}/admin/wizard/launch"))?;
@@ -373,7 +324,7 @@ async fn render_step(
         }
         "replies" => Response::from_html(replies_html(
             &state.persona,
-            &state.canned_replies,
+            state.default_wait_seconds,
             base_url,
         )),
         "launch" => {
@@ -391,4 +342,49 @@ async fn render_step(
         }
         _ => Response::from_html(basics_html(&state.business, base_url)),
     }
+}
+
+/// Seed every already-connected channel's `ReplyConfig` with the preset's
+/// bundled rules + wait_seconds. Existing per-rule overrides are replaced
+/// since the user has just chosen a fresh starting style.
+async fn apply_preset_to_channels(
+    kv: &kv::KvStore,
+    tenant_id: &str,
+    preset: PersonaPreset,
+    wait_seconds: u32,
+) -> Result<()> {
+    let now = crate::helpers::now_iso();
+    let rules = preset.default_rules();
+
+    let wa = list_whatsapp_accounts(kv, tenant_id).await?;
+    for mut acct in wa {
+        acct.auto_reply.rules = rules.clone();
+        acct.auto_reply.wait_seconds = wait_seconds;
+        acct.updated_at = now.clone();
+        save_whatsapp_account(kv, &acct).await?;
+    }
+
+    let ig = list_instagram_accounts(kv, tenant_id).await?;
+    for mut acct in ig {
+        acct.auto_reply.rules = rules.clone();
+        acct.auto_reply.wait_seconds = wait_seconds;
+        acct.updated_at = now.clone();
+        save_instagram_account(kv, &acct).await?;
+    }
+
+    let emails = get_email_addresses(kv, tenant_id).await?;
+    for mut addr in emails {
+        addr.auto_reply.rules = rules.clone();
+        addr.auto_reply.wait_seconds = wait_seconds;
+        addr.updated_at = now.clone();
+        save_email_address(kv, tenant_id, &addr).await?;
+    }
+
+    if let Some(mut dc) = get_discord_config_by_tenant(kv, tenant_id).await? {
+        dc.auto_reply.rules = rules.clone();
+        dc.auto_reply.wait_seconds = wait_seconds;
+        save_discord_config(kv, &dc).await?;
+    }
+
+    Ok(())
 }

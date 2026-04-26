@@ -70,12 +70,16 @@ footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--border
 
 <h2>Configuring Auto-Reply</h2>
 
+<p>Each Instagram account has its own <code>ReplyConfig</code> with the same shape as WhatsApp:</p>
+
 <ul>
-  <li><strong>Enabled</strong>: Toggle the account on/off</li>
-  <li><strong>Auto-Reply Enabled</strong>: Toggle auto-reply specifically</li>
-  <li><strong>Mode</strong>: Static or AI (same as WhatsApp)</li>
-  <li><strong>Prompt/Message</strong>: The reply text or AI system prompt</li>
+  <li><strong>Enabled</strong>: master switch for the account.</li>
+  <li><strong>Auto-Reply Enabled</strong>: master switch for replies on inbound DMs.</li>
+  <li><strong>Default reply</strong>: edited inline; canned text or AI prompt for the no-rule-matched fallback.</li>
+  <li><strong>Reply rules</strong>: ordered list managed at <code>/admin/rules/instagram/{account_id}</code>. Same matchers (Keywords, Prompt) and responses (Canned, AI prompt) as WhatsApp.</li>
 </ul>
+
+<p>The persona prompt at <code>/admin/persona</code> is the system prompt for every AI reply on this account, concatenated with the matched rule's prompt. AI replies require the persona to be safety-<code>Approved</code>.</p>
 
 <h2>How It Works</h2>
 

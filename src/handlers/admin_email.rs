@@ -100,7 +100,7 @@ pub async fn handle_email_admin(
             let new_addr = EmailAddress {
                 local_part: label.clone(),
                 tenant_id: tenant_id.to_string(),
-                auto_reply: AutoReplyConfig::default(),
+                auto_reply: ReplyConfig::default(),
                 notification_recipients: vec![owner],
                 created_at: now.clone(),
                 updated_at: now,
@@ -146,17 +146,13 @@ pub async fn handle_email_admin(
             let mode_str = form
                 .get("mode")
                 .and_then(|v| v.as_str())
-                .unwrap_or("static");
-            addr.auto_reply.mode = if mode_str == "ai" {
-                AutoReplyMode::Ai
-            } else {
-                AutoReplyMode::Static
-            };
-            addr.auto_reply.prompt = form
+                .unwrap_or("canned");
+            let prompt_text = form
                 .get("prompt")
                 .and_then(|v| v.as_str())
                 .unwrap_or("")
                 .to_string();
+            addr.auto_reply.set_default_response(mode_str, prompt_text);
             addr.auto_reply.wait_seconds = form
                 .get("wait_seconds")
                 .and_then(|v| v.as_u64())

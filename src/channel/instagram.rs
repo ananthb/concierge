@@ -96,7 +96,7 @@ mod tests {
             instagram_user_id: "ig-user-1".into(),
             instagram_username: "testuser".into(),
             page_id: "page-123".into(),
-            auto_reply: AutoReplyConfig::default(),
+            auto_reply: ReplyConfig::default(),
             enabled: true,
             created_at: String::new(),
             updated_at: String::new(),

@@ -36,7 +36,10 @@ mod helpers;
 mod instagram;
 mod legal;
 mod management;
+mod personas;
 mod pipeline;
+mod safety;
+mod safety_queue;
 mod scheduled;
 mod storage;
 mod templates;
@@ -401,4 +404,14 @@ async fn handle_email_verify(env: Env, token: &str) -> Result<Response> {
 #[event(scheduled)]
 async fn scheduled_handler(event: ScheduledEvent, env: Env, ctx: ScheduleContext) {
     scheduled::handle_scheduled(event, env, ctx).await;
+}
+
+/// Persona safety classifier consumer. See `src/safety_queue.rs`.
+#[event(queue)]
+async fn queue_handler(
+    batch: MessageBatch<safety_queue::SafetyJob>,
+    env: Env,
+    _ctx: Context,
+) -> Result<()> {
+    safety_queue::handle_batch(batch, env).await
 }

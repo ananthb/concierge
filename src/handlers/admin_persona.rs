@@ -1,0 +1,176 @@
+//! `/admin/persona` — read + edit the tenant's AI persona.
+//!
+//! The persona has three modes (PersonaSource): Preset / Builder / Custom.
+//! Each save recomputes `active_prompt_hash`; if it differs from the
+//! last-vetted hash, the safety check is re-enqueued.
+
+use worker::*;
+
+use crate::personas;
+use crate::storage::{get_onboarding, save_onboarding};
+use crate::templates::persona::persona_admin_html;
+use crate::types::{
+    PersonaBuilder, PersonaConfig, PersonaPreset, PersonaSafety, PersonaSafetyStatus, PersonaSource,
+};
+
+/// Maximum length of the user-provided custom prompt. Mirrors the value
+/// documented in the plan; bounded so the safety classifier and main-model
+/// system prompt stay cheap.
+const MAX_CUSTOM_PROMPT: usize = 2000;
+
+pub async fn handle_persona_admin(
+    mut req: Request,
+    env: Env,
+    path: &str,
+    base_url: &str,
+    tenant_id: &str,
+) -> Result<Response> {
+    let kv = env.kv("KV")?;
+    let method = req.method();
+    let mut state = get_onboarding(&kv, tenant_id).await?;
+
+    match (method, path) {
+        (Method::Get, "/admin/persona") => {
+            Response::from_html(persona_admin_html(&state.persona, base_url))
+        }
+
+        (Method::Post, "/admin/persona") => {
+            let form: serde_json::Value = req.json().await?;
+
+            let mode = form
+                .get("mode")
+                .and_then(|v| v.as_str())
+                .unwrap_or("preset");
+
+            let new_source = match mode {
+                "preset" => {
+                    let slug = form.get("preset_id").and_then(|v| v.as_str()).unwrap_or("");
+                    let preset =
+                        PersonaPreset::from_slug(slug).unwrap_or(PersonaPreset::FriendlyFlorist);
+                    PersonaSource::Preset(preset)
+                }
+                "builder" => {
+                    let s = |k: &str| {
+                        form.get(k)
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .trim()
+                            .to_string()
+                    };
+                    let parse_chips = |k: &str| -> Vec<String> {
+                        form.get(k)
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .split('\n')
+                            .map(|s| s.trim().to_string())
+                            .filter(|s| !s.is_empty())
+                            .take(10)
+                            .collect()
+                    };
+                    PersonaSource::Builder(PersonaBuilder {
+                        biz_type: s("biz_type"),
+                        city: s("city"),
+                        tone: s("tone"),
+                        catch_phrases: parse_chips("catch_phrases").into_iter().take(5).collect(),
+                        off_topics: parse_chips("off_topics"),
+                        never: s("never"),
+                    })
+                }
+                "custom" => {
+                    let raw = form
+                        .get("custom_prompt")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("");
+                    let trimmed = raw.trim();
+                    if trimmed.is_empty() {
+                        return Response::from_html(
+                            r#"<div class="error">Write a prompt or pick another mode.</div>"#
+                                .to_string(),
+                        );
+                    }
+                    let bounded: String = trimmed.chars().take(MAX_CUSTOM_PROMPT).collect();
+                    PersonaSource::Custom(bounded)
+                }
+                _ => {
+                    return Response::from_html(
+                        r#"<div class="error">Unknown persona mode.</div>"#.to_string(),
+                    );
+                }
+            };
+
+            // Build a candidate persona and check if its prompt actually
+            // differs from what we already vetted. If yes: status -> Pending
+            // and enqueue. If no (e.g. user re-selected the same preset):
+            // keep the existing safety verdict so the badge doesn't flicker.
+            let mut new_persona = PersonaConfig {
+                source: new_source,
+                safety: state.persona.safety.clone(),
+            };
+            let new_hash = new_persona.active_prompt_hash();
+            let prompt_changed =
+                state.persona.safety.checked_prompt_hash.as_deref() != Some(new_hash.as_str());
+
+            if prompt_changed {
+                new_persona.safety = PersonaSafety {
+                    status: PersonaSafetyStatus::Pending,
+                    checked_prompt_hash: None,
+                    checked_at: None,
+                    vague_reason: None,
+                };
+            }
+
+            state.persona = new_persona;
+            save_onboarding(&kv, tenant_id, &state).await?;
+
+            if prompt_changed {
+                let job = crate::safety_queue::SafetyJob {
+                    tenant_id: tenant_id.to_string(),
+                    prompt_hash: new_hash,
+                };
+                let _ = crate::safety_queue::enqueue(&env, job).await;
+            }
+
+            let headers = Headers::new();
+            headers.set("HX-Redirect", &format!("{base_url}/admin/persona"))?;
+            Ok(Response::empty()?.with_status(200).with_headers(headers))
+        }
+
+        // Live preview endpoint: takes Builder field values, returns the
+        // generated prompt. Lets the UI show a current preview without
+        // committing to a save.
+        (Method::Post, "/admin/persona/preview") => {
+            let form: serde_json::Value = req.json().await?;
+            let s = |k: &str| {
+                form.get(k)
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .trim()
+                    .to_string()
+            };
+            let chips = |k: &str| -> Vec<String> {
+                form.get(k)
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .split('\n')
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty())
+                    .collect()
+            };
+            let builder = PersonaBuilder {
+                biz_type: s("biz_type"),
+                city: s("city"),
+                tone: s("tone"),
+                catch_phrases: chips("catch_phrases").into_iter().take(5).collect(),
+                off_topics: chips("off_topics").into_iter().take(10).collect(),
+                never: s("never"),
+            };
+            let prompt = personas::generate(&builder);
+            Response::from_html(format!(
+                r#"<pre class="mono m-0 fs-12" style="white-space:pre-wrap">{}</pre>"#,
+                crate::helpers::html_escape(&prompt)
+            ))
+        }
+
+        _ => Response::error("Not Found", 404),
+    }
+}

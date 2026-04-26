@@ -66,7 +66,7 @@ pub async fn handle_whatsapp_admin(
                 name: String::from("New WhatsApp Number"),
                 phone_number: String::new(),
                 phone_number_id: String::new(),
-                auto_reply: AutoReplyConfig::default(),
+                auto_reply: ReplyConfig::default(),
                 created_at: now.clone(),
                 updated_at: now,
             };
@@ -113,17 +113,25 @@ pub async fn handle_whatsapp_admin(
                 account.phone_number_id = truncate(&phone_id, 30);
             }
 
-            // Auto-reply config
+            // Auto-reply: edit the default rule's response (full rules CRUD
+            // lives on a separate page).
             account.auto_reply.enabled = form.get("auto_reply_enabled").is_some();
-            if let Some(FormEntry::Field(mode)) = form.get("auto_reply_mode") {
-                account.auto_reply.mode = match mode.as_str() {
-                    "ai" => AutoReplyMode::Ai,
-                    _ => AutoReplyMode::Static,
-                };
-            }
-            if let Some(FormEntry::Field(prompt)) = form.get("auto_reply_prompt") {
-                account.auto_reply.prompt = truncate(&prompt, 2000);
-            }
+            let mode = form
+                .get("auto_reply_mode")
+                .and_then(|v| match v {
+                    FormEntry::Field(s) => Some(s),
+                    _ => None,
+                })
+                .unwrap_or_else(|| "canned".to_string());
+            let prompt = form
+                .get("auto_reply_prompt")
+                .and_then(|v| match v {
+                    FormEntry::Field(s) => Some(s),
+                    _ => None,
+                })
+                .map(|s| truncate(&s, 2000))
+                .unwrap_or_default();
+            account.auto_reply.set_default_response(&mode, prompt);
             if let Some(FormEntry::Field(w)) = form.get("wait_seconds") {
                 if let Ok(n) = w.parse::<u32>() {
                     account.auto_reply.wait_seconds = n.min(30);

@@ -129,9 +129,9 @@ pub async fn handle_lead_form(
                 .unwrap_or_default();
 
             // Generate message
-            let message = match form.reply_mode {
-                AutoReplyMode::Ai => {
-                    if form.reply_prompt.is_empty() {
+            let message = match &form.reply {
+                ReplyResponse::Prompt { text: prompt } => {
+                    if prompt.is_empty() {
                         "Thanks for reaching out! We'll be in touch soon.".to_string()
                     } else {
                         let mut context = serde_json::Map::new();
@@ -139,20 +139,20 @@ pub async fn handle_lead_form(
                             "phone_number".to_string(),
                             serde_json::Value::String(phone.clone()),
                         );
-                        match ai::generate_response(&env, &form.reply_prompt, &context).await {
+                        match ai::generate_response(&env, prompt, &context).await {
                             Ok(r) => r,
                             Err(e) => {
                                 console_log!("AI error for lead form: {:?}", e);
-                                interpolate_or_default(&form.reply_prompt, &phone)
+                                interpolate_or_default(prompt, &phone)
                             }
                         }
                     }
                 }
-                AutoReplyMode::Static => {
-                    if form.reply_prompt.is_empty() {
+                ReplyResponse::Canned { text } => {
+                    if text.is_empty() {
                         "Thanks for reaching out! We'll be in touch soon.".to_string()
                     } else {
-                        interpolate_or_default(&form.reply_prompt, &phone)
+                        interpolate_or_default(text, &phone)
                     }
                 }
             };
@@ -169,10 +169,11 @@ pub async fn handle_lead_form(
                 console_log!("Failed to send lead form WhatsApp: {:?}", e);
             }
 
-            // Log to D1
-            let reply_mode_str = match form.reply_mode {
-                AutoReplyMode::Static => "static",
-                AutoReplyMode::Ai => "ai",
+            // Log to D1: keep the historical column populated with the
+            // matched reply kind for analytics.
+            let reply_mode_str = match form.reply {
+                ReplyResponse::Canned { .. } => "static",
+                ReplyResponse::Prompt { .. } => "ai",
             };
             let _ = save_lead_form_submission(
                 &db,

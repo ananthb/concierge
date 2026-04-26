@@ -45,8 +45,9 @@ pub async fn handle_lead_forms_admin(
                 name: String::from("New Lead Form"),
                 slug,
                 whatsapp_account_id: String::new(),
-                reply_mode: AutoReplyMode::Static,
-                reply_prompt: String::from("Thanks for reaching out! We'll be in touch soon."),
+                reply: ReplyResponse::Canned {
+                    text: String::from("Thanks for reaching out! We'll be in touch soon."),
+                },
                 style: LeadFormStyle::default(),
                 allowed_origins: Vec::new(),
                 enabled: true,
@@ -103,15 +104,27 @@ pub async fn handle_lead_forms_admin(
                     form.whatsapp_account_id = String::new();
                 }
             }
-            if let Some(FormEntry::Field(mode)) = data.get("reply_mode") {
-                form.reply_mode = match mode.as_str() {
-                    "ai" => AutoReplyMode::Ai,
-                    _ => AutoReplyMode::Static,
-                };
-            }
-            if let Some(FormEntry::Field(prompt)) = data.get("reply_prompt") {
-                form.reply_prompt = truncate(&prompt, 2000);
-            }
+            // Read mode + prompt together so the existing form posts
+            // (single dropdown + textarea) collapse into a single ReplyResponse.
+            let mode = data
+                .get("reply_mode")
+                .and_then(|v| match v {
+                    FormEntry::Field(s) => Some(s),
+                    _ => None,
+                })
+                .unwrap_or_else(|| "canned".to_string());
+            let prompt = data
+                .get("reply_prompt")
+                .and_then(|v| match v {
+                    FormEntry::Field(s) => Some(s),
+                    _ => None,
+                })
+                .map(|s| truncate(&s, 2000))
+                .unwrap_or_default();
+            form.reply = match mode.as_str() {
+                "ai" | "prompt" => ReplyResponse::Prompt { text: prompt },
+                _ => ReplyResponse::Canned { text: prompt },
+            };
             if let Some(FormEntry::Field(origins)) = data.get("allowed_origins") {
                 form.allowed_origins = origins
                     .lines()

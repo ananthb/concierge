@@ -3,6 +3,7 @@ use worker::*;
 
 const DEFAULT_MODEL: &str = "@cf/meta/llama-4-scout-17b-16e-instruct";
 const DEFAULT_FAST_MODEL: &str = "@cf/meta/llama-3.1-8b-instruct-fast";
+pub const EMBEDDING_MODEL: &str = "@cf/baai/bge-base-en-v1.5";
 
 fn get_model(env: &Env) -> String {
     env.var("AI_MODEL")
@@ -138,6 +139,64 @@ pub async fn is_prompt_injection(env: &Env, text: &str) -> bool {
             console_log!("Injection scanner error: {:?}", e);
             true // fail closed
         }
+    }
+}
+
+// ============================================================================
+// Embeddings (rule matching)
+// ============================================================================
+
+/// Embed a single piece of text using Cloudflare Workers AI's BGE model.
+/// Returns the dense vector. Used by the pipeline (embed inbound message)
+/// and by the persona admin handler (embed each Prompt rule's description
+/// on save).
+pub async fn embed(env: &Env, text: &str) -> Result<Vec<f32>> {
+    let ai = env.ai("AI")?;
+    let input = serde_json::json!({ "text": [text] });
+    let response: serde_json::Value = ai
+        .run(EMBEDDING_MODEL, input)
+        .await
+        .map_err(|e| Error::from(format!("Embedding model error: {:?}", e)))?;
+
+    // BGE returns { "data": [[..floats..]], "shape": [...] }. Defensively
+    // accept either `data` or `embeddings`, and either nested-list or flat
+    // single-vector layouts.
+    let arr = response
+        .get("data")
+        .or_else(|| response.get("embeddings"))
+        .and_then(|v| v.as_array())
+        .ok_or_else(|| Error::from("Embedding response missing data array"))?;
+    let first = arr
+        .first()
+        .ok_or_else(|| Error::from("Embedding response data array empty"))?;
+    let vec = first
+        .as_array()
+        .ok_or_else(|| Error::from("Embedding response inner not array"))?;
+    Ok(vec
+        .iter()
+        .filter_map(|v| v.as_f64().map(|f| f as f32))
+        .collect())
+}
+
+/// Cosine similarity in [-1.0, 1.0]. Returns 0 on length mismatch or
+/// zero-magnitude vectors so callers don't need to special-case those.
+pub fn cosine(a: &[f32], b: &[f32]) -> f32 {
+    if a.len() != b.len() || a.is_empty() {
+        return 0.0;
+    }
+    let mut dot = 0.0f32;
+    let mut na = 0.0f32;
+    let mut nb = 0.0f32;
+    for i in 0..a.len() {
+        dot += a[i] * b[i];
+        na += a[i] * a[i];
+        nb += b[i] * b[i];
+    }
+    let denom = na.sqrt() * nb.sqrt();
+    if denom == 0.0 {
+        0.0
+    } else {
+        dot / denom
     }
 }
 

@@ -115,7 +115,7 @@ pub async fn handle_whatsapp_signup(
                 name: format!("WhatsApp {}", phone_number),
                 phone_number,
                 phone_number_id,
-                auto_reply: AutoReplyConfig::default(),
+                auto_reply: ReplyConfig::default(),
                 created_at: now.clone(),
                 updated_at: now,
             };

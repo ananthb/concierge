@@ -161,7 +161,7 @@ pub async fn handle_instagram(
                 instagram_user_id: ig_user_id,
                 instagram_username: ig_username,
                 page_id,
-                auto_reply: AutoReplyConfig::default(),
+                auto_reply: ReplyConfig::default(),
                 enabled: true,
                 created_at: now.clone(),
                 updated_at: now,

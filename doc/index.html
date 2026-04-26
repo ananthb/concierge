@@ -78,12 +78,14 @@ footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--border
 <ul>
   <li><strong>WhatsApp Auto-Reply</strong>: reply instantly to incoming messages with static text or AI-generated responses via the Meta Business API</li>
   <li><strong>Instagram DM Auto-Reply</strong>: auto-respond to Instagram Direct Messages via Facebook Pages API</li>
+  <li><strong>Reply Rules</strong>: per-channel ordered routing — keyword matchers (case-insensitive substring) and embedding-based intent matchers (cosine similarity over BGE embeddings), each routing to canned text or an AI prompt. Every channel has a mandatory default rule</li>
+  <li><strong>Persona Builder</strong>: tenant-wide AI persona via curated preset, guided builder (tone, catch-phrases, off-topic boundaries), or raw prompt. Every prompt change runs through an async safety classifier (Cloudflare Queues) before AI replies resume</li>
   <li><strong>Email Routing</strong>: catch-all email with flexible routing rules using glob patterns. Actions include drop, spam reject, forward email (with reverse-alias reply routing), forward to Discord, and AI-generated replies with approval workflow</li>
   <li><strong>Discord Relay</strong>: unified inbox in Discord where messages from any channel are forwarded with Reply, Approve, and Drop buttons. Replies in Discord route back through the originating channel</li>
   <li><strong>Discord Slash Commands</strong>: <code>/status</code>, <code>/domains</code>, and <code>/rules</code> for managing your setup from Discord</li>
   <li><strong>Lead Capture Forms</strong>: embeddable phone number forms that trigger WhatsApp messages on submission</li>
   <li><strong>Unified Message Pipeline</strong>: all channels produce a common <code>InboundMessage</code> type, logged to a unified messages table (metadata only, no message content stored)</li>
-  <li><strong>Onboarding Wizard</strong>: 6-step guided setup for new tenants</li>
+  <li><strong>Onboarding Wizard</strong>: 5-step guided setup for new tenants (business, channels, notifications, persona preset, launch)</li>
   <li><strong>Management Panel</strong>: platform operator dashboard at <code>/manage/*</code> behind Cloudflare Access for tenant CRUD, billing controls, and audit logs</li>
   <li><strong>Billing</strong>: prepaid reply credits with 100 free per month. Purchased credits never expire. Razorpay integration for paid credit packs</li>
   <li><strong>Multi-Tenant Auth</strong>: Google and Facebook OAuth with multi-provider account linking</li>

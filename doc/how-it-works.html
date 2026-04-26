@@ -73,24 +73,28 @@ footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--border
 
 <p><strong>Privacy note:</strong> The unified messages table stores only metadata (channel, direction, sender ID, recipient ID, tenant, timestamp). No message content is ever persisted.</p>
 
-<h2>WhatsApp Auto-Reply</h2>
+<h2>WhatsApp / Instagram Auto-Reply</h2>
+
+<p>Both channels run through the same reply pipeline:</p>
 
 <ol>
-  <li>A customer sends a WhatsApp message to your business number</li>
-  <li>Meta delivers the message to Concierge via webhook at <code>POST /webhook/whatsapp</code></li>
-  <li>Concierge looks up the WhatsApp account by phone number ID, checks if auto-reply is enabled</li>
-  <li>One reply credit is deducted before generating the response</li>
-  <li>Sends a reply: either a static message or an AI-generated response via Workers AI</li>
-  <li>If the send fails, the credit is restored</li>
+  <li>Meta delivers the inbound message to <code>POST /webhook/whatsapp</code> or <code>POST /webhook/instagram</code></li>
+  <li>Concierge looks up the channel account (phone number ID for WhatsApp, page ID for Instagram) and its <code>ReplyConfig</code></li>
+  <li>The body is truncated to 1000 chars and run past a fast prompt-injection scanner; injection attempts are dropped</li>
+  <li>If any rule has a <code>Prompt</code> matcher, the inbound message is embedded once and compared via cosine similarity to each rule's pre-computed embedding</li>
+  <li>Rules are walked in order; <em>Keywords</em> matchers do a case-insensitive substring check, <em>Prompt</em> matchers compare against the embedding. First match wins; otherwise the mandatory default rule fires</li>
+  <li>If the matched response is <em>Canned</em>, the text is sent verbatim with no AI call and no credit charge</li>
+  <li>If the matched response is <em>Prompt</em>, the persona prompt + the rule's prompt + a context block are sent to the LLM; one credit is deducted and restored if the send or AI call fails. AI replies require the tenant's persona to be safety-<code>Approved</code>; otherwise the reply is skipped silently</li>
 </ol>
 
-<h2>Instagram DM Auto-Reply</h2>
+<h2>Persona &amp; safety check</h2>
 
 <ol>
-  <li>Someone sends a DM to your Instagram business account</li>
-  <li>Meta delivers the message via webhook at <code>POST /webhook/instagram</code></li>
-  <li>Concierge looks up the account by page ID, checks auto-reply config</li>
-  <li>One reply credit is deducted, a reply is generated and sent via the Instagram Pages API</li>
+  <li>The tenant picks a curated preset, fills in the builder (tone / catch-phrases / off-topic boundaries), or writes a raw custom prompt at <code>/admin/persona</code></li>
+  <li>On save, the active prompt is hashed; if the hash differs from the last-vetted hash, status flips to <code>Pending</code> and a <code>SafetyJob</code> is enqueued onto Cloudflare Queue <code>concierge-safety</code></li>
+  <li>The queue consumer reads the job, re-checks the hash (drops stale jobs), and runs the safety classifier with Calculon Tech's content policy</li>
+  <li>The result lands back in KV as <code>Approved</code> or <code>Rejected</code> with a vague user-facing reason</li>
+  <li>While <code>Pending</code> or <code>Rejected</code>, AI replies are blocked tenant-wide; canned default replies still send</li>
 </ol>
 
 <h2>Email Routing</h2>

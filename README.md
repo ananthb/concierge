@@ -16,12 +16,14 @@ Don't want to self-host? [concierge.calculon.tech](https://concierge.calculon.te
 
 ## Features
 
-- **WhatsApp Auto-Reply**: static or AI-powered replies to every message via Meta Business API
+- **WhatsApp Auto-Reply**: rule-routed canned or AI replies via Meta Business API
 - **Instagram DM Auto-Reply**: connect your business account, reply automatically
+- **Reply Rules**: per-channel ordered rules — keyword matchers and embedding-based intent matchers — each routing to canned text or an AI prompt; mandatory default fallback per channel
+- **Persona Builder**: tenant-wide AI persona with three modes — curated preset (Friendly Florist / Professional Salon / Playful Cafe / Old-school Clinic), guided builder (tone, catch-phrases, off-topic boundaries), or raw prompt. Every change is run past a safety classifier asynchronously via Cloudflare Queues
 - **Managed Email Subdomains**: each tenant gets `*.cncg.email` addresses with smart routing rules (glob patterns). Forward, drop, AI-draft, or relay to Discord. MX records provisioned automatically via Cloudflare API
 - **Discord Relay**: unified inbox. Messages from any channel land in Discord with Reply/Approve/Drop buttons. Reply in Discord and it flows back to the customer
 - **Lead Capture Forms**: embeddable phone number forms that trigger WhatsApp messages
-- **Onboarding Wizard**: 5-step guided setup (business info, channels, notifications, replies, billing)
+- **Onboarding Wizard**: 5-step guided setup (business info, channels, notifications, persona preset, billing)
 - **Notification Preferences**: configurable approval + digest delivery via Discord and/or Email with batching frequency
 - **Management Panel**: Cloudflare Access-protected admin for tenant management, billing, audit log
 - **Billing**: flat prepaid credits — **₹2 / $0.02 per AI reply**, 100 free every month. Static auto-replies are always free. Buy any quantity (slider, no tiers, no packs). Email subdomains are a separate ₹199/$2 monthly subscription, auto-provisioned

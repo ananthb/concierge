@@ -22,9 +22,10 @@ pub fn email_dashboard_html(
         .iter()
         .map(|a| {
             let full = format!("{}@{}", a.local_part, base_domain);
-            let mode_label = match a.auto_reply.mode {
-                AutoReplyMode::Static => "Static",
-                AutoReplyMode::Ai => "AI",
+            let mode_label = if a.auto_reply.default_is_canned() {
+                "Static"
+            } else {
+                "AI"
             };
             let on_off = if a.auto_reply.enabled {
                 r#"<span class="chip ok">on</span>"#
@@ -115,8 +116,8 @@ pub fn email_dashboard_html(
 pub fn email_address_html(addr: &EmailAddress, base_domain: &str, base_url: &str) -> String {
     let full = format!("{}@{}", addr.local_part, base_domain);
 
-    let static_selected = matches!(addr.auto_reply.mode, AutoReplyMode::Static);
-    let ai_selected = matches!(addr.auto_reply.mode, AutoReplyMode::Ai);
+    let static_selected = addr.auto_reply.default_is_canned();
+    let ai_selected = !static_selected;
     let enabled_attr = if addr.auto_reply.enabled {
         "checked"
     } else {
@@ -124,7 +125,8 @@ pub fn email_address_html(addr: &EmailAddress, base_domain: &str, base_url: &str
     };
 
     let auto_reply_form = format!(
-        r##"<form hx-put="{base_url}/admin/email/addresses/{label}/auto-reply" hx-ext="json-enc" hx-target="{HASH}auto-toast" hx-swap="innerHTML">
+        r##"<p class="muted fs-13 mb-12">This is the default reply when no rule matches. Manage the full rules list at <a href="{base_url}/admin/rules/email/{label}">Reply rules</a>.</p>
+        <form hx-put="{base_url}/admin/email/addresses/{label}/auto-reply" hx-ext="json-enc" hx-target="{HASH}auto-toast" hx-swap="innerHTML">
             <div class="form-group">
                 <label class="row gap-8">
                     <span class="toggle">
@@ -135,14 +137,14 @@ pub fn email_address_html(addr: &EmailAddress, base_domain: &str, base_url: &str
                 </label>
             </div>
             <div class="form-group">
-                <label>Mode</label>
+                <label>Default reply mode</label>
                 <select class="select" name="mode">
-                    <option value="static" {static_sel}>Static: same canned reply every time</option>
-                    <option value="ai" {ai_sel}>AI: generate a reply for each message (uses 1 credit)</option>
+                    <option value="canned" {static_sel}>Static: same canned reply every time</option>
+                    <option value="prompt" {ai_sel}>AI: generate a reply for each message (uses 1 credit)</option>
                 </select>
             </div>
             <div class="form-group">
-                <label>Reply text / AI prompt</label>
+                <label>Default reply text / AI prompt</label>
                 <textarea class="textarea" name="prompt" rows="6" placeholder="In static mode this exact text is sent. In AI mode, this is the system prompt for the model.">{prompt}</textarea>
             </div>
             <div class="form-group">
@@ -161,7 +163,7 @@ pub fn email_address_html(addr: &EmailAddress, base_domain: &str, base_url: &str
         enabled_attr = enabled_attr,
         static_sel = if static_selected { "selected" } else { "" },
         ai_sel = if ai_selected { "selected" } else { "" },
-        prompt = html_escape(&addr.auto_reply.prompt),
+        prompt = html_escape(addr.auto_reply.default_text()),
         wait = addr.auto_reply.wait_seconds,
     );
 

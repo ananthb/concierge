@@ -38,6 +38,31 @@ new_classes = ["ReplyBufferDO"]
 binding = "AI"
 
 # ============================================================================
+# Queues: persona safety classifier
+#
+# Producer: the persona admin handler enqueues a SafetyJob whenever a tenant
+# saves a new persona prompt.
+#
+# Consumer: src/safety_queue.rs:handle_batch (wired via #[event(queue)] in
+# src/lib.rs) re-reads the persona, runs the classifier, and writes the
+# verdict back. Failed jobs go to the DLQ after 3 retries.
+#
+# Both queues must exist before deploy:
+#   wrangler queues create concierge-safety
+#   wrangler queues create concierge-safety-dlq
+# ============================================================================
+[[queues.producers]]
+queue = "concierge-safety"
+binding = "SAFETY_QUEUE"
+
+[[queues.consumers]]
+queue = "concierge-safety"
+max_batch_size = 10
+max_batch_timeout = 5
+max_retries = 3
+dead_letter_queue = "concierge-safety-dlq"
+
+# ============================================================================
 # Email Routing: send_email binding for outbound forwarding
 # ============================================================================
 [[send_email]]

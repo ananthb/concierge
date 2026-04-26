@@ -43,16 +43,19 @@ pub struct WhatsAppAccount {
     pub name: String,
     pub phone_number: String,
     pub phone_number_id: String,
-    pub auto_reply: AutoReplyConfig,
+    pub auto_reply: ReplyConfig,
     pub created_at: String,
     pub updated_at: String,
 }
 
+/// Per-channel reply routing: an ordered list of rules whose first match wins,
+/// plus a mandatory default rule that fires when nothing matches.
 #[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct AutoReplyConfig {
+pub struct ReplyConfig {
     pub enabled: bool,
-    pub mode: AutoReplyMode,
-    pub prompt: String,
+    #[serde(default)]
+    pub rules: Vec<ReplyRule>,
+    pub default_rule: ReplyRule,
     /// Seconds to wait after the latest inbound message before replying.
     /// Lets users finish typing and groups multi-message bursts into one
     /// AI call. 0 = reply immediately (no buffering).
@@ -60,14 +63,39 @@ pub struct AutoReplyConfig {
     pub wait_seconds: u32,
 }
 
-impl Default for AutoReplyConfig {
+impl Default for ReplyConfig {
     fn default() -> Self {
         Self {
             enabled: false,
-            mode: AutoReplyMode::default(),
-            prompt: String::new(),
+            rules: Vec::new(),
+            default_rule: ReplyRule::default_fallback(),
             wait_seconds: default_wait_seconds(),
         }
+    }
+}
+
+impl ReplyConfig {
+    /// Convenience: read the default rule's text without unwrapping the enum.
+    /// Used by channel admin templates that still expose a single
+    /// "default response" field while a richer rules UI is built out.
+    pub fn default_text(&self) -> &str {
+        match &self.default_rule.response {
+            ReplyResponse::Canned { text } | ReplyResponse::Prompt { text } => text,
+        }
+    }
+
+    /// True when the default rule sends static text (no LLM, no credit).
+    pub fn default_is_canned(&self) -> bool {
+        matches!(self.default_rule.response, ReplyResponse::Canned { .. })
+    }
+
+    /// Mutate the default rule from an admin form. `mode` is the wire value
+    /// from the form ("canned" / "prompt" / legacy "static" / "ai").
+    pub fn set_default_response(&mut self, mode: &str, text: String) {
+        self.default_rule.response = match mode {
+            "ai" | "prompt" => ReplyResponse::Prompt { text },
+            _ => ReplyResponse::Canned { text },
+        };
     }
 }
 
@@ -75,12 +103,65 @@ pub fn default_wait_seconds() -> u32 {
     5
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
-#[serde(rename_all = "snake_case")]
-pub enum AutoReplyMode {
-    #[default]
-    Static,
-    Ai,
+/// One reply routing entry: a matcher (when does this fire?) and a response
+/// (what do we send?).
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct ReplyRule {
+    pub id: String,
+    pub label: String,
+    pub matcher: ReplyMatcher,
+    pub response: ReplyResponse,
+}
+
+impl ReplyRule {
+    /// The default fallback rule used when a tenant hasn't customized.
+    /// Calls the LLM with the persona prompt + a generic instruction.
+    pub fn default_fallback() -> Self {
+        Self {
+            id: "default".to_string(),
+            label: "Default reply".to_string(),
+            matcher: ReplyMatcher::Default,
+            response: ReplyResponse::Prompt {
+                text: "Reply to the customer's message helpfully.".to_string(),
+            },
+        }
+    }
+}
+
+/// How a rule decides whether it matches the inbound message.
+#[derive(Serialize, Deserialize, Clone, Debug)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum ReplyMatcher {
+    /// Only valid for the `default_rule` slot. Always matches.
+    Default,
+    /// Match if any keyword (case-insensitive substring) appears in the message.
+    StaticText { keywords: Vec<String> },
+    /// Embedding-based intent match. The `embedding` is precomputed from
+    /// `description` on save; the pipeline compares it to the embedded
+    /// inbound message via cosine similarity.
+    Prompt {
+        description: String,
+        #[serde(default)]
+        embedding: Vec<f32>,
+        #[serde(default)]
+        embedding_model: String,
+        #[serde(default = "default_match_threshold")]
+        threshold: f32,
+    },
+}
+
+pub fn default_match_threshold() -> f32 {
+    0.72
+}
+
+/// What to send when a rule matches.
+#[derive(Serialize, Deserialize, Clone, Debug)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum ReplyResponse {
+    /// Send this text verbatim. No AI call, no credit.
+    Canned { text: String },
+    /// Append this prompt to the persona prompt and run the main LLM.
+    Prompt { text: String },
 }
 
 // ============================================================================
@@ -94,7 +175,7 @@ pub struct InstagramAccount {
     pub instagram_user_id: String,
     pub instagram_username: String,
     pub page_id: String,
-    pub auto_reply: AutoReplyConfig,
+    pub auto_reply: ReplyConfig,
     pub enabled: bool,
     pub created_at: String,
     #[serde(default)]
@@ -112,8 +193,7 @@ pub struct LeadCaptureForm {
     pub name: String,
     pub slug: String,
     pub whatsapp_account_id: String,
-    pub reply_mode: AutoReplyMode,
-    pub reply_prompt: String,
+    pub reply: ReplyResponse,
     pub style: LeadFormStyle,
     pub allowed_origins: Vec<String>,
     pub enabled: bool,
@@ -289,7 +369,7 @@ pub struct EmailAddress {
     pub local_part: String,
     pub tenant_id: String,
     #[serde(default)]
-    pub auto_reply: AutoReplyConfig,
+    pub auto_reply: ReplyConfig,
     #[serde(default)]
     pub notification_recipients: Vec<NotificationRecipient>,
     pub created_at: String,
@@ -461,13 +541,83 @@ pub struct OnboardingState {
     pub business: BusinessInfo,
     #[serde(default)]
     pub notifications: NotificationConfig,
+    #[serde(default)]
     pub persona: PersonaConfig,
-    pub canned_replies: Vec<CannedReply>,
+    /// Default wait_seconds copied into ReplyConfig on every channel account
+    /// this tenant connects later. Per-account overrides live on each ReplyConfig.
+    #[serde(default = "default_wait_seconds")]
+    pub default_wait_seconds: u32,
     pub completed: bool,
 }
 
+/// Tenant-wide AI persona used as the system prompt for every AI reply.
+/// The persona is one of three sources (Preset, Builder, Custom) — never a
+/// mix — so there is exactly one source of truth for the active prompt.
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct PersonaConfig {
+    pub source: PersonaSource,
+    #[serde(default)]
+    pub safety: PersonaSafety,
+}
+
+impl Default for PersonaConfig {
+    fn default() -> Self {
+        Self {
+            source: PersonaSource::Preset(PersonaPreset::FriendlyFlorist),
+            safety: PersonaSafety::default(),
+        }
+    }
+}
+
+impl PersonaConfig {
+    /// The actual prompt sent to the LLM. Computed from the source on demand.
+    pub fn active_prompt(&self) -> String {
+        match &self.source {
+            PersonaSource::Preset(p) => p.prompt().to_string(),
+            PersonaSource::Builder(b) => crate::personas::generate(b),
+            PersonaSource::Custom(s) => s.clone(),
+        }
+    }
+
+    /// SHA-256 of the active prompt, used to detect when a re-run of the
+    /// safety classifier is needed.
+    pub fn active_prompt_hash(&self) -> String {
+        crate::helpers::sha256_hex(&self.active_prompt())
+    }
+
+    /// True if AI replies are allowed: the safety check has approved the
+    /// current prompt (no hash drift since approval).
+    pub fn is_safe_to_use(&self) -> bool {
+        matches!(self.safety.status, PersonaSafetyStatus::Approved)
+            && self.safety.checked_prompt_hash.as_deref()
+                == Some(self.active_prompt_hash().as_str())
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum PersonaSource {
+    /// Wizard default: a curated preset's bundled prompt is used verbatim.
+    Preset(PersonaPreset),
+    /// User-filled inputs the system uses to compose a prompt on demand.
+    Builder(PersonaBuilder),
+    /// Power-user override: raw prompt text. Replaces builder/preset entirely.
+    Custom(String),
+}
+
+/// Curated persona presets shipped in the app. Add a variant here AND in
+/// `personas.rs` (label/description/prompt/default_rules) to ship a new one.
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum PersonaPreset {
+    FriendlyFlorist,
+    ProfessionalSalon,
+    PlayfulCafe,
+    OldSchoolClinic,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+pub struct PersonaBuilder {
     #[serde(default)]
     pub biz_type: String,
     #[serde(default)]
@@ -475,61 +625,38 @@ pub struct PersonaConfig {
     #[serde(default)]
     pub tone: String,
     #[serde(default)]
+    pub catch_phrases: Vec<String>,
+    #[serde(default)]
+    pub off_topics: Vec<String>,
+    #[serde(default)]
     pub never: String,
-    /// Default wait_seconds applied to AutoReplyConfig on every channel
-    /// account this tenant connects in the future. Existing accounts can
-    /// override per-account on their settings page.
-    #[serde(default = "default_wait_seconds")]
-    pub default_wait_seconds: u32,
 }
 
-impl Default for PersonaConfig {
-    fn default() -> Self {
-        Self {
-            biz_type: String::new(),
-            city: String::new(),
-            tone: String::new(),
-            never: String::new(),
-            default_wait_seconds: default_wait_seconds(),
-        }
-    }
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+pub struct PersonaSafety {
+    #[serde(default)]
+    pub status: PersonaSafetyStatus,
+    /// SHA-256 of the prompt that was last vetted. Used to detect when the
+    /// active prompt has drifted (e.g. user edited but new check hasn't
+    /// completed) and AI replies must be paused.
+    #[serde(default)]
+    pub checked_prompt_hash: Option<String>,
+    #[serde(default)]
+    pub checked_at: Option<String>,
+    /// User-facing decline reason for the Rejected case. Always vague — the
+    /// internal classifier category is logged but not exposed so users can't
+    /// iterate prompts against the classifier.
+    #[serde(default)]
+    pub vague_reason: Option<String>,
 }
 
-impl PersonaConfig {
-    pub fn to_system_prompt(&self) -> String {
-        let mut parts =
-            vec!["You are a helpful messaging assistant for a small business.".to_string()];
-        if !self.biz_type.is_empty() {
-            let loc = if self.city.is_empty() {
-                String::new()
-            } else {
-                format!(" in {}", self.city)
-            };
-            parts.push(format!("The business is a {}{}.", self.biz_type, loc));
-        }
-        if !self.tone.is_empty() {
-            parts.push(format!(
-                "Tone: {}. Match this tone in every reply.",
-                self.tone
-            ));
-        }
-        if !self.never.is_empty() {
-            parts.push(format!(
-                "Never {}. If asked, politely defer to a human.",
-                self.never
-            ));
-        }
-        parts.push(
-            "Keep replies short (1-3 sentences). If unsure, hand off to the owner.".to_string(),
-        );
-        parts.join("\n")
-    }
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct CannedReply {
-    pub trigger: String,
-    pub reply: String,
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum PersonaSafetyStatus {
+    #[default]
+    Pending,
+    Approved,
+    Rejected,
 }
 
 /// Discord guild → tenant mapping config.
@@ -553,7 +680,7 @@ pub struct DiscordConfig {
     pub inbound_channel_ids: Vec<String>,
     /// AI auto-reply configuration for inbound Discord messages.
     #[serde(default)]
-    pub auto_reply: AutoReplyConfig,
+    pub auto_reply: ReplyConfig,
 }
 
 #[cfg(test)]
@@ -561,14 +688,18 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_auto_reply_mode_serialization() {
-        assert_eq!(
-            serde_json::to_string(&AutoReplyMode::Static).unwrap(),
-            "\"static\""
-        );
-        assert_eq!(serde_json::to_string(&AutoReplyMode::Ai).unwrap(), "\"ai\"");
-        let mode: AutoReplyMode = serde_json::from_str("\"ai\"").unwrap();
-        assert_eq!(mode, AutoReplyMode::Ai);
+    fn test_reply_response_serialization() {
+        let canned = ReplyResponse::Canned {
+            text: "hi".to_string(),
+        };
+        let s = serde_json::to_string(&canned).unwrap();
+        assert!(s.contains("\"kind\":\"canned\""));
+        assert!(s.contains("\"text\":\"hi\""));
+        let prompt = ReplyResponse::Prompt {
+            text: "be helpful".to_string(),
+        };
+        let s = serde_json::to_string(&prompt).unwrap();
+        assert!(s.contains("\"kind\":\"prompt\""));
     }
 
     #[test]

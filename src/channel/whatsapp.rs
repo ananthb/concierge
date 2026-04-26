@@ -71,7 +71,7 @@ mod tests {
             name: "Test".into(),
             phone_number: "+1234567890".into(),
             phone_number_id: "phone-123".into(),
-            auto_reply: AutoReplyConfig::default(),
+            auto_reply: ReplyConfig::default(),
             created_at: String::new(),
             updated_at: String::new(),
         }

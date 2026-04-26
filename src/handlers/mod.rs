@@ -5,6 +5,8 @@ mod admin_billing;
 mod admin_email;
 mod admin_instagram;
 mod admin_lead_forms;
+mod admin_persona;
+pub mod admin_rules;
 mod admin_whatsapp;
 pub mod auth;
 mod data_deletion;

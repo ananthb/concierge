@@ -131,6 +131,15 @@ pub async fn handle_admin(req: Request, env: Env, path: &str, method: Method) ->
         return super::onboarding::handle_wizard(req, env, path, &base_url, &tenant_id).await;
     }
 
+    if path.starts_with("/admin/persona") {
+        return super::admin_persona::handle_persona_admin(req, env, path, &base_url, &tenant_id)
+            .await;
+    }
+
+    if path.starts_with("/admin/rules/") {
+        return super::admin_rules::handle_rules(req, env, path, &base_url, &tenant_id).await;
+    }
+
     if path == "/admin" || path == "/admin/" {
         let kv = env.kv("KV")?;
 

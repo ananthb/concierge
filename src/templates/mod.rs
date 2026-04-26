@@ -10,6 +10,8 @@ pub mod features;
 mod lead_form;
 pub mod management;
 pub mod onboarding;
+pub mod persona;
+pub mod rules;
 
 pub use admin::*;
 pub use lead_form::*;

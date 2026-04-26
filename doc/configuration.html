@@ -147,11 +147,29 @@ footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--border
   </thead>
   <tbody>
     <tr><td><code>DB</code></td><td>D1</td><td>SQLite database for message logs, payments, audit, credit packs</td></tr>
-    <tr><td><code>KV</code></td><td>KV</td><td>Config store for tenants, accounts, sessions, routing rules, billing state</td></tr>
-    <tr><td><code>AI</code></td><td>AI</td><td>Cloudflare Workers AI for auto-reply generation</td></tr>
+    <tr><td><code>KV</code></td><td>KV</td><td>Config store for tenants, accounts, sessions, routing rules, billing state, persona</td></tr>
+    <tr><td><code>AI</code></td><td>AI</td><td>Cloudflare Workers AI for reply generation, prompt-injection scanning, persona safety classification, and BGE embeddings</td></tr>
     <tr><td><code>EMAIL</code></td><td>send_email</td><td>Outbound email for forwarding and reverse-alias replies</td></tr>
+    <tr><td><code>REPLY_BUFFER</code></td><td>Durable Object</td><td>Per-conversation reply buffer that batches multi-message bursts within <code>wait_seconds</code></td></tr>
+    <tr><td><code>SAFETY_QUEUE</code></td><td>Queue (producer)</td><td>Persona safety classifier jobs. The same worker also binds as the consumer (see <a href="deployment.html">Deploy</a>)</td></tr>
   </tbody>
 </table>
+
+<h2>Cloudflare Queues</h2>
+
+<p>Two queues must exist before deploy:</p>
+
+<ul>
+  <li><code>concierge-safety</code>: producer + consumer for the persona safety classifier. The worker enqueues a <code>SafetyJob</code> on each persona save and consumes the same queue via <code>#[event(queue)]</code>.</li>
+  <li><code>concierge-safety-dlq</code>: dead-letter queue for safety jobs after 3 retries. Inspect failures here when persona checks stop completing.</li>
+</ul>
+
+<p>Create both with:</p>
+
+<pre><code>wrangler queues create concierge-safety
+wrangler queues create concierge-safety-dlq</code></pre>
+
+<p>Local <code>wrangler dev</code> works without queues configured: <code>safety_queue::enqueue</code> logs and falls through, leaving personas in <code>Pending</code> until you deploy against a properly bound environment.</p>
 
 <h2>OAuth Redirect URIs</h2>
 

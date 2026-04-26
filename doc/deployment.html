@@ -71,11 +71,17 @@ custom_domain = true</code></pre>
 <p>Email routing requires a real zone you own; pick the domain you'll use for inbound mail here.</p>
 
 <h2>3. Create the Cloudflare resources</h2>
-<p>You need a D1 database (metadata logs, billing, audit) and a KV namespace (sessions, account configs, billing state).</p>
+<p>You need a D1 database (metadata logs, billing, audit), a KV namespace (sessions, account configs, billing state, persona), and two Cloudflare Queues (persona safety classifier + DLQ).</p>
 <pre><code>nix develop                                       # or install wrangler manually
 wrangler d1 create concierge
-wrangler kv namespace create KV</code></pre>
-<p>Save the returned <code>database_id</code> (D1) and <code>id</code> (KV): you'll paste them into GitHub Secrets next.</p>
+wrangler kv namespace create KV
+wrangler queues create concierge-safety
+wrangler queues create concierge-safety-dlq</code></pre>
+<p>Save the returned <code>database_id</code> (D1) and <code>id</code> (KV): you'll paste them into GitHub Secrets next. The queue names are referenced by name in <code>wrangler.toml</code>, so they don't need to go into secrets &mdash; just create them once per Cloudflare account.</p>
+
+<p>D1 migrations apply automatically on each <code>wrangler deploy</code> via <code>wrangler d1 migrations apply concierge --remote</code> &mdash; you don't need to apply them by hand.</p>
+
+<p>If you skip the queues, persona safety checks will stay in <code>Pending</code> forever and AI replies will be blocked tenant-wide. Static/canned replies still work.</p>
 
 <h2>4. Configure GitHub Secrets</h2>
 <p>In your fork: <strong>Settings → Secrets and variables → Actions</strong>. Add:</p>

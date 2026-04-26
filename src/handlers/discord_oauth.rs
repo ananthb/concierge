@@ -130,7 +130,7 @@ pub async fn handle_discord_callback(req: Request, env: Env) -> Result<Response>
         relay_channel_id: None,
         inbound_mentions: false,
         inbound_channel_ids: Vec::new(),
-        auto_reply: AutoReplyConfig::default(),
+        auto_reply: ReplyConfig::default(),
     };
     save_discord_config(&kv, &config).await?;
 
@@ -267,15 +267,19 @@ async fn save_channels(req: &mut Request, kv: &kv::KvStore, tenant_id: &str) -> 
         .get("auto_reply_enabled")
         .map(|v| v.as_bool().unwrap_or_else(|| v.as_str() == Some("true")))
         .unwrap_or(false);
-    if let Some(mode) = form.get("auto_reply_mode").and_then(|v| v.as_str()) {
-        cfg.auto_reply.mode = match mode {
-            "ai" => AutoReplyMode::Ai,
-            _ => AutoReplyMode::Static,
-        };
-    }
-    if let Some(p) = form.get("auto_reply_prompt").and_then(|v| v.as_str()) {
-        cfg.auto_reply.prompt = p.chars().take(2000).collect();
-    }
+    let mode = form
+        .get("auto_reply_mode")
+        .and_then(|v| v.as_str())
+        .unwrap_or("canned")
+        .to_string();
+    let prompt: String = form
+        .get("auto_reply_prompt")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .chars()
+        .take(2000)
+        .collect();
+    cfg.auto_reply.set_default_response(&mode, prompt);
     if let Some(n) = form.get("wait_seconds").and_then(|v| {
         v.as_i64()
             .or_else(|| v.as_str().and_then(|s| s.parse().ok()))

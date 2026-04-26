@@ -189,6 +189,19 @@ pub fn truncate(s: &str, max: usize) -> String {
     s.chars().take(max).collect()
 }
 
+/// Hex SHA-256 of a string. Used to detect drift in safety-checked content.
+pub fn sha256_hex(s: &str) -> String {
+    use sha2::{Digest, Sha256};
+    let mut h = Sha256::new();
+    h.update(s.as_bytes());
+    let bytes = h.finalize();
+    let mut out = String::with_capacity(bytes.len() * 2);
+    for b in bytes.iter() {
+        out.push_str(&format!("{b:02x}"));
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

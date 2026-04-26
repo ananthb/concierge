@@ -71,21 +71,31 @@ footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--border
 
 <h2>Configuring Auto-Reply</h2>
 
-<p>Each WhatsApp account has its own auto-reply settings:</p>
+<p>Each WhatsApp account has its own <code>ReplyConfig</code> with two layers:</p>
 
 <ul>
-  <li><strong>Enabled</strong>: Toggle auto-reply on/off</li>
-  <li><strong>Mode</strong>: Static (fixed message) or AI (generated response)</li>
-  <li><strong>Prompt/Message</strong>: The static message to send, or the AI system prompt</li>
+  <li><strong>Default reply</strong>: edited inline on the account's edit page. Sets the fallback when no rule matches. Pick canned text or AI prompt.</li>
+  <li><strong>Reply rules</strong>: managed at <code>/admin/rules/whatsapp/{account_id}</code>. An ordered list checked top-down on every inbound message; first match wins.</li>
 </ul>
 
-<h3>Static Mode</h3>
+<p>Account-level toggles:</p>
 
-<p>Every incoming message gets the same reply. Good for "We'll get back to you" or business hours info.</p>
+<ul>
+  <li><strong>Enabled</strong>: master switch for auto-reply on this account.</li>
+  <li><strong>Default reply mode</strong>: <em>Static</em> (verbatim text, free) or <em>AI</em> (generated reply, 1 credit).</li>
+  <li><strong>Default reply text / prompt</strong>: the static message or the AI prompt appended to the persona prompt.</li>
+  <li><strong>Wait before replying</strong>: 0&ndash;30 seconds; lets quick-fire bursts collapse into one reply.</li>
+</ul>
 
-<h3>AI Mode</h3>
+<h3>Reply rules</h3>
 
-<p>The prompt is used as a system instruction for Cloudflare Workers AI. The sender's name and message are passed as context. The AI generates a contextual reply.</p>
+<p>Each rule has a matcher and a response. Matchers are <em>Keywords</em> (case-insensitive substring match against the inbound message) or <em>Prompt</em> (a short topic description that's embedded with BGE and compared via cosine similarity, default threshold 0.72). Responses are <em>Canned</em> (verbatim, free) or <em>Prompt</em> (appended to the persona prompt and run through the LLM, 1 credit).</p>
+
+<p>Rules can be reordered with up/down arrows on the rules list page. Up to 50 rules per account.</p>
+
+<h3>Persona</h3>
+
+<p>The system prompt for every AI reply is the tenant-wide persona prompt at <code>/admin/persona</code> (preset, builder, or custom) concatenated with the matched rule's prompt. AI replies are blocked unless the persona's safety status is <code>Approved</code>; canned default replies still send.</p>
 
 <h2>Credit Deduction</h2>
 

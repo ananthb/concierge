@@ -616,146 +616,78 @@ pub fn notifications_html(
     wizard_shell("notifications", base_url, &x_data, progress_expr, &content)
 }
 
-fn sel_attr(current: &str, value: &str) -> &'static str {
-    if current == value {
-        " selected"
-    } else {
-        ""
-    }
-}
+pub fn replies_html(persona: &PersonaConfig, default_wait_seconds: u32, base_url: &str) -> String {
+    let current_slug = match &persona.source {
+        PersonaSource::Preset(p) => p.slug(),
+        _ => "",
+    };
 
-pub fn replies_html(persona: &PersonaConfig, canned: &[CannedReply], base_url: &str) -> String {
-    let rows: String = canned
+    let preset_cards: String = PersonaPreset::ALL
         .iter()
-        .enumerate()
-        .map(|(i, r)| {
+        .map(|p| {
+            let slug = p.slug();
+            let label = p.label();
+            let desc = p.description();
+            let checked = if slug == current_slug { " checked" } else { "" };
             format!(
-                r#"<div class="replies-row">
-  <input class="input mono" name="trigger_{i}" value="{trigger}" placeholder="hours | open | *closed*">
-  <textarea class="textarea" name="reply_{i}" style="min-height:60px;font-family:var(--f-body)" placeholder="Hi! We're open 9-7...">{reply}</textarea>
-  <button class="btn ghost icon" hx-post="{base_url}/admin/wizard/replies/del" hx-vals='{{"i":"{i}"}}' hx-target="body" hx-swap="innerHTML">&#x2715;</button>
-</div>"#,
-                i = i,
-                trigger = html_escape(&r.trigger),
-                reply = html_escape(&r.reply),
-                base_url = base_url,
+                r#"<label class="card p-18 preset-card" style="cursor:pointer;display:block">
+  <div class="row gap-12" style="align-items:flex-start">
+    <input type="radio" name="preset_id" value="{slug}" x-model="preset"{checked} style="margin-top:4px">
+    <div class="flex-1">
+      <div class="eyebrow mb-4">{label}</div>
+      <p class="m-0 fs-14">{desc}</p>
+    </div>
+  </div>
+</label>"#,
+                slug = html_escape(slug),
+                label = html_escape(label),
+                desc = html_escape(desc),
+                checked = checked,
             )
         })
         .collect();
 
-    let empty = if canned.is_empty() {
-        r#"<div class="replies-row"><span class="muted ta-center" style="grid-column:1/-1">No canned replies yet. Add one below: or just let the AI handle everything.</span></div>"#
-    } else {
-        ""
-    };
-
-    let prompt = persona.to_system_prompt();
-
     let content = format!(
         r#"<section class="page narrow">
   <div class="section-label"><span class="mono muted">04 / 05</span><span class="eyebrow">Replies</span></div>
-  <h2 class="display-md">How should your concierge respond?</h2>
-  <p class="lead">Configure the AI voice for general replies, then add canned overrides for specific questions.</p>
-
-  <div class="card p-22 mb-16">
-    <div class="eyebrow mb-12">AI persona</div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
-      <div>
-        <label class="eyebrow lbl">Type of business</label>
-        <input class="input" name="biz_type" value="{biz_type}" placeholder="florist, hair salon, coffee shop..." x-model="bizType">
-      </div>
-      <div>
-        <label class="eyebrow lbl">City</label>
-        <input class="input" name="city" value="{city}" placeholder="Chennai, Berlin..." x-model="city">
-      </div>
-      <div>
-        <label class="eyebrow lbl">Tone</label>
-        <select class="select" name="tone" x-model="tone">
-          <option value="">Choose a tone...</option>
-          <option value="warm &amp; chatty"{tone_wc}>warm &amp; chatty</option>
-          <option value="concise &amp; professional"{tone_cp}>concise &amp; professional</option>
-          <option value="playful with emoji"{tone_pe}>playful with emoji</option>
-          <option value="old-school polite"{tone_op}>old-school polite</option>
-        </select>
-      </div>
-      <div>
-        <label class="eyebrow lbl">Never do this</label>
-        <select class="select" name="never" x-model="never">
-          <option value="">Choose a boundary...</option>
-          <option value="quote prices"{never_qp}>quote prices</option>
-          <option value="promise dates"{never_pd}>promise dates</option>
-          <option value="handle refunds"{never_hr}>handle refunds</option>
-        </select>
-      </div>
-    </div>
-    <div class="card p-14 mt-16" style="background:var(--ink);color:var(--cream);border-color:var(--ink);border-radius:var(--r-sm)">
-      <div class="mono fs-10 mb-6" style="letter-spacing:.18em;color:var(--accent-soft)">SYSTEM PROMPT</div>
-      <pre class="mono m-0 fs-11" style="white-space:pre-wrap;color:var(--cream);line-height:1.5">{prompt}</pre>
-    </div>
-  </div>
-
-  <div class="card p-22 mt-16">
-    <div class="eyebrow mb-8">Wait before replying</div>
-    <p class="muted fs-13 m-0 mb-12">If a customer fires a few messages in a row, hold off until they pause so the AI sees the whole burst at once. Default applies to every WhatsApp / Instagram / Discord channel; override per account in Settings.</p>
-    <div class="row gap-12">
-      <input type="range" min="0" max="30" step="1"
-             x-model.number="waitSeconds"
-             class="flex-1"
-             style="accent-color:var(--accent)">
-      <div class="mono ta-right" style="min-width:80px">
-        <span x-text="waitSeconds === 0 ? 'instant' : waitSeconds + 's'"></span>
-      </div>
-    </div>
-  </div>
+  <h2 class="display-md">Pick a starting style</h2>
+  <p class="lead">Each preset comes with a tone and a small set of default reply rules. You can fine-tune everything from <a href="{base_url}/admin/persona">Persona settings</a> after launch.</p>
 
   <form hx-post="{base_url}/admin/wizard/replies/save" hx-target="body" hx-swap="innerHTML">
-    <input type="hidden" name="biz_type" value="{biz_type}">
-    <input type="hidden" name="city" value="{city}">
-    <input type="hidden" name="tone" value="{tone_raw}">
-    <input type="hidden" name="never" value="{never_raw}">
-    <input type="hidden" name="default_wait_seconds" :value="waitSeconds">
-    <div class="card replies-card">
-      <div class="eyebrow" style="padding:14px 20px 0">Canned replies <span class="muted">(optional)</span></div>
-      <p class="muted fs-13" style="padding:4px 20px 0">These fire before the AI. Glob patterns work &mdash; <span class="mono">*</span> matches anything.</p>
-      <div class="replies-head mt-12"><div>When message matches</div><div>Reply with</div><div></div></div>
-      {rows}{empty}
-      <div class="replies-add">
-        <button type="button" class="btn ghost sm" hx-post="{base_url}/admin/wizard/replies/add" hx-target="body" hx-swap="innerHTML">+ Add reply</button>
+    <div style="display:grid;gap:12px;grid-template-columns:1fr 1fr;margin-bottom:24px">
+      {preset_cards}
+    </div>
+
+    <div class="card p-22 mb-16">
+      <div class="eyebrow mb-8">Wait before replying</div>
+      <p class="muted fs-13 m-0 mb-12">If a customer sends a few messages in a row, hold off until they pause so the AI sees the whole burst at once. Default applies to every channel; override per account in Settings.</p>
+      <div class="row gap-12">
+        <input type="range" min="0" max="30" step="1" name="default_wait_seconds"
+               x-model.number="waitSeconds"
+               class="flex-1"
+               style="accent-color:var(--accent)">
+        <div class="mono ta-right" style="min-width:80px">
+          <span x-text="waitSeconds === 0 ? 'instant' : waitSeconds + 's'"></span>
+        </div>
       </div>
     </div>
+
     <div class="between mt-32">
       <button type="button" class="btn ghost" hx-post="{base_url}/admin/wizard/goto" hx-vals='{{"to":"notifications"}}' hx-target="body" hx-swap="innerHTML">&larr; Back</button>
-      <button type="submit" class="btn primary">Continue &rarr;</button>
+      <button type="submit" class="btn primary" :disabled="!preset">Continue &rarr;</button>
     </div>
   </form>
 </section>"#,
         base_url = base_url,
-        biz_type = html_escape(&persona.biz_type),
-        city = html_escape(&persona.city),
-        tone_raw = html_escape(&persona.tone),
-        never_raw = html_escape(&persona.never),
-        prompt = html_escape(&prompt),
-        tone_wc = sel_attr(&persona.tone, "warm & chatty"),
-        tone_cp = sel_attr(&persona.tone, "concise & professional"),
-        tone_pe = sel_attr(&persona.tone, "playful with emoji"),
-        tone_op = sel_attr(&persona.tone, "old-school polite"),
-        never_qp = sel_attr(&persona.never, "quote prices"),
-        never_pd = sel_attr(&persona.never, "promise dates"),
-        never_hr = sel_attr(&persona.never, "handle refunds"),
-        rows = rows,
-        empty = empty,
+        preset_cards = preset_cards,
     );
 
     let x_data = format!(
-        "{{ bizType: '{}', city: '{}', tone: '{}', never: '{}', waitSeconds: {} }}",
-        js_attr_escape(&persona.biz_type),
-        js_attr_escape(&persona.city),
-        js_attr_escape(&persona.tone),
-        js_attr_escape(&persona.never),
-        persona.default_wait_seconds,
+        "{{ preset: '{}', waitSeconds: {} }}",
+        js_attr_escape(current_slug),
+        default_wait_seconds,
     );
-    let progress_expr =
-        "((bizType ? 0.35 : 0) + (tone ? 0.35 : 0) + (city ? 0.15 : 0) + (never ? 0.15 : 0))";
+    let progress_expr = "(preset ? 1.0 : 0.0)";
 
     wizard_shell("replies", base_url, &x_data, progress_expr, &content)
 }
