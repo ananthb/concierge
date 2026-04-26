@@ -285,11 +285,28 @@ pub fn admin_dashboard_html(
     billing: &TenantBilling,
     email_addrs: &[EmailAddress],
     base_url: &str,
+    show_risk_gate_banner: bool,
 ) -> String {
     use super::base::app_shell;
 
     let has_email_domains = !email_addrs.is_empty();
     let suspended_banner = String::new();
+    let risk_gate_banner = if show_risk_gate_banner {
+        r##"<div id="risk-gate-banner" class="card p-16 mb-16" style="border-left:4px solid var(--accent)">
+  <div class="row gap-12" style="align-items:flex-start;justify-content:space-between">
+    <div>
+      <strong>AI replies now pause for review when needed.</strong>
+      <p class="muted fs-13 m-0 mt-4">If an AI draft mentions money or makes a commitment, we'll queue it for your approval before sending. You can change this per rule.</p>
+    </div>
+    <button class="btn ghost sm"
+      hx-post="/admin/risk-gate-banner/dismiss"
+      hx-target="#risk-gate-banner"
+      hx-swap="outerHTML">Got it</button>
+  </div>
+</div>"##
+    } else {
+        ""
+    };
 
     // Sidebar: connected channels
     let ig_icon = r#"<svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-label="Instagram"><rect x="3" y="3" width="18" height="18" rx="5" stroke="currentColor" stroke-width="1.6"/><circle cx="12" cy="12" r="4.2" stroke="currentColor" stroke-width="1.6"/></svg>"#;
@@ -352,6 +369,7 @@ pub fn admin_dashboard_html(
   </aside>
   <main class="dash-main">
     {suspended_banner}
+    {risk_gate_banner}
     <div class="card p-22">
       <div class="between mb-16">
         <div>
@@ -430,6 +448,7 @@ pub fn admin_dashboard_html(
         } else {
             "Add a domain to auto-forward, AI-reply, or relay emails to Discord. Takes under a minute."
         },
+        risk_gate_banner = risk_gate_banner,
     );
 
     let page = app_shell(&content, "Overview", base_url);

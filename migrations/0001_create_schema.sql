@@ -1,3 +1,8 @@
+-- Single canonical schema. Merged from the original 0001-0004 progression
+-- ahead of the approval-workflow deploy. The deploy workflow drops all
+-- tables (and the d1_migrations bookkeeping table) before reapplying this
+-- file, so we can write the final shape directly without ALTER chains.
+
 -- Tenants
 CREATE TABLE IF NOT EXISTS tenants (
     id TEXT PRIMARY KEY,
@@ -6,7 +11,8 @@ CREATE TABLE IF NOT EXISTS tenants (
     facebook_id TEXT,
     plan TEXT DEFAULT 'free',
     currency TEXT NOT NULL DEFAULT 'INR',
-    email_address_packs_purchased INTEGER NOT NULL DEFAULT 0,
+    locale TEXT NOT NULL DEFAULT 'en-IN',
+    email_address_extras_purchased INTEGER NOT NULL DEFAULT 0,
     created_at TEXT DEFAULT (datetime('now')),
     updated_at TEXT DEFAULT (datetime('now'))
 );
@@ -63,8 +69,6 @@ CREATE INDEX IF NOT EXISTS idx_instagram_messages_account
 CREATE INDEX IF NOT EXISTS idx_instagram_messages_tenant
     ON instagram_messages(tenant_id, created_at);
 
--- (Email logging now lives in the unified `messages` table.)
-
 -- Unified message log (all channels)
 CREATE TABLE IF NOT EXISTS messages (
     id TEXT PRIMARY KEY,
@@ -114,3 +118,32 @@ CREATE TABLE IF NOT EXISTS audit_log (
     details TEXT DEFAULT '{}',
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+-- Pending AI-draft approvals. One row per draft that's been queued instead
+-- of sent: either the rule's policy is `Always`, or `Auto` and the risk
+-- gate fired. The id matches the KV ConversationContext id, so the Discord
+-- button handler and the web routes can join through a single token.
+CREATE TABLE IF NOT EXISTS pending_approvals (
+    id                  TEXT PRIMARY KEY,
+    tenant_id           TEXT NOT NULL,
+    channel             TEXT NOT NULL,
+    channel_account_id  TEXT NOT NULL,
+    rule_id             TEXT NOT NULL,
+    rule_label          TEXT NOT NULL,
+    sender              TEXT NOT NULL,
+    sender_name         TEXT,
+    inbound_preview     TEXT NOT NULL,
+    draft               TEXT NOT NULL,
+    queue_reason        TEXT NOT NULL,
+    status              TEXT NOT NULL DEFAULT 'pending',
+    created_at          TEXT NOT NULL DEFAULT (datetime('now')),
+    decided_at          TEXT,
+    decided_by          TEXT,
+    edited              INTEGER NOT NULL DEFAULT 0,
+    last_digest_at      TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_pa_tenant_status
+    ON pending_approvals(tenant_id, status, created_at);
+CREATE INDEX IF NOT EXISTS idx_pa_status_created
+    ON pending_approvals(status, created_at);

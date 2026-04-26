@@ -22,10 +22,14 @@
 use worker::*;
 
 use crate::ai;
+use crate::approval;
 use crate::helpers::{generate_id, now_iso};
 use crate::storage::*;
 use crate::templates::rules::{rule_form_html, rule_form_title, rules_list_html};
-use crate::types::{default_match_threshold, ReplyConfig, ReplyMatcher, ReplyResponse, ReplyRule};
+use crate::types::{
+    default_match_threshold, ApprovalPolicy, NoGateAcceptance, ReplyConfig, ReplyMatcher,
+    ReplyResponse, ReplyRule,
+};
 
 const MAX_LABEL: usize = 80;
 const MAX_KEYWORDS: usize = 20;
@@ -188,15 +192,21 @@ pub async fn handle_rules(
         return Response::error("Channel not found", 404);
     };
 
+    let allow_no_gate = approval::allow_no_gate(&env);
+
     let rest_slice: Vec<&str> = rest.iter().copied().collect();
     match (method, rest_slice.as_slice()) {
         // List page
         (Method::Get, []) => Response::from_html(rules_list_html(&cfg, &channel, base_url)),
 
         // New-rule form
-        (Method::Get, ["new"]) => {
-            Response::from_html(rule_form_html(&channel, None, base_url, "Add a rule"))
-        }
+        (Method::Get, ["new"]) => Response::from_html(rule_form_html(
+            &channel,
+            None,
+            base_url,
+            "Add a rule",
+            allow_no_gate,
+        )),
 
         // Create rule
         (Method::Post, []) => {
@@ -206,7 +216,7 @@ pub async fn handle_rules(
                 ));
             }
             let form: serde_json::Value = req.json().await?;
-            let rule = match build_rule_from_form(&env, &generate_id(), &form).await {
+            let rule = match build_rule_from_form(&env, &generate_id(), &form, tenant_id).await {
                 Ok(r) => r,
                 Err(msg) => {
                     return Response::from_html(format!(r#"<div class="error">{msg}</div>"#));
@@ -223,6 +233,7 @@ pub async fn handle_rules(
             Some(&cfg.default_rule),
             base_url,
             "Edit default reply",
+            allow_no_gate,
         )),
 
         // Update default rule
@@ -267,6 +278,7 @@ pub async fn handle_rules(
                 Some(&existing),
                 base_url,
                 rule_form_title(&existing),
+                allow_no_gate,
             ))
         }
 
@@ -276,13 +288,28 @@ pub async fn handle_rules(
             let Some(idx) = cfg.rules.iter().position(|r| r.id == id) else {
                 return Response::error("Rule not found", 404);
             };
+            let prior = cfg.rules[idx].clone();
             let form: serde_json::Value = req.json().await?;
-            let updated = match build_rule_from_form(&env, &id, &form).await {
+            let mut updated = match build_rule_from_form(&env, &id, &form, tenant_id).await {
                 Ok(r) => r,
                 Err(msg) => {
                     return Response::from_html(format!(r#"<div class="error">{msg}</div>"#));
                 }
             };
+            // If the rule was already NoGate and the user kept it on NoGate
+            // without re-clicking the modal, carry the prior acceptance
+            // forward instead of forcing a reaccept on every save.
+            if let (
+                ApprovalPolicy::NoGate {
+                    acceptance: prior_acc,
+                },
+                ApprovalPolicy::NoGate { acceptance },
+            ) = (&prior.approval, &mut updated.approval)
+            {
+                if acceptance.accepted_at.is_empty() {
+                    *acceptance = prior_acc.clone();
+                }
+            }
             cfg.rules[idx] = updated;
             channel.save(&kv, tenant_id, cfg).await?;
             redirect_to(base_url, &channel)
@@ -338,6 +365,7 @@ async fn build_rule_from_form(
     env: &Env,
     id: &str,
     form: &serde_json::Value,
+    tenant_id: &str,
 ) -> std::result::Result<ReplyRule, String> {
     let label = form
         .get("label")
@@ -434,10 +462,72 @@ async fn build_rule_from_form(
         },
     };
 
+    let approval = parse_approval_policy(env, form, tenant_id, &response).await?;
+
     Ok(ReplyRule {
         id: id.to_string(),
         label,
         matcher,
         response,
+        approval,
     })
+}
+
+async fn parse_approval_policy(
+    env: &Env,
+    form: &serde_json::Value,
+    tenant_id: &str,
+    response: &ReplyResponse,
+) -> std::result::Result<ApprovalPolicy, String> {
+    // Approval policy only applies to AI rules. For canned text, force Auto
+    // (the default) regardless of what the form sent.
+    if !matches!(response, ReplyResponse::Prompt { .. }) {
+        return Ok(ApprovalPolicy::default());
+    }
+
+    let kind = form
+        .get("approval_kind")
+        .and_then(|v| v.as_str())
+        .unwrap_or("auto");
+
+    match kind {
+        "always" => Ok(ApprovalPolicy::Always),
+        "no_gate" => {
+            if !approval::allow_no_gate(env) {
+                return Err(
+                    "This deployment doesn't allow turning off the safety check.".to_string(),
+                );
+            }
+            let confirmed = form
+                .get("no_gate_acceptance")
+                .map(|v| v.as_str() == Some("true") || v.as_bool() == Some(true))
+                .unwrap_or(false);
+            if !confirmed {
+                return Err(
+                    "You must accept the safety-check waiver before saving this option."
+                        .to_string(),
+                );
+            }
+            // Look up tenant email for the audit field. If lookup fails we
+            // fall back to tenant_id so the row still records who acted.
+            let accepted_by = if let Ok(db) = env.d1("DB") {
+                crate::storage::get_tenant(&db, tenant_id)
+                    .await
+                    .ok()
+                    .flatten()
+                    .map(|t| t.email)
+                    .unwrap_or_else(|| tenant_id.to_string())
+            } else {
+                tenant_id.to_string()
+            };
+            Ok(ApprovalPolicy::NoGate {
+                acceptance: NoGateAcceptance {
+                    accepted_at: now_iso(),
+                    accepted_by,
+                    version: "v1".to_string(),
+                },
+            })
+        }
+        _ => Ok(ApprovalPolicy::Auto),
+    }
 }

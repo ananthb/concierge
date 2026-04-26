@@ -164,13 +164,6 @@ pub async fn handle_wizard(
             let form: serde_json::Value = req.json().await?;
             let is_true =
                 |key: &str| -> bool { form.get(key).and_then(|v| v.as_str()) == Some("true") };
-            let parse_freq = |key: &str, min: u32, max: u32, default: u32| -> u32 {
-                form.get(key)
-                    .and_then(|v| v.as_str())
-                    .and_then(|s| s.parse::<u32>().ok())
-                    .map(|v| v.clamp(min, max))
-                    .unwrap_or(default)
-            };
 
             let approval_discord = is_true("approval_discord");
             let approval_email = is_true("approval_email");
@@ -179,13 +172,14 @@ pub async fn handle_wizard(
                     r#"<div class="error">Pick at least one approval channel: Discord or Email: so the AI knows where to ask before sending.</div>"#.to_string(),
                 );
             }
+            let cadence_raw = form
+                .get("approval_cadence")
+                .and_then(|v| v.as_str())
+                .unwrap_or("hourly");
             state.notifications = NotificationConfig {
                 approval_discord,
                 approval_email,
-                approval_email_frequency_minutes: parse_freq("approval_freq", 5, 60, 15),
-                digest_discord: is_true("digest_discord"),
-                digest_email: is_true("digest_email"),
-                digest_email_frequency_minutes: parse_freq("digest_freq", 1440, 129600, 1440),
+                approval_email_cadence: crate::types::DigestCadence::from_str(cadence_raw),
             };
             state.step = "replies".to_string();
             save_onboarding(&kv, tenant_id, &state).await?;

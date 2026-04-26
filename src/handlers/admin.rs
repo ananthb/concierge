@@ -163,6 +163,21 @@ pub async fn handle_admin(req: Request, env: Env, path: &str, method: Method) ->
         return super::admin_rules::handle_rules(req, env, path, &base_url, &tenant_id).await;
     }
 
+    if path == "/admin/approvals" || path.starts_with("/admin/approvals/") {
+        return super::admin_approvals::handle_approvals(req, env, path, &base_url, &tenant_id)
+            .await;
+    }
+
+    if path == "/admin/risk-gate-banner/dismiss" && method == Method::Post {
+        let mut state = crate::storage::get_onboarding(&kv, &tenant_id).await?;
+        if !state.risk_gate_banner_dismissed {
+            state.risk_gate_banner_dismissed = true;
+            crate::storage::save_onboarding(&kv, &tenant_id, &state).await?;
+        }
+        // HTMX swaps the banner element out by replacing it with empty.
+        return Response::ok("");
+    }
+
     if path == "/admin" || path == "/admin/" {
         let kv = env.kv("KV")?;
 
@@ -189,6 +204,7 @@ pub async fn handle_admin(req: Request, env: Env, path: &str, method: Method) ->
             &billing,
             &email_addrs,
             &base_url,
+            !onboarding.risk_gate_banner_dismissed,
         ))?;
         resp.headers_mut().set("Cache-Control", "no-store")?;
         return Ok(resp);

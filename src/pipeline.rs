@@ -4,6 +4,8 @@
 use worker::*;
 
 use crate::ai;
+use crate::approval;
+use crate::approvals;
 use crate::billing;
 use crate::channel;
 use crate::helpers::generate_id;
@@ -240,6 +242,40 @@ async fn handle_auto_reply(
             }
         }
         return Ok(());
+    }
+
+    // For AI drafts, run the approval gate. The risk gate is the always-on
+    // safety net for `Auto`; `Always` always queues; `NoGate` skips the
+    // gate, but only when the operator's env var is on.
+    if is_ai {
+        let allow_no_gate = approval::allow_no_gate(env);
+        let persona_ref = persona.as_ref().expect("AI rule must have loaded persona");
+        let decision = approval::decide(matched, &reply, persona_ref, allow_no_gate);
+        if let approval::ApprovalDecision::Queue { reason } = decision {
+            if let Err(e) = approvals::enqueue(env, msg, matched, &reply, reason).await {
+                // Enqueue failed: don't send (we'd bypass the human review
+                // the rule asked for) and don't restore credit (the AI ran).
+                // Log for visibility and bail.
+                console_log!("Approval enqueue failed: {:?}", e);
+                return Ok(());
+            }
+            if let Err(e) = save_message(
+                db,
+                &generate_id(),
+                &msg.channel,
+                "outbound",
+                &msg.recipient,
+                &msg.sender,
+                &msg.tenant_id,
+                &msg.channel_account_id,
+                Some("ai_queued"),
+            )
+            .await
+            {
+                console_log!("Failed to log queued message: {:?}", e);
+            }
+            return Ok(());
+        }
     }
 
     if let Err(e) = channel::send_reply(

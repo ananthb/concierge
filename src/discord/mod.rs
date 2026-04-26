@@ -16,6 +16,9 @@ use crate::helpers::generate_id;
 use crate::storage;
 use crate::types::*;
 
+/// Inbound preview line cap shown on a Discord draft embed.
+const PREVIEW_LEN: usize = 500;
+
 /// Construct a `DiscordBot` from worker secrets. Returns `None` if any of the
 /// three required secrets are missing or empty.
 fn bot_from_env(env: &Env) -> Option<DiscordBot> {
@@ -129,60 +132,48 @@ pub async fn post_forwarded_message(
     Ok(message.id)
 }
 
-/// Post an AI-generated draft reply with Approve/Reject buttons.
+/// Post an AI-generated draft reply with Approve/Reject buttons. Caller owns
+/// the `ConversationContext`: this function only creates the Discord message
+/// and returns its id so the caller can stamp it back into the context.
 pub async fn post_ai_draft(
     env: &Env,
-    msg: &InboundMessage,
-    discord_channel_id: &str,
-    draft: &str,
+    ctx: &ConversationContext,
+    inbound_subject: Option<&str>,
+    inbound_preview: &str,
+    queue_reason_label: Option<&str>,
     rule_name: Option<&str>,
-) -> Result<()> {
+) -> Result<String> {
     let bot = bot_from_env(env).ok_or_else(|| Error::from("Discord not configured"))?;
-    let kv = env.kv("KV")?;
 
-    let ctx = ConversationContext {
-        id: generate_id(),
-        discord_message_id: String::new(),
-        discord_channel_id: discord_channel_id.to_string(),
-        origin_channel: msg.channel.clone(),
-        origin_sender: msg.sender.clone(),
-        origin_recipient: msg.recipient.clone(),
-        tenant_id: msg.tenant_id.clone(),
-        channel_account_id: msg.channel_account_id.clone(),
-        reply_metadata: msg.raw_metadata.clone(),
-        ai_draft: Some(draft.to_string()),
-        created_at: crate::helpers::now_iso(),
+    let draft = ctx
+        .ai_draft
+        .as_deref()
+        .ok_or_else(|| Error::from("post_ai_draft called with no draft"))?;
+
+    let footer_text = match (rule_name, queue_reason_label) {
+        (Some(rule), Some(reason)) => Some(format!("Rule: {rule} · Reason: {reason}")),
+        (Some(rule), None) => Some(format!("Rule: {rule}")),
+        (None, Some(reason)) => Some(format!("Reason: {reason}")),
+        (None, None) => None,
     };
-
-    let original_preview = if msg.body.len() > 500 {
-        format!("{}...", &msg.body[..497])
-    } else {
-        msg.body.clone()
-    };
-
-    let footer = rule_name.map(|n| EmbedFooter {
-        text: format!("Rule: {n}"),
-    });
+    let footer = footer_text.map(|text| EmbedFooter { text });
 
     let params = CreateMessage {
         content: "**AI Draft Reply**: Approve or reject.".into(),
         embeds: vec![
             Embed {
-                title: Some(format!(
-                    "Re: {}",
-                    msg.subject.as_deref().unwrap_or("(message)")
-                )),
+                title: Some(format!("Re: {}", inbound_subject.unwrap_or("(message)"))),
                 description: Some(format!("**Draft:**\n{draft}")),
                 color: Some(0x5865F2),
                 fields: vec![
                     EmbedField {
                         name: "To".into(),
-                        value: msg.sender.clone(),
+                        value: ctx.origin_sender.clone(),
                         inline: true,
                     },
                     EmbedField {
                         name: "Channel".into(),
-                        value: msg.channel.as_str().into(),
+                        value: ctx.origin_channel.as_str().into(),
                         inline: true,
                     },
                 ],
@@ -190,7 +181,7 @@ pub async fn post_ai_draft(
             },
             Embed {
                 title: Some("Original message".into()),
-                description: Some(original_preview),
+                description: Some(inbound_preview.to_string()),
                 color: Some(0x99AAB5),
                 ..Default::default()
             },
@@ -202,13 +193,18 @@ pub async fn post_ai_draft(
         ..Default::default()
     };
 
-    let message = bot.create_message(discord_channel_id, params).await?;
-    let ctx = ConversationContext {
-        discord_message_id: message.id,
-        ..ctx
-    };
-    storage::save_conversation_context(&kv, &ctx).await?;
-    Ok(())
+    let message = bot.create_message(&ctx.discord_channel_id, params).await?;
+    Ok(message.id)
+}
+
+/// Build a clamped preview of an inbound message body for embedding into a
+/// Discord draft post.
+pub fn truncate_inbound_preview(body: &str) -> String {
+    if body.len() > PREVIEW_LEN {
+        format!("{}...", &body[..PREVIEW_LEN.saturating_sub(3)])
+    } else {
+        body.to_string()
+    }
 }
 
 /// Entry point for `POST /discord/interactions`. Verifies the request

@@ -9,7 +9,9 @@
 //! Adding a preset: add a variant to `PersonaPreset` in `types.rs` and a
 //! match arm in every method here. The compiler enforces completeness.
 
-use crate::types::{PersonaBuilder, PersonaPreset, ReplyMatcher, ReplyResponse, ReplyRule};
+use crate::types::{
+    ApprovalPolicy, PersonaBuilder, PersonaPreset, ReplyMatcher, ReplyResponse, ReplyRule,
+};
 
 impl PersonaPreset {
     pub const ALL: &'static [PersonaPreset] = &[
@@ -88,6 +90,7 @@ impl PersonaPreset {
                          and say a human will confirm the slot."
                             .to_string(),
                     },
+                    approval: ApprovalPolicy::Auto,
                 },
                 ReplyRule {
                     id: "pricing".to_string(),
@@ -103,6 +106,7 @@ impl PersonaPreset {
                          budget they have in mind so we can come back with a quote."
                             .to_string(),
                     },
+                    approval: ApprovalPolicy::Auto,
                 },
             ],
             PersonaPreset::ProfessionalSalon => vec![
@@ -122,6 +126,7 @@ impl PersonaPreset {
                          will confirm shortly."
                             .to_string(),
                     },
+                    approval: ApprovalPolicy::Auto,
                 },
                 ReplyRule {
                     id: "cancellation".to_string(),
@@ -135,6 +140,7 @@ impl PersonaPreset {
                          and we'll take care of it."
                             .to_string(),
                     },
+                    approval: ApprovalPolicy::Auto,
                 },
             ],
             PersonaPreset::PlayfulCafe => vec![
@@ -152,6 +158,7 @@ impl PersonaPreset {
                     response: ReplyResponse::Canned {
                         text: "We're open 7am-7pm every day. Come say hi! ☕".to_string(),
                     },
+                    approval: ApprovalPolicy::Auto,
                 },
                 ReplyRule {
                     id: "menu".to_string(),
@@ -168,6 +175,7 @@ impl PersonaPreset {
                          in. If they ask about specifics we don't know, offer to ping the owner."
                             .to_string(),
                     },
+                    approval: ApprovalPolicy::Auto,
                 },
             ],
             PersonaPreset::OldSchoolClinic => vec![
@@ -188,6 +196,7 @@ impl PersonaPreset {
                          unable to provide emergency care via message."
                             .to_string(),
                     },
+                    approval: ApprovalPolicy::Auto,
                 },
                 ReplyRule {
                     id: "appointment".to_string(),
@@ -204,6 +213,7 @@ impl PersonaPreset {
                          hours."
                             .to_string(),
                     },
+                    approval: ApprovalPolicy::Auto,
                 },
             ],
         }

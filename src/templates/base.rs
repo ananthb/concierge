@@ -614,6 +614,7 @@ pub fn maintenance_html() -> String {
 pub fn app_shell(content: &str, active_nav: &str, base_url: &str) -> String {
     let nav_items = [
         ("Overview", "/admin"),
+        ("Approvals", "/admin/approvals"),
         ("Channels", "/admin/whatsapp"),
         ("Email Routing", "/admin/email"),
         ("Billing", "/admin/billing"),

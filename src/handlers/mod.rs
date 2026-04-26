@@ -1,6 +1,7 @@
 //! Handler modules for the concierge worker
 
 mod admin;
+mod admin_approvals;
 mod admin_billing;
 mod admin_email;
 mod admin_instagram;

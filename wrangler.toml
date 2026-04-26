@@ -79,10 +79,15 @@ WHATSAPP_SIGNUP_CONFIG_ID = ""  # Meta Embedded Signup config ID
 EMAIL_BASE_DOMAIN = "cncg.email" # Single platform email domain. MX records on the apex.
 
 # ============================================================================
-# Cron triggers: daily at 6AM UTC for Instagram token refresh
+# Cron triggers:
+#   "*/15 * * * *" — approval-digest sweep: scan pending_approvals, send
+#                    digest emails to tenants whose cadence is due, expire
+#                    stale rows past 24h.
+#   "0 6 * * *"    — daily Instagram token refresh.
+# scheduled.rs dispatches on event.cron().
 # ============================================================================
 [triggers]
-crons = ["0 6 * * *"]
+crons = ["*/15 * * * *", "0 6 * * *"]
 
 [observability.logs]
 enabled = true

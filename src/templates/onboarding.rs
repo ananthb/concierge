@@ -497,28 +497,30 @@ pub fn notifications_html(
     discord_installed: bool,
     base_url: &str,
 ) -> String {
-    let freq_options = |current: u32, opts: &[(u32, &str)]| -> String {
-        opts.iter()
-            .map(|(val, label)| {
-                let sel = if current == *val { " selected" } else { "" };
-                format!(r#"<option value="{val}"{sel}>{label}</option>"#)
-            })
-            .collect()
-    };
-
-    let approval_freq_html = freq_options(
-        config.approval_email_frequency_minutes,
-        &[(5, "5 min"), (15, "15 min"), (30, "30 min"), (60, "1 hour")],
-    );
-    let digest_freq_html = freq_options(
-        config.digest_email_frequency_minutes,
-        &[
-            (1440, "Daily"),
-            (10080, "Weekly"),
-            (43200, "Monthly"),
-            (129600, "Quarterly"),
-        ],
-    );
+    use crate::types::DigestCadence;
+    let cadences = [
+        DigestCadence::Instant,
+        DigestCadence::Every15Min,
+        DigestCadence::Hourly,
+        DigestCadence::Every4Hours,
+        DigestCadence::Daily,
+    ];
+    let approval_freq_html: String = cadences
+        .iter()
+        .map(|c| {
+            let sel = if *c == config.approval_email_cadence {
+                " selected"
+            } else {
+                ""
+            };
+            format!(
+                r#"<option value="{val}"{sel}>{label}</option>"#,
+                val = c.as_str(),
+                sel = sel,
+                label = c.label(),
+            )
+        })
+        .collect();
 
     let b = |v: bool| if v { "true" } else { "false" };
 
@@ -551,45 +553,16 @@ pub fn notifications_html(
             <div class="mono muted fs-11">batched digest</div></div>
           </div>
           <div class="freq-row row gap-8 mt-12" x-show="approval.email" x-cloak>
-            <span class="mono muted fs-12">Every</span>
-            <select class="select fs-13" name="approval_freq" style="width:auto;padding:6px 10px">{approval_freq_html}</select>
+            <span class="mono muted fs-12">Send digest</span>
+            <select class="select fs-13" name="approval_cadence" style="width:auto;padding:6px 10px">{approval_freq_html}</select>
           </div>
         </label>
       </div>
-      <div class="card-soft p-14 mt-12" x-show="(approval.discord || digest.discord) && !{dc_installed_js}" x-cloak>
+      <div class="card-soft p-14 mt-12" x-show="approval.discord && !{dc_installed_js}" x-cloak>
         <div class="row gap-12">
-          <div class="fs-13 flex-1">Discord isn't installed yet. You need the bot in a server before approvals or digests land there.</div>
+          <div class="fs-13 flex-1">Discord isn't installed yet. You need the bot in a server before approvals can land there.</div>
           <a href="{base_url}/admin/discord/install?from=wizard_heads_up" class="btn sm primary">Install Discord</a>
         </div>
-      </div>
-    </div>
-
-    <div class="card p-22">
-      <div class="eyebrow mb-12">Activity digest <span class="muted">(optional)</span></div>
-      <p class="muted mb-14 fs-14">A periodic summary of messages handled, credits used, and anything that needs attention.</p>
-      <div class="admin-grid">
-        <label class="admin-card" :class="digest.discord ? 'selected' : ''" style="min-height:auto;cursor:pointer">
-          <input type="hidden" name="digest_discord" value="false">
-          <input type="checkbox" name="digest_discord" value="true" class="hidden" x-model="digest.discord">
-          <div class="row gap-12">
-            <div class="admin-mark icon-chip">{discord_icon}</div>
-            <div><div class="fw-600">Discord</div>
-            <div class="mono muted fs-11">channel post</div></div>
-          </div>
-        </label>
-        <label class="admin-card" :class="digest.email ? 'selected' : ''" style="min-height:auto;cursor:pointer">
-          <input type="hidden" name="digest_email" value="false">
-          <input type="checkbox" name="digest_email" value="true" class="hidden" x-model="digest.email">
-          <div class="row gap-12">
-            <div class="admin-mark icon-chip">{mail_icon}</div>
-            <div><div class="fw-600">Email</div>
-            <div class="mono muted fs-11">periodic summary</div></div>
-          </div>
-          <div class="freq-row row gap-8 mt-12" x-show="digest.email" x-cloak>
-            <span class="mono muted fs-12">Every</span>
-            <select class="select fs-13" name="digest_freq" style="width:auto;padding:6px 10px">{digest_freq_html}</select>
-          </div>
-        </label>
       </div>
     </div>
 
@@ -604,20 +577,15 @@ pub fn notifications_html(
         discord_icon = channel_icon("discord"),
         mail_icon = channel_icon("mail"),
         approval_freq_html = approval_freq_html,
-        digest_freq_html = digest_freq_html,
         dc_installed_js = if discord_installed { "true" } else { "false" },
     );
 
     let x_data = format!(
-        "{{ approval: {{ discord: {ad}, email: {ae} }}, digest: {{ discord: {dd}, email: {de} }} }}",
+        "{{ approval: {{ discord: {ad}, email: {ae} }} }}",
         ad = b(config.approval_discord),
         ae = b(config.approval_email),
-        dd = b(config.digest_discord),
-        de = b(config.digest_email),
     );
-    // Required approval gives 60%; optional digest adds up to 40%.
-    let progress_expr =
-        "((approval.discord || approval.email) ? 0.6 : 0) + ((digest.discord || digest.email) ? 0.4 : 0)";
+    let progress_expr = "((approval.discord || approval.email) ? 1.0 : 0)";
 
     wizard_shell("notifications", base_url, &x_data, progress_expr, &content)
 }

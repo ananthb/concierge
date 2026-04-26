@@ -80,9 +80,15 @@ jobs:
           WHATSAPP_WABA_ID = "${WHATSAPP_WABA_ID}"
           WHATSAPP_SIGNUP_CONFIG_ID = "${WHATSAPP_SIGNUP_CONFIG_ID}"
           EMAIL_BASE_DOMAIN = "cncg.email"
+          # Operator gate: when "true", the rule editor exposes the
+          # NoGate radio (skip the risk-gate safety check). Defaults to
+          # closed: tenants can't pick NoGate unless we opt in here.
+          ALLOW_NO_GATE = "false"
 
           [triggers]
-          crons = ["0 6 * * *"]
+          # */15 * * * * — approval-digest sweep + 24h expiry.
+          # 0 6 * * *    — daily Instagram token refresh.
+          crons = ["*/15 * * * *", "0 6 * * *"]
 
           [observability.logs]
           enabled = true

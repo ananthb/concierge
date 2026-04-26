@@ -121,6 +121,8 @@ pub struct ReplyRule {
     pub label: String,
     pub matcher: ReplyMatcher,
     pub response: ReplyResponse,
+    #[serde(default)]
+    pub approval: ApprovalPolicy,
 }
 
 impl ReplyRule {
@@ -134,8 +136,86 @@ impl ReplyRule {
             response: ReplyResponse::Prompt {
                 text: "Reply to the customer's message helpfully.".to_string(),
             },
+            approval: ApprovalPolicy::default(),
         }
     }
+}
+
+/// Per-rule policy for AI-generated drafts. Only consulted when the rule's
+/// `response` is `ReplyResponse::Prompt` (canned rules send verbatim, no draft).
+///
+/// `Auto` is the default and runs the cheap risk gate: drafts that look
+/// risky get queued for human approval, the rest send. `Always` queues every
+/// AI draft. `NoGate` skips the safety check entirely and is locked behind
+/// the operator's `ALLOW_NO_GATE` env var plus a per-rule TOS acceptance.
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq, Eq)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum ApprovalPolicy {
+    #[default]
+    Auto,
+    Always,
+    NoGate {
+        acceptance: NoGateAcceptance,
+    },
+}
+
+/// TOS acceptance recorded when a tenant flips a rule into `NoGate`. Lives
+/// inside the variant so changing the policy drops the acceptance.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct NoGateAcceptance {
+    pub accepted_at: String,
+    pub accepted_by: String,
+    /// Wording version. Bump when the disclaimer text materially changes,
+    /// so we know whether existing acceptances cover the new copy.
+    pub version: String,
+}
+
+/// Why an AI draft was diverted from the auto-send path to the approval
+/// queue. Logged on the pending_approvals row and surfaced in the admin UI.
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum QueueReason {
+    /// Rule policy is `Always`. No risk-gate signal, just the explicit choice.
+    RuleAlways,
+    /// Draft was very short or very long.
+    RiskLength,
+    /// Draft mentioned money, prices, or refunds.
+    RiskMoneyWord,
+    /// Draft made a commitment (guarantee/promise/by-day).
+    RiskCommitment,
+    /// Draft contained a topic in the persona's off-topics or never list.
+    RiskPersonaDrift,
+}
+
+/// One row of the pending_approvals D1 table, mirrored as a Rust struct.
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct PendingApproval {
+    pub id: String,
+    pub tenant_id: String,
+    pub channel: Channel,
+    pub channel_account_id: String,
+    pub rule_id: String,
+    pub rule_label: String,
+    pub sender: String,
+    pub sender_name: Option<String>,
+    pub inbound_preview: String,
+    pub draft: String,
+    pub queue_reason: QueueReason,
+    pub status: ApprovalStatus,
+    pub created_at: String,
+    pub decided_at: Option<String>,
+    pub decided_by: Option<String>,
+    pub edited: bool,
+    pub last_digest_at: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ApprovalStatus {
+    Pending,
+    Approved,
+    Rejected,
+    Expired,
 }
 
 /// How a rule decides whether it matches the inbound message.
@@ -506,40 +586,127 @@ pub struct BusinessInfo {
     pub pincode: String,
 }
 
-/// Notification delivery configuration.
-#[derive(Serialize, Deserialize, Clone, Debug)]
+/// Notification delivery configuration. Today this only covers approval
+/// notifications. The previous activity-summary digest scaffolding was
+/// dropped: it was wizard-collected but never read by any send path.
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct NotificationConfig {
     #[serde(default)]
     pub approval_discord: bool,
     #[serde(default)]
     pub approval_email: bool,
-    #[serde(default = "default_approval_freq")]
-    pub approval_email_frequency_minutes: u32,
     #[serde(default)]
-    pub digest_discord: bool,
-    #[serde(default)]
-    pub digest_email: bool,
-    #[serde(default = "default_digest_freq")]
-    pub digest_email_frequency_minutes: u32,
+    pub approval_email_cadence: DigestCadence,
 }
 
-fn default_approval_freq() -> u32 {
-    60
-}
-fn default_digest_freq() -> u32 {
-    1440
+/// How often a tenant wants the approval-queue digest email. The cron sweep
+/// runs every 15 minutes and skips tenants whose cadence isn't due yet.
+/// `Instant` means a single-item email per draft, no batching.
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum DigestCadence {
+    Instant,
+    Every15Min,
+    #[default]
+    Hourly,
+    Every4Hours,
+    Daily,
 }
 
-impl Default for NotificationConfig {
-    fn default() -> Self {
-        Self {
-            approval_discord: false,
-            approval_email: false,
-            approval_email_frequency_minutes: 60,
-            digest_discord: false,
-            digest_email: false,
-            digest_email_frequency_minutes: 1440,
+impl DigestCadence {
+    /// Wire form used by HTML form submissions. Stable: this string also
+    /// appears in serde JSON since the enum uses `rename_all = "snake_case"`.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            DigestCadence::Instant => "instant",
+            DigestCadence::Every15Min => "every15_min",
+            DigestCadence::Hourly => "hourly",
+            DigestCadence::Every4Hours => "every4_hours",
+            DigestCadence::Daily => "daily",
         }
+    }
+
+    pub fn from_str(s: &str) -> Self {
+        match s {
+            "instant" => DigestCadence::Instant,
+            "every15_min" | "every_15_min" => DigestCadence::Every15Min,
+            "every4_hours" | "every_4_hours" => DigestCadence::Every4Hours,
+            "daily" => DigestCadence::Daily,
+            _ => DigestCadence::Hourly,
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            DigestCadence::Instant => "Instant",
+            DigestCadence::Every15Min => "Every 15 min",
+            DigestCadence::Hourly => "Hourly",
+            DigestCadence::Every4Hours => "Every 4 hours",
+            DigestCadence::Daily => "Daily",
+        }
+    }
+
+    /// True if the cron tick at this hour:minute should consider this
+    /// tenant due. The 15-minute cron is the minimum granularity, so
+    /// `Every15Min` always fires; coarser cadences fire only when the tick
+    /// aligns with their boundary (e.g. `Hourly` at minute :00, `Daily` at
+    /// 06:00 UTC).
+    pub fn is_due_at(self, hour: u32, minute: u32) -> bool {
+        match self {
+            DigestCadence::Instant => true,
+            DigestCadence::Every15Min => true,
+            DigestCadence::Hourly => minute < 15,
+            DigestCadence::Every4Hours => minute < 15 && hour % 4 == 0,
+            DigestCadence::Daily => minute < 15 && hour == 6,
+        }
+    }
+}
+
+#[cfg(test)]
+mod cadence_tests {
+    use super::DigestCadence;
+
+    #[test]
+    fn instant_always_due() {
+        for h in 0..24 {
+            for m in [0_u32, 15, 30, 45] {
+                assert!(DigestCadence::Instant.is_due_at(h, m));
+            }
+        }
+    }
+
+    #[test]
+    fn every_15_min_always_due() {
+        for h in 0..24 {
+            for m in [0_u32, 15, 30, 45] {
+                assert!(DigestCadence::Every15Min.is_due_at(h, m));
+            }
+        }
+    }
+
+    #[test]
+    fn hourly_fires_only_in_first_quarter() {
+        assert!(DigestCadence::Hourly.is_due_at(10, 0));
+        assert!(DigestCadence::Hourly.is_due_at(10, 14));
+        assert!(!DigestCadence::Hourly.is_due_at(10, 15));
+        assert!(!DigestCadence::Hourly.is_due_at(10, 45));
+    }
+
+    #[test]
+    fn every4_fires_only_at_aligned_hours() {
+        assert!(DigestCadence::Every4Hours.is_due_at(0, 0));
+        assert!(DigestCadence::Every4Hours.is_due_at(4, 14));
+        assert!(DigestCadence::Every4Hours.is_due_at(8, 0));
+        assert!(!DigestCadence::Every4Hours.is_due_at(2, 0));
+        assert!(!DigestCadence::Every4Hours.is_due_at(4, 30));
+    }
+
+    #[test]
+    fn daily_fires_only_at_6_utc_first_quarter() {
+        assert!(DigestCadence::Daily.is_due_at(6, 0));
+        assert!(DigestCadence::Daily.is_due_at(6, 14));
+        assert!(!DigestCadence::Daily.is_due_at(6, 15));
+        assert!(!DigestCadence::Daily.is_due_at(7, 0));
     }
 }
 
@@ -558,6 +725,11 @@ pub struct OnboardingState {
     #[serde(default = "default_wait_seconds")]
     pub default_wait_seconds: u32,
     pub completed: bool,
+    /// Tenant has dismissed the one-time banner explaining that AI replies
+    /// now pause for review when a draft mentions money or makes a commitment.
+    /// Sticky across sessions.
+    #[serde(default)]
+    pub risk_gate_banner_dismissed: bool,
 }
 
 /// Tenant-wide AI persona used as the system prompt for every AI reply.

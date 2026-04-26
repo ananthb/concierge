@@ -25,6 +25,8 @@ use wasm_bindgen::prelude::*;
 use worker::*;
 
 mod ai;
+mod approval;
+mod approvals;
 mod billing;
 mod channel;
 mod crypto;

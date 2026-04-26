@@ -5,7 +5,9 @@
 
 use crate::handlers::admin_rules::ChannelRef;
 use crate::helpers::html_escape;
-use crate::types::{default_match_threshold, ReplyConfig, ReplyMatcher, ReplyResponse, ReplyRule};
+use crate::types::{
+    default_match_threshold, ApprovalPolicy, ReplyConfig, ReplyMatcher, ReplyResponse, ReplyRule,
+};
 
 use super::base::{app_shell, base_html};
 use super::HASH;
@@ -79,6 +81,17 @@ fn rule_row_html(rule: &ReplyRule, idx: usize, last_idx: usize, rules_base: &str
         ReplyResponse::Canned { .. } => r#"<span class="chip">canned</span>"#,
         ReplyResponse::Prompt { .. } => r#"<span class="chip ok">AI</span>"#,
     };
+    let approval_chip = match (&rule.response, &rule.approval) {
+        // Approval policy is irrelevant for canned text (no AI draft).
+        (ReplyResponse::Canned { .. }, _) => "",
+        (ReplyResponse::Prompt { .. }, ApprovalPolicy::Auto) => r#"<span class="chip">auto</span>"#,
+        (ReplyResponse::Prompt { .. }, ApprovalPolicy::Always) => {
+            r#"<span class="chip warn">always asks</span>"#
+        }
+        (ReplyResponse::Prompt { .. }, ApprovalPolicy::NoGate { .. }) => {
+            r#"<span class="chip warn">unsafe: no gate</span>"#
+        }
+    };
 
     let id = html_escape(&rule.id);
     let up_btn = if idx > 0 {
@@ -103,6 +116,7 @@ fn rule_row_html(rule: &ReplyRule, idx: usize, last_idx: usize, rules_base: &str
     <div class="row gap-8" style="align-items:center;flex-wrap:wrap">
       <strong>{label}</strong>
       {response_chip}
+      {approval_chip}
     </div>
     <div class="mt-4">{matcher_chip}</div>
   </div>
@@ -119,6 +133,7 @@ fn rule_row_html(rule: &ReplyRule, idx: usize, last_idx: usize, rules_base: &str
         label = label,
         matcher_chip = matcher_chip,
         response_chip = response_chip,
+        approval_chip = approval_chip,
         up_btn = up_btn,
         down_btn = down_btn,
         HASH = HASH,
@@ -162,6 +177,7 @@ pub fn rule_form_html(
     existing: Option<&ReplyRule>,
     base_url: &str,
     title: impl AsRef<str>,
+    allow_no_gate: bool,
 ) -> String {
     let rules_base = channel.rules_base(base_url);
     let title = html_escape(title.as_ref());
@@ -180,9 +196,19 @@ pub fn rule_form_html(
         response: ReplyResponse::Canned {
             text: String::new(),
         },
+        approval: crate::types::ApprovalPolicy::default(),
     });
 
     let label_val = html_escape(&initial.label);
+    let approval_kind = match &initial.approval {
+        ApprovalPolicy::Auto => "auto",
+        ApprovalPolicy::Always => "always",
+        ApprovalPolicy::NoGate { .. } => "no_gate",
+    };
+    // If a rule was previously saved as `NoGate`, the acceptance is already
+    // on file: the modal must NOT re-prompt unless the user changes the
+    // radio away and back.
+    let already_accepted = matches!(initial.approval, ApprovalPolicy::NoGate { .. });
 
     let (matcher_kind, keywords_val, description_val, threshold_val) = match &initial.matcher {
         ReplyMatcher::Default => (
@@ -251,12 +277,15 @@ pub fn rule_form_html(
         )
     };
 
+    let approval_block = approval_block_html(approval_kind, allow_no_gate);
+    let no_gate_modal = no_gate_modal_html();
+
     let body = format!(
         r##"<div class="page-pad" x-data="{x_data}" hx-ext="json-enc">
   <p><a href="{rules_base}" class="btn ghost sm">&larr; All rules</a></p>
   <h1 class="display-sm m-0 mb-16">{title}</h1>
 
-  <form class="card p-22" {method_attr}="{action_url}" hx-target="body" hx-swap="innerHTML">
+  <form class="card p-22" {method_attr}="{action_url}" hx-target="body" hx-swap="innerHTML" x-ref="form">
     <div class="form-group">
       <label class="eyebrow lbl">Label</label>
       <input class="input" name="label" maxlength="80" value="{label_val}" placeholder="Pricing questions" required>
@@ -274,11 +303,19 @@ pub fn rule_form_html(
       <p class="muted fs-12 mt-4" x-show="responseKind === 'prompt'" x-cloak>This text is appended to your persona prompt and sent to the LLM.</p>
     </div>
 
+    {approval_block}
+
+    <input type="hidden" name="approval_kind" :value="approvalKind">
+    <input type="hidden" name="no_gate_acceptance" :value="noGateConfirmed ? 'true' : 'false'">
+
     <div class="row gap-8 mt-16" style="justify-content:flex-end">
       <a class="btn ghost" href="{rules_base}">Cancel</a>
-      <button class="btn primary" type="submit">Save</button>
+      <button class="btn primary" type="submit"
+        @click="if (responseKind === 'prompt' && approvalKind === 'no_gate' && !noGateConfirmed) {{ $event.preventDefault(); noGateModalOpen = true; }}">Save</button>
     </div>
   </form>
+
+  {no_gate_modal}
 </div>"##,
         rules_base = rules_base,
         title = title,
@@ -287,16 +324,92 @@ pub fn rule_form_html(
         label_val = label_val,
         matcher_block = matcher_block,
         response_text = html_escape(&response_text),
-        x_data = build_x_data(matcher_kind, response_kind, threshold_val),
+        approval_block = approval_block,
+        no_gate_modal = no_gate_modal,
+        x_data = build_x_data(
+            matcher_kind,
+            response_kind,
+            threshold_val,
+            approval_kind,
+            already_accepted,
+        ),
     );
 
     let page = app_shell(&body, "Rules", base_url);
     base_html("Edit rule - Concierge", &page)
 }
 
-fn build_x_data(matcher_kind: &str, response_kind: &str, threshold: f32) -> String {
+fn approval_block_html(approval_kind: &str, allow_no_gate: bool) -> String {
+    let no_gate_radio = if allow_no_gate {
+        r##"<label class="row gap-6" style="opacity:0.85">
+          <input type="radio" name="approval_kind_visible" value="no_gate" x-model="approvalKind"
+            @change="if (approvalKind === 'no_gate' && !noGateConfirmed) {{ noGateModalOpen = true }}">
+          <span><strong>Send every reply with no safety check</strong> <span class="chip warn">advanced</span><br><span class="muted fs-12">Skips the heuristic safety check entirely. Not recommended.</span></span>
+        </label>"##
+    } else {
+        ""
+    };
+
+    let _ = approval_kind;
     format!(
-        "{{ matcherKind: '{}', responseKind: '{}', threshold: {} }}",
-        matcher_kind, response_kind, threshold
+        r##"<div class="form-group" x-show="responseKind === 'prompt'" x-cloak>
+  <label class="eyebrow lbl">Approval</label>
+  <div class="col gap-8 mb-4">
+    <label class="row gap-6">
+      <input type="radio" name="approval_kind_visible" value="auto" x-model="approvalKind">
+      <span><strong>Send right away</strong><br><span class="muted fs-12">Recommended. We'll pause and ask you only if a draft mentions money, makes a commitment, or looks unusual.</span></span>
+    </label>
+    <label class="row gap-6">
+      <input type="radio" name="approval_kind_visible" value="always" x-model="approvalKind">
+      <span><strong>Ask me first for every reply</strong><br><span class="muted fs-12">Every AI reply waits for your approval before it sends.</span></span>
+    </label>
+    {no_gate_radio}
+  </div>
+</div>"##
+    )
+}
+
+fn no_gate_modal_html() -> &'static str {
+    r##"<div x-show="noGateModalOpen" x-cloak
+  style="position:fixed;inset:0;background:rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;z-index:1000">
+  <div class="card p-22" style="max-width:560px;width:90%">
+    <h2 class="display-xs mb-8">Turn off the safety check for this rule</h2>
+    <p class="muted fs-13 mb-12">The risk gate normally pauses an AI reply for your review when it:</p>
+    <ul class="muted fs-13 mb-12" style="margin-left:18px">
+      <li>Mentions money, prices, refunds, or discounts</li>
+      <li>Makes a commitment ("guarantee", "by Friday", "confirmed")</li>
+      <li>Looks unusual in length</li>
+      <li>Drifts onto persona off-topics</li>
+    </ul>
+    <p class="fs-13 mb-12"><strong>By turning this off you accept</strong> that AI-generated replies under this rule will be sent without our heuristic safety check. This is in addition to the disclaimers in our terms of service. Calculon Tech disclaims all liability for any reply sent under this rule, including without limitation factual errors, regulatory or platform-policy violations, defamatory content, missed appointments, mispriced quotes, and any commercial loss.</p>
+    <label class="row gap-6 mb-8"><input type="checkbox" x-model="noGateAck1"> I understand the safety check is off for this rule.</label>
+    <label class="row gap-6 mb-12"><input type="checkbox" x-model="noGateAck2"> I accept the terms above.</label>
+    <div class="row gap-8" style="justify-content:flex-end">
+      <button type="button" class="btn ghost"
+        @click="noGateModalOpen = false; noGateAck1 = false; noGateAck2 = false; approvalKind = 'auto'">Cancel</button>
+      <button type="button" class="btn primary"
+        :disabled="!(noGateAck1 && noGateAck2)"
+        @click="if (noGateAck1 && noGateAck2) { noGateConfirmed = true; noGateModalOpen = false; $refs.form.requestSubmit(); }">Turn off safety check and save</button>
+    </div>
+  </div>
+</div>"##
+}
+
+fn build_x_data(
+    matcher_kind: &str,
+    response_kind: &str,
+    threshold: f32,
+    approval_kind: &str,
+    already_accepted: bool,
+) -> String {
+    format!(
+        "{{ matcherKind: '{}', responseKind: '{}', threshold: {}, approvalKind: '{}', noGateConfirmed: {}, noGateModalOpen: false, noGateAck1: {}, noGateAck2: {} }}",
+        matcher_kind,
+        response_kind,
+        threshold,
+        approval_kind,
+        already_accepted,
+        already_accepted,
+        already_accepted,
     )
 }

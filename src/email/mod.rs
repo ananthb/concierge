@@ -1,3 +1,4 @@
+pub mod digest;
 pub mod forward;
 pub mod handler;
 pub mod mime;

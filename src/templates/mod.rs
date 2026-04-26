@@ -2,6 +2,7 @@
 
 mod admin;
 pub mod admin_email;
+pub mod approvals;
 pub mod base;
 pub mod billing;
 pub mod credit_slider;

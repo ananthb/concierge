@@ -1,18 +1,29 @@
 use worker::*;
 
 use crate::crypto;
+use crate::email::digest;
 use crate::instagram;
 use crate::storage::*;
 
-pub async fn handle_scheduled(_event: ScheduledEvent, env: Env, _ctx: ScheduleContext) {
-    console_log!("Scheduled job started");
+pub async fn handle_scheduled(event: ScheduledEvent, env: Env, _ctx: ScheduleContext) {
+    let cron = event.cron();
+    console_log!("Scheduled job started: {cron}");
 
-    // Refresh Instagram tokens
-    if let Err(e) = refresh_instagram_tokens(&env).await {
-        console_log!("Instagram token refresh error: {:?}", e);
+    match cron.as_str() {
+        "*/15 * * * *" => {
+            if let Err(e) = digest::sweep(&env).await {
+                console_log!("Digest sweep error: {:?}", e);
+            }
+        }
+        "0 6 * * *" => {
+            if let Err(e) = refresh_instagram_tokens(&env).await {
+                console_log!("Instagram token refresh error: {:?}", e);
+            }
+        }
+        other => console_log!("Unknown cron schedule: {other}"),
     }
 
-    console_log!("Scheduled job completed");
+    console_log!("Scheduled job completed: {cron}");
 }
 
 async fn refresh_instagram_tokens(env: &Env) -> Result<()> {
