@@ -18,12 +18,14 @@
 
     <link rel="icon" type="image/svg+xml" href="https://concierge.calculon.tech/logo.svg">
 
-    <!-- We load only highlight.css from the mdBook defaults (for code-block
-         syntax tints) and skip variables/general/chrome — those would
-         redefine :root tokens, html/body, .sidebar, .content, etc., and
-         shadow our design system. docs.css below carries the full design. -->
-    <link rel="stylesheet" id="mdbook-highlight-css" href="{{ resource "highlight.css" }}">
+    <!-- mdBook defaults — we keep them so search, code-block highlighting, and
+         the sidebar's JS plumbing all work out of the box. Our own CSS rides
+         after them via additional-css and shadows whatever it needs to. -->
+    <link rel="stylesheet" href="{{ resource "css/variables.css" }}">
+    <link rel="stylesheet" href="{{ resource "css/general.css" }}">
+    <link rel="stylesheet" href="{{ resource "css/chrome.css" }}">
     <link rel="stylesheet" href="{{ resource "fonts/fonts.css" }}">
+    <link rel="stylesheet" id="mdbook-highlight-css" href="{{ resource "highlight.css" }}">
 
     {{#each additional_css}}
     <link rel="stylesheet" href="{{ resource this }}">
