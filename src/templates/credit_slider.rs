@@ -6,6 +6,8 @@
 //! `MAX_CREDITS`. Live price preview is computed in Alpine on the client.
 
 use crate::billing::{MAX_CREDITS, MIN_CREDITS, UNIT_PRICE_CENTS, UNIT_PRICE_PAISE};
+use crate::helpers::{format_count, format_money};
+use crate::locale::{Currency, Locale};
 
 /// Variant of the slider: controls the bottom action area.
 pub enum SliderMode<'a> {
@@ -19,15 +21,23 @@ pub enum SliderMode<'a> {
     },
 }
 
-pub fn slider_html(currency: &str, base_url: &str, mode: SliderMode<'_>) -> String {
-    let (sym, per_reply_label, price_js) = if currency == "USD" {
-        // Display dollars with two decimals.
-        ("$", "$0.02", "(credits * 2 / 100).toFixed(2)")
-    } else {
-        // Whole rupees only.
-        ("₹", "₹2", "(credits * 2).toLocaleString()")
+pub fn slider_html(locale: &Locale, base_url: &str, mode: SliderMode<'_>) -> String {
+    // Per-reply price label and the JS expression for live total. INR uses
+    // `toLocaleString('en-IN')` for lakh/crore grouping; USD does standard
+    // dollars-and-cents.
+    let (per_reply_label, price_js) = match locale.currency {
+        Currency::Usd => (
+            format_money(UNIT_PRICE_CENTS, locale),
+            "(credits * 2 / 100).toFixed(2)".to_string(),
+        ),
+        Currency::Inr => (
+            format_money(UNIT_PRICE_PAISE, locale),
+            "(credits * 2).toLocaleString('en-IN')".to_string(),
+        ),
     };
-    // Initial slider step value seeded server-side to match minimum.
+    let symbol = locale.currency.symbol();
+    let count_locale = locale.langid.to_string(); // "en-IN" / "en-US"
+                                                  // Initial slider step value seeded server-side to match minimum.
     let initial = MIN_CREDITS.max(500); // start at a friendlier default
 
     let action_html = match mode {
@@ -35,11 +45,11 @@ pub fn slider_html(currency: &str, base_url: &str, mode: SliderMode<'_>) -> Stri
             r##"<form hx-post="{base_url}/admin/billing/checkout" hx-ext="json-enc" hx-target="body" hx-swap="innerHTML" class="mt-16">
   <input type="hidden" name="credits" :value="credits">
   <input type="hidden" name="return_to" value="{return_to}">
-  <button type="submit" class="btn primary lg w-full">Buy <span x-text="credits.toLocaleString()"></span> replies: {sym}<span x-text="{price_js}"></span></button>
+  <button type="submit" class="btn primary lg w-full">Buy <span x-text="credits.toLocaleString(countLocale)"></span> replies: {symbol}<span x-text="{price_js}"></span></button>
 </form>"##,
             base_url = base_url,
             return_to = return_to,
-            sym = sym,
+            symbol = symbol,
             price_js = price_js,
         ),
         SliderMode::Preview {
@@ -53,14 +63,14 @@ pub fn slider_html(currency: &str, base_url: &str, mode: SliderMode<'_>) -> Stri
     };
 
     format!(
-        r##"<div x-data="{{ credits: {initial}, custom: false }}" class="card p-22">
+        r##"<div x-data="{{ credits: {initial}, custom: false, countLocale: '{count_locale}' }}" class="card p-22">
   <div class="between mb-12">
     <div>
       <div class="eyebrow">AI reply credits</div>
       <p class="muted m-0 mt-4 fs-13">{per_reply_label} per AI reply. Static auto-replies are always free. 100 AI replies free every month. Purchased credits never expire.</p>
     </div>
     <div class="ta-right">
-      <div class="serif" style="font-size:34px;line-height:1"><span x-text="credits.toLocaleString()"></span></div>
+      <div class="serif" style="font-size:34px;line-height:1"><span x-text="credits.toLocaleString(countLocale)"></span></div>
       <div class="mono muted fs-11">replies</div>
     </div>
   </div>
@@ -71,9 +81,9 @@ pub fn slider_html(currency: &str, base_url: &str, mode: SliderMode<'_>) -> Stri
            class="w-full"
            style="accent-color:var(--accent)">
     <div class="between mt-4 mono muted fs-11">
-      <span>{sym}{min_price}</span>
+      <span>{min_price}</span>
       <span><a href="#" class="muted" @click.prevent="custom = true; if (credits < {min}) credits = {min}">Need more?</a></span>
-      <span>{sym}{max_price}</span>
+      <span>{max_price}</span>
     </div>
   </div>
 
@@ -89,41 +99,30 @@ pub fn slider_html(currency: &str, base_url: &str, mode: SliderMode<'_>) -> Stri
   </div>
 
   <div class="ta-center mt-16 fs-14">
-    Total: <strong>{sym}<span x-text="{price_js}"></span></strong>
+    Total: <strong>{symbol}<span x-text="{price_js}"></span></strong>
   </div>
 
   {action_html}
 </div>"##,
         initial = initial,
-        sym = sym,
         per_reply_label = per_reply_label,
+        symbol = symbol,
         min = MIN_CREDITS,
         max = MAX_CREDITS,
-        max_display = format_with_commas(MAX_CREDITS),
-        min_price = format_price(MIN_CREDITS, currency),
-        max_price = format_price(10_000, currency),
+        max_display = format_count(MAX_CREDITS, locale),
+        min_price = price_for(MIN_CREDITS, locale),
+        max_price = price_for(10_000, locale),
         price_js = price_js,
+        count_locale = count_locale,
         action_html = action_html,
     )
 }
 
-fn format_with_commas(n: i64) -> String {
-    let s = n.to_string();
-    let mut out = String::new();
-    for (i, c) in s.chars().rev().enumerate() {
-        if i > 0 && i % 3 == 0 {
-            out.push(',');
-        }
-        out.push(c);
-    }
-    out.chars().rev().collect()
-}
-
-fn format_price(credits: i64, currency: &str) -> String {
-    if currency == "USD" {
-        let cents = credits * UNIT_PRICE_CENTS;
-        format!("{}.{:02}", cents / 100, cents % 100)
-    } else {
-        format_with_commas(credits * UNIT_PRICE_PAISE / 100)
-    }
+/// Total price for `credits` reply units in the given locale.
+fn price_for(credits: i64, locale: &Locale) -> String {
+    let amount_minor = match locale.currency {
+        Currency::Inr => credits * UNIT_PRICE_PAISE,
+        Currency::Usd => credits * UNIT_PRICE_CENTS,
+    };
+    format_money(amount_minor, locale)
 }

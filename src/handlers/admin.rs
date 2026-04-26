@@ -65,19 +65,42 @@ pub async fn handle_admin(req: Request, env: Env, path: &str, method: Method) ->
         let db = env.d1("DB")?;
         let mut req = req;
         let form: serde_json::Value = req.json().await?;
-        let currency = form
-            .get("currency")
+        // Currency and locale are independent: a tenant can read English-IN
+        // copy with USD prices, or vice versa. Both are accepted in the same
+        // PUT so the settings page can offer them as paired controls.
+        let currency = form.get("currency").and_then(|v| v.as_str()).map(|c| {
+            if c == "USD" {
+                "USD"
+            } else {
+                "INR"
+            }
+        });
+        let locale_str = form
+            .get("locale")
             .and_then(|v| v.as_str())
-            .unwrap_or("INR");
-        let currency = if currency == "USD" { "USD" } else { "INR" };
+            .filter(|s| matches!(*s, "en-IN" | "en-US"));
 
         if let Some(mut tenant) = get_tenant(&db, &tenant_id).await? {
-            tenant.currency = currency.to_string();
-            tenant.updated_at = crate::helpers::now_iso();
-            save_tenant(&db, &tenant).await?;
+            let mut changed = false;
+            if let Some(c) = currency {
+                if tenant.currency != c {
+                    tenant.currency = c.to_string();
+                    changed = true;
+                }
+            }
+            if let Some(l) = locale_str {
+                if tenant.locale != l {
+                    tenant.locale = l.to_string();
+                    changed = true;
+                }
+            }
+            if changed {
+                tenant.updated_at = crate::helpers::now_iso();
+                save_tenant(&db, &tenant).await?;
+            }
         }
 
-        return Response::from_html("<div class=\"success\">Currency updated.</div>".to_string());
+        return Response::from_html("<div class=\"success\">Settings updated.</div>".to_string());
     }
 
     if path == "/admin/delete-account" && method == Method::Delete {

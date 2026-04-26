@@ -12,6 +12,11 @@ pub struct Tenant {
     #[serde(default)]
     pub facebook_id: Option<String>,
     pub plan: String,
+    /// BCP-47 locale tag, e.g. "en-IN", "en-US". Drives UI grouping and
+    /// (in Phase 2) translated copy. Currency below is a separate override
+    /// that lets a tenant see prices in INR while reading English-IN copy.
+    #[serde(default = "default_locale")]
+    pub locale: String,
     #[serde(default = "default_currency")]
     pub currency: String,
     /// Each pack adds 5 to the tenant's email-address quota. Quota = 1 + 5 *
@@ -30,6 +35,10 @@ impl Tenant {
 
 fn default_currency() -> String {
     "INR".to_string()
+}
+
+fn default_locale() -> String {
+    "en-IN".to_string()
 }
 
 // ============================================================================

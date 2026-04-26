@@ -423,6 +423,78 @@ pub fn public_nav_html(active: &str) -> String {
     )
 }
 
+#[cfg(test)]
+mod footer_tests {
+    fn count(haystack: &str, needle: &str) -> usize {
+        haystack.matches(needle).count()
+    }
+
+    #[test]
+    fn welcome_has_one_footer() {
+        let l = crate::locale::Locale::default_inr();
+        let s = crate::templates::onboarding::welcome_html("", &l);
+        assert_eq!(count(&s, r#"<footer class="site-footer">"#), 1, "welcome");
+    }
+
+    /// Verify every FTL key used by the page resolves: `t()` falls back to
+    /// the key string on miss, so a passing assertion guarantees the FTL
+    /// bundle has every key the template references.
+    fn assert_keys_resolved(html: &str, keys: &[&str], page: &str) {
+        for key in keys {
+            assert!(
+                !html.contains(&format!(">{key}<"))
+                    && !html.contains(&format!("=\"{key}\""))
+                    && !html.contains(&format!(">{key} "))
+                    && !html.contains(&format!(" {key}<")),
+                "{page}: FTL key {key:?} appears unresolved in rendered HTML"
+            );
+        }
+    }
+
+    #[test]
+    fn welcome_resolves_all_keys() {
+        let l = crate::locale::Locale::default_inr();
+        let s = crate::templates::onboarding::welcome_html("", &l);
+        assert_keys_resolved(
+            &s,
+            &[
+                "welcome-eyebrow",
+                "welcome-headline",
+                "welcome-lead",
+                "welcome-cta-primary",
+                "welcome-cta-secondary",
+            ],
+            "welcome",
+        );
+    }
+
+    #[test]
+    fn features_has_one_footer() {
+        let s = crate::templates::features::features_html();
+        assert_eq!(count(&s, r#"<footer class="site-footer">"#), 1, "features");
+        // Also catch any stray <footer> tag with a different class.
+        assert_eq!(count(&s, "<footer"), 1, "features any-footer");
+    }
+
+    #[test]
+    fn pricing_has_one_footer() {
+        let s = crate::templates::onboarding::pricing_html("INR");
+        assert_eq!(count(&s, r#"<footer class="site-footer">"#), 1, "pricing");
+    }
+
+    #[test]
+    fn terms_has_one_footer() {
+        let s = crate::legal::terms_of_service_html();
+        assert_eq!(count(&s, r#"<footer class="site-footer">"#), 1, "terms");
+    }
+
+    #[test]
+    fn privacy_has_one_footer() {
+        let s = crate::legal::privacy_policy_html();
+        assert_eq!(count(&s, r#"<footer class="site-footer">"#), 1, "privacy");
+    }
+}
+
 /// Shared footer for all pages.
 pub fn footer() -> &'static str {
     r##"<footer class="site-footer">

@@ -130,17 +130,12 @@ pub async fn handle_auth(req: Request, env: Env, path: &str, method: Method) -> 
             let kv = env.kv("KV")?;
             let db = env.d1("DB")?;
 
-            // Find or create tenant
+            // Find or create tenant. New tenants pick locale from
+            // Accept-Language > cf-ipcountry > en-IN; currency follows.
             let tenant = match get_tenant_by_email(&db, &user.email).await? {
                 Some(t) => t,
                 None => {
-                    let country = req
-                        .headers()
-                        .get("cf-ipcountry")
-                        .ok()
-                        .flatten()
-                        .unwrap_or_default();
-                    let currency = if country == "IN" { "INR" } else { "USD" };
+                    let signup_locale = crate::locale::Locale::from_request(&req);
                     let now = now_iso();
                     let tenant = Tenant {
                         id: generate_id(),
@@ -148,7 +143,8 @@ pub async fn handle_auth(req: Request, env: Env, path: &str, method: Method) -> 
                         name: user.name,
                         facebook_id: None,
                         plan: "free".to_string(),
-                        currency: currency.to_string(),
+                        locale: signup_locale.langid.to_string(),
+                        currency: signup_locale.currency.as_str().to_string(),
                         email_address_packs_purchased: 0,
                         created_at: now.clone(),
                         updated_at: now,
@@ -256,13 +252,7 @@ pub async fn handle_auth(req: Request, env: Env, path: &str, method: Method) -> 
                     save_tenant(&db, &t).await?;
                     t
                 } else {
-                    let country = req
-                        .headers()
-                        .get("cf-ipcountry")
-                        .ok()
-                        .flatten()
-                        .unwrap_or_default();
-                    let currency = if country == "IN" { "INR" } else { "USD" };
+                    let signup_locale = crate::locale::Locale::from_request(&req);
                     let now = now_iso();
                     let tenant = Tenant {
                         id: generate_id(),
@@ -270,7 +260,8 @@ pub async fn handle_auth(req: Request, env: Env, path: &str, method: Method) -> 
                         name: fb_name,
                         facebook_id: Some(fb_id),
                         plan: "free".to_string(),
-                        currency: currency.to_string(),
+                        locale: signup_locale.langid.to_string(),
+                        currency: signup_locale.currency.as_str().to_string(),
                         email_address_packs_purchased: 0,
                         created_at: now.clone(),
                         updated_at: now,

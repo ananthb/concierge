@@ -112,19 +112,20 @@ fn wizard_shell(
     base_html(&format!("Concierge - Setup"), &inner)
 }
 
-pub fn welcome_html(_base_url: &str) -> String {
+pub fn welcome_html(_base_url: &str, locale: &crate::locale::Locale) -> String {
+    use crate::i18n::t;
     let header = super::base::public_nav_html("");
 
     let content = format!(
         r#"{header}
 <section class="page welcome">
   <div class="welcome-left">
-    <div class="eyebrow">// automated customer engagement</div>
-    <h1 class="display">Hello. I'll be answering <br>every <em>DM, WhatsApp &amp; email</em> <br>so you don't have to.</h1>
-    <p class="lead">Connect your channels, set a tone, and your concierge handles the rest. Auto-replies across WhatsApp, Instagram, Discord, and email. 100 AI replies free every month: static replies always free.</p>
+    <div class="eyebrow">{eyebrow}</div>
+    <h1 class="display">{headline}</h1>
+    <p class="lead">{lead}</p>
     <div class="row gap-12 wrap mt-16">
-      <a href="/auth/login" class="btn primary lg">Get started &rarr;</a>
-      <a href="/features" class="btn ghost lg">See features</a>
+      <a href="/auth/login" class="btn primary lg">{cta_primary}</a>
+      <a href="/features" class="btn ghost lg">{cta_secondary}</a>
     </div>
   </div>
   <aside class="postcard" aria-hidden="true">
@@ -142,6 +143,11 @@ pub fn welcome_html(_base_url: &str) -> String {
   </aside>
 </section>"#,
         header = header,
+        eyebrow = t(locale, "welcome-eyebrow"),
+        headline = t(locale, "welcome-headline"),
+        lead = t(locale, "welcome-lead"),
+        cta_primary = t(locale, "welcome-cta-primary"),
+        cta_secondary = t(locale, "welcome-cta-secondary"),
         hash = HASH,
     );
 
@@ -695,7 +701,7 @@ pub fn replies_html(persona: &PersonaConfig, default_wait_seconds: u32, base_url
 pub fn launch_html(
     email_addresses: &[crate::types::EmailAddress],
     base_domain: &str,
-    currency: &str,
+    locale: &crate::locale::Locale,
     base_url: &str,
 ) -> String {
     let email_rows: String = email_addresses
@@ -731,7 +737,7 @@ pub fn launch_html(
   <p class="muted ta-center mt-8 fs-12">Optional: 100 replies are free every month. Top up later from Billing if you need.</p>
 </div>"#,
         slider = crate::templates::credit_slider::slider_html(
-            currency,
+            locale,
             base_url,
             crate::templates::credit_slider::SliderMode::Buy {
                 return_to: "/admin/wizard/launch",
@@ -774,40 +780,46 @@ pub fn launch_html(
     // Progress on the launch step is always full: addresses are live the
     // moment they're added (no payment gate any more).
     let _ = email_addresses;
-    let _ = currency;
+    let _ = locale;
     let x_data = "{}".to_string();
     let progress_expr = "1";
 
     wizard_shell("launch", base_url, &x_data, progress_expr, &content)
 }
 
-/// Public pricing page at /pricing
+/// Public pricing page at /pricing. The `?c=usd` query param swaps the
+/// display currency without changing the visitor's UI language.
 pub fn pricing_html(default_currency: &str) -> String {
+    use crate::helpers::format_money;
+    use crate::locale::{Currency, Locale};
+
     // Public pricing page. Visitors aren't logged in, so the slider's
     // checkout button is replaced with a sign-in CTA. The ?c= query param
     // carries the chosen currency so the toggle is shareable.
-    let currency = if default_currency.eq_ignore_ascii_case("usd") {
-        "USD"
+    let locale = if default_currency.eq_ignore_ascii_case("usd") {
+        Locale::default_usd()
     } else {
-        "INR"
+        Locale::default_inr()
     };
     let slider = crate::templates::credit_slider::slider_html(
-        currency,
+        &locale,
         "",
         crate::templates::credit_slider::SliderMode::Preview {
             cta_href: "/auth/login",
             cta_label: "Sign in to buy",
         },
     );
-    let (per_reply, pack_price) = if currency == "USD" {
-        ("$0.02", "$0.50")
-    } else {
-        ("₹2", "₹49")
+    let per_reply = match locale.currency {
+        Currency::Usd => format_money(crate::billing::UNIT_PRICE_CENTS, &locale),
+        Currency::Inr => format_money(crate::billing::UNIT_PRICE_PAISE, &locale),
     };
-    let (inr_cls, usd_cls) = if currency == "USD" {
-        ("btn ghost sm", "btn sm")
-    } else {
-        ("btn sm", "btn ghost sm")
+    let pack_price = format_money(
+        crate::billing::address_pack_price(locale.currency.as_str()),
+        &locale,
+    );
+    let (inr_cls, usd_cls) = match locale.currency {
+        Currency::Usd => ("btn ghost sm", "btn sm"),
+        Currency::Inr => ("btn sm", "btn ghost sm"),
     };
 
     let nav = super::base::public_nav_html("pricing");

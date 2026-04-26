@@ -34,16 +34,12 @@ pub async fn handle_billing_admin(
             let tenant = storage::get_tenant(&db, tenant_id)
                 .await?
                 .unwrap_or_default();
-            let currency = if tenant.currency == "USD" {
-                "USD"
-            } else {
-                "INR"
-            };
+            let locale = crate::locale::Locale::from_tenant(&tenant.locale, Some(&tenant.currency));
             let kv = env.kv("KV")?;
             let addrs = storage::get_email_addresses(&kv, tenant_id).await?;
             Response::from_html(tmpl::billing_overview_with_addresses_html(
                 &bill,
-                currency,
+                &locale,
                 base_url,
                 addrs.len() as u32,
                 tenant.email_address_quota(),
@@ -79,11 +75,8 @@ pub async fn handle_billing_admin(
             let tenant = storage::get_tenant(&db, tenant_id)
                 .await?
                 .unwrap_or_default();
-            let currency = if tenant.currency == "USD" {
-                "USD"
-            } else {
-                "INR"
-            };
+            let locale = crate::locale::Locale::from_tenant(&tenant.locale, Some(&tenant.currency));
+            let currency = locale.currency.as_str();
             let amount = credits * billing::unit_price(currency);
 
             let key_id = env.secret("RAZORPAY_KEY_ID")?.to_string();
@@ -96,7 +89,7 @@ pub async fn handle_billing_admin(
             let order_id = order.get("id").and_then(|v| v.as_str()).unwrap_or("");
 
             Response::from_html(tmpl::checkout_html(
-                order_id, amount, currency, credits, &key_id, tenant_id, &return_to, base_url,
+                order_id, amount, &locale, credits, &key_id, tenant_id, &return_to, base_url,
             ))
         }
 
@@ -107,11 +100,8 @@ pub async fn handle_billing_admin(
             let tenant = storage::get_tenant(&db, tenant_id)
                 .await?
                 .unwrap_or_default();
-            let currency = if tenant.currency == "USD" {
-                "USD"
-            } else {
-                "INR"
-            };
+            let locale = crate::locale::Locale::from_tenant(&tenant.locale, Some(&tenant.currency));
+            let currency = locale.currency.as_str();
             let amount = billing::address_pack_price(currency);
 
             let key_id = env.secret("RAZORPAY_KEY_ID")?.to_string();
@@ -133,7 +123,7 @@ pub async fn handle_billing_admin(
             .await?;
             let order_id = order.get("id").and_then(|v| v.as_str()).unwrap_or("");
             Response::from_html(tmpl::address_pack_checkout_html(
-                order_id, amount, currency, &key_id, tenant_id, base_url,
+                order_id, amount, &locale, &key_id, tenant_id, base_url,
             ))
         }
 

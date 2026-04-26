@@ -189,6 +189,54 @@ pub fn truncate(s: &str, max: usize) -> String {
     s.chars().take(max).collect()
 }
 
+/// Format a count for display in the user's locale. Indian locales (en-IN,
+/// hi-IN, ...) get last-3-then-2s grouping (1,00,000); Western locales get
+/// thousands grouping (100,000). Backed by icu's `FixedDecimalFormatter`.
+pub fn format_count(n: i64, locale: &crate::locale::Locale) -> String {
+    use icu::decimal::{options::FixedDecimalFormatterOptions, FixedDecimalFormatter};
+    use icu::locid::Locale as IcuLocale;
+
+    // unic_langid -> icu_locid via string round-trip; both are BCP-47.
+    let icu_locale: IcuLocale = locale
+        .langid
+        .to_string()
+        .parse()
+        .unwrap_or_else(|_| icu::locid::locale!("en-IN"));
+    let formatter =
+        FixedDecimalFormatter::try_new(&icu_locale.into(), FixedDecimalFormatterOptions::default())
+            .expect("locale supported by compiled_data");
+    let value: fixed_decimal::FixedDecimal = n.into();
+    formatter.format(&value).to_string()
+}
+
+/// Format a money amount in the smallest currency unit (paise / cents) for
+/// display in the user's locale. Indian-locale outputs use ₹ + Indian
+/// grouping; US-locale outputs use $ + thousands grouping with two
+/// decimals. The currency comes from the locale; the amount is always in
+/// minor units.
+pub fn format_money(amount_minor: i64, locale: &crate::locale::Locale) -> String {
+    use crate::locale::Currency;
+    match locale.currency {
+        Currency::Inr => {
+            // Whole rupees only on display (we don't price in fractional
+            // rupees anywhere). Round half-up to keep parity with the
+            // historical `amount / 100` truncation behavior.
+            let rupees = amount_minor.div_euclid(100);
+            format!("{}{}", Currency::Inr.symbol(), format_count(rupees, locale))
+        }
+        Currency::Usd => {
+            let dollars = amount_minor / 100;
+            let cents = (amount_minor % 100).abs();
+            format!(
+                "{}{}.{:02}",
+                Currency::Usd.symbol(),
+                format_count(dollars, locale),
+                cents
+            )
+        }
+    }
+}
+
 /// Hex SHA-256 of a string. Used to detect drift in safety-checked content.
 pub fn sha256_hex(s: &str) -> String {
     use sha2::{Digest, Sha256};
@@ -224,6 +272,45 @@ mod tests {
         assert!(is_origin_allowed("https://EXAMPLE.COM", &allowed));
         assert!(is_origin_allowed("https://example.com/", &allowed));
         assert!(!is_origin_allowed("https://other.com", &allowed));
+    }
+
+    use crate::locale::Locale;
+
+    #[test]
+    fn test_format_count_indian() {
+        let l = Locale::default_inr();
+        assert_eq!(format_count(0, &l), "0");
+        assert_eq!(format_count(999, &l), "999");
+        assert_eq!(format_count(1_000, &l), "1,000");
+        assert_eq!(format_count(100_000, &l), "1,00,000");
+        assert_eq!(format_count(12_345_678, &l), "1,23,45,678");
+    }
+
+    #[test]
+    fn test_format_count_western() {
+        let l = Locale::default_usd();
+        assert_eq!(format_count(1_000, &l), "1,000");
+        assert_eq!(format_count(100_000, &l), "100,000");
+        assert_eq!(format_count(1_234_567, &l), "1,234,567");
+    }
+
+    #[test]
+    fn test_format_money_inr() {
+        let l = Locale::default_inr();
+        // amount in paise; ₹1,00,000.00 → 1 lakh rupees = 1_00_00_000 paise
+        assert_eq!(format_money(1_00_00_000, &l), "₹1,00,000");
+        assert_eq!(format_money(20_000_00, &l), "₹20,000");
+        assert_eq!(format_money(2_00, &l), "₹2");
+    }
+
+    #[test]
+    fn test_format_money_usd() {
+        let l = Locale::default_usd();
+        // amount in cents
+        assert_eq!(format_money(2, &l), "$0.02");
+        assert_eq!(format_money(50, &l), "$0.50");
+        assert_eq!(format_money(2_50, &l), "$2.50");
+        assert_eq!(format_money(20_000_00, &l), "$20,000.00");
     }
 
     #[test]

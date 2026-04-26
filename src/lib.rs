@@ -33,8 +33,10 @@ mod durable_objects;
 mod email;
 mod handlers;
 mod helpers;
+mod i18n;
 mod instagram;
 mod legal;
+mod locale;
 mod management;
 mod personas;
 mod pipeline;
@@ -340,7 +342,8 @@ async fn handle_request(req: Request, env: Env) -> Result<Response> {
             headers.set("Location", "/admin")?;
             return Ok(Response::empty()?.with_status(302).with_headers(headers));
         }
-        return Response::from_html(templates::onboarding::welcome_html(""));
+        let locale = locale::Locale::from_request(&req);
+        return Response::from_html(templates::onboarding::welcome_html("", &locale));
     }
 
     Response::error("Not Found", 404)

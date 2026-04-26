@@ -25,6 +25,15 @@ base64 = "0.22"
 subtle = "2.6"
 botrelay = { git = "https://github.com/ananthb/botrelay-rs", branch = "main" }
 
+# Localization: icu4x for number/currency/date formatting; unic-langid for
+# BCP-47 tag handling; accept-language for parsing the request header.
+icu = { version = "1.5", features = ["compiled_data"] }
+fixed_decimal = "0.5"
+unic-langid = { version = "0.9", features = ["macros"] }
+accept-language = "3"
+fluent = "0.16"
+fluent-syntax = "0.11"
+
 [profile.release]
 opt-level = "s"
 lto = true

@@ -334,11 +334,11 @@ async fn render_step(
                 .map(|v| v.to_string())
                 .unwrap_or_default();
             let db = env.d1("DB")?;
-            let currency = crate::storage::get_tenant(&db, tenant_id)
+            let tenant = crate::storage::get_tenant(&db, tenant_id)
                 .await?
-                .map(|t| t.currency)
-                .unwrap_or_else(|| "INR".to_string());
-            Response::from_html(launch_html(&email_addrs, &base_domain, &currency, base_url))
+                .unwrap_or_default();
+            let locale = crate::locale::Locale::from_tenant(&tenant.locale, Some(&tenant.currency));
+            Response::from_html(launch_html(&email_addrs, &base_domain, &locale, base_url))
         }
         _ => Response::from_html(basics_html(&state.business, base_url)),
     }

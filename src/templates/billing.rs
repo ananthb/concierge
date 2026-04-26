@@ -1,6 +1,7 @@
 //! Billing templates: tenant-facing credit balance + purchase
 
-use crate::helpers::html_escape;
+use crate::helpers::{format_money, html_escape};
+use crate::locale::Locale;
 use crate::types::{CreditSource, TenantBilling};
 
 use super::base::{app_shell, base_html};
@@ -69,7 +70,7 @@ fn format_expiry(iso: &str) -> String {
 /// Renders the billing dashboard, including the email address-quota card.
 pub fn billing_overview_with_addresses_html(
     billing: &TenantBilling,
-    currency: &str,
+    locale: &Locale,
     base_url: &str,
     addresses_used: u32,
     address_quota: u32,
@@ -99,14 +100,17 @@ pub fn billing_overview_with_addresses_html(
     };
 
     let slider = slider_html(
-        currency,
+        locale,
         base_url,
         SliderMode::Buy {
             return_to: "/admin/billing",
         },
     );
 
-    let pack_price_label = if currency == "USD" { "$0.50" } else { "₹49" };
+    let pack_price_label = format_money(
+        crate::billing::address_pack_price(locale.currency.as_str()),
+        locale,
+    );
     let address_card = format!(
         r##"<div class="card p-18 mb-24">
             <div class="between">
@@ -181,18 +185,15 @@ pub fn billing_overview_with_addresses_html(
 pub fn checkout_html(
     order_id: &str,
     amount: i64,
-    currency: &str,
+    locale: &Locale,
     credits: i64,
     razorpay_key: &str,
     tenant_id: &str,
     return_to: &str,
     base_url: &str,
 ) -> String {
-    let display_amount = if currency == "INR" {
-        format!("₹{}", amount / 100)
-    } else {
-        format!("${}", amount / 100)
-    };
+    let currency = locale.currency.as_str();
+    let display_amount = format_money(amount, locale);
 
     let content = format!(
         r##"<div class="ta-center" style="max-width:480px;margin:4rem auto;padding:0 1rem">
@@ -251,16 +252,13 @@ document.getElementById("pay-btn").addEventListener("click", function() {{
 pub fn address_pack_checkout_html(
     order_id: &str,
     amount: i64,
-    currency: &str,
+    locale: &Locale,
     razorpay_key: &str,
     tenant_id: &str,
     base_url: &str,
 ) -> String {
-    let display_amount = if currency == "INR" {
-        format!("₹{}", amount / 100)
-    } else {
-        format!("${}.{:02}", amount / 100, amount % 100)
-    };
+    let currency = locale.currency.as_str();
+    let display_amount = format_money(amount, locale);
     let content = format!(
         r##"<div class="ta-center" style="max-width:480px;margin:4rem auto;padding:0 1rem">
   <div class="card p-28">
