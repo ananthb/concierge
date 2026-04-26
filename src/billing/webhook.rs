@@ -68,9 +68,11 @@ pub async fn handle_razorpay_webhook(mut req: Request, env: Env) -> Result<Respo
                 .unwrap_or("INR");
 
             match kind {
-                "address_pack" => {
-                    let packs = payment
-                        .pointer("/notes/packs")
+                "address" => {
+                    // notes.extras tells us how many addresses to grant. Default
+                    // 1 since our checkout flow only sells one extra at a time.
+                    let extras = payment
+                        .pointer("/notes/extras")
                         .and_then(|v| v.as_str())
                         .and_then(|s| s.parse::<u32>().ok())
                         .unwrap_or(1);
@@ -78,20 +80,20 @@ pub async fn handle_razorpay_webhook(mut req: Request, env: Env) -> Result<Respo
                         &db,
                         payment_id,
                         tenant_id,
-                        packs as i64,
+                        extras as i64,
                         currency,
-                        "address_pack",
+                        "address",
                     )
                     .await?;
                     if let Some(mut tenant) = storage::get_tenant(&db, tenant_id).await? {
-                        tenant.email_address_packs_purchased += packs;
+                        tenant.email_address_extras_purchased += extras;
                         tenant.updated_at = crate::helpers::now_iso();
                         storage::save_tenant(&db, &tenant).await?;
                         console_log!(
-                            "Granted {packs} address pack(s) to {tenant_id} (payment {payment_id})"
+                            "Granted {extras} extra email address(es) to {tenant_id} (payment {payment_id})"
                         );
                     } else {
-                        console_log!("Tenant {tenant_id} missing — skipping address-pack grant");
+                        console_log!("Tenant {tenant_id} missing, skipping address grant");
                     }
                 }
                 _ => {

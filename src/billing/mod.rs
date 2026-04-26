@@ -30,10 +30,9 @@ pub const UNIT_PRICE_CENTS: i64 = 2; //   $0.02 per reply
 pub const MIN_CREDITS: i64 = 100;
 pub const MAX_CREDITS: i64 = 1_000_000;
 
-// Email address packs — 5 addresses for ₹49 / 50¢, one-time purchase.
-pub const ADDRESS_PACK_PRICE_PAISE: i64 = 4900;
-pub const ADDRESS_PACK_PRICE_CENTS: i64 = 50;
-pub const ADDRESS_PACK_SIZE: u32 = 5;
+// Extra email addresses: ₹99 / $1 each, one-time purchase per address.
+pub const ADDRESS_PRICE_PAISE: i64 = 9900;
+pub const ADDRESS_PRICE_CENTS: i64 = 100;
 
 /// Per-reply price in the smallest currency unit (paise / cents).
 pub fn unit_price(currency: &str) -> i64 {
@@ -44,12 +43,12 @@ pub fn unit_price(currency: &str) -> i64 {
     }
 }
 
-/// One address-pack price in the smallest currency unit (paise / cents).
-pub fn address_pack_price(currency: &str) -> i64 {
+/// Per-extra-address price in the smallest currency unit (paise / cents).
+pub fn address_price(currency: &str) -> i64 {
     if currency == "USD" {
-        ADDRESS_PACK_PRICE_CENTS
+        ADDRESS_PRICE_CENTS
     } else {
-        ADDRESS_PACK_PRICE_PAISE
+        ADDRESS_PRICE_PAISE
     }
 }
 

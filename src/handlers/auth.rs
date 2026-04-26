@@ -145,7 +145,7 @@ pub async fn handle_auth(req: Request, env: Env, path: &str, method: Method) -> 
                         plan: "free".to_string(),
                         locale: signup_locale.langid.to_string(),
                         currency: signup_locale.currency.as_str().to_string(),
-                        email_address_packs_purchased: 0,
+                        email_address_extras_purchased: 0,
                         created_at: now.clone(),
                         updated_at: now,
                     };
@@ -262,7 +262,7 @@ pub async fn handle_auth(req: Request, env: Env, path: &str, method: Method) -> 
                         plan: "free".to_string(),
                         locale: signup_locale.langid.to_string(),
                         currency: signup_locale.currency.as_str().to_string(),
-                        email_address_packs_purchased: 0,
+                        email_address_extras_purchased: 0,
                         created_at: now.clone(),
                         updated_at: now,
                     };

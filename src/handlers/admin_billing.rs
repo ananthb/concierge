@@ -93,16 +93,16 @@ pub async fn handle_billing_admin(
             ))
         }
 
-        // Email address pack (5 addresses, one-time). Builds an order with
-        // notes.kind="address_pack" so the webhook knows to bump the
-        // tenant's address quota.
-        (Method::Post, "address-packs") => {
+        // Buy one extra email address (one-time, ₹99 / $1). Builds an order
+        // with notes.kind="address" so the webhook bumps the tenant's
+        // email_address_extras_purchased count by one.
+        (Method::Post, "address") => {
             let tenant = storage::get_tenant(&db, tenant_id)
                 .await?
                 .unwrap_or_default();
             let locale = crate::locale::Locale::from_tenant(&tenant.locale, Some(&tenant.currency));
             let currency = locale.currency.as_str();
-            let amount = billing::address_pack_price(currency);
+            let amount = billing::address_price(currency);
 
             let key_id = env.secret("RAZORPAY_KEY_ID")?.to_string();
             let key_secret = env.secret("RAZORPAY_KEY_SECRET")?.to_string();
@@ -116,13 +116,13 @@ pub async fn handle_billing_admin(
                 &receipt,
                 serde_json::json!({
                     "tenant_id": tenant_id,
-                    "kind": "address_pack",
-                    "packs": "1",
+                    "kind": "address",
+                    "extras": "1",
                 }),
             )
             .await?;
             let order_id = order.get("id").and_then(|v| v.as_str()).unwrap_or("");
-            Response::from_html(tmpl::address_pack_checkout_html(
+            Response::from_html(tmpl::address_checkout_html(
                 order_id, amount, &locale, &key_id, tenant_id, base_url,
             ))
         }

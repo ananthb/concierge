@@ -44,8 +44,8 @@ fn row_to_tenant(row: &serde_json::Value) -> Tenant {
             .and_then(|v| v.as_str())
             .unwrap_or("INR")
             .to_string(),
-        email_address_packs_purchased: row
-            .get("email_address_packs_purchased")
+        email_address_extras_purchased: row
+            .get("email_address_extras_purchased")
             .and_then(|v| v.as_u64())
             .unwrap_or(0) as u32,
         created_at: row
@@ -101,7 +101,7 @@ pub async fn save_tenant(db: &D1Database, tenant: &Tenant) -> Result<()> {
         None => JsValue::NULL,
     };
     db.prepare(
-        "INSERT INTO tenants (id, email, name, facebook_id, plan, locale, currency, email_address_packs_purchased, created_at, updated_at)
+        "INSERT INTO tenants (id, email, name, facebook_id, plan, locale, currency, email_address_extras_purchased, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET
            email = excluded.email,
@@ -110,7 +110,7 @@ pub async fn save_tenant(db: &D1Database, tenant: &Tenant) -> Result<()> {
            plan = excluded.plan,
            locale = excluded.locale,
            currency = excluded.currency,
-           email_address_packs_purchased = excluded.email_address_packs_purchased,
+           email_address_extras_purchased = excluded.email_address_extras_purchased,
            updated_at = excluded.updated_at",
     )
     .bind(&[
@@ -121,7 +121,7 @@ pub async fn save_tenant(db: &D1Database, tenant: &Tenant) -> Result<()> {
         tenant.plan.as_str().into(),
         tenant.locale.as_str().into(),
         tenant.currency.as_str().into(),
-        JsValue::from(tenant.email_address_packs_purchased as f64),
+        JsValue::from(tenant.email_address_extras_purchased as f64),
         tenant.created_at.as_str().into(),
         tenant.updated_at.as_str().into(),
     ])?

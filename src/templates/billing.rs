@@ -107,8 +107,8 @@ pub fn billing_overview_with_addresses_html(
         },
     );
 
-    let pack_price_label = format_money(
-        crate::billing::address_pack_price(locale.currency.as_str()),
+    let address_price_label = format_money(
+        crate::billing::address_price(locale.currency.as_str()),
         locale,
     );
     let address_card = format!(
@@ -119,14 +119,14 @@ pub fn billing_overview_with_addresses_html(
                     <div class="stat-n serif">{addresses_used} / {address_quota}</div>
                     <div class="mono muted fs-11">used / total quota</div>
                 </div>
-                <form hx-post="{base_url}/admin/billing/address-packs" hx-target="body" hx-swap="innerHTML">
-                    <button class="btn primary" type="submit">Buy 5 more: {pack_price_label}</button>
+                <form hx-post="{base_url}/admin/billing/address" hx-target="body" hx-swap="innerHTML">
+                    <button class="btn primary" type="submit">Buy 1 more: {address_price_label}</button>
                 </form>
             </div>
         </div>"##,
         addresses_used = addresses_used,
         address_quota = address_quota,
-        pack_price_label = pack_price_label,
+        address_price_label = address_price_label,
         base_url = base_url,
     );
 
@@ -248,8 +248,8 @@ document.getElementById("pay-btn").addEventListener("click", function() {{
     base_html("Checkout - Concierge", &content)
 }
 
-/// Checkout for the email address-pack one-time purchase.
-pub fn address_pack_checkout_html(
+/// Checkout for one extra email address (one-time, ₹99 / $1).
+pub fn address_checkout_html(
     order_id: &str,
     amount: i64,
     locale: &Locale,
@@ -262,8 +262,8 @@ pub fn address_pack_checkout_html(
     let content = format!(
         r##"<div class="ta-center" style="max-width:480px;margin:4rem auto;padding:0 1rem">
   <div class="card p-28">
-    <h2 class="display-sm">Email address pack</h2>
-    <p class="muted m-0 mt-8 mb-24">5 additional concierge addresses · one-time charge</p>
+    <h2 class="display-sm">Extra email address</h2>
+    <p class="muted m-0 mt-8 mb-24">One additional concierge address. One-time charge.</p>
     <div class="stat-n serif mb-24">{display_amount}</div>
     <button id="pay-btn" class="btn primary lg w-full">Pay with Razorpay</button>
     <p class="mono muted fs-11 mt-12">Secure payment via Razorpay</p>
@@ -279,8 +279,8 @@ document.getElementById("pay-btn").addEventListener("click", function() {{
     currency: "{currency}",
     order_id: "{order_id}",
     name: "Concierge",
-    description: "5-address pack",
-    notes: {{ tenant_id: "{tenant_id}", kind: "address_pack", packs: "1" }},
+    description: "Extra email address",
+    notes: {{ tenant_id: "{tenant_id}", kind: "address", extras: "1" }},
     handler: function(response) {{
       fetch("{base_url}/admin/billing/verify", {{
         method: "POST",
@@ -306,5 +306,5 @@ document.getElementById("pay-btn").addEventListener("click", function() {{
         base_url = base_url,
     );
 
-    base_html("Email address pack: Concierge", &content)
+    base_html("Extra email address: Concierge", &content)
 }

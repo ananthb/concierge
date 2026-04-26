@@ -335,7 +335,7 @@ pub fn connect_html(
       <span class="mono muted fs-13">@{base_domain}</span>
       <button type="submit" class="btn sm ml-auto">Add</button>
     </form>
-    <div class="mono muted fs-11 mt-6">First address is free. Need more? Buy a 5-pack later for ₹49 / 50¢.</div>
+    <div class="mono muted fs-11 mt-6">First address is free. Need more? ₹99 / $1 per extra, one-time.</div>
   </div>
 </div>"#,
             mail_icon = channel_icon("mail"),
@@ -813,8 +813,8 @@ pub fn pricing_html(default_currency: &str) -> String {
         Currency::Usd => format_money(crate::billing::UNIT_PRICE_CENTS, &locale),
         Currency::Inr => format_money(crate::billing::UNIT_PRICE_PAISE, &locale),
     };
-    let pack_price = format_money(
-        crate::billing::address_pack_price(locale.currency.as_str()),
+    let address_price = format_money(
+        crate::billing::address_price(locale.currency.as_str()),
         &locale,
     );
     let (inr_cls, usd_cls) = match locale.currency {
@@ -850,13 +850,13 @@ pub fn pricing_html(default_currency: &str) -> String {
   <p class="muted">Each address you set up at <code>name@cncg.email</code> can auto-reply to inbound mail. Replies go to the original sender; you and your team get a copy via Cc/Bcc.</p>
 
   <div class="card p-18" style="margin:24px 0">
-    <p class="m-0"><strong>1 address free per account.</strong> Need more? Buy a 5-pack for <strong>{pack_price}</strong>: one-time charge, never expires.</p>
+    <p class="m-0"><strong>1 address free per account.</strong> Need more? <strong>{address_price}</strong> per extra address, one-time, never expires.</p>
     <p class="muted" style="margin:8px 0 0">Static replies stay free; AI replies draw from your credit balance above.</p>
   </div>
 </article>"##,
         nav = nav,
         per_reply = per_reply,
-        pack_price = pack_price,
+        address_price = address_price,
         slider = slider,
         inr_cls = inr_cls,
         usd_cls = usd_cls,
@@ -866,7 +866,7 @@ pub fn pricing_html(default_currency: &str) -> String {
         "Pricing - Concierge",
         &content,
         &PageMeta {
-            description: "Simple, prepaid pricing for Concierge. ₹2 / $0.02 per AI reply, no tiers. Static auto-replies free. 100 free AI replies every month. 1 free email address; 5-packs from ₹49 / $0.50.",
+            description: "Simple, prepaid pricing for Concierge. ₹2 / $0.02 per AI reply, no tiers. Static auto-replies free. 100 free AI replies every month. 1 free email address; ₹99 / $1 per extra address.",
             og_title: "Concierge Pricing",
             ..PageMeta::default()
         },

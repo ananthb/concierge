@@ -19,17 +19,18 @@ pub struct Tenant {
     pub locale: String,
     #[serde(default = "default_currency")]
     pub currency: String,
-    /// Each pack adds 5 to the tenant's email-address quota. Quota = 1 + 5 *
-    /// this. Packs are purchased one-time via Razorpay.
+    /// Count of extra email addresses the tenant has bought beyond the one
+    /// free with the account. Quota = 1 + this. Each extra is a one-time
+    /// Razorpay purchase at ₹99 / $1.
     #[serde(default)]
-    pub email_address_packs_purchased: u32,
+    pub email_address_extras_purchased: u32,
     pub created_at: String,
     pub updated_at: String,
 }
 
 impl Tenant {
     pub fn email_address_quota(&self) -> u32 {
-        1 + 5 * self.email_address_packs_purchased
+        1 + self.email_address_extras_purchased
     }
 }
 
