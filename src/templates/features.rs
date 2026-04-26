@@ -36,7 +36,7 @@ pub fn features_html() -> String {
   <div class="channels-grid">
     <div class="card p-22">
       <div class="eyebrow">1. Connect</div>
-      <p class="m-0 mt-8">5-minute wizard. OAuth into the channels you use; everything else stays untouched.</p>
+      <p class="m-0 mt-8">5-minute wizard. Authenticate with your WhatsApp for Business, Instagram Pages, and Discord Channels.</p>
     </div>
     <div class="card p-22">
       <div class="eyebrow">2. Configure</div>
@@ -44,7 +44,7 @@ pub fn features_html() -> String {
     </div>
     <div class="card p-22">
       <div class="eyebrow">3. Run</div>
-      <p class="m-0 mt-8">Inbound messages flow through. Bursts collapse into one reply (configurable wait: default 5s).</p>
+      <p class="m-0 mt-8">Concierge replies to incoming messages for you in the channels you use. Pick up the conversation when you're ready!</p>
     </div>
   </div>
 
