@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Billing · Concierge docs</title>
+<meta name="theme-color" content="#e86a2c">
+<link rel="icon" type="image/svg+xml" href="https://concierge.calculon.tech/logo.svg">
+<link rel="stylesheet" href="docs.css">
+</head>
+<body>
+
+<header class="topbar">
+  <a href="./" class="topbar__brand">
+    <span class="topbar__brand-mark">C</span>
+    <span class="topbar__title">Concierge</span>
+  </a>
+  <span class="topbar__divider"></span>
+  <span class="topbar__product"><strong>Documentation</strong></span>
+  <div class="topbar__search">
+    <svg class="topbar__search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+    <input class="topbar__search-input" placeholder="Search the docs, secrets, endpoints…">
+    <span class="topbar__kbd">⌘K</span>
+  </div>
+  <nav class="topbar__nav">
+    <a href="https://concierge.calculon.tech">Hosted&nbsp;app↗</a>
+    <a href="api/concierge/">API&nbsp;ref↗</a>
+    <a href="https://github.com/ananthb/concierge" class="topbar__cta">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M12 .3a12 12 0 0 0-3.8 23.4c.6.1.8-.3.8-.6v-2c-3.3.7-4-1.6-4-1.6-.5-1.4-1.3-1.7-1.3-1.7-1.1-.7.1-.7.1-.7 1.2 0 1.8 1.2 1.8 1.2 1 1.8 2.7 1.3 3.4 1 .1-.8.4-1.3.7-1.6-2.7-.3-5.5-1.3-5.5-6 0-1.3.5-2.3 1.2-3.2-.1-.3-.5-1.5.1-3.2 0 0 1-.3 3.3 1.2a11.5 11.5 0 0 1 6 0c2.3-1.5 3.3-1.2 3.3-1.2.7 1.7.2 3 .1 3.2.8.9 1.2 2 1.2 3.2 0 4.6-2.8 5.7-5.5 6 .4.4.8 1.1.8 2.2v3.3c0 .3.2.7.8.6A12 12 0 0 0 12 .3"/></svg>
+      ananthb/concierge
+    </a>
+  </nav>
+</header>
+
+<div class="shell">
+
+  <aside class="sidebar">
+    <div class="sidebar__group">
+      <div class="sidebar__group-label">Start here</div>
+      <ul class="sidebar__list">
+        <li><a href="index.html"><span class="dot"></span>Overview</a></li>
+        <li><a href="how-it-works.html"><span class="dot"></span>How it works</a></li>
+        <li><a href="architecture.html"><span class="dot"></span>Architecture<span class="badge">ref</span></a></li>
+        <li><a href="configuration.html"><span class="dot"></span>Configuration<span class="badge">ref</span></a></li>
+        <li><a href="deployment.html"><span class="dot"></span>Deployment</a></li>
+      </ul>
+    </div>
+    <div class="sidebar__group">
+      <div class="sidebar__group-label">Channels</div>
+      <ul class="sidebar__list">
+        <li><a href="whatsapp.html"><span class="dot"></span>WhatsApp</a></li>
+        <li><a href="instagram.html"><span class="dot"></span>Instagram</a></li>
+        <li><a href="email-routing.html"><span class="dot"></span>Email routing</a></li>
+        <li><a href="discord.html"><span class="dot"></span>Discord relay</a></li>
+        <li><a href="lead-forms.html"><span class="dot"></span>Lead forms</a></li>
+      </ul>
+    </div>
+    <div class="sidebar__group">
+      <div class="sidebar__group-label">Operate</div>
+      <ul class="sidebar__list">
+        <li><a href="embedding.html"><span class="dot"></span>Embedding</a></li>
+        <li><a href="billing.html" class="is-current"><span class="dot"></span>Billing &amp; credits</a></li>
+        <li><a href="management.html"><span class="dot"></span>Management panel</a></li>
+        <li><a href="facebook-app-setup.html"><span class="dot"></span>Facebook app setup</a></li>
+      </ul>
+    </div>
+    <div class="sidebar__group">
+      <div class="sidebar__group-label">Reference</div>
+      <ul class="sidebar__list">
+        <li><a href="api/concierge/"><span class="dot"></span>Rust API docs<span class="badge">↗</span></a></li>
+        <li><a href="https://github.com/ananthb/concierge"><span class="dot"></span>Source on GitHub<span class="badge">↗</span></a></li>
+      </ul>
+    </div>
+  </aside>
+
+  <main class="content">
+    <div class="content__main prose">
+
+      <div class="crumb">
+        <a href="index.html">Docs</a>
+        <span class="crumb__sep">/</span>
+        <span>Operate</span>
+        <span class="crumb__sep">/</span>
+        <span>Billing</span>
+      </div>
+
+      <div class="page-eyebrow">Operate</div>
+      <h1 class="page-title">Billing <em>&amp; credits</em>.</h1>
+
+
+<p>Concierge uses a prepaid reply credit system. Every auto-reply (WhatsApp, Instagram) and relay reply (Discord) deducts one credit from the tenant's balance. When credits reach zero, auto-replies stop silently.</p>
+
+<h2>How Credits Work</h2>
+
+<ul>
+  <li>Each tenant has a <code>TenantBilling</code> record in KV tracking: <code>replies_remaining</code>, <code>replies_used</code> (lifetime), and <code>replies_granted</code> (lifetime)</li>
+  <li>Credits are deducted <em>before</em> the reply is sent (optimistic deduction)</li>
+  <li>If the AI generation or message send fails, the credit is automatically restored</li>
+  <li>An empty reply (e.g., AI returns nothing) also triggers a credit restore</li>
+</ul>
+
+<h2>Getting Credits</h2>
+
+<p>There are two ways to get reply credits:</p>
+
+<h3>1. Management Grants (Free)</h3>
+
+<p>Platform operators can grant free credits to any tenant via the <a href="management.html">management panel</a>. This is useful for onboarding, promotions, or support situations. Grants are logged to the audit trail.</p>
+
+<h3>2. Paid Credit Packs (Razorpay)</h3>
+
+<p>Tenants can purchase credit packs via Razorpay checkout. The available packs are configurable by management. Default packs seeded by the migration:</p>
+
+<table>
+  <thead>
+    <tr><th>Pack</th><th>Replies</th><th>Price (INR)</th><th>Price (USD)</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>Starter</td><td>500</td><td>249.00</td><td>$3.00</td></tr>
+    <tr><td>Growth</td><td>2,000</td><td>799.00</td><td>$10.00</td></tr>
+    <tr><td>Scale</td><td>10,000</td><td>2,999.00</td><td>$36.00</td></tr>
+    <tr><td>Volume</td><td>50,000</td><td>9,999.00</td><td>$120.00</td></tr>
+  </tbody>
+</table>
+
+<p>Prices are stored in paise (INR) and cents (USD) internally.</p>
+
+<h2>Razorpay Integration</h2>
+
+<p>The payment flow works as follows:</p>
+
+<ol>
+  <li>Tenant selects a credit pack on the pricing page (<code>/pricing</code>)</li>
+  <li>Concierge creates a Razorpay order via the API</li>
+  <li>The Razorpay checkout widget opens in the browser</li>
+  <li>On successful payment, Razorpay sends a webhook to <code>POST /webhook/razorpay</code></li>
+  <li>Concierge verifies the payment signature (HMAC-SHA256) and credits the tenant's balance</li>
+  <li>The payment is recorded in the <code>payments</code> D1 table</li>
+</ol>
+
+<h3>Required Secrets</h3>
+
+<ul>
+  <li><code>RAZORPAY_KEY_ID</code>: Razorpay API key ID</li>
+  <li><code>RAZORPAY_KEY_SECRET</code>: Razorpay API key secret</li>
+  <li><code>RAZORPAY_WEBHOOK_SECRET</code>: Webhook secret for signature verification</li>
+</ul>
+
+<h2>Credit Pack Management</h2>
+
+<p>Platform operators can manage credit packs via the <a href="management.html">management panel</a> at <code>/manage/billing</code>:</p>
+
+<ul>
+  <li>Create new packs with custom names, reply counts, and prices</li>
+  <li>Update existing pack details</li>
+  <li>Activate or deactivate packs (inactive packs are hidden from tenants)</li>
+  <li>Delete packs</li>
+  <li>Control sort order for display on the pricing page</li>
+</ul>
+
+<p>All pack management actions are recorded in the audit log.</p>
+
+<h2>Billing State</h2>
+
+<p>Each tenant's billing state is stored in KV as a <code>TenantBilling</code> JSON object:</p>
+
+<pre><code>{
+  "replies_remaining": 450,
+  "replies_used": 50,
+  "replies_granted": 500
+}</code></pre>
+
+      <nav class="pagernav">
+        <a href="embedding.html" class="pagernav__item">
+          <div class="pagernav__dir">← Previous</div>
+          <div class="pagernav__title">Embedding</div>
+        </a>
+        <a href="management.html" class="pagernav__item pagernav__item--next">
+          <div class="pagernav__dir">Next →</div>
+          <div class="pagernav__title">Management panel</div>
+        </a>
+      </nav>
+
+      <footer class="docfoot">
+        <a href="https://github.com/ananthb/concierge">Open&#8209;source</a>
+        <span>·</span>
+        <a href="https://www.gnu.org/licenses/agpl-3.0.html">AGPL&#8209;3.0</a>
+        <span>·</span>
+        <a href="api/concierge/">API reference</a>
+      </footer>
+
+    </div>
+  </main>
+</div>
+
+</body>
+</html>

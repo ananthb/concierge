@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lead forms · Concierge docs</title>
+<meta name="theme-color" content="#e86a2c">
+<link rel="icon" type="image/svg+xml" href="https://concierge.calculon.tech/logo.svg">
+<link rel="stylesheet" href="docs.css">
+</head>
+<body>
+
+<header class="topbar">
+  <a href="./" class="topbar__brand">
+    <span class="topbar__brand-mark">C</span>
+    <span class="topbar__title">Concierge</span>
+  </a>
+  <span class="topbar__divider"></span>
+  <span class="topbar__product"><strong>Documentation</strong></span>
+  <div class="topbar__search">
+    <svg class="topbar__search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+    <input class="topbar__search-input" placeholder="Search the docs, secrets, endpoints…">
+    <span class="topbar__kbd">⌘K</span>
+  </div>
+  <nav class="topbar__nav">
+    <a href="https://concierge.calculon.tech">Hosted&nbsp;app↗</a>
+    <a href="api/concierge/">API&nbsp;ref↗</a>
+    <a href="https://github.com/ananthb/concierge" class="topbar__cta">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M12 .3a12 12 0 0 0-3.8 23.4c.6.1.8-.3.8-.6v-2c-3.3.7-4-1.6-4-1.6-.5-1.4-1.3-1.7-1.3-1.7-1.1-.7.1-.7.1-.7 1.2 0 1.8 1.2 1.8 1.2 1 1.8 2.7 1.3 3.4 1 .1-.8.4-1.3.7-1.6-2.7-.3-5.5-1.3-5.5-6 0-1.3.5-2.3 1.2-3.2-.1-.3-.5-1.5.1-3.2 0 0 1-.3 3.3 1.2a11.5 11.5 0 0 1 6 0c2.3-1.5 3.3-1.2 3.3-1.2.7 1.7.2 3 .1 3.2.8.9 1.2 2 1.2 3.2 0 4.6-2.8 5.7-5.5 6 .4.4.8 1.1.8 2.2v3.3c0 .3.2.7.8.6A12 12 0 0 0 12 .3"/></svg>
+      ananthb/concierge
+    </a>
+  </nav>
+</header>
+
+<div class="shell">
+
+  <aside class="sidebar">
+    <div class="sidebar__group">
+      <div class="sidebar__group-label">Start here</div>
+      <ul class="sidebar__list">
+        <li><a href="index.html"><span class="dot"></span>Overview</a></li>
+        <li><a href="how-it-works.html"><span class="dot"></span>How it works</a></li>
+        <li><a href="architecture.html"><span class="dot"></span>Architecture<span class="badge">ref</span></a></li>
+        <li><a href="configuration.html"><span class="dot"></span>Configuration<span class="badge">ref</span></a></li>
+        <li><a href="deployment.html"><span class="dot"></span>Deployment</a></li>
+      </ul>
+    </div>
+    <div class="sidebar__group">
+      <div class="sidebar__group-label">Channels</div>
+      <ul class="sidebar__list">
+        <li><a href="whatsapp.html"><span class="dot"></span>WhatsApp</a></li>
+        <li><a href="instagram.html"><span class="dot"></span>Instagram</a></li>
+        <li><a href="email-routing.html"><span class="dot"></span>Email routing</a></li>
+        <li><a href="discord.html"><span class="dot"></span>Discord relay</a></li>
+        <li><a href="lead-forms.html" class="is-current"><span class="dot"></span>Lead forms</a></li>
+      </ul>
+    </div>
+    <div class="sidebar__group">
+      <div class="sidebar__group-label">Operate</div>
+      <ul class="sidebar__list">
+        <li><a href="embedding.html"><span class="dot"></span>Embedding</a></li>
+        <li><a href="billing.html"><span class="dot"></span>Billing &amp; credits</a></li>
+        <li><a href="management.html"><span class="dot"></span>Management panel</a></li>
+        <li><a href="facebook-app-setup.html"><span class="dot"></span>Facebook app setup</a></li>
+      </ul>
+    </div>
+    <div class="sidebar__group">
+      <div class="sidebar__group-label">Reference</div>
+      <ul class="sidebar__list">
+        <li><a href="api/concierge/"><span class="dot"></span>Rust API docs<span class="badge">↗</span></a></li>
+        <li><a href="https://github.com/ananthb/concierge"><span class="dot"></span>Source on GitHub<span class="badge">↗</span></a></li>
+      </ul>
+    </div>
+  </aside>
+
+  <main class="content">
+    <div class="content__main prose">
+
+      <div class="crumb">
+        <a href="index.html">Docs</a>
+        <span class="crumb__sep">/</span>
+        <span>Channels</span>
+        <span class="crumb__sep">/</span>
+        <span>Lead forms</span>
+      </div>
+
+      <div class="page-eyebrow">Channel</div>
+      <h1 class="page-title">Lead capture <em>forms</em>.</h1>
+
+
+<p>Lead forms are embeddable phone number capture widgets. When someone submits their phone number, they receive a WhatsApp message immediately.</p>
+
+<h2>Creating a Form</h2>
+
+<ol>
+  <li>Go to <strong>Admin &gt; Lead Forms &gt; New Form</strong></li>
+  <li>Configure:
+    <ul>
+      <li><strong>Name</strong>: displayed as the form heading</li>
+      <li><strong>WhatsApp Account</strong>: which number sends the reply</li>
+      <li><strong>Reply Mode</strong>: Static or AI</li>
+      <li><strong>Reply Prompt</strong>: the message text or AI prompt</li>
+      <li><strong>Style</strong>: colors, button text, placeholder, success message, custom CSS</li>
+      <li><strong>Allowed Origins</strong>: restrict which domains can embed the form (empty = all)</li>
+    </ul>
+  </li>
+  <li>Copy the embed code from the form's edit page</li>
+</ol>
+
+<h2>Embedding</h2>
+
+<p>Use the iframe snippet from the edit page:</p>
+
+<pre><code>&lt;iframe src="https://your-domain/lead/{form_id}/{slug}"
+        width="400" height="200" frameborder="0"&gt;&lt;/iframe&gt;</code></pre>
+
+<p>The form submits via HTMX within the iframe: no page navigation.</p>
+
+<h2>CORS</h2>
+
+<p>If you set allowed origins, only those domains can embed and submit the form. Leave empty to allow embedding from any site.</p>
+
+<h2>Styling</h2>
+
+<p>Customize the form appearance with:</p>
+
+<ul>
+  <li>Primary color, text color, background color</li>
+  <li>Border radius</li>
+  <li>Button text and placeholder text</li>
+  <li>Success message shown after submission</li>
+  <li>Custom CSS (injected into the form's <code>&lt;style&gt;</code> tag)</li>
+</ul>
+
+      <nav class="pagernav">
+        <a href="discord.html" class="pagernav__item">
+          <div class="pagernav__dir">← Previous</div>
+          <div class="pagernav__title">Discord relay</div>
+        </a>
+        <a href="embedding.html" class="pagernav__item pagernav__item--next">
+          <div class="pagernav__dir">Next →</div>
+          <div class="pagernav__title">Embedding</div>
+        </a>
+      </nav>
+
+      <footer class="docfoot">
+        <a href="https://github.com/ananthb/concierge">Open&#8209;source</a>
+        <span>·</span>
+        <a href="https://www.gnu.org/licenses/agpl-3.0.html">AGPL&#8209;3.0</a>
+        <span>·</span>
+        <a href="api/concierge/">API reference</a>
+      </footer>
+
+    </div>
+  </main>
+</div>
+
+</body>
+</html>

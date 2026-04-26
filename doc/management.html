@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Management · Concierge docs</title>
+<meta name="theme-color" content="#e86a2c">
+<link rel="icon" type="image/svg+xml" href="https://concierge.calculon.tech/logo.svg">
+<link rel="stylesheet" href="docs.css">
+</head>
+<body>
+
+<header class="topbar">
+  <a href="./" class="topbar__brand">
+    <span class="topbar__brand-mark">C</span>
+    <span class="topbar__title">Concierge</span>
+  </a>
+  <span class="topbar__divider"></span>
+  <span class="topbar__product"><strong>Documentation</strong></span>
+  <div class="topbar__search">
+    <svg class="topbar__search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+    <input class="topbar__search-input" placeholder="Search the docs, secrets, endpoints…">
+    <span class="topbar__kbd">⌘K</span>
+  </div>
+  <nav class="topbar__nav">
+    <a href="https://concierge.calculon.tech">Hosted&nbsp;app↗</a>
+    <a href="api/concierge/">API&nbsp;ref↗</a>
+    <a href="https://github.com/ananthb/concierge" class="topbar__cta">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M12 .3a12 12 0 0 0-3.8 23.4c.6.1.8-.3.8-.6v-2c-3.3.7-4-1.6-4-1.6-.5-1.4-1.3-1.7-1.3-1.7-1.1-.7.1-.7.1-.7 1.2 0 1.8 1.2 1.8 1.2 1 1.8 2.7 1.3 3.4 1 .1-.8.4-1.3.7-1.6-2.7-.3-5.5-1.3-5.5-6 0-1.3.5-2.3 1.2-3.2-.1-.3-.5-1.5.1-3.2 0 0 1-.3 3.3 1.2a11.5 11.5 0 0 1 6 0c2.3-1.5 3.3-1.2 3.3-1.2.7 1.7.2 3 .1 3.2.8.9 1.2 2 1.2 3.2 0 4.6-2.8 5.7-5.5 6 .4.4.8 1.1.8 2.2v3.3c0 .3.2.7.8.6A12 12 0 0 0 12 .3"/></svg>
+      ananthb/concierge
+    </a>
+  </nav>
+</header>
+
+<div class="shell">
+
+  <aside class="sidebar">
+    <div class="sidebar__group">
+      <div class="sidebar__group-label">Start here</div>
+      <ul class="sidebar__list">
+        <li><a href="index.html"><span class="dot"></span>Overview</a></li>
+        <li><a href="how-it-works.html"><span class="dot"></span>How it works</a></li>
+        <li><a href="architecture.html"><span class="dot"></span>Architecture<span class="badge">ref</span></a></li>
+        <li><a href="configuration.html"><span class="dot"></span>Configuration<span class="badge">ref</span></a></li>
+        <li><a href="deployment.html"><span class="dot"></span>Deployment</a></li>
+      </ul>
+    </div>
+    <div class="sidebar__group">
+      <div class="sidebar__group-label">Channels</div>
+      <ul class="sidebar__list">
+        <li><a href="whatsapp.html"><span class="dot"></span>WhatsApp</a></li>
+        <li><a href="instagram.html"><span class="dot"></span>Instagram</a></li>
+        <li><a href="email-routing.html"><span class="dot"></span>Email routing</a></li>
+        <li><a href="discord.html"><span class="dot"></span>Discord relay</a></li>
+        <li><a href="lead-forms.html"><span class="dot"></span>Lead forms</a></li>
+      </ul>
+    </div>
+    <div class="sidebar__group">
+      <div class="sidebar__group-label">Operate</div>
+      <ul class="sidebar__list">
+        <li><a href="embedding.html"><span class="dot"></span>Embedding</a></li>
+        <li><a href="billing.html"><span class="dot"></span>Billing &amp; credits</a></li>
+        <li><a href="management.html" class="is-current"><span class="dot"></span>Management panel</a></li>
+        <li><a href="facebook-app-setup.html"><span class="dot"></span>Facebook app setup</a></li>
+      </ul>
+    </div>
+    <div class="sidebar__group">
+      <div class="sidebar__group-label">Reference</div>
+      <ul class="sidebar__list">
+        <li><a href="api/concierge/"><span class="dot"></span>Rust API docs<span class="badge">↗</span></a></li>
+        <li><a href="https://github.com/ananthb/concierge"><span class="dot"></span>Source on GitHub<span class="badge">↗</span></a></li>
+      </ul>
+    </div>
+  </aside>
+
+  <main class="content">
+    <div class="content__main prose">
+
+      <div class="crumb">
+        <a href="index.html">Docs</a>
+        <span class="crumb__sep">/</span>
+        <span>Operate</span>
+        <span class="crumb__sep">/</span>
+        <span>Management</span>
+      </div>
+
+      <div class="page-eyebrow">Operate</div>
+      <h1 class="page-title">Management <em>panel</em>.</h1>
+
+
+<p>The management panel at <code>/manage/*</code> is a platform operator dashboard for managing tenants, billing, and reviewing audit logs. It is protected by Cloudflare Access with full JWT verification.</p>
+
+<h2>Authentication</h2>
+
+<p>Management routes verify the <code>Cf-Access-Jwt-Assertion</code> header:</p>
+
+<ol>
+  <li><strong>Cloudflare Access</strong>: Handles the login flow and issues a signed JWT</li>
+  <li><strong>JWT verification</strong>: Concierge fetches the team's JWKS, verifies the RS256 signature, checks the <code>aud</code> claim against <code>CF_ACCESS_AUD</code>, and extracts the email</li>
+</ol>
+
+<p>Anyone with a valid Access JWT (matching your Access policy) is authorized. Scope access via your Cloudflare Access policy.</p>
+
+<h2>Dashboard</h2>
+
+<p>The main dashboard (<code>/manage</code>) shows:</p>
+
+<ul>
+  <li>The authenticated operator's email</li>
+  <li>Total tenant count</li>
+  <li>Links to tenant management, billing, and audit log</li>
+</ul>
+
+<h2>Tenant Management</h2>
+
+<p>At <code>/manage/tenants</code>, operators can:</p>
+
+<ul>
+  <li>List all tenants with their email, plan, and creation date</li>
+  <li>View individual tenant details including connected accounts</li>
+  <li>See a tenant's billing state (credits remaining, used, granted)</li>
+  <li>Grant free reply credits to a tenant</li>
+</ul>
+
+<h2>Billing Controls</h2>
+
+<p>At <code>/manage/billing</code>, operators can:</p>
+
+<ul>
+  <li><strong>View credit packs</strong>: See all defined packs with their reply counts, prices, and status</li>
+  <li><strong>Create packs</strong>: Add new credit packs with name, reply count, INR price, USD price, and sort order</li>
+  <li><strong>Update packs</strong>: Edit existing pack details</li>
+  <li><strong>Activate/Deactivate packs</strong>: Control which packs are visible to tenants</li>
+  <li><strong>Delete packs</strong>: Remove packs entirely</li>
+  <li><strong>Grant credits</strong>: Give free reply credits to a specific tenant (at <code>/manage/billing/grant/{tenant_id}</code>)</li>
+</ul>
+
+<h2>Audit Log</h2>
+
+<p>At <code>/manage/audit</code>, operators can review a chronological log of all management actions. Each entry records:</p>
+
+<table>
+  <thead>
+    <tr><th>Field</th><th>Description</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>actor_email</code></td><td>The operator who performed the action</td></tr>
+    <tr><td><code>action</code></td><td>What was done (e.g., <code>grant_replies</code>, <code>create_pack</code>, <code>update_pack</code>, <code>delete_pack</code>)</td></tr>
+    <tr><td><code>resource_type</code></td><td>The type of resource affected (e.g., <code>billing</code>, <code>credit_pack</code>)</td></tr>
+    <tr><td><code>resource_id</code></td><td>The specific resource identifier (optional)</td></tr>
+    <tr><td><code>details</code></td><td>JSON payload with action-specific details</td></tr>
+    <tr><td><code>created_at</code></td><td>Timestamp</td></tr>
+  </tbody>
+</table>
+
+<p>The audit log shows the most recent 100 entries.</p>
+
+<h2>Setup</h2>
+
+<ol>
+  <li>In the Cloudflare dashboard, go to <strong>Zero Trust &gt; Access &gt; Applications</strong></li>
+  <li>Create a Self-hosted application for <code>your-domain/manage/*</code></li>
+  <li>Copy the <strong>Application Audience (AUD) Tag</strong> from the application overview</li>
+  <li>Set <code>CF_ACCESS_TEAM</code> (your team name) and <code>CF_ACCESS_AUD</code> in <code>wrangler.toml</code></li>
+  <li>Add a policy allowing the emails that should have management access</li>
+  <li>Deploy with <code>wrangler deploy</code></li>
+</ol>
+
+      <nav class="pagernav">
+        <a href="billing.html" class="pagernav__item">
+          <div class="pagernav__dir">← Previous</div>
+          <div class="pagernav__title">Billing</div>
+        </a>
+        <a href="facebook-app-setup.html" class="pagernav__item pagernav__item--next">
+          <div class="pagernav__dir">Next →</div>
+          <div class="pagernav__title">Facebook app setup</div>
+        </a>
+      </nav>
+
+      <footer class="docfoot">
+        <a href="https://github.com/ananthb/concierge">Open&#8209;source</a>
+        <span>·</span>
+        <a href="https://www.gnu.org/licenses/agpl-3.0.html">AGPL&#8209;3.0</a>
+        <span>·</span>
+        <a href="api/concierge/">API reference</a>
+      </footer>
+
+    </div>
+  </main>
+</div>
+
+</body>
+</html>

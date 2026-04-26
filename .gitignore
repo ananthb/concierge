@@ -30,7 +30,6 @@ wrangler.production.toml
 
 # Documentation build
 site/
-doc/book/
 
 # cachix/git-hooks.nix
 .pre-commit-config.yaml

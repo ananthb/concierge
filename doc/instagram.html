@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Instagram · Concierge docs</title>
+<meta name="theme-color" content="#e86a2c">
+<link rel="icon" type="image/svg+xml" href="https://concierge.calculon.tech/logo.svg">
+<link rel="stylesheet" href="docs.css">
+</head>
+<body>
+
+<header class="topbar">
+  <a href="./" class="topbar__brand">
+    <span class="topbar__brand-mark">C</span>
+    <span class="topbar__title">Concierge</span>
+  </a>
+  <span class="topbar__divider"></span>
+  <span class="topbar__product"><strong>Documentation</strong></span>
+  <div class="topbar__search">
+    <svg class="topbar__search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+    <input class="topbar__search-input" placeholder="Search the docs, secrets, endpoints…">
+    <span class="topbar__kbd">⌘K</span>
+  </div>
+  <nav class="topbar__nav">
+    <a href="https://concierge.calculon.tech">Hosted&nbsp;app↗</a>
+    <a href="api/concierge/">API&nbsp;ref↗</a>
+    <a href="https://github.com/ananthb/concierge" class="topbar__cta">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M12 .3a12 12 0 0 0-3.8 23.4c.6.1.8-.3.8-.6v-2c-3.3.7-4-1.6-4-1.6-.5-1.4-1.3-1.7-1.3-1.7-1.1-.7.1-.7.1-.7 1.2 0 1.8 1.2 1.8 1.2 1 1.8 2.7 1.3 3.4 1 .1-.8.4-1.3.7-1.6-2.7-.3-5.5-1.3-5.5-6 0-1.3.5-2.3 1.2-3.2-.1-.3-.5-1.5.1-3.2 0 0 1-.3 3.3 1.2a11.5 11.5 0 0 1 6 0c2.3-1.5 3.3-1.2 3.3-1.2.7 1.7.2 3 .1 3.2.8.9 1.2 2 1.2 3.2 0 4.6-2.8 5.7-5.5 6 .4.4.8 1.1.8 2.2v3.3c0 .3.2.7.8.6A12 12 0 0 0 12 .3"/></svg>
+      ananthb/concierge
+    </a>
+  </nav>
+</header>
+
+<div class="shell">
+
+  <aside class="sidebar">
+    <div class="sidebar__group">
+      <div class="sidebar__group-label">Start here</div>
+      <ul class="sidebar__list">
+        <li><a href="index.html"><span class="dot"></span>Overview</a></li>
+        <li><a href="how-it-works.html"><span class="dot"></span>How it works</a></li>
+        <li><a href="architecture.html"><span class="dot"></span>Architecture<span class="badge">ref</span></a></li>
+        <li><a href="configuration.html"><span class="dot"></span>Configuration<span class="badge">ref</span></a></li>
+        <li><a href="deployment.html"><span class="dot"></span>Deployment</a></li>
+      </ul>
+    </div>
+    <div class="sidebar__group">
+      <div class="sidebar__group-label">Channels</div>
+      <ul class="sidebar__list">
+        <li><a href="whatsapp.html"><span class="dot"></span>WhatsApp</a></li>
+        <li><a href="instagram.html" class="is-current"><span class="dot"></span>Instagram</a></li>
+        <li><a href="email-routing.html"><span class="dot"></span>Email routing</a></li>
+        <li><a href="discord.html"><span class="dot"></span>Discord relay</a></li>
+        <li><a href="lead-forms.html"><span class="dot"></span>Lead forms</a></li>
+      </ul>
+    </div>
+    <div class="sidebar__group">
+      <div class="sidebar__group-label">Operate</div>
+      <ul class="sidebar__list">
+        <li><a href="embedding.html"><span class="dot"></span>Embedding</a></li>
+        <li><a href="billing.html"><span class="dot"></span>Billing &amp; credits</a></li>
+        <li><a href="management.html"><span class="dot"></span>Management panel</a></li>
+        <li><a href="facebook-app-setup.html"><span class="dot"></span>Facebook app setup</a></li>
+      </ul>
+    </div>
+    <div class="sidebar__group">
+      <div class="sidebar__group-label">Reference</div>
+      <ul class="sidebar__list">
+        <li><a href="api/concierge/"><span class="dot"></span>Rust API docs<span class="badge">↗</span></a></li>
+        <li><a href="https://github.com/ananthb/concierge"><span class="dot"></span>Source on GitHub<span class="badge">↗</span></a></li>
+      </ul>
+    </div>
+  </aside>
+
+  <main class="content">
+    <div class="content__main prose">
+
+      <div class="crumb">
+        <a href="index.html">Docs</a>
+        <span class="crumb__sep">/</span>
+        <span>Channels</span>
+        <span class="crumb__sep">/</span>
+        <span>Instagram</span>
+      </div>
+
+      <div class="page-eyebrow">Channel · 2 of 4</div>
+      <h1 class="page-title">Instagram <em>auto&#8209;reply</em>.</h1>
+
+
+<p>Instagram is one of four channels in the unified messaging pipeline. Incoming DMs are normalized into <code>InboundMessage</code> structs and processed through the common pipeline, which handles credit deduction, reply generation, and metadata logging.</p>
+
+<h2>Connecting Instagram</h2>
+
+<ol>
+  <li>Go to <strong>Admin &gt; Instagram Accounts &gt; Connect Account</strong></li>
+  <li>Sign in with Facebook (the account that manages your Instagram business page)</li>
+  <li>Concierge discovers your Facebook Pages and finds the linked Instagram business account</li>
+  <li>The page token is encrypted and stored for sending DM replies</li>
+</ol>
+
+<h2>Configuring Auto-Reply</h2>
+
+<p>Each Instagram account has its own <code>ReplyConfig</code> with the same shape as WhatsApp:</p>
+
+<ul>
+  <li><strong>Enabled</strong>: master switch for the account.</li>
+  <li><strong>Auto-Reply Enabled</strong>: master switch for replies on inbound DMs.</li>
+  <li><strong>Default reply</strong>: edited inline; canned text or AI prompt for the no-rule-matched fallback.</li>
+  <li><strong>Reply rules</strong>: ordered list managed at <code>/admin/rules/instagram/{account_id}</code>. Same matchers (Keywords, Prompt) and responses (Canned, AI prompt) as WhatsApp.</li>
+</ul>
+
+<p>The persona prompt at <code>/admin/persona</code> is the system prompt for every AI reply on this account, concatenated with the matched rule's prompt. AI replies require the persona to be safety-<code>Approved</code>.</p>
+
+<h2>How It Works</h2>
+
+<ol>
+  <li>Meta delivers incoming DMs to <code>POST /webhook/instagram</code></li>
+  <li>Concierge verifies the webhook signature</li>
+  <li>Looks up the Instagram account by the recipient page ID</li>
+  <li>One reply credit is deducted from the tenant's balance</li>
+  <li>Generates a reply (static or AI)</li>
+  <li>Sends via the Instagram Pages Messaging API</li>
+  <li>If the send fails, the credit is restored</li>
+  <li>Message metadata (no content) is logged to the unified <code>messages</code> table</li>
+</ol>
+
+<h2>Credit Deduction</h2>
+
+<p>Each auto-reply deducts one reply credit. Credits are deducted before the reply is sent and restored on failure. When credits reach zero, auto-replies stop silently.</p>
+
+<p>See <a href="billing.html">Billing</a> for details on managing credits.</p>
+
+<h2>Requirements</h2>
+
+<p>Your Meta app needs these permissions (requires App Review):</p>
+
+<ul>
+  <li><code>instagram_basic</code></li>
+  <li><code>instagram_manage_messages</code></li>
+  <li><code>pages_manage_metadata</code></li>
+  <li><code>pages_messaging</code></li>
+</ul>
+
+<h2>Token Refresh</h2>
+
+<p>Page tokens are long-lived but can expire. A daily cron job (6 AM UTC) checks all tokens and refreshes those within 7 days of expiry.</p>
+
+      <nav class="pagernav">
+        <a href="whatsapp.html" class="pagernav__item">
+          <div class="pagernav__dir">← Previous</div>
+          <div class="pagernav__title">WhatsApp</div>
+        </a>
+        <a href="email-routing.html" class="pagernav__item pagernav__item--next">
+          <div class="pagernav__dir">Next →</div>
+          <div class="pagernav__title">Email routing</div>
+        </a>
+      </nav>
+
+      <footer class="docfoot">
+        <a href="https://github.com/ananthb/concierge">Open&#8209;source</a>
+        <span>·</span>
+        <a href="https://www.gnu.org/licenses/agpl-3.0.html">AGPL&#8209;3.0</a>
+        <span>·</span>
+        <a href="api/concierge/">API reference</a>
+      </footer>
+
+    </div>
+  </main>
+</div>
+
+</body>
+</html>

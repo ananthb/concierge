@@ -33,17 +33,15 @@ jobs:
             extra-substituters = https://cache.garnix.io
             extra-trusted-public-keys = cache.garnix.io:CTFPyKSLcx5RMJKfLo5EEPUObbA78b0YQ2DTCJXqr9g=
 
-      - name: Build prose docs (mdBook)
-        run: nix develop -c mdbook build doc
-
-      - name: Build API docs (rustdoc)
+      - name: Build API documentation
         run: nix develop -c cargo doc --no-deps
 
       - name: Assemble site
         run: |
-          # mdbook output → site root; cargo doc output → site/api.
           mkdir -p site
-          cp -r doc/book/. site/
+          # Copy every static asset under doc/, not just the HTML — docs.css
+          # (and any future image/JS) needs to ride along.
+          cp -r doc/. site/
           mv target/doc site/api
 
       - uses: actions/configure-pages@v4

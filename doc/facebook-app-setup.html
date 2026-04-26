@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Facebook app setup · Concierge docs</title>
+<meta name="theme-color" content="#e86a2c">
+<link rel="icon" type="image/svg+xml" href="https://concierge.calculon.tech/logo.svg">
+<link rel="stylesheet" href="docs.css">
+</head>
+<body>
+
+<header class="topbar">
+  <a href="./" class="topbar__brand">
+    <span class="topbar__brand-mark">C</span>
+    <span class="topbar__title">Concierge</span>
+  </a>
+  <span class="topbar__divider"></span>
+  <span class="topbar__product"><strong>Documentation</strong></span>
+  <div class="topbar__search">
+    <svg class="topbar__search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+    <input class="topbar__search-input" placeholder="Search the docs, secrets, endpoints…">
+    <span class="topbar__kbd">⌘K</span>
+  </div>
+  <nav class="topbar__nav">
+    <a href="https://concierge.calculon.tech">Hosted&nbsp;app↗</a>
+    <a href="api/concierge/">API&nbsp;ref↗</a>
+    <a href="https://github.com/ananthb/concierge" class="topbar__cta">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M12 .3a12 12 0 0 0-3.8 23.4c.6.1.8-.3.8-.6v-2c-3.3.7-4-1.6-4-1.6-.5-1.4-1.3-1.7-1.3-1.7-1.1-.7.1-.7.1-.7 1.2 0 1.8 1.2 1.8 1.2 1 1.8 2.7 1.3 3.4 1 .1-.8.4-1.3.7-1.6-2.7-.3-5.5-1.3-5.5-6 0-1.3.5-2.3 1.2-3.2-.1-.3-.5-1.5.1-3.2 0 0 1-.3 3.3 1.2a11.5 11.5 0 0 1 6 0c2.3-1.5 3.3-1.2 3.3-1.2.7 1.7.2 3 .1 3.2.8.9 1.2 2 1.2 3.2 0 4.6-2.8 5.7-5.5 6 .4.4.8 1.1.8 2.2v3.3c0 .3.2.7.8.6A12 12 0 0 0 12 .3"/></svg>
+      ananthb/concierge
+    </a>
+  </nav>
+</header>
+
+<div class="shell">
+
+  <aside class="sidebar">
+    <div class="sidebar__group">
+      <div class="sidebar__group-label">Start here</div>
+      <ul class="sidebar__list">
+        <li><a href="index.html"><span class="dot"></span>Overview</a></li>
+        <li><a href="how-it-works.html"><span class="dot"></span>How it works</a></li>
+        <li><a href="architecture.html"><span class="dot"></span>Architecture<span class="badge">ref</span></a></li>
+        <li><a href="configuration.html"><span class="dot"></span>Configuration<span class="badge">ref</span></a></li>
+        <li><a href="deployment.html"><span class="dot"></span>Deployment</a></li>
+      </ul>
+    </div>
+    <div class="sidebar__group">
+      <div class="sidebar__group-label">Channels</div>
+      <ul class="sidebar__list">
+        <li><a href="whatsapp.html"><span class="dot"></span>WhatsApp</a></li>
+        <li><a href="instagram.html"><span class="dot"></span>Instagram</a></li>
+        <li><a href="email-routing.html"><span class="dot"></span>Email routing</a></li>
+        <li><a href="discord.html"><span class="dot"></span>Discord relay</a></li>
+        <li><a href="lead-forms.html"><span class="dot"></span>Lead forms</a></li>
+      </ul>
+    </div>
+    <div class="sidebar__group">
+      <div class="sidebar__group-label">Operate</div>
+      <ul class="sidebar__list">
+        <li><a href="embedding.html"><span class="dot"></span>Embedding</a></li>
+        <li><a href="billing.html"><span class="dot"></span>Billing &amp; credits</a></li>
+        <li><a href="management.html"><span class="dot"></span>Management panel</a></li>
+        <li><a href="facebook-app-setup.html" class="is-current"><span class="dot"></span>Facebook app setup</a></li>
+      </ul>
+    </div>
+    <div class="sidebar__group">
+      <div class="sidebar__group-label">Reference</div>
+      <ul class="sidebar__list">
+        <li><a href="api/concierge/"><span class="dot"></span>Rust API docs<span class="badge">↗</span></a></li>
+        <li><a href="https://github.com/ananthb/concierge"><span class="dot"></span>Source on GitHub<span class="badge">↗</span></a></li>
+      </ul>
+    </div>
+  </aside>
+
+  <main class="content">
+    <div class="content__main prose">
+
+      <div class="crumb">
+        <a href="index.html">Docs</a>
+        <span class="crumb__sep">/</span>
+        <span>Operate</span>
+        <span class="crumb__sep">/</span>
+        <span>Facebook app setup</span>
+      </div>
+
+      <div class="page-eyebrow">Operate</div>
+      <h1 class="page-title">Facebook <em>app setup</em>.</h1>
+
+
+<p>Step-by-step guide to configuring your Meta Developer app for Concierge.</p>
+
+<h2>1. Create a Facebook App</h2>
+
+<ol>
+  <li>Go to <a href="https://developers.facebook.com/apps/">developers.facebook.com/apps</a></li>
+  <li>Click <strong>Create App</strong> &gt; choose <strong>Business</strong> type</li>
+  <li>Enter app name and contact email</li>
+</ol>
+
+<h2>2. Basic Settings</h2>
+
+<p>Go to <strong>Settings &gt; Basic</strong>:</p>
+
+<ul>
+  <li><strong>App Domains</strong>: <code>your-domain</code></li>
+  <li><strong>Privacy Policy URL</strong>: <code>https://your-domain/privacy</code></li>
+  <li><strong>Terms of Service URL</strong>: <code>https://your-domain/terms</code></li>
+  <li><strong>User Data Deletion</strong>: Callback URL <code>https://your-domain/data-deletion</code>, select "Data Deletion Callback URL"</li>
+</ul>
+
+<h2>3. Facebook Login</h2>
+
+<ol>
+  <li>Add the <strong>Facebook Login</strong> product</li>
+  <li>Go to <strong>Facebook Login &gt; Settings</strong></li>
+  <li>Add Valid OAuth Redirect URIs:
+    <ul>
+      <li><code>https://your-domain/auth/facebook/callback</code></li>
+      <li><code>https://your-domain/instagram/callback</code></li>
+    </ul>
+  </li>
+</ol>
+
+<h2>4. WhatsApp</h2>
+
+<ol>
+  <li>Add the <strong>WhatsApp</strong> product</li>
+  <li>Go to <strong>WhatsApp &gt; API Setup</strong>: note your WABA ID</li>
+  <li>Go to <strong>WhatsApp &gt; Configuration</strong>:
+    <ul>
+      <li>Callback URL: <code>https://your-domain/webhook/whatsapp</code></li>
+      <li>Verify token: your <code>WHATSAPP_VERIFY_TOKEN</code> value</li>
+      <li>Subscribe to: <code>messages</code></li>
+    </ul>
+  </li>
+</ol>
+
+<h3>Embedded Signup</h3>
+
+<ol>
+  <li>Go to <strong>WhatsApp &gt; Embedded Signup</strong></li>
+  <li>Create a configuration</li>
+  <li>Copy the Config ID &gt; set as <code>WHATSAPP_SIGNUP_CONFIG_ID</code> in <code>wrangler.toml</code></li>
+</ol>
+
+<h2>5. Instagram Webhooks</h2>
+
+<ol>
+  <li>Go to <strong>Webhooks</strong> in the left sidebar</li>
+  <li>Select <strong>Instagram</strong> from the dropdown</li>
+  <li>Click <strong>Subscribe to this object</strong>
+    <ul>
+      <li>Callback URL: <code>https://your-domain/webhook/instagram</code></li>
+      <li>Verify token: your <code>INSTAGRAM_VERIFY_TOKEN</code> value</li>
+    </ul>
+  </li>
+  <li>Subscribe to the <code>messages</code> field</li>
+</ol>
+
+<h2>6. App Review</h2>
+
+<p>Request these permissions:</p>
+
+<table>
+  <thead>
+    <tr><th>Permission</th><th>Purpose</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>email</code></td><td>Sign-in (auto-approved)</td></tr>
+    <tr><td><code>instagram_basic</code></td><td>Read Instagram account info</td></tr>
+    <tr><td><code>instagram_manage_messages</code></td><td>Send/receive Instagram DMs</td></tr>
+    <tr><td><code>pages_manage_metadata</code></td><td>Discover Instagram business accounts</td></tr>
+    <tr><td><code>pages_messaging</code></td><td>Send DMs via Facebook Pages</td></tr>
+    <tr><td><code>whatsapp_business_management</code></td><td>WhatsApp Embedded Signup</td></tr>
+    <tr><td><code>whatsapp_business_messaging</code></td><td>Send WhatsApp messages</td></tr>
+  </tbody>
+</table>
+
+<p>For each permission, Meta requires:</p>
+
+<ul>
+  <li>A screencast (30-60 seconds) showing the feature in action</li>
+  <li>A description of the use case</li>
+  <li>Your privacy policy URL</li>
+</ul>
+
+<p><strong>Tip</strong>: Before App Review is complete, add yourself as a tester at <strong>App Roles &gt; People</strong> to test all features in development mode.</p>
+
+      <nav class="pagernav">
+        <a href="management.html" class="pagernav__item">
+          <div class="pagernav__dir">← Previous</div>
+          <div class="pagernav__title">Management panel</div>
+        </a>
+        <a href="index.html" class="pagernav__item pagernav__item--next">
+          <div class="pagernav__dir">Next →</div>
+          <div class="pagernav__title">Back to overview</div>
+        </a>
+      </nav>
+
+      <footer class="docfoot">
+        <a href="https://github.com/ananthb/concierge">Open&#8209;source</a>
+        <span>·</span>
+        <a href="https://www.gnu.org/licenses/agpl-3.0.html">AGPL&#8209;3.0</a>
+        <span>·</span>
+        <a href="api/concierge/">API reference</a>
+      </footer>
+
+    </div>
+  </main>
+</div>
+
+</body>
+</html>
