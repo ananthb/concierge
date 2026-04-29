@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Deployment · Concierge docs</title>
-<meta name="description" content="Deploy Concierge to Cloudflare Workers: D1, KV, Queues, secrets, Meta webhooks, Discord bot, Email Routing, Access policies.">
+<meta name="description" content="Deploy Concierge to Cloudflare Workers via Cloudflare Builds: bindings, secrets, Meta webhooks, Discord bot, Email Routing, Access policies.">
 <meta name="theme-color" content="#e86a2c">
 <link rel="icon" type="image/svg+xml" href="https://concierge.calculon.tech/logo.svg">
 <link rel="stylesheet" href="docs.css">
@@ -88,7 +88,7 @@
       <div class="page-eyebrow">Self&#8209;host · ~20 min</div>
       <h1 class="page-title">Deployment <em>guide</em>.</h1>
       <p class="page-lede">
-        From a fresh <code>git clone</code> to a deployed Worker absorbing inbound messages on every channel. You&rsquo;ll provision Cloudflare resources, register Meta and Discord apps, set secrets, and wire webhooks. Plan on twenty minutes if your accounts are ready.
+        From the <strong>Deploy to Cloudflare</strong> button on the README to a deployed Worker absorbing inbound messages on every channel. Cloudflare Builds handles the build and deploy from your fork; you&rsquo;ll set bindings and secrets in the dashboard, register Meta and Discord apps, and wire webhooks. Plan on twenty minutes if your accounts are ready.
       </p>
 
       <div class="page-meta">
@@ -138,9 +138,9 @@
         <div class="card">
           <div class="card__head">
             <span class="card__chip">NIX</span>
-            <span class="card__title">Nix &amp; direnv</span>
+            <span class="card__title">Nix <span class="pill" style="margin-left:6px">optional</span></span>
           </div>
-          <p class="card__desc">The dev shell pins <code>cargo</code>, <code>wrangler</code>, and the WASM toolchain. <code>nix develop</code> drops you in.</p>
+          <p class="card__desc">Cloudflare Builds installs <code>rustup</code>, <code>cargo</code>, and Node automatically &mdash; no Nix required for CI. For local dev, the flake provides a pinned shell: <code>nix develop</code>.</p>
         </div>
       </div>
 
@@ -148,102 +148,64 @@
 
       <ol class="steps">
         <li>
-          <h3>Clone &amp; build</h3>
-          <p>Get the source, drop into the dev shell, and run the test suite to confirm your toolchain works.</p>
-          <div class="codeblock">
-            <div class="codeblock__head">
-              <span class="codeblock__lang">bash</span>
-              <span class="codeblock__file">terminal</span>
-              <button class="codeblock__copy">Copy</button>
-            </div>
-<pre><code><span class="tok-k">git</span> clone <span class="tok-s">https://github.com/ananthb/concierge</span>
-<span class="tok-k">cd</span> concierge
-<span class="tok-k">nix</span> develop
-<span class="tok-k">cargo</span> test</code></pre>
+          <h3>Fork &amp; connect Cloudflare Builds</h3>
+          <p>The fastest path is the <strong>Deploy to Cloudflare</strong> button on the <a href="https://github.com/ananthb/concierge">repo README</a>. It forks <code>ananthb/concierge</code> into your account, creates a Worker, auto-provisions the bindings declared in <code>wrangler.toml</code> (D1, KV, AI, Email send-binding, Durable Objects, Queues), and connects the fork to <strong>Cloudflare Builds</strong> so future pushes deploy automatically.</p>
+          <p>To wire it up by hand: fork the repo, then in the dashboard create a Worker named <code>concierge</code> and connect the fork under <strong>Workers &rsaquo; concierge &rsaquo; Settings &rsaquo; Builds</strong>:</p>
+          <ul>
+            <li><strong>Build command:</strong> leave default (CF Builds detects <code>package.json</code> and runs <code>npm install</code>).</li>
+            <li><strong>Deploy command:</strong> <code>npm run deploy</code> &mdash; runs <code>cargo install -q worker-build &amp;&amp; wrangler deploy</code>.</li>
+          </ul>
+          <p class="muted">Local dev still works the usual way: <code>nix develop</code> (or install <code>cargo</code>, <code>wrangler</code>, the WASM target by hand), then <code>cargo test</code> / <code>wrangler dev</code>.</p>
+        </li>
+
+        <li>
+          <h3>Bind resources in the dashboard</h3>
+          <p>Under <strong>Workers &rsaquo; concierge &rsaquo; Settings &rsaquo; Bindings</strong>. The Deploy button auto-provisions matching resources for most of these; you only need to attend to anything missing. Names must match the <code>binding</code> values in <code>wrangler.toml</code>.</p>
+          <div class="table-wrap">
+            <table class="docs">
+              <thead><tr><th>Binding</th><th>What it backs</th></tr></thead>
+              <tbody>
+                <tr><td><code>DB</code> &rarr; D1 <code>concierge</code></td><td class="muted">SQLite for messages, rules, billing, audit log.</td></tr>
+                <tr><td><code>KV</code></td><td class="muted">Account configs, sessions, persona drafts, billing state.</td></tr>
+                <tr><td><code>AI</code></td><td class="muted">Workers AI (LLaMA reply generation + safety classifier).</td></tr>
+                <tr><td><code>EMAIL</code> (send_email)</td><td class="muted">Outbound forwarding via Email Routing.</td></tr>
+                <tr><td><code>REPLY_BUFFER</code> &rarr; <code>ReplyBufferDO</code></td><td class="muted">Durable Object: buffers inbound messages so we can reply to a batch.</td></tr>
+                <tr><td><code>APPROVALS_DO</code> &rarr; <code>ApprovalsDO</code></td><td class="muted">Durable Object: per-tenant SSE fan-out for the approvals page.</td></tr>
+                <tr><td><code>SAFETY_QUEUE</code> &rarr; <code>concierge-safety</code> + DLQ <code>concierge-safety-dlq</code></td><td class="muted">Persona safety classifier pipeline. If absent, persona safety checks stay <em>Pending</em> and AI replies are blocked tenant-wide; static replies still work.</td></tr>
+              </tbody>
+            </table>
           </div>
         </li>
 
         <li>
-          <h3>Create Cloudflare resources</h3>
-          <p>Provision a D1 database, a KV namespace, and the two queues that back the persona safety classifier. Note the IDs that print; you&rsquo;ll paste them into <code>wrangler.toml</code>.</p>
-          <div class="codeblock">
-            <div class="codeblock__head">
-              <span class="codeblock__lang">bash</span>
-              <span class="codeblock__file">terminal</span>
-              <button class="codeblock__copy">Copy</button>
-            </div>
-<pre><code><span class="tok-c"># SQLite database</span>
-<span class="tok-k">wrangler</span> d1 create concierge
-
-<span class="tok-c"># Config / session / token / persona store</span>
-<span class="tok-k">wrangler</span> kv namespace create KV
-
-<span class="tok-c"># Persona safety classifier queue + DLQ</span>
-<span class="tok-k">wrangler</span> queues create concierge-safety
-<span class="tok-k">wrangler</span> queues create concierge-safety-dlq</code></pre>
-          </div>
-          <div class="callout callout--tip">
-            <div class="callout__icon">→</div>
-            <div class="callout__body">
-              <strong>Update wrangler.toml</strong>
-              <p>Paste the printed IDs into <code>[[d1_databases]]</code> and <code>[[kv_namespaces]]</code>. The <code>EMAIL</code>, <code>AI</code>, and queue producer / consumer bindings are already declared.</p>
-            </div>
-          </div>
-          <p class="muted">If you skip the queues, persona safety checks stay in <em>Pending</em> forever and AI replies are blocked tenant&#8209;wide. Static / canned replies still work.</p>
+          <h3>D1 migrations run on every deploy</h3>
+          <p>The Worker carries its schema in <code>migrations/*.sql</code>. The <code>npm run deploy</code> script runs <code>wrangler d1 migrations apply concierge --remote</code> as part of the deploy; it&rsquo;s idempotent, safe to re-run, and you don&rsquo;t need to do anything for it manually.</p>
+          <p class="muted">If you ever want to run it yourself (e.g. to apply pending migrations without redeploying), <code>nix develop --command wrangler d1 migrations apply concierge --remote</code> works from a local checkout.</p>
         </li>
 
         <li>
-          <h3>Apply database migrations</h3>
-          <p>The Worker carries its schema in <code>migrations/*.sql</code>. <code>wrangler d1 migrations apply</code> tracks what&rsquo;s already been run and applies the rest.</p>
-          <div class="codeblock">
-            <div class="codeblock__head">
-              <span class="codeblock__lang">bash</span>
-              <span class="codeblock__file">terminal</span>
-              <button class="codeblock__copy">Copy</button>
-            </div>
-<pre><code><span class="tok-k">wrangler</span> d1 migrations apply concierge <span class="tok-v">--remote</span></code></pre>
-          </div>
-          <p>This is idempotent, safe to re&#8209;run on every deploy.</p>
-        </li>
-
-        <li>
-          <h3>Set secrets</h3>
-          <p>Most of your real configuration lives in Worker secrets. The full reference is on the <a href="configuration.html">configuration page</a>; the minimum to deploy is below.</p>
-          <div class="codeblock">
-            <div class="codeblock__head">
-              <span class="codeblock__lang">bash</span>
-              <span class="codeblock__file">at minimum</span>
-              <button class="codeblock__copy">Copy</button>
-            </div>
-<pre><code><span class="tok-c"># Core encryption: generate with: openssl rand -hex 32</span>
-<span class="tok-k">wrangler</span> secret put <span class="tok-v">ENCRYPTION_KEY</span>
-
-<span class="tok-c"># Google OAuth (sign-in)</span>
-<span class="tok-k">wrangler</span> secret put <span class="tok-v">GOOGLE_OAUTH_CLIENT_ID</span>
-<span class="tok-k">wrangler</span> secret put <span class="tok-v">GOOGLE_OAUTH_CLIENT_SECRET</span>
-
-<span class="tok-c"># Meta: Facebook / Instagram / WhatsApp</span>
-<span class="tok-k">wrangler</span> secret put <span class="tok-v">META_APP_ID</span>
-<span class="tok-k">wrangler</span> secret put <span class="tok-v">META_APP_SECRET</span>
-<span class="tok-k">wrangler</span> secret put <span class="tok-v">WHATSAPP_ACCESS_TOKEN</span>
-<span class="tok-k">wrangler</span> secret put <span class="tok-v">WHATSAPP_VERIFY_TOKEN</span>
-<span class="tok-k">wrangler</span> secret put <span class="tok-v">INSTAGRAM_VERIFY_TOKEN</span>
-
-<span class="tok-c"># Discord</span>
-<span class="tok-k">wrangler</span> secret put <span class="tok-v">DISCORD_PUBLIC_KEY</span>
-<span class="tok-k">wrangler</span> secret put <span class="tok-v">DISCORD_APPLICATION_ID</span>
-<span class="tok-k">wrangler</span> secret put <span class="tok-v">DISCORD_BOT_TOKEN</span>
-
-<span class="tok-c"># Razorpay: only if billing is enabled</span>
-<span class="tok-k">wrangler</span> secret put <span class="tok-v">RAZORPAY_KEY_ID</span>
-<span class="tok-k">wrangler</span> secret put <span class="tok-v">RAZORPAY_KEY_SECRET</span>
-<span class="tok-k">wrangler</span> secret put <span class="tok-v">RAZORPAY_WEBHOOK_SECRET</span></code></pre>
+          <h3>Set secrets in the dashboard</h3>
+          <p>All runtime secrets live under <strong>Workers &rsaquo; concierge &rsaquo; Settings &rsaquo; Variables and Secrets &rsaquo; Secrets</strong>. The full reference is on the <a href="configuration.html">configuration page</a>; the minimum to deploy is below.</p>
+          <div class="table-wrap">
+            <table class="docs">
+              <thead><tr><th>Secret</th><th>Notes</th></tr></thead>
+              <tbody>
+                <tr><td><code>ENCRYPTION_KEY</code></td><td class="muted">32-byte hex (token encryption). Generate with <code>openssl rand -hex 32</code>.</td></tr>
+                <tr><td><code>GOOGLE_OAUTH_CLIENT_ID</code> / <code>GOOGLE_OAUTH_CLIENT_SECRET</code></td><td class="muted">Sign-in.</td></tr>
+                <tr><td><code>META_APP_ID</code> / <code>META_APP_SECRET</code></td><td class="muted">Shared across Facebook Login, Instagram, and WhatsApp.</td></tr>
+                <tr><td><code>WHATSAPP_ACCESS_TOKEN</code> / <code>WHATSAPP_VERIFY_TOKEN</code></td><td class="muted">Platform WABA token + webhook verifier.</td></tr>
+                <tr><td><code>INSTAGRAM_VERIFY_TOKEN</code></td><td class="muted">Instagram DM webhook verifier.</td></tr>
+                <tr><td><code>DISCORD_PUBLIC_KEY</code> / <code>DISCORD_APPLICATION_ID</code> / <code>DISCORD_BOT_TOKEN</code></td><td class="muted">Discord interactions + bot.</td></tr>
+                <tr><td><code>RAZORPAY_KEY_ID</code> / <code>RAZORPAY_KEY_SECRET</code> / <code>RAZORPAY_WEBHOOK_SECRET</code></td><td class="muted">Only if billing is enabled.</td></tr>
+                <tr><td><code>CF_DNS_API_TOKEN</code></td><td class="muted">Cloudflare API token with DNS Edit on the email zone &mdash; needed only for tenant subdomain provisioning.</td></tr>
+              </tbody>
+            </table>
           </div>
         </li>
 
         <li>
-          <h3>Configure <code>wrangler.toml</code> variables</h3>
-          <p>Plain&#8209;text vars belong in the <code>[vars]</code> block. These are the ones to set:</p>
+          <h3>Set runtime variables in the dashboard</h3>
+          <p>Plain-text vars live alongside the secrets, under <strong>Variables and Secrets &rsaquo; Variables</strong>. <code>EMAIL_BASE_DOMAIN</code> is the only var the repo ships with a default for (<code>cncg.email</code>); the rest you set per-deployment:</p>
           <div class="table-wrap">
             <table class="docs">
               <thead><tr><th>Variable</th><th>What it&rsquo;s for</th></tr></thead>
@@ -252,7 +214,8 @@
                 <tr><td><code>CF_ACCESS_AUD</code></td><td class="muted">Application Audience (AUD) tag from your Access app for <code>/manage/*</code>.</td></tr>
                 <tr><td><code>WHATSAPP_WABA_ID</code></td><td class="muted">Your WhatsApp Business Account ID.</td></tr>
                 <tr><td><code>WHATSAPP_SIGNUP_CONFIG_ID</code></td><td class="muted">Meta Embedded Signup configuration ID.</td></tr>
-                <tr><td><code>EMAIL_BASE_DOMAIN</code></td><td class="muted">The single domain you own that hosts catch&#8209;all email subdomains (default <code>cncg.email</code>).</td></tr>
+                <tr><td><code>EMAIL_ZONE_ID</code></td><td class="muted">Cloudflare zone ID for <code>EMAIL_BASE_DOMAIN</code>. Used by the DNS provisioning code path.</td></tr>
+                <tr><td><code>AI_MODEL</code> / <code>AI_FAST_MODEL</code></td><td class="muted">Optional overrides for the reply and injection-scanning models.</td></tr>
               </tbody>
             </table>
           </div>
@@ -260,15 +223,16 @@
 
         <li>
           <h3>Deploy</h3>
-          <p>One command. The first deploy compiles to WASM, uploads, and prints your Worker URL.</p>
+          <p>Push to <code>main</code>. Cloudflare Builds runs <code>npm run deploy</code> &mdash; installs <code>worker-build</code>, compiles the Rust crate to WASM, applies any pending D1 migrations, runs <code>wrangler deploy</code>. Watch the build log under <strong>Settings &rsaquo; Builds</strong>; it prints the deployed Worker URL when it&rsquo;s done.</p>
           <div class="codeblock">
             <div class="codeblock__head">
               <span class="codeblock__lang">bash</span>
               <span class="codeblock__file">terminal</span>
               <button class="codeblock__copy">Copy</button>
             </div>
-<pre><code><span class="tok-k">wrangler</span> deploy</code></pre>
+<pre><code><span class="tok-k">git</span> push origin main</code></pre>
           </div>
+          <p class="muted">For an out-of-band deploy from a local checkout, <code>nix develop --command wrangler deploy</code> still works.</p>
         </li>
 
         <li>
@@ -312,7 +276,7 @@
           <ol>
             <li>In the Cloudflare dashboard, go to <strong>Zero Trust → Access → Applications</strong>.</li>
             <li>Create an application for <code>your-domain/manage/*</code>.</li>
-            <li>Copy the <strong>Application Audience (AUD) Tag</strong> and set it as <code>CF_ACCESS_AUD</code> in <code>wrangler.toml</code>.</li>
+            <li>Copy the <strong>Application Audience (AUD) Tag</strong> and set it as the <code>CF_ACCESS_AUD</code> variable under <strong>Workers &rsaquo; concierge &rsaquo; Settings &rsaquo; Variables and Secrets</strong>.</li>
             <li>Add a policy allowing the emails that should have management access.</li>
           </ol>
           <p>See the <a href="management.html">Management panel</a> page.</p>
