@@ -373,3 +373,56 @@ privacy-li-deletion-2 = Or remove the Concierge app from your <a href="https://w
 privacy-p-deletion-suffix = Deletion is immediate and irreversible.
 privacy-h2-contact = Contact
 privacy-p-contact = Questions? Open an issue at <a href="https://github.com/ananthb/concierge">github.com/ananthb/concierge</a>.
+
+# Wizard step 2: Connect channels.
+wizard-channels-eyebrow = Plug in
+wizard-channels-headline = Where do your customers already talk to you?
+wizard-channels-lead = Connect your channels. Skip anything you don't use — you can add more from the dashboard later.
+wizard-channels-continue = Continue →
+wizard-channels-skip = Skip →
+wizard-channels-name-instagram = Instagram DMs
+wizard-channels-flavor-instagram = Meta login. We'll read DMs from your business account.
+wizard-channels-handle-instagram-demo = @blossom.florist
+wizard-channels-name-whatsapp = WhatsApp Business
+wizard-channels-flavor-whatsapp = Uses your Meta Business access token + phone number ID.
+wizard-channels-handle-whatsapp-demo = +61 431 555 019
+wizard-channels-name-discord = Discord
+wizard-channels-flavor-discord = Install the bot to relay messages, approve AI drafts, and run slash commands.
+wizard-channels-discord-handle-fallback = Connected
+wizard-channels-name-email = Email
+wizard-channels-email-lead-prefix = Pick a name to receive mail at
+wizard-channels-email-lead-suffix = . Replies go to the sender; you and your team get a copy via Cc/Bcc.
+wizard-channels-email-placeholder = your-name
+wizard-channels-email-add = Add
+wizard-channels-email-help = First address is free. Need more? ₹99 / $1 per extra, one-time.
+wizard-channels-card-active = active
+wizard-channels-card-manage = Manage
+wizard-channels-card-connect = Connect →
+wizard-channels-card-connected = connected
+
+# Wizard step 3: Notifications.
+wizard-notifications-eyebrow = Heads up
+wizard-notifications-headline = How should we notify you?
+wizard-notifications-lead = Approvals are required: that's how the AI asks you before sending. Digests are optional.
+wizard-notifications-card-eyebrow = AI reply approvals
+wizard-notifications-card-required = *
+wizard-notifications-card-lead = When the AI drafts a reply, where should we ask you to approve it? Pick at least one.
+wizard-notifications-channel-discord = Discord
+wizard-notifications-channel-discord-sub = real-time threads
+wizard-notifications-channel-email = Email
+wizard-notifications-channel-email-sub = batched digest
+wizard-notifications-cadence-prefix = Send digest
+wizard-notifications-discord-missing = Discord isn't installed yet. You need the bot in a server before approvals can land there.
+wizard-notifications-discord-install = Install Discord
+wizard-notifications-continue = Continue →
+
+# Wizard step 4: Replies.
+wizard-replies-eyebrow = Replies
+wizard-replies-headline = Pick a starting style
+wizard-replies-lead-prefix = Each preset comes with a tone and a small set of default reply rules. You can fine-tune everything from
+wizard-replies-lead-link = Persona settings
+wizard-replies-lead-suffix = after launch.
+wizard-replies-wait-eyebrow = Wait before replying
+wizard-replies-wait-lead = If a customer sends a few messages in a row, hold off until they pause so the AI sees the whole burst at once. Default applies to every channel; override per account in Settings.
+wizard-replies-wait-instant = instant
+wizard-replies-continue = Continue →

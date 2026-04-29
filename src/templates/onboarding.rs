@@ -300,39 +300,51 @@ pub fn connect_html(
     base_url: &str,
     locale: &crate::locale::Locale,
 ) -> String {
+    let ig_name = t(locale, "wizard-channels-name-instagram");
+    let ig_flavor = t(locale, "wizard-channels-flavor-instagram");
+    let ig_demo = t(locale, "wizard-channels-handle-instagram-demo");
     let ig_card = channel_card(
         "ig",
-        "Instagram DMs",
+        &ig_name,
         ig_connected,
-        "@blossom.florist",
-        "Meta login. We'll read DMs from your business account.",
+        &ig_demo,
+        &ig_flavor,
         tenant_id,
         base_url,
+        locale,
     );
+    let wa_name = t(locale, "wizard-channels-name-whatsapp");
+    let wa_flavor = t(locale, "wizard-channels-flavor-whatsapp");
+    let wa_demo = t(locale, "wizard-channels-handle-whatsapp-demo");
     let wa_card = channel_card(
         "wa",
-        "WhatsApp Business",
+        &wa_name,
         wa_connected,
-        "+61 431 555 019",
-        "Uses your Meta Business access token + phone number ID.",
+        &wa_demo,
+        &wa_flavor,
         tenant_id,
         base_url,
+        locale,
     );
+    let dc_fallback = t(locale, "wizard-channels-discord-handle-fallback");
     let (dc_connected, dc_handle) = match discord {
         Some(c) => (
             true,
-            c.guild_name.clone().unwrap_or_else(|| "Connected".into()),
+            c.guild_name.clone().unwrap_or_else(|| dc_fallback.clone()),
         ),
         None => (false, String::new()),
     };
+    let dc_name = t(locale, "wizard-channels-name-discord");
+    let dc_flavor = t(locale, "wizard-channels-flavor-discord");
     let dc_card = channel_card(
         "discord",
-        "Discord",
+        &dc_name,
         dc_connected,
         &dc_handle,
-        "Install the bot to relay messages, approve AI drafts, and run slash commands.",
+        &dc_flavor,
         tenant_id,
         base_url,
+        locale,
     );
 
     let email_rows: String = email_addresses
@@ -360,18 +372,19 @@ pub fn connect_html(
             r#"<div class="channel" style="grid-column:1/-1">
   <div class="channel-head">
     <div class="channel-mark">{mail_icon}</div>
-    <div><div class="channel-name">Email</div></div>
+    <div><div class="channel-name">{email_name}</div></div>
   </div>
   <div class="channel-body">
-    <p class="muted m-0 mb-12">Pick a name to receive mail at <code>name@{base_domain}</code>. Replies go to the sender; you and your team get a copy via Cc/Bcc.</p>
+    <p class="muted m-0 mb-12">{lead_prefix} <code>name@{base_domain}</code>{lead_suffix}</p>
     {email_rows}
     <form hx-post="{base_url}/admin/wizard/email/add" hx-target="body" hx-swap="innerHTML"
           class="row gap-8 mt-8">
-      <input class="input fs-13" type="text" name="label" value="{slug}" placeholder="your-name" style="max-width:160px">
+      <label for="wiz-email-label" class="sr-only">{email_name}</label>
+      <input id="wiz-email-label" class="input fs-13" type="text" name="label" value="{slug}" placeholder="{ph}" style="max-width:160px">
       <span class="mono muted fs-13">@{base_domain}</span>
-      <button type="submit" class="btn sm ml-auto">Add</button>
+      <button type="submit" class="btn sm ml-auto">{add}</button>
     </form>
-    <div class="mono muted fs-11 mt-6">First address is free. Need more? ₹99 / $1 per extra, one-time.</div>
+    <div class="mono muted fs-11 mt-6">{help}</div>
   </div>
 </div>"#,
             mail_icon = channel_icon("mail"),
@@ -379,24 +392,30 @@ pub fn connect_html(
             base_url = base_url,
             slug = html_escape(suggested_slug),
             base_domain = html_escape(email_base_domain),
+            email_name = t(locale, "wizard-channels-name-email"),
+            lead_prefix = t(locale, "wizard-channels-email-lead-prefix"),
+            lead_suffix = t(locale, "wizard-channels-email-lead-suffix"),
+            ph = t(locale, "wizard-channels-email-placeholder"),
+            add = t(locale, "wizard-channels-email-add"),
+            help = t(locale, "wizard-channels-email-help"),
         )
     };
 
     let has_anything = ig_connected || wa_connected || !email_addresses.is_empty();
     let continue_label = if has_anything {
-        "Continue &rarr;"
+        t(locale, "wizard-channels-continue")
     } else {
-        "Skip &rarr;"
+        t(locale, "wizard-channels-skip")
     };
 
     let content = format!(
         r#"<section class="page narrow">
-  <div class="section-label"><span class="mono muted">02 / 05</span><span class="eyebrow">Plug in</span></div>
-  <h2 class="display-md">Where do your customers already talk to you?</h2>
-  <p class="lead">Connect your channels. Skip anything you don't use &mdash; you can add more from the dashboard later.</p>
+  <div class="section-label"><span class="mono muted">02 / 05</span><span class="eyebrow">{eyebrow}</span></div>
+  <h2 class="display-md">{headline}</h2>
+  <p class="lead">{lead}</p>
   <div class="channels-grid">{ig_card}{wa_card}{dc_card}{email_section}</div>
   <div class="between mt-36">
-    <button class="btn ghost" hx-post="{base_url}/admin/wizard/goto" hx-vals='{{"to":"basics"}}' hx-target="body" hx-swap="innerHTML">&larr; Back</button>
+    <button class="btn ghost" hx-post="{base_url}/admin/wizard/goto" hx-vals='{{"to":"basics"}}' hx-target="body" hx-swap="innerHTML">{back}</button>
     <button class="btn primary" hx-post="{base_url}/admin/wizard/goto" hx-vals='{{"to":"notifications"}}' hx-target="body" hx-swap="innerHTML">{continue_label}</button>
   </div>
 </section>"#,
@@ -406,6 +425,10 @@ pub fn connect_html(
         email_section = email_section,
         base_url = base_url,
         continue_label = continue_label,
+        eyebrow = t(locale, "wizard-channels-eyebrow"),
+        headline = t(locale, "wizard-channels-headline"),
+        lead = t(locale, "wizard-channels-lead"),
+        back = t(locale, "wizard-back"),
     );
 
     // Progress: 30% Instagram, 30% WhatsApp, 20% Discord, 20% any email address.
@@ -442,28 +465,31 @@ pub struct ChannelCardProps<'a> {
     pub manage_href: &'a str,
 }
 
-pub fn channel_card_html(p: &ChannelCardProps) -> String {
+pub fn channel_card_html(p: &ChannelCardProps, locale: &crate::locale::Locale) -> String {
     if p.connected {
         format!(
             r#"<div class="channel is-connected">
-  <div class="ribbon">connected</div>
+  <div class="ribbon">{connected_lbl}</div>
   <div class="channel-head">
     <div class="channel-mark">{icon}</div>
     <div><div class="channel-name">{name}</div></div>
     <span class="dot ok ml-auto"></span>
   </div>
   <div class="channel-body">
-    <div class="mono text-ok fs-12">&#x25CF; active</div>
+    <div class="mono text-ok fs-12">&#x25CF; {active_lbl}</div>
     <div class="serif mt-4" style="font-size:18px;line-height:1.2">{status}</div>
   </div>
   <div class="row gap-8">
-    <a href="{manage_href}" class="btn ghost sm">Manage</a>
+    <a href="{manage_href}" class="btn ghost sm">{manage_lbl}</a>
   </div>
 </div>"#,
             icon = channel_icon(p.key),
             name = html_escape(p.name),
             status = html_escape(p.status_line),
             manage_href = p.manage_href,
+            connected_lbl = t(locale, "wizard-channels-card-connected"),
+            active_lbl = t(locale, "wizard-channels-card-active"),
+            manage_lbl = t(locale, "wizard-channels-card-manage"),
         )
     } else {
         format!(
@@ -474,12 +500,13 @@ pub fn channel_card_html(p: &ChannelCardProps) -> String {
     <span class="dot ml-auto"></span>
   </div>
   <div class="channel-body"><p class="muted m-0">{flavor}</p></div>
-  <a href="{connect_href}" class="btn">Connect &rarr;</a>
+  <a href="{connect_href}" class="btn">{connect_lbl}</a>
 </div>"#,
             icon = channel_icon(p.key),
             name = html_escape(p.name),
             flavor = html_escape(p.status_line),
             connect_href = p.connect_href,
+            connect_lbl = t(locale, "wizard-channels-card-connect"),
         )
     }
 }
@@ -493,6 +520,7 @@ fn channel_card(
     flavor: &str,
     tenant_id: &str,
     base_url: &str,
+    locale: &crate::locale::Locale,
 ) -> String {
     let connect_href = match key {
         "ig" => format!("{base_url}/instagram/auth/{}", html_escape(tenant_id)),
@@ -507,14 +535,17 @@ fn channel_card(
         _ => format!("{base_url}/admin/{key}"),
     };
     let status_line = if connected { handle } else { flavor };
-    channel_card_html(&ChannelCardProps {
-        key,
-        name,
-        connected,
-        status_line,
-        connect_href: &connect_href,
-        manage_href: &manage_href,
-    })
+    channel_card_html(
+        &ChannelCardProps {
+            key,
+            name,
+            connected,
+            status_line,
+            connect_href: &connect_href,
+            manage_href: &manage_href,
+        },
+        locale,
+    )
 }
 
 pub fn channel_icon(key: &str) -> &'static str {
@@ -573,22 +604,22 @@ pub fn notifications_html(
 
     let content = format!(
         r##"<section class="page narrow">
-  <div class="section-label"><span class="mono muted">03 / 05</span><span class="eyebrow">Heads up</span></div>
-  <h2 class="display-md">How should we notify you?</h2>
-  <p class="lead">Approvals are required: that's how the AI asks you before sending. Digests are optional.</p>
+  <div class="section-label"><span class="mono muted">03 / 05</span><span class="eyebrow">{eyebrow}</span></div>
+  <h2 class="display-md">{headline}</h2>
+  <p class="lead">{lead}</p>
 
   <form hx-post="{base_url}/admin/wizard/notifications" hx-target="#notif-toast" hx-swap="innerHTML">
     <div class="card p-22 mb-16">
-      <div class="eyebrow mb-12">AI reply approvals <span class="text-warn">*</span></div>
-      <p class="muted mb-14 fs-14">When the AI drafts a reply, where should we ask you to approve it? Pick at least one.</p>
-      <div class="admin-grid">
+      <div class="eyebrow mb-12">{card_eyebrow} <span class="text-warn">{required_mark}</span></div>
+      <p class="muted mb-14 fs-14">{card_lead}</p>
+      <div class="admin-grid" role="group" aria-label="{card_eyebrow}">
         <label class="admin-card" :class="approval.discord ? 'selected' : ''" style="min-height:auto;cursor:pointer">
           <input type="hidden" name="approval_discord" value="false">
           <input type="checkbox" name="approval_discord" value="true" class="hidden" x-model="approval.discord">
           <div class="row gap-12">
             <div class="admin-mark icon-chip">{discord_icon}</div>
-            <div><div class="fw-600">Discord</div>
-            <div class="mono muted fs-11">real-time threads</div></div>
+            <div><div class="fw-600">{discord_lbl}</div>
+            <div class="mono muted fs-11">{discord_sub}</div></div>
           </div>
         </label>
         <label class="admin-card" :class="approval.email ? 'selected' : ''" style="min-height:auto;cursor:pointer">
@@ -596,28 +627,29 @@ pub fn notifications_html(
           <input type="checkbox" name="approval_email" value="true" class="hidden" x-model="approval.email">
           <div class="row gap-12">
             <div class="admin-mark icon-chip">{mail_icon}</div>
-            <div><div class="fw-600">Email</div>
-            <div class="mono muted fs-11">batched digest</div></div>
+            <div><div class="fw-600">{email_lbl}</div>
+            <div class="mono muted fs-11">{email_sub}</div></div>
           </div>
-          <div class="freq-row row gap-8 mt-12" x-show="approval.email" x-cloak>
-            <span class="mono muted fs-12">Send digest</span>
-            <select class="select fs-13" name="approval_cadence" style="width:auto;padding:6px 10px">{approval_freq_html}</select>
+          <div class="freq-row row gap-8 mt-12" x-show="approval.email" x-cloak :aria-hidden="!approval.email">
+            <span class="mono muted fs-12">{cadence_prefix}</span>
+            <label for="wiz-approval-cadence" class="sr-only">{cadence_prefix}</label>
+            <select id="wiz-approval-cadence" class="select fs-13" name="approval_cadence" style="width:auto;padding:6px 10px">{approval_freq_html}</select>
           </div>
         </label>
       </div>
-      <div class="card-soft p-14 mt-12" x-show="approval.discord && !{dc_installed_js}" x-cloak>
+      <div class="card-soft p-14 mt-12" x-show="approval.discord && !{dc_installed_js}" x-cloak :aria-hidden="!(approval.discord && !{dc_installed_js})">
         <div class="row gap-12">
-          <div class="fs-13 flex-1">Discord isn't installed yet. You need the bot in a server before approvals can land there.</div>
-          <a href="{base_url}/admin/discord/install?from=wizard_heads_up" class="btn sm primary">Install Discord</a>
+          <div class="fs-13 flex-1">{discord_missing}</div>
+          <a href="{base_url}/admin/discord/install?from=wizard_heads_up" class="btn sm primary">{discord_install}</a>
         </div>
       </div>
     </div>
 
     <div class="between mt-36">
-      <button type="button" class="btn ghost" hx-post="{base_url}/admin/wizard/goto" hx-vals='{{"to":"channels"}}' hx-target="body" hx-swap="innerHTML">&larr; Back</button>
-      <button type="submit" class="btn primary" :disabled="!approval.discord && !approval.email">Continue &rarr;</button>
+      <button type="button" class="btn ghost" hx-post="{base_url}/admin/wizard/goto" hx-vals='{{"to":"channels"}}' hx-target="body" hx-swap="innerHTML">{back}</button>
+      <button type="submit" class="btn primary" :disabled="!approval.discord && !approval.email">{cont}</button>
     </div>
-    <div id="notif-toast" class="mt-12"></div>
+    <div id="notif-toast" class="mt-12" role="status" aria-live="polite" aria-atomic="true"></div>
   </form>
 </section>"##,
         base_url = base_url,
@@ -625,6 +657,21 @@ pub fn notifications_html(
         mail_icon = channel_icon("mail"),
         approval_freq_html = approval_freq_html,
         dc_installed_js = if discord_installed { "true" } else { "false" },
+        eyebrow = t(locale, "wizard-notifications-eyebrow"),
+        headline = t(locale, "wizard-notifications-headline"),
+        lead = t(locale, "wizard-notifications-lead"),
+        card_eyebrow = t(locale, "wizard-notifications-card-eyebrow"),
+        required_mark = t(locale, "wizard-notifications-card-required"),
+        card_lead = t(locale, "wizard-notifications-card-lead"),
+        discord_lbl = t(locale, "wizard-notifications-channel-discord"),
+        discord_sub = t(locale, "wizard-notifications-channel-discord-sub"),
+        email_lbl = t(locale, "wizard-notifications-channel-email"),
+        email_sub = t(locale, "wizard-notifications-channel-email-sub"),
+        cadence_prefix = t(locale, "wizard-notifications-cadence-prefix"),
+        discord_missing = t(locale, "wizard-notifications-discord-missing"),
+        discord_install = t(locale, "wizard-notifications-discord-install"),
+        back = t(locale, "wizard-back"),
+        cont = t(locale, "wizard-notifications-continue"),
     );
 
     let x_data = format!(
@@ -682,37 +729,49 @@ pub fn replies_html(
 
     let content = format!(
         r#"<section class="page narrow">
-  <div class="section-label"><span class="mono muted">04 / 05</span><span class="eyebrow">Replies</span></div>
-  <h2 class="display-md">Pick a starting style</h2>
-  <p class="lead">Each preset comes with a tone and a small set of default reply rules. You can fine-tune everything from <a href="{base_url}/admin/persona">Persona settings</a> after launch.</p>
+  <div class="section-label"><span class="mono muted">04 / 05</span><span class="eyebrow">{eyebrow}</span></div>
+  <h2 class="display-md">{headline}</h2>
+  <p class="lead">{lead_prefix} <a href="{base_url}/admin/persona">{lead_link}</a> {lead_suffix}</p>
 
   <form hx-post="{base_url}/admin/wizard/replies/save" hx-target="body" hx-swap="innerHTML">
-    <div style="display:grid;gap:12px;grid-template-columns:1fr 1fr;margin-bottom:24px">
+    <div style="display:grid;gap:12px;grid-template-columns:1fr 1fr;margin-bottom:24px" role="radiogroup" aria-labelledby="replies-preset-label">
+      <span id="replies-preset-label" class="sr-only">{headline}</span>
       {preset_cards}
     </div>
 
     <div class="card p-22 mb-16">
-      <div class="eyebrow mb-8">Wait before replying</div>
-      <p class="muted fs-13 m-0 mb-12">If a customer sends a few messages in a row, hold off until they pause so the AI sees the whole burst at once. Default applies to every channel; override per account in Settings.</p>
+      <div class="eyebrow mb-8" id="wiz-wait-label">{wait_eyebrow}</div>
+      <p class="muted fs-13 m-0 mb-12">{wait_lead}</p>
       <div class="row gap-12">
         <input type="range" min="0" max="30" step="1" name="default_wait_seconds"
                x-model.number="waitSeconds"
                class="flex-1"
+               aria-labelledby="wiz-wait-label"
                style="accent-color:var(--accent)">
         <div class="mono ta-right" style="min-width:80px">
-          <span x-text="waitSeconds === 0 ? 'instant' : waitSeconds + 's'"></span>
+          <span x-text="waitSeconds === 0 ? '{instant}' : waitSeconds + 's'"></span>
         </div>
       </div>
     </div>
 
     <div class="between mt-32">
-      <button type="button" class="btn ghost" hx-post="{base_url}/admin/wizard/goto" hx-vals='{{"to":"notifications"}}' hx-target="body" hx-swap="innerHTML">&larr; Back</button>
-      <button type="submit" class="btn primary" :disabled="!preset">Continue &rarr;</button>
+      <button type="button" class="btn ghost" hx-post="{base_url}/admin/wizard/goto" hx-vals='{{"to":"notifications"}}' hx-target="body" hx-swap="innerHTML">{back}</button>
+      <button type="submit" class="btn primary" :disabled="!preset">{cont}</button>
     </div>
   </form>
 </section>"#,
         base_url = base_url,
         preset_cards = preset_cards,
+        eyebrow = t(locale, "wizard-replies-eyebrow"),
+        headline = t(locale, "wizard-replies-headline"),
+        lead_prefix = t(locale, "wizard-replies-lead-prefix"),
+        lead_link = t(locale, "wizard-replies-lead-link"),
+        lead_suffix = t(locale, "wizard-replies-lead-suffix"),
+        wait_eyebrow = t(locale, "wizard-replies-wait-eyebrow"),
+        wait_lead = t(locale, "wizard-replies-wait-lead"),
+        instant = t(locale, "wizard-replies-wait-instant"),
+        back = t(locale, "wizard-back"),
+        cont = t(locale, "wizard-replies-continue"),
     );
 
     let x_data = format!(

@@ -91,6 +91,13 @@ pub fn admin_settings_html(
     // Integrations section reuses the wizard's channel card helper, so
     // Connect/Manage behaves identically to the onboarding Channels step.
     use super::onboarding::{channel_card_html, ChannelCardProps};
+    let ig_name = t(locale, "wizard-channels-name-instagram");
+    let ig_flavor = t(locale, "wizard-channels-flavor-instagram");
+    let wa_name = t(locale, "wizard-channels-name-whatsapp");
+    let wa_flavor = t(locale, "wizard-channels-flavor-whatsapp");
+    let dc_name = t(locale, "wizard-channels-name-discord");
+    let dc_flavor = t(locale, "wizard-channels-flavor-discord");
+    let dc_fallback = t(locale, "wizard-channels-discord-handle-fallback");
     let ig_card = {
         let ig_handle = ig
             .first()
@@ -101,18 +108,21 @@ pub fn admin_settings_html(
             crate::helpers::html_escape(tenant_id)
         );
         let manage = format!("{base_url}/admin/instagram");
-        channel_card_html(&ChannelCardProps {
-            key: "ig",
-            name: "Instagram DMs",
-            connected: !ig.is_empty(),
-            status_line: if ig.is_empty() {
-                "Meta login. We'll read DMs from your business account."
-            } else {
-                &ig_handle
+        channel_card_html(
+            &ChannelCardProps {
+                key: "ig",
+                name: &ig_name,
+                connected: !ig.is_empty(),
+                status_line: if ig.is_empty() {
+                    &ig_flavor
+                } else {
+                    &ig_handle
+                },
+                connect_href: &connect,
+                manage_href: &manage,
             },
-            connect_href: &connect,
-            manage_href: &manage,
-        })
+            locale,
+        )
     };
     let wa_card = {
         let wa_handle = wa
@@ -121,37 +131,43 @@ pub fn admin_settings_html(
             .unwrap_or_default();
         let connect = format!("{base_url}/admin/whatsapp/new");
         let manage = format!("{base_url}/admin/whatsapp");
-        channel_card_html(&ChannelCardProps {
-            key: "wa",
-            name: "WhatsApp Business",
-            connected: !wa.is_empty(),
-            status_line: if wa.is_empty() {
-                "Uses your Meta Business access token + phone number ID."
-            } else {
-                &wa_handle
+        channel_card_html(
+            &ChannelCardProps {
+                key: "wa",
+                name: &wa_name,
+                connected: !wa.is_empty(),
+                status_line: if wa.is_empty() {
+                    &wa_flavor
+                } else {
+                    &wa_handle
+                },
+                connect_href: &connect,
+                manage_href: &manage,
             },
-            connect_href: &connect,
-            manage_href: &manage,
-        })
+            locale,
+        )
     };
     let dc_card = {
         let dc_handle = discord
             .and_then(|c| c.guild_name.clone())
-            .unwrap_or_else(|| "Connected".to_string());
+            .unwrap_or_else(|| dc_fallback.clone());
         let connect = format!("{base_url}/admin/discord/install");
         let manage = format!("{base_url}/admin/discord");
-        channel_card_html(&ChannelCardProps {
-            key: "discord",
-            name: "Discord",
-            connected: discord.is_some(),
-            status_line: if discord.is_some() {
-                &dc_handle
-            } else {
-                "Install the bot to relay messages, approve AI drafts, and run slash commands."
+        channel_card_html(
+            &ChannelCardProps {
+                key: "discord",
+                name: &dc_name,
+                connected: discord.is_some(),
+                status_line: if discord.is_some() {
+                    &dc_handle
+                } else {
+                    &dc_flavor
+                },
+                connect_href: &connect,
+                manage_href: &manage,
             },
-            connect_href: &connect,
-            manage_href: &manage,
-        })
+            locale,
+        )
     };
     let integrations_section = format!(
         r#"<div class="card p-22">
