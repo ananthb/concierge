@@ -39,8 +39,8 @@ CI/CD is handled by **Cloudflare Builds** (Workers CI), which builds and deploys
 To wire up your fork:
 
 1. In the Cloudflare dashboard, create a Worker named (e.g.) `concierge` and connect this repo under **Settings → Builds**.
-   - **Build command:** `cargo install -q worker-build`
-   - **Deploy command:** leave default (`npx wrangler deploy`)
+   - **Build command:** `bash scripts/cf-build.sh` (installs rustup + worker-build; CF Builds doesn't ship Rust)
+   - **Deploy command:** `. "$HOME/.cargo/env" && npx wrangler deploy` (sources the cargo env so wrangler finds worker-build)
 2. Bind a D1 database (`DB`), KV namespace (`KV`), Workers AI (`AI`), Email Routing send-binding (`EMAIL`), Durable Objects (`REPLY_BUFFER` → `ReplyBufferDO`, `APPROVALS_DO` → `ApprovalsDO`), and Queues (`SAFETY_QUEUE` producer + `concierge-safety` / `concierge-safety-dlq` consumers) under **Settings → Bindings**. Names must match the `binding` values in [`wrangler.toml`](wrangler.toml).
 3. Set runtime variables and secrets under **Settings → Variables and Secrets** — full list is documented at the bottom of [`wrangler.toml`](wrangler.toml).
 4. Push to `main`. Cloudflare Builds runs the build command, then `wrangler deploy` — which picks up `[build] command = "worker-build --release"` from `wrangler.toml` to compile the Rust crate to WASM.
