@@ -32,7 +32,18 @@ Don't want to self-host? [concierge.calculon.tech](https://concierge.calculon.te
 
 ## Deploy
 
-See the **[Deploy guide](https://ananthb.github.io/concierge/deployment.html)** for step-by-step instructions on forking and deploying your own instance to Cloudflare via GitHub Actions.
+See the **[Deploy guide](https://ananthb.github.io/concierge/deployment.html)** for step-by-step instructions on forking and deploying your own instance to Cloudflare.
+
+CI/CD is handled by **Cloudflare Builds** (Workers CI), which builds and deploys directly from this repo without needing GitHub Actions or Nix.
+
+To wire up your fork:
+
+1. In the Cloudflare dashboard, create a Worker named (e.g.) `concierge` and connect this repo under **Settings → Builds**.
+   - **Build command:** `cargo install -q worker-build`
+   - **Deploy command:** leave default (`npx wrangler deploy`)
+2. Bind a D1 database (`DB`), KV namespace (`KV`), Workers AI (`AI`), Email Routing send-binding (`EMAIL`), Durable Objects (`REPLY_BUFFER` → `ReplyBufferDO`, `APPROVALS_DO` → `ApprovalsDO`), and Queues (`SAFETY_QUEUE` producer + `concierge-safety` / `concierge-safety-dlq` consumers) under **Settings → Bindings**. Names must match the `binding` values in [`wrangler.toml`](wrangler.toml).
+3. Set runtime variables and secrets under **Settings → Variables and Secrets** — full list is documented at the bottom of [`wrangler.toml`](wrangler.toml).
+4. Push to `main`. Cloudflare Builds runs the build command, then `wrangler deploy` — which picks up `[build] command = "worker-build --release"` from `wrangler.toml` to compile the Rust crate to WASM.
 
 ## Architecture
 
@@ -50,11 +61,13 @@ See the **[Deploy guide](https://ananthb.github.io/concierge/deployment.html)** 
 ## Development
 
 ```bash
-nix develop        # enter dev shell with all tools
+nix develop        # enter dev shell with all tools (Nix-only; CI does not use Nix)
 cargo test         # run tests
 wrangler dev       # local dev server
 wrangler deploy    # deploy to Cloudflare
 ```
+
+Nix is for local convenience only — Cloudflare Builds installs the same toolchain via rustup, which reads the channel from [`rust-toolchain.toml`](rust-toolchain.toml).
 
 ## License
 

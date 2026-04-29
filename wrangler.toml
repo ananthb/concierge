@@ -6,19 +6,20 @@ compatibility_date = "2024-01-01"
 command = "worker-build --release"
 
 # ============================================================================
-# D1 Database for messages and submissions
+# D1 Database for messages and submissions.
+# `database_id` is intentionally omitted — bind via Cloudflare dashboard
+# (Workers → concierge → Settings → Bindings) or let the
+# "Deploy to Cloudflare" button auto-provision it on first deploy.
 # ============================================================================
 [[d1_databases]]
 binding = "DB"
 database_name = "concierge"
-database_id = "95687fdd-d529-4993-8b84-e55db87159c2"
 
 # ============================================================================
-# KV Namespace for configs
+# KV Namespace for configs. `id` bound via dashboard / Deploy button.
 # ============================================================================
 [[kv_namespaces]]
 binding = "KV"
-id = "2c2f474d22e04d1f8a4d12b37810390b"
 
 # ============================================================================
 # Durable Objects:
@@ -85,12 +86,6 @@ name = "EMAIL"
 
 [vars]
 ENVIRONMENT = "production"
-CF_ACCESS_TEAM = ""             # Your Cloudflare Access team name (e.g. "myteam")
-CF_ACCESS_AUD = ""              # Application Audience (AUD) tag from Access application
-AI_MODEL = ""                    # Workers AI model for replies (default: llama-4-scout-17b-16e-instruct)
-AI_FAST_MODEL = ""               # Workers AI model for injection scanning (default: llama-3.1-8b-instruct-fast)
-WHATSAPP_WABA_ID = ""           # Your WhatsApp Business Account ID
-WHATSAPP_SIGNUP_CONFIG_ID = ""  # Meta Embedded Signup config ID
 EMAIL_BASE_DOMAIN = "cncg.email" # Single platform email domain. MX records on the apex.
 
 # ============================================================================
@@ -109,31 +104,34 @@ enabled = true
 invocation_logs = true
 
 # ============================================================================
-# Required Secrets (set via wrangler secret put <NAME>)
+# Per-deployment configuration
 # ============================================================================
+# All runtime vars and secrets (apart from the static defaults above) are
+# managed in the Cloudflare dashboard (Workers → concierge → Settings →
+# Variables and Secrets) so this file stays portable for forks. Cloudflare
+# Builds redeploys preserve them.
 #
-# Encryption:
-#   ENCRYPTION_KEY          - 32-byte hex key for AES-256-GCM token encryption
+# Plain-text variables (Settings → Variables):
+#   CF_ACCESS_TEAM             Cloudflare Access team name (e.g. "myteam")
+#   CF_ACCESS_AUD              Application Audience (AUD) tag from Access app
+#   AI_MODEL                   Workers AI reply model (default llama-4-scout-17b-16e-instruct)
+#   AI_FAST_MODEL              Workers AI scanning model (default llama-3.1-8b-instruct-fast)
+#   WHATSAPP_WABA_ID           WhatsApp Business Account ID
+#   WHATSAPP_SIGNUP_CONFIG_ID  Meta Embedded Signup config ID
 #
-# Google OAuth (login only):
-#   GOOGLE_OAUTH_CLIENT_ID     - Google OAuth client ID
-#   GOOGLE_OAUTH_CLIENT_SECRET - Google OAuth client secret
-#
-# WhatsApp Business (platform WABA token):
-#   WHATSAPP_ACCESS_TOKEN   - System user token for the shared WABA
-#   WHATSAPP_VERIFY_TOKEN   - Webhook verification token
-#
-# Meta (Facebook/Instagram/WhatsApp login + APIs):
-#   META_APP_ID             - Meta app ID (shared for Facebook Login, Instagram, WhatsApp)
-#   META_APP_SECRET         - Meta app secret
-#   INSTAGRAM_VERIFY_TOKEN  - Instagram DM webhook verification token
-#
-# Discord:
-#   DISCORD_PUBLIC_KEY      - Discord application public key (Ed25519 verification)
-#   DISCORD_APPLICATION_ID  - Discord application ID
-#   DISCORD_BOT_TOKEN       - Discord bot token
-#
-# Razorpay (billing):
-#   RAZORPAY_KEY_ID         - Razorpay key ID
-#   RAZORPAY_KEY_SECRET     - Razorpay key secret
-#   RAZORPAY_WEBHOOK_SECRET - Razorpay webhook secret (for payment.captured events)
+# Secrets (Settings → Secrets):
+#   ENCRYPTION_KEY             32-byte hex key for AES-256-GCM token encryption
+#   GOOGLE_OAUTH_CLIENT_ID     Google OAuth client ID
+#   GOOGLE_OAUTH_CLIENT_SECRET Google OAuth client secret
+#   WHATSAPP_ACCESS_TOKEN      System user token for the shared WABA
+#   WHATSAPP_VERIFY_TOKEN      WhatsApp webhook verification token
+#   META_APP_ID                Meta app ID (Facebook Login, Instagram, WhatsApp)
+#   META_APP_SECRET            Meta app secret
+#   INSTAGRAM_VERIFY_TOKEN     Instagram DM webhook verification token
+#   DISCORD_PUBLIC_KEY         Discord Ed25519 verification key
+#   DISCORD_APPLICATION_ID     Discord application ID
+#   DISCORD_BOT_TOKEN          Discord bot token
+#   RAZORPAY_KEY_ID            Razorpay key ID
+#   RAZORPAY_KEY_SECRET        Razorpay key secret
+#   RAZORPAY_WEBHOOK_SECRET    Razorpay webhook secret
+#   CF_DNS_API_TOKEN           Cloudflare API token (DNS edit on email zone)
