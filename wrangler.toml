@@ -7,13 +7,16 @@ command = "worker-build --release"
 
 # ============================================================================
 # D1 Database for messages and submissions.
-# `database_id` is intentionally omitted — bind via Cloudflare dashboard
-# (Workers → concierge → Settings → Bindings) or let the
-# "Deploy to Cloudflare" button auto-provision it on first deploy.
+# `database_id` is required by `wrangler d1 migrations apply --remote` (run
+# in the Cloudflare Builds deploy pipeline). It's not secret — worthless
+# without an API token. Forks using the Deploy button get this overwritten
+# with their own auto-provisioned database; forks wiring it manually should
+# replace this line with their own `wrangler d1 create <name>` output.
 # ============================================================================
 [[d1_databases]]
 binding = "DB"
 database_name = "concierge"
+database_id = "95687fdd-d529-4993-8b84-e55db87159c2"
 
 # ============================================================================
 # KV Namespace for configs. `id` bound via dashboard / Deploy button.
