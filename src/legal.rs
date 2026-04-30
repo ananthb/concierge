@@ -111,6 +111,17 @@ pub fn privacy_policy_html(locale: &Locale) -> String {
   <h2>{h2_third}</h2>
   <p>{p_third}</p>
 
+  <h2>{h2_google_limited}</h2>
+  <p>{p_google_limited_prefix}</p>
+  <ul>
+    <li>{li_google_limited_1}</li>
+    <li>{li_google_limited_2}</li>
+    <li>{li_google_limited_3}</li>
+    <li>{li_google_limited_4}</li>
+    <li>{li_google_limited_5}</li>
+    <li>{li_google_limited_6}</li>
+  </ul>
+
   <h2>{h2_retention}</h2>
   <p>{p_retention}</p>
 
@@ -143,6 +154,14 @@ pub fn privacy_policy_html(locale: &Locale) -> String {
         p_ai = t(locale, "privacy-p-ai"),
         h2_third = t(locale, "privacy-h2-third"),
         p_third = t(locale, "privacy-p-third"),
+        h2_google_limited = t(locale, "privacy-h2-google-limited"),
+        p_google_limited_prefix = t(locale, "privacy-p-google-limited-prefix"),
+        li_google_limited_1 = t(locale, "privacy-li-google-limited-1"),
+        li_google_limited_2 = t(locale, "privacy-li-google-limited-2"),
+        li_google_limited_3 = t(locale, "privacy-li-google-limited-3"),
+        li_google_limited_4 = t(locale, "privacy-li-google-limited-4"),
+        li_google_limited_5 = t(locale, "privacy-li-google-limited-5"),
+        li_google_limited_6 = t(locale, "privacy-li-google-limited-6"),
         h2_retention = t(locale, "privacy-h2-retention"),
         p_retention = t(locale, "privacy-p-retention"),
         h2_deletion = t(locale, "privacy-h2-deletion"),

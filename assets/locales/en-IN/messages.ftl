@@ -349,23 +349,31 @@ terms-p-contact = Questions? Open an issue at <a href="https://github.com/ananth
 privacy-title = Privacy Policy | Concierge
 privacy-meta-description = Privacy Policy for Concierge. We store the minimum data needed to operate and you can delete everything at any time.
 privacy-h1 = Privacy Policy
-privacy-effective = Effective April 26, 2026
+privacy-effective = Effective April 29, 2026
 privacy-h2-collect = What we collect
-privacy-li-account = <strong>Account info:</strong> your Google email and name (from OAuth sign-in)
+privacy-li-account = <strong>Account info:</strong> your Google account email address and display name, obtained when you sign in via Google OAuth using the <code>openid</code>, <code>email</code>, and <code>profile</code> scopes. We do not request access to Gmail, Drive, Calendar, Contacts, or any other Google Workspace data.
 privacy-li-connected = <strong>Connected accounts:</strong> WhatsApp phone number IDs, Instagram page IDs, and encrypted access tokens
 privacy-li-logs = <strong>Message logs:</strong> inbound/outbound WhatsApp and Instagram messages processed by auto-reply
 privacy-li-leads = <strong>Lead form submissions:</strong> phone numbers submitted through your lead capture forms
 privacy-li-persona = <strong>Persona prompts and reply rules:</strong> the AI persona text you write and the rule descriptions you configure
 privacy-h2-use = How we use it
-privacy-p-use = Solely to operate the Service: routing messages, generating auto-replies, and displaying your admin dashboard. We do not sell, share, or use your data for advertising.
-privacy-h2-storage = Where it's stored
-privacy-p-storage = Data is stored on Cloudflare's infrastructure (D1 database and KV store). Sensitive tokens are encrypted with AES-256-GCM.
+privacy-p-use = Solely to operate the Service: authenticating your sign-in, routing messages, generating auto-replies, and displaying your admin dashboard. Your Google account email and name are used only to identify your account and to display your name in the admin UI.
+privacy-h2-storage = How we store and protect your data
+privacy-p-storage = Data is stored on Cloudflare's infrastructure (D1 database and KV store). All transfers between your browser, the Service, and third-party APIs use TLS encryption. Sensitive tokens (Meta access tokens, session cookies) are encrypted at rest with AES-256-GCM. Database access is restricted to the Service's backend code and a small number of authorised maintainers; no human routinely reviews customer data.
 privacy-h2-ai = AI processing
 privacy-p-ai = Inbound message text and your persona prompt are sent to Cloudflare Workers AI to draft replies and to classify message intent and persona safety. Cloudflare's AI processing terms apply. Persona prompts are also classified by an automated safety scanner; the scanner's category labels are logged for abuse review and not shared. AI-generated replies may be incorrect or inappropriate. See our <a href="/terms">Terms of Service</a> for the liability disclaimer.
-privacy-h2-third = Third parties
-privacy-p-third = We interact with Meta's WhatsApp and Instagram APIs on your behalf. We use Cloudflare Workers AI for AI-powered auto-replies and intent classification. No other third parties receive your data.
+privacy-h2-third = How we share your data
+privacy-p-third = We interact with Meta's WhatsApp and Instagram APIs and Cloudflare Workers AI on your behalf to deliver the Service. We do <strong>not</strong> sell your data, transfer it to data brokers or information resellers, or share it with any other third party, except (a) with your explicit consent, (b) as required by law or valid legal process, or (c) as part of a merger, acquisition, or sale of assets, in which case we will notify you before your data is transferred and becomes subject to a different privacy policy.
+privacy-h2-google-limited = Limited use of Google user data
+privacy-p-google-limited-prefix = Concierge's use of information received from Google APIs adheres to the <a href="https://developers.google.com/terms/api-services-user-data-policy">Google API Services User Data Policy</a>, including the Limited Use requirements. Specifically:
+privacy-li-google-limited-1 = We use Google account data (email and name) only to provide and improve user-facing features of Concierge that are visible and prominent in the user interface.
+privacy-li-google-limited-2 = We do not use Google user data to serve advertisements, including retargeting, personalised, or interest-based advertising.
+privacy-li-google-limited-3 = We do not transfer Google user data to third parties except as necessary to provide or improve the Service, to comply with applicable law, or as part of a merger, acquisition, or sale of assets with notice to users.
+privacy-li-google-limited-4 = We do not use Google user data, or data derived from it, to develop, improve, or train generalised or non-personalised AI or machine-learning models.
+privacy-li-google-limited-5 = We do not use Google user data for credit-worthiness, lending, insurance underwriting, or any similar evaluation.
+privacy-li-google-limited-6 = No human at Concierge reads your Google user data unless we have your affirmative consent for specific messages, it is necessary for security purposes (e.g. investigating abuse), to comply with applicable law, or the data is aggregated and used for internal operations in line with this policy.
 privacy-h2-retention = Data retention
-privacy-p-retention = Data is retained while your account is active. You can delete all your data at any time from <a href="/admin/settings">Settings</a>.
+privacy-p-retention = Data is retained while your account is active. You can delete all your data at any time from <a href="/admin/settings">Settings</a>. When you delete your account, your Google account email, display name, and all associated tenant data are removed from our database immediately.
 privacy-h2-deletion = Data deletion
 privacy-p-deletion-prefix = To delete your account and all associated data:
 privacy-li-deletion-1 = Go to <a href="/admin/settings">Settings</a> and click "Delete Account"
