@@ -426,13 +426,14 @@ pub fn brand_mark() -> String {
     )
 }
 
-/// Shared header for public marketing pages (home, /features, /pricing,
-/// /docs). `active` is the slug of the current page so the matching nav
-/// item lights up: pass "" to highlight nothing.
+/// Shared header for public marketing pages (home, /features, /pricing).
+/// `active` is the slug of the current page so the matching nav item
+/// lights up: pass "" to highlight nothing.
 ///
-/// External-pointer links (Docs, Open source) get the `nav-ext` class so
-/// the mobile stylesheet can drop them — they're duplicated in the footer
-/// and shedding them is what lets the row fit a 375px viewport.
+/// "Open source" gets the `nav-ext` class so it's hidden up to 760px —
+/// it's duplicated in the footer and shedding it is what lets the row
+/// fit a phone-sized viewport. "Docs" lives only in the footer (it's
+/// architecture/dev docs, not user-facing help).
 pub fn public_nav_html(active: &str, locale: &Locale) -> String {
     let item = |slug: &str, label: &str, href: &str| -> String {
         let cls = if slug == active {
@@ -444,10 +445,6 @@ pub fn public_nav_html(active: &str, locale: &Locale) -> String {
     };
     let features = item("features", &t(locale, "nav-features"), "/features");
     let pricing = item("pricing", &t(locale, "nav-pricing"), "/pricing");
-    let docs_label = t(locale, "nav-docs");
-    let docs = format!(
-        r#"<a href="https://ananthb.github.io/concierge/" class="btn ghost sm nav-ext" target="_blank" rel="noopener">{docs_label}</a>"#,
-    );
     let github_label = t(locale, "nav-open-source");
     let github = format!(
         r#"<a href="https://github.com/ananthb/concierge" class="btn ghost sm nav-ext" target="_blank" rel="noopener">{github_label}</a>"#,
@@ -458,13 +455,12 @@ pub fn public_nav_html(active: &str, locale: &Locale) -> String {
         r#"<header class="site-header">
   {brand}
   <nav class="site-nav row gap-8 ml-auto" aria-label="Primary">
-    {features}{pricing}{docs}{github}{signin}
+    {features}{pricing}{github}{signin}
   </nav>
 </header>"#,
         brand = brand_mark(),
         features = features,
         pricing = pricing,
-        docs = docs,
         github = github,
         signin = signin,
     )
@@ -677,28 +673,33 @@ pub fn base_html_with_meta(title: &str, content: &str, meta: &PageMeta, locale: 
 <body data-i18n-copy-default="{copy_default}" data-i18n-copy-copied="{copy_copied}" data-i18n-htmx-error="{htmx_error}">
 <a href="#main" class="skip-link">{skip_link}</a>
 <div class="app-root"><main id="main" class="app-main">{content}</main>{footer}</div>
-<script>
-function copyUrl(btn, url) {{
-    var copied = document.body.dataset.i18nCopyCopied || 'Copied!';
-    var def = document.body.dataset.i18nCopyDefault || 'Copy';
-    navigator.clipboard.writeText(url).then(function() {{
-        btn.textContent = copied;
-        var toast = document.getElementById('toast');
-        if (toast) {{ toast.innerHTML = '<div class="success">' + copied + '</div>'; }}
-        setTimeout(function() {{
-            btn.textContent = def;
-        }}, 2000);
-    }});
-}}
-document.addEventListener("htmx:responseError", function() {{
-  var t = document.getElementById("toast");
-  var msg = document.body.dataset.i18nHtmxError || 'Something went wrong. Please try again.';
-  if (t) {{ t.innerHTML = '<div class="error">' + msg + '</div>'; }}
+<script type="module">
+// Inline `onclick="copyUrl(this, '...')"` handlers reach this through
+// `window`, so this is one of the few cases where we deliberately attach
+// to the global instead of relying on module scope.
+window.copyUrl = async (btn, url) => {{
+  const copied = document.body.dataset.i18nCopyCopied || 'Copied!';
+  const def = document.body.dataset.i18nCopyDefault || 'Copy';
+  await navigator.clipboard.writeText(url);
+  btn.textContent = copied;
+  const toast = document.getElementById('toast');
+  if (toast) toast.innerHTML = `<div class="success">${{copied}}</div>`;
+  setTimeout(() => {{ btn.textContent = def; }}, 2000);
+}};
+
+document.addEventListener('htmx:responseError', () => {{
+  const toast = document.getElementById('toast');
+  const msg = document.body.dataset.i18nHtmxError || 'Something went wrong. Please try again.';
+  if (toast) toast.innerHTML = `<div class="error">${{msg}}</div>`;
 }});
-// Send CSRF token with all HTMX requests
-document.addEventListener("htmx:configRequest", function(e) {{
-  var csrf = document.cookie.split(';').map(function(c){{return c.trim()}}).find(function(c){{return c.startsWith('csrf=')}});
-  if (csrf) {{ e.detail.headers['X-CSRF-Token'] = csrf.substring(5); }}
+
+// Send CSRF token with all HTMX requests.
+document.addEventListener('htmx:configRequest', (e) => {{
+  const csrf = document.cookie
+    .split(';')
+    .map((c) => c.trim())
+    .find((c) => c.startsWith('csrf='));
+  if (csrf) e.detail.headers['X-CSRF-Token'] = csrf.substring(5);
 }});
 </script>
 </body>

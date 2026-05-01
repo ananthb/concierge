@@ -209,29 +209,30 @@ pub fn checkout_html(
   <a href="{base_url}{return_to}" class="btn ghost sm mt-16">&larr; Cancel</a>
 </div>
 <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
-<script>
-document.getElementById("pay-btn").addEventListener("click", function() {{
-  var options = {{
-    key: "{key}",
+<script type="module">
+document.getElementById('pay-btn').addEventListener('click', () => {{
+  const options = {{
+    key: '{key}',
     amount: {amount},
-    currency: "{currency}",
-    order_id: "{order_id}",
-    name: "Concierge",
-    description: "{credits} AI reply credits",
-    notes: {{ tenant_id: "{tenant_id}", credits: "{credits}" }},
-    handler: function(response) {{
-      fetch("{base_url}/admin/billing/verify", {{
-        method: "POST",
-        headers: {{"Content-Type": "application/json"}},
+    currency: '{currency}',
+    order_id: '{order_id}',
+    name: 'Concierge',
+    description: '{credits} AI reply credits',
+    notes: {{ tenant_id: '{tenant_id}', credits: '{credits}' }},
+    handler: async (response) => {{
+      await fetch('{base_url}/admin/billing/verify', {{
+        method: 'POST',
+        headers: {{ 'Content-Type': 'application/json' }},
         body: JSON.stringify({{
           razorpay_order_id: response.razorpay_order_id,
           razorpay_payment_id: response.razorpay_payment_id,
           razorpay_signature: response.razorpay_signature,
-          credits: "{credits}"
-        }})
-      }}).then(function() {{ window.location.href = "{base_url}{return_to}"; }});
+          credits: '{credits}',
+        }}),
+      }});
+      window.location.href = '{base_url}{return_to}';
     }},
-    theme: {{ color: "#E86A2C" }}
+    theme: {{ color: '#E86A2C' }},
   }};
   new Razorpay(options).open();
 }});
@@ -278,28 +279,29 @@ pub fn verification_checkout_html(
   <a href="{base_url}{return_to}" class="btn ghost sm mt-16">&larr; Cancel</a>
 </div>
 <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
-<script>
-document.getElementById("pay-btn").addEventListener("click", function() {{
-  var options = {{
-    key: "{key}",
+<script type="module">
+document.getElementById('pay-btn').addEventListener('click', () => {{
+  const options = {{
+    key: '{key}',
     amount: {amount},
-    currency: "{currency}",
-    order_id: "{order_id}",
-    name: "Concierge",
-    description: "Sign-up verification (refunded)",
-    notes: {{ tenant_id: "{tenant_id}", kind: "verification" }},
-    handler: function(response) {{
-      fetch("{base_url}/admin/billing/verify", {{
-        method: "POST",
-        headers: {{"Content-Type": "application/json"}},
+    currency: '{currency}',
+    order_id: '{order_id}',
+    name: 'Concierge',
+    description: 'Sign-up verification (refunded)',
+    notes: {{ tenant_id: '{tenant_id}', kind: 'verification' }},
+    handler: async (response) => {{
+      await fetch('{base_url}/admin/billing/verify', {{
+        method: 'POST',
+        headers: {{ 'Content-Type': 'application/json' }},
         body: JSON.stringify({{
           razorpay_order_id: response.razorpay_order_id,
           razorpay_payment_id: response.razorpay_payment_id,
-          razorpay_signature: response.razorpay_signature
-        }})
-      }}).then(function() {{ window.location.href = "{base_url}{return_to}"; }});
+          razorpay_signature: response.razorpay_signature,
+        }}),
+      }});
+      window.location.href = '{base_url}{return_to}';
     }},
-    theme: {{ color: "#E86A2C" }}
+    theme: {{ color: '#E86A2C' }},
   }};
   new Razorpay(options).open();
 }});
@@ -342,28 +344,29 @@ pub fn address_checkout_html(
   <a href="{base_url}/admin/email" class="btn ghost sm mt-16">&larr; Cancel</a>
 </div>
 <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
-<script>
-document.getElementById("pay-btn").addEventListener("click", function() {{
-  var options = {{
-    key: "{key}",
+<script type="module">
+document.getElementById('pay-btn').addEventListener('click', () => {{
+  const options = {{
+    key: '{key}',
     amount: {amount},
-    currency: "{currency}",
-    order_id: "{order_id}",
-    name: "Concierge",
-    description: "Extra email address",
-    notes: {{ tenant_id: "{tenant_id}", kind: "address", extras: "1" }},
-    handler: function(response) {{
-      fetch("{base_url}/admin/billing/verify", {{
-        method: "POST",
-        headers: {{"Content-Type": "application/json"}},
+    currency: '{currency}',
+    order_id: '{order_id}',
+    name: 'Concierge',
+    description: 'Extra email address',
+    notes: {{ tenant_id: '{tenant_id}', kind: 'address', extras: '1' }},
+    handler: async (response) => {{
+      await fetch('{base_url}/admin/billing/verify', {{
+        method: 'POST',
+        headers: {{ 'Content-Type': 'application/json' }},
         body: JSON.stringify({{
           razorpay_order_id: response.razorpay_order_id,
           razorpay_payment_id: response.razorpay_payment_id,
-          razorpay_signature: response.razorpay_signature
-        }})
-      }}).then(function() {{ window.location.href = "{base_url}/admin/email"; }});
+          razorpay_signature: response.razorpay_signature,
+        }}),
+      }});
+      window.location.href = '{base_url}/admin/email';
     }},
-    theme: {{ color: "#E86A2C" }}
+    theme: {{ color: '#E86A2C' }},
   }};
   new Razorpay(options).open();
 }});

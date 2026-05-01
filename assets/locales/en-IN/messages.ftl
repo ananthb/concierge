@@ -11,7 +11,6 @@
 # Public navigation (top of every public page).
 nav-features = Features
 nav-pricing = Pricing
-nav-docs = Docs ↑
 nav-open-source = Open source ↑
 nav-sign-in = Sign in
 

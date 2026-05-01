@@ -52,12 +52,14 @@ pub fn auth_login_html(
         fb_url = html_escape(&fb_url),
     );
     // WhatsApp button is JS-driven (Meta Embedded Signup). If the page lacks
-    // the Meta app id, omit the button rather than render a dud.
+    // the Meta app id, omit the button rather than render a dud. The click
+    // handler is wired via addEventListener in the module script below — no
+    // inline onclick — so the module can keep its handler closures private.
     let wa_btn = if meta_app_id.is_empty() {
         String::new()
     } else {
         format!(
-            r#"<button type="button" id="wa-signup-btn" class="btn brand-whatsapp lg w-full jc-center" onclick="launchWhatsAppSignup()">{wa_svg} {wa_label}</button>"#,
+            r#"<button type="button" id="wa-signup-btn" class="btn brand-whatsapp lg w-full jc-center">{wa_svg} {wa_label}</button>"#,
         )
     };
 
@@ -76,56 +78,84 @@ pub fn auth_login_html(
     } else {
         format!(
             r#"<script async defer crossorigin="anonymous" src="https://connect.facebook.net/en_US/sdk.js"></script>
-<script>
-window.fbAsyncInit = function() {{
+<script type="module">
+// The SDK loads `async defer` — an early click would otherwise hit
+// `FB is not defined`. We expose a Promise resolved from inside
+// `fbAsyncInit` and have the click handler await it (with a timeout
+// so a blocked / failed load surfaces an error instead of hanging).
+//
+// Module scripts are deferred, so the SDK can run *before* this code
+// executes. Handle both orderings: if FB is already loaded, init now;
+// otherwise let the SDK call our hook when it loads.
+const fbReady = new Promise((resolve) => {{
+  const init = () => {{
     FB.init({{ appId: '{app_id}', autoLogAppEvents: true, xfbml: true, version: '{api_version}' }});
+    resolve();
+  }};
+  if (typeof FB !== 'undefined' && typeof FB.init === 'function') init();
+  else window.fbAsyncInit = init;
+}});
+
+const btn = document.getElementById('wa-signup-btn');
+const errDiv = document.getElementById('wa-signup-error');
+const SDK_TIMEOUT_MS = 8000;
+
+const buildLoginConfig = () => {{
+  const cfg = {{
+    response_type: 'code',
+    override_default_response_type: true,
+    extras: {{ featureType: '', sessionInfoVersion: '3' }},
+  }};
+  const configId = '{config_id}';
+  if (configId) cfg.config_id = configId;
+  else cfg.scope = 'whatsapp_business_management,whatsapp_business_messaging,email,public_profile';
+  return cfg;
 }};
-function launchWhatsAppSignup() {{
-    var btn = document.getElementById('wa-signup-btn');
-    var errDiv = document.getElementById('wa-signup-error');
-    var origLabel = btn.innerHTML;
-    btn.disabled = true;
-    btn.textContent = '{connecting}';
-    errDiv.textContent = '';
-    var loginConfig = {{
-        response_type: 'code',
-        override_default_response_type: true,
-        extras: {{ featureType: '', sessionInfoVersion: '3' }}
-    }};
-    var configId = '{config_id}';
-    if (configId) {{
-        loginConfig.config_id = configId;
-    }} else {{
-        loginConfig.scope = 'whatsapp_business_management,whatsapp_business_messaging,email,public_profile';
-    }}
-    FB.login(function(response) {{
-        if (response.authResponse && response.authResponse.code) {{
-            var form = document.createElement('form');
-            form.method = 'POST';
-            form.action = '{base_url}/whatsapp/signup/public-callback';
-            var codeInput = document.createElement('input');
-            codeInput.type = 'hidden'; codeInput.name = 'code';
-            codeInput.value = response.authResponse.code;
-            form.appendChild(codeInput);
-            var stateInput = document.createElement('input');
-            stateInput.type = 'hidden'; stateInput.name = 'state';
-            stateInput.value = '{state}';
-            form.appendChild(stateInput);
-            if (response.authResponse.phone_number_id) {{
-                var phoneInput = document.createElement('input');
-                phoneInput.type = 'hidden'; phoneInput.name = 'phone_number_id';
-                phoneInput.value = response.authResponse.phone_number_id;
-                form.appendChild(phoneInput);
-            }}
-            document.body.appendChild(form);
-            form.submit();
-        }} else {{
-            btn.disabled = false;
-            btn.innerHTML = origLabel;
-            errDiv.textContent = '{error}';
-        }}
-    }}, loginConfig);
-}}
+
+const submitCallback = ({{ code, phone_number_id }}) => {{
+  const form = document.createElement('form');
+  form.method = 'POST';
+  form.action = '{base_url}/whatsapp/signup/public-callback';
+  const append = (name, value) => {{
+    const input = document.createElement('input');
+    input.type = 'hidden';
+    input.name = name;
+    input.value = value;
+    form.appendChild(input);
+  }};
+  append('code', code);
+  append('state', '{state}');
+  if (phone_number_id) append('phone_number_id', phone_number_id);
+  document.body.appendChild(form);
+  form.submit();
+}};
+
+btn?.addEventListener('click', async () => {{
+  const origLabel = btn.innerHTML;
+  btn.disabled = true;
+  btn.textContent = '{connecting}';
+  errDiv.textContent = '';
+
+  const fail = () => {{
+    btn.disabled = false;
+    btn.innerHTML = origLabel;
+    errDiv.textContent = '{error}';
+  }};
+
+  try {{
+    const timeout = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('sdk-timeout')), SDK_TIMEOUT_MS));
+    await Promise.race([fbReady, timeout]);
+  }} catch {{
+    fail();
+    return;
+  }}
+
+  FB.login((response) => {{
+    if (response.authResponse?.code) submitCallback(response.authResponse);
+    else fail();
+  }}, buildLoginConfig());
+}});
 </script>"#,
             app_id = html_escape(meta_app_id),
             api_version = crate::META_API_VERSION,
@@ -723,7 +753,7 @@ pub fn admin_whatsapp_signup_html(
         <div class="card ta-center" style="padding: 2rem;">
             <p class="muted" style="margin-bottom: 1.5rem">{lead}</p>
             <div id="signup-error" class="text-warn mb-16" role="alert" aria-live="assertive"></div>
-            <button id="signup-btn" class="btn" style="padding: 0.75rem 2rem; font-size: 1rem;" onclick="launchSignup()">
+            <button id="signup-btn" class="btn" style="padding: 0.75rem 2rem; font-size: 1rem;">
                 {cta}
             </button>
             <p class="muted" style="margin-top: 1.5rem; font-size: 0.85rem">
@@ -731,75 +761,80 @@ pub fn admin_whatsapp_signup_html(
             </p>
         </div>
         <script async defer crossorigin="anonymous" src="https://connect.facebook.net/en_US/sdk.js"></script>
-        <script>
-            window.fbAsyncInit = function() {{
-                FB.init({{
-                    appId: '{app_id}',
-                    autoLogAppEvents: true,
-                    xfbml: true,
-                    version: '{api_version}'
-                }});
-            }};
+        <script type="module">
+// Module scripts are deferred — handle the case where the SDK ran first
+// (FB already exists) as well as the normal case (SDK still loading).
+const fbReady = new Promise((resolve) => {{
+  const init = () => {{
+    FB.init({{
+      appId: '{app_id}',
+      autoLogAppEvents: true,
+      xfbml: true,
+      version: '{api_version}',
+    }});
+    resolve();
+  }};
+  if (typeof FB !== 'undefined' && typeof FB.init === 'function') init();
+  else window.fbAsyncInit = init;
+}});
 
-            function launchSignup() {{
-                var btn = document.getElementById('signup-btn');
-                var errDiv = document.getElementById('signup-error');
-                btn.disabled = true;
-                btn.textContent = '{connecting}';
-                errDiv.textContent = '';
+const btn = document.getElementById('signup-btn');
+const errDiv = document.getElementById('signup-error');
+const SDK_TIMEOUT_MS = 8000;
 
-                var loginConfig = {{
-                    response_type: 'code',
-                    override_default_response_type: true,
-                    extras: {{
-                        featureType: '',
-                        sessionInfoVersion: '3'
-                    }}
-                }};
+btn?.addEventListener('click', async () => {{
+  btn.disabled = true;
+  btn.textContent = '{connecting}';
+  errDiv.textContent = '';
 
-                var configId = '{config_id}';
-                if (configId) {{
-                    loginConfig.config_id = configId;
-                }} else {{
-                    loginConfig.scope = 'whatsapp_business_management,whatsapp_business_messaging';
-                }}
+  const fail = () => {{
+    btn.disabled = false;
+    btn.textContent = '{cta_again}';
+    errDiv.textContent = '{cancel_error}';
+  }};
 
-                FB.login(function(response) {{
-                    if (response.authResponse && response.authResponse.code) {{
-                        var form = document.createElement('form');
-                        form.method = 'POST';
-                        form.action = '{base_url}/whatsapp/signup/callback';
+  try {{
+    const timeout = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('sdk-timeout')), SDK_TIMEOUT_MS));
+    await Promise.race([fbReady, timeout]);
+  }} catch {{
+    fail();
+    return;
+  }}
 
-                        var codeInput = document.createElement('input');
-                        codeInput.type = 'hidden';
-                        codeInput.name = 'code';
-                        codeInput.value = response.authResponse.code;
-                        form.appendChild(codeInput);
+  const loginConfig = {{
+    response_type: 'code',
+    override_default_response_type: true,
+    extras: {{ featureType: '', sessionInfoVersion: '3' }},
+  }};
+  const configId = '{config_id}';
+  if (configId) loginConfig.config_id = configId;
+  else loginConfig.scope = 'whatsapp_business_management,whatsapp_business_messaging';
 
-                        var stateInput = document.createElement('input');
-                        stateInput.type = 'hidden';
-                        stateInput.name = 'state';
-                        stateInput.value = '{state}';
-                        form.appendChild(stateInput);
-
-                        // If phone_number_id is in the response, send it too
-                        if (response.authResponse.phone_number_id) {{
-                            var phoneInput = document.createElement('input');
-                            phoneInput.type = 'hidden';
-                            phoneInput.name = 'phone_number_id';
-                            phoneInput.value = response.authResponse.phone_number_id;
-                            form.appendChild(phoneInput);
-                        }}
-
-                        document.body.appendChild(form);
-                        form.submit();
-                    }} else {{
-                        btn.disabled = false;
-                        btn.textContent = '{cta_again}';
-                        errDiv.textContent = '{cancel_error}';
-                    }}
-                }}, loginConfig);
-            }}
+  FB.login((response) => {{
+    if (!response.authResponse?.code) {{
+      fail();
+      return;
+    }}
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = '{base_url}/whatsapp/signup/callback';
+    const append = (name, value) => {{
+      const input = document.createElement('input');
+      input.type = 'hidden';
+      input.name = name;
+      input.value = value;
+      form.appendChild(input);
+    }};
+    append('code', response.authResponse.code);
+    append('state', '{state}');
+    if (response.authResponse.phone_number_id) {{
+      append('phone_number_id', response.authResponse.phone_number_id);
+    }}
+    document.body.appendChild(form);
+    form.submit();
+  }}, loginConfig);
+}});
         </script>
         </div>"#,
         back = signup_back,
