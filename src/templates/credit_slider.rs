@@ -85,7 +85,7 @@ pub fn slider_html(
   <div class="between mb-12">
     <div>
       <div class="eyebrow">AI reply credits</div>
-      <p class="muted m-0 mt-4 fs-13">{per_reply_label} per AI reply. 100 AI replies included every month; static replies don't consume credits.</p>
+      <p class="muted m-0 mt-4 fs-13">{per_reply_label} per AI reply. 100 AI replies included every month.</p>
     </div>
     <div class="ta-right">
       <div class="serif" style="font-size:34px;line-height:1"><span x-text="credits.toLocaleString(countLocale)"></span></div>
