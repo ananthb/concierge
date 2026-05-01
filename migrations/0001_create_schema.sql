@@ -162,3 +162,30 @@ INSERT OR IGNORE INTO global_settings (key, value) VALUES ('unit_price_millicent
 INSERT OR IGNORE INTO global_settings (key, value) VALUES ('address_price_paise', '9900');
 INSERT OR IGNORE INTO global_settings (key, value) VALUES ('address_price_cents', '100');
 INSERT OR IGNORE INTO global_settings (key, value) VALUES ('email_pack_size', '5');
+INSERT OR IGNORE INTO global_settings (key, value) VALUES ('free_monthly_credits', '100');
+
+-- Scheduled credit grants. The scheduled-grants cron picks every row where
+-- next_run_at <= now AND active = 1, grants `credits` to the targeted
+-- tenants, then advances next_run_at by the cadence.
+--
+-- audience_kind = 'everyone'  → grant to every tenant in the tenants table.
+-- audience_kind = 'emails'    → grant only to tenants whose email is in
+--                               the JSON array `audience_emails`.
+-- cadence is one of: daily, weekly_<dow>, monthly_first
+--   weekly_<dow> uses lowercase 3-letter day codes: mon, tue, wed, thu, fri, sat, sun.
+-- expires_in_days controls the granted-credit expiry (0 = never expires).
+CREATE TABLE IF NOT EXISTS scheduled_grants (
+    id TEXT PRIMARY KEY,
+    cadence TEXT NOT NULL,
+    audience_kind TEXT NOT NULL CHECK (audience_kind IN ('everyone', 'emails')),
+    audience_emails TEXT NOT NULL DEFAULT '[]',
+    credits INTEGER NOT NULL CHECK (credits > 0),
+    expires_in_days INTEGER NOT NULL DEFAULT 0,
+    last_run_at TEXT,
+    next_run_at TEXT NOT NULL,
+    active INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_sg_due
+    ON scheduled_grants(active, next_run_at);

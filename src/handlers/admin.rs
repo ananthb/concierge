@@ -194,7 +194,7 @@ pub async fn handle_admin(req: Request, env: Env, path: &str, method: Method) ->
         let email_addrs = crate::storage::get_email_addresses(&kv, &tenant_id).await?;
         let db = env.d1("DB")?;
         let mut billing = crate::storage::get_tenant_billing(&db, &tenant_id).await?;
-        crate::billing::refresh_billing(&mut billing);
+        crate::billing::refresh_billing_async(&db, &mut billing).await;
 
         let mut resp = Response::from_html(admin_dashboard_html(
             &whatsapp_accounts,

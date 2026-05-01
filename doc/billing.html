@@ -107,6 +107,8 @@
 
 <p>Platform operators can grant free credits to any tenant via the <a href="management.html">management panel</a>. This is useful for onboarding, promotions, or support situations. Grants are logged to the audit trail.</p>
 
+<p>Operators can also schedule recurring grants from the same panel. See the "Scheduled grants" section below.</p>
+
 <h3>2. Paid Top-ups (Razorpay)</h3>
 
 <p>Tenants can purchase AI-reply credits (minimum 500) via a slider in the dashboard. The system uses a flat per-reply rate which is configurable by platform operators.</p>
@@ -152,6 +154,7 @@
     <tr><td><code>address_price_paise</code></td><td>paise</td><td>9900 (₹99)</td><td>Reply-email subscription pack price per month (INR)</td></tr>
     <tr><td><code>address_price_cents</code></td><td>cents</td><td>100 ($1)</td><td>Reply-email subscription pack price per month (USD)</td></tr>
     <tr><td><code>email_pack_size</code></td><td>integer</td><td>5</td><td>Addresses granted per reply-email pack purchase</td></tr>
+    <tr><td><code>free_monthly_credits</code></td><td>integer</td><td>100</td><td>Replies granted to every tenant on the 1st of each calendar month (lazy: applied on next billing operation)</td></tr>
   </tbody>
 </table>
 
@@ -162,6 +165,30 @@
 <p><strong>Subscription enforcement, not yet wired:</strong> the reply-email pack is described as recurring monthly, but the current Razorpay integration creates one-time orders. A successful payment grants <code>email_pack_size</code> addresses for the lifetime of the account. A follow-up change should switch this flow to Razorpay Subscriptions, with a webhook handler that revokes pack-granted addresses when the subscription lapses.</p>
 
 <p>All grants and pricing edits are recorded in the audit log.</p>
+
+<h2>Scheduled grants</h2>
+
+<p>Operators can configure recurring credit grants on a calendar cadence from <code>/manage/billing</code>. Each scheduled grant has:</p>
+
+<ul>
+  <li><strong>Cadence:</strong> <code>daily</code>, <code>weekly_{sun..sat}</code>, or <code>monthly_first</code> (the 1st of every month at 00:00 UTC).</li>
+  <li><strong>Audience:</strong> <em>every tenant</em> or a specific list of tenant emails.</li>
+  <li><strong>Credits:</strong> how many replies to add per beneficiary per firing.</li>
+  <li><strong>Expiry:</strong> credits expire after N days, or never (0).</li>
+</ul>
+
+<p>The form validates emails on submit. If any email doesn't map to an existing tenant, the page re-renders with an inline warning naming the unmatched addresses and nothing is saved. Fix the typos or switch to the <em>every tenant</em> audience and resubmit.</p>
+
+<p>An hourly cron (<code>0 * * * *</code>) sweeps the <code>scheduled_grants</code> table for any row whose <code>next_run_at</code> has elapsed and:</p>
+
+<ol>
+  <li>Resolves the audience to a list of tenant IDs.</li>
+  <li>Calls <code>billing::grant_purchased</code> (no expiry) or <code>billing::grant_with_expiry</code> for each tenant.</li>
+  <li>Advances <code>next_run_at</code> to the next firing of the cadence.</li>
+  <li>Writes a single <code>scheduled_grant_run</code> entry to the audit log with the actor <code>system:cron</code>, recording the credit count, expiry policy, and the number of tenants who actually received the grant.</li>
+</ol>
+
+<p>Cadence math is in <code>src/billing/cadence.rs</code> as a pure function so it can be unit-tested without touching the JavaScript date API.</p>
 
 <h2>Billing State</h2>
 

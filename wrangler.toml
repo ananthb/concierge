@@ -93,10 +93,12 @@ EMAIL_DOMAIN = "cncg.email" # Single platform email domain. MX records on the ap
 #                    digest emails to tenants whose cadence is due, expire
 #                    stale rows past 24h.
 #   "0 6 * * *"    — daily Instagram token refresh.
+#   "0 * * * *"    — hourly scheduled-grants processor: run every row in
+#                    scheduled_grants whose next_run_at has elapsed.
 # scheduled.rs dispatches on event.cron().
 # ============================================================================
 [triggers]
-crons = ["*/15 * * * *", "0 6 * * *"]
+crons = ["*/15 * * * *", "0 6 * * *", "0 * * * *"]
 
 [observability.logs]
 enabled = true

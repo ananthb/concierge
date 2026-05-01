@@ -402,6 +402,77 @@ pub fn audit_html(log: &[serde_json::Value], base_url: &str, locale: &Locale) ->
     )
 }
 
+fn scheduled_grants_table(scheduled: &[crate::types::ScheduledGrant], base_url: &str) -> String {
+    use crate::types::GrantAudience;
+
+    if scheduled.is_empty() {
+        return r#"<p class="muted fs-13 m-0">No scheduled grants yet.</p>"#.to_string();
+    }
+
+    let rows: String = scheduled
+        .iter()
+        .map(|g| {
+            let audience = match &g.audience {
+                GrantAudience::Everyone => "Every tenant".to_string(),
+                GrantAudience::Emails(es) => format!("{} tenant(s)", es.len()),
+            };
+            let expiry = if g.expires_in_days <= 0 {
+                "never".to_string()
+            } else {
+                format!("{}d", g.expires_in_days)
+            };
+            let last_run = g.last_run_at.as_deref().unwrap_or("—");
+            let active = if g.active { "active" } else { "off" };
+            format!(
+                r##"<tr>
+  <td>{cadence}</td>
+  <td class="ta-right mono">{credits}</td>
+  <td class="mono fs-12">{audience}</td>
+  <td class="mono fs-12">{expiry}</td>
+  <td class="mono fs-11">{last_run}</td>
+  <td class="mono fs-11">{next_run}</td>
+  <td><span class="chip">{active}</span></td>
+  <td>
+    <form hx-delete="{base_url}/manage/billing/schedule/{id}" hx-target="body" hx-swap="innerHTML" hx-confirm="Remove this scheduled grant?">
+      <button class="btn ghost sm" type="submit">Remove</button>
+    </form>
+  </td>
+</tr>"##,
+                cadence = html_escape(g.cadence.label()),
+                credits = g.credits,
+                audience = html_escape(&audience),
+                expiry = expiry,
+                last_run = html_escape(last_run.get(..16).unwrap_or(last_run)),
+                next_run = html_escape(g.next_run_at.get(..16).unwrap_or(&g.next_run_at)),
+                active = active,
+                base_url = base_url,
+                id = html_escape(&g.id),
+            )
+        })
+        .collect();
+
+    format!(
+        r##"<div class="card no-pad" style="overflow-x:auto">
+            <table class="manage-table fs-13">
+              <thead>
+                <tr>
+                  <th>Cadence</th>
+                  <th class="ta-right">Credits</th>
+                  <th>Audience</th>
+                  <th>Expiry</th>
+                  <th>Last run</th>
+                  <th>Next run</th>
+                  <th>Status</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>{rows}</tbody>
+            </table>
+          </div>"##,
+        rows = rows,
+    )
+}
+
 pub fn billing_overview_html(
     base_url: &str,
     locale: &Locale,
@@ -410,12 +481,18 @@ pub fn billing_overview_html(
     address_paise: i64,
     address_cents: i64,
     email_pack_size: i64,
+    free_monthly_credits: i64,
+    scheduled: &[crate::types::ScheduledGrant],
+    schedule_form_msg: Option<&str>,
 ) -> String {
     // Display in major units: milli-paise / 100_000 = rupees, milli-cents / 100_000 = dollars.
     let paise_per_reply = format!("{:.2}", milli_paise as f64 / 100_000.0);
     let cents_per_reply = format!("{:.3}", milli_cents as f64 / 100_000.0);
     let address_inr = format!("{:.2}", address_paise as f64 / 100.0);
     let address_usd = format!("{:.2}", address_cents as f64 / 100.0);
+
+    let scheduled_rows = scheduled_grants_table(scheduled, base_url);
+    let schedule_msg = schedule_form_msg.unwrap_or("");
 
     let content = format!(
         r##"<div class="page-pad">
@@ -459,7 +536,62 @@ pub fn billing_overview_html(
           <div class="muted fs-11 mt-4">tenants get this many addresses per active pack</div>
         </label>
       </div>
-      <button class="btn sm" type="submit">Save pricing</button>
+      <h3 class="mb-8">Free monthly credits</h3>
+      <p class="muted mb-12">How many AI replies every tenant gets at the start of each calendar month. Existing balances aren't touched mid-month.</p>
+      <div class="row gap-12 wrap mb-12">
+        <label class="flex-1" style="min-width:220px">
+          <div class="eyebrow mb-4">Monthly credits per tenant</div>
+          <input class="input mono" name="free_monthly_credits" type="number" min="0" required value="{free_monthly_credits}">
+          <div class="muted fs-11 mt-4">currently {free_monthly_credits} replies/month</div>
+        </label>
+      </div>
+      <button class="btn sm" type="submit">Save settings</button>
+    </form>
+  </div>
+
+  <div class="card p-22 mb-16">
+    <h3 class="mb-8">Scheduled credit grants</h3>
+    <p class="muted mb-12">Automated grants that fire on a calendar cadence. Use these to drop credits into specific tenants (by email) or every tenant on a recurring schedule.</p>
+    {scheduled_rows}
+    <div id="schedule-toast">{schedule_msg}</div>
+    <form hx-post="{base_url}/manage/billing/schedule" hx-target="body" hx-swap="innerHTML" hx-ext="json-enc" class="mt-12">
+      <div class="row gap-12 wrap mb-12">
+        <label style="min-width:220px">
+          <div class="eyebrow mb-4">Cadence</div>
+          <select class="input" name="cadence" required>
+            <option value="monthly_first">1st of every month</option>
+            <option value="weekly_mon">Every Monday</option>
+            <option value="weekly_tue">Every Tuesday</option>
+            <option value="weekly_wed">Every Wednesday</option>
+            <option value="weekly_thu">Every Thursday</option>
+            <option value="weekly_fri">Every Friday</option>
+            <option value="weekly_sat">Every Saturday</option>
+            <option value="weekly_sun">Every Sunday</option>
+            <option value="daily">Every day at 00:00 UTC</option>
+          </select>
+        </label>
+        <label style="min-width:140px">
+          <div class="eyebrow mb-4">Credits</div>
+          <input class="input mono" name="credits" type="number" min="1" required>
+        </label>
+        <label style="min-width:140px">
+          <div class="eyebrow mb-4">Expires in (days, 0 = never)</div>
+          <input class="input mono" name="expires_in_days" type="number" min="0" value="0" required>
+        </label>
+      </div>
+      <div class="mb-12">
+        <div class="eyebrow mb-4">Audience</div>
+        <label class="row gap-8" style="align-items:center;cursor:pointer">
+          <input type="radio" name="audience_kind" value="everyone" checked>
+          <span>Every tenant</span>
+        </label>
+        <label class="row gap-8 mt-4" style="align-items:center;cursor:pointer">
+          <input type="radio" name="audience_kind" value="emails">
+          <span>Specific tenants by email</span>
+        </label>
+        <textarea class="input mono mt-8" name="emails" rows="3" placeholder="comma- or newline-separated tenant emails"></textarea>
+      </div>
+      <button class="btn sm" type="submit">Add scheduled grant</button>
     </form>
   </div>
 
@@ -485,10 +617,13 @@ pub fn billing_overview_html(
         address_paise = address_paise,
         address_cents = address_cents,
         email_pack_size = email_pack_size,
+        free_monthly_credits = free_monthly_credits,
         paise_per_reply = paise_per_reply,
         cents_per_reply = cents_per_reply,
         address_inr = address_inr,
         address_usd = address_usd,
+        scheduled_rows = scheduled_rows,
+        schedule_msg = schedule_msg,
     );
 
     manage_shell("Billing - Concierge", &content, "Billing", base_url, locale)
@@ -510,6 +645,9 @@ mod tests {
             5_555,  // address paise
             77,     // address cents
             7,      // email pack size
+            150,    // free monthly credits
+            &[],
+            None,
         );
 
         // Form posts to the management settings endpoint.
@@ -529,6 +667,11 @@ mod tests {
         assert!(html.contains(r#"value="77""#));
         assert!(html.contains(r#"name="email_pack_size""#));
         assert!(html.contains(r#"value="7""#));
+        assert!(html.contains(r#"name="free_monthly_credits""#));
+        assert!(html.contains(r#"value="150""#));
+        // Scheduled-grants section is always rendered.
+        assert!(html.contains("Scheduled credit grants"));
+        assert!(html.contains("No scheduled grants yet."));
 
         // Per-reply hint shows the major-currency conversion.
         // 12_345 milli-paise / 100_000 = 0.12345 ≈ 0.12

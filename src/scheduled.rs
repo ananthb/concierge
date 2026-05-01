@@ -12,6 +12,10 @@ pub const CRON_DIGEST_SWEEP: &str = "*/15 * * * *";
 /// Daily Instagram long-lived-token refresh. Same wrangler/workflow contract.
 pub const CRON_INSTAGRAM_REFRESH: &str = "0 6 * * *";
 
+/// Hourly scheduled-grant processor. Picks rows from `scheduled_grants`
+/// whose next_run_at has passed and credits the targeted tenants.
+pub const CRON_SCHEDULED_GRANTS: &str = "0 * * * *";
+
 pub async fn handle_scheduled(event: ScheduledEvent, env: Env, _ctx: ScheduleContext) {
     let cron = event.cron();
     console_log!("Scheduled job started: {cron}");
@@ -27,10 +31,89 @@ pub async fn handle_scheduled(event: ScheduledEvent, env: Env, _ctx: ScheduleCon
                 console_log!("Instagram token refresh error: {:?}", e);
             }
         }
+        CRON_SCHEDULED_GRANTS => {
+            if let Err(e) = process_scheduled_grants(&env).await {
+                console_log!("Scheduled-grants processor error: {:?}", e);
+            }
+        }
         other => console_log!("Unknown cron schedule: {other}"),
     }
 
     console_log!("Scheduled job completed: {cron}");
+}
+
+/// Process every `scheduled_grants` row whose next_run_at has elapsed.
+/// For each row: grant credits to the configured audience, log an audit
+/// row per beneficiary, advance next_run_at by the cadence.
+async fn process_scheduled_grants(env: &Env) -> Result<()> {
+    let db = env.d1("DB")?;
+    let now = crate::helpers::now_iso();
+    let due = list_due_scheduled_grants(&db, &now).await?;
+    if due.is_empty() {
+        return Ok(());
+    }
+    console_log!("Processing {} due scheduled grant(s)", due.len());
+
+    for g in due {
+        let tenant_ids = match &g.audience {
+            crate::types::GrantAudience::Everyone => list_tenants(&db)
+                .await?
+                .into_iter()
+                .map(|t| t.id)
+                .collect::<Vec<_>>(),
+            crate::types::GrantAudience::Emails(emails) => {
+                let mut ids = Vec::with_capacity(emails.len());
+                for em in emails {
+                    if let Some(t) = get_tenant_by_email(&db, em).await? {
+                        ids.push(t.id);
+                    } else {
+                        console_log!("Scheduled grant {}: skipping unknown email {em}", g.id);
+                    }
+                }
+                ids
+            }
+        };
+
+        let mut granted_to = 0u32;
+        for tid in &tenant_ids {
+            let res = if g.expires_in_days <= 0 {
+                crate::billing::grant_purchased(&db, tid, g.credits).await
+            } else {
+                crate::billing::grant_with_expiry(&db, tid, g.credits, g.expires_in_days).await
+            };
+            match res {
+                Ok(_) => granted_to += 1,
+                Err(e) => {
+                    console_log!("Scheduled grant {}: tenant {tid} grant failed: {e:?}", g.id)
+                }
+            }
+        }
+
+        let next = crate::billing::cadence::next_run_after(&now, g.cadence);
+        record_scheduled_grant_run(&db, &g.id, &now, &next).await?;
+        let details = serde_json::json!({
+            "credits": g.credits,
+            "expires_in_days": g.expires_in_days,
+            "tenant_count": granted_to,
+            "next_run_at": next,
+        });
+        // System actor for cron-driven audit entries.
+        crate::management::audit::log_action(
+            &db,
+            "system:cron",
+            "scheduled_grant_run",
+            "billing",
+            Some(&g.id),
+            Some(&details),
+        )
+        .await?;
+        console_log!(
+            "Scheduled grant {}: granted {granted_to} tenant(s) {credits} credit(s); next run {next}",
+            g.id,
+            credits = g.credits,
+        );
+    }
+    Ok(())
 }
 
 async fn refresh_instagram_tokens(env: &Env) -> Result<()> {

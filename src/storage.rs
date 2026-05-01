@@ -1061,3 +1061,151 @@ pub async fn get_config_price(db: &D1Database, key: &str, default: i64) -> i64 {
         .and_then(|s| s.parse::<i64>().ok())
         .unwrap_or(default)
 }
+
+// ============================================================================
+// Scheduled grants
+// ============================================================================
+
+fn parse_scheduled_grant(row: &serde_json::Value) -> Option<crate::types::ScheduledGrant> {
+    use crate::types::{GrantAudience, GrantCadence, ScheduledGrant};
+
+    let id = row.get("id")?.as_str()?.to_string();
+    let cadence_wire = row.get("cadence")?.as_str()?;
+    let cadence = GrantCadence::from_wire(cadence_wire)?;
+    let audience_kind = row.get("audience_kind")?.as_str()?;
+    let emails_str = row
+        .get("audience_emails")
+        .and_then(|v| v.as_str())
+        .unwrap_or("[]");
+    let emails: Vec<String> = serde_json::from_str(emails_str).unwrap_or_default();
+    let audience = match audience_kind {
+        "everyone" => GrantAudience::Everyone,
+        "emails" => GrantAudience::Emails(emails),
+        _ => return None,
+    };
+    let credits = row.get("credits")?.as_i64()?;
+    let expires_in_days = row
+        .get("expires_in_days")
+        .and_then(|v| v.as_i64())
+        .unwrap_or(0);
+    let last_run_at = row
+        .get("last_run_at")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+    let next_run_at = row.get("next_run_at")?.as_str()?.to_string();
+    let active = row
+        .get("active")
+        .and_then(|v| v.as_i64())
+        .map(|n| n != 0)
+        .unwrap_or(true);
+    let created_at = row
+        .get("created_at")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let updated_at = row
+        .get("updated_at")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    Some(ScheduledGrant {
+        id,
+        cadence,
+        audience,
+        credits,
+        expires_in_days,
+        last_run_at,
+        next_run_at,
+        active,
+        created_at,
+        updated_at,
+    })
+}
+
+pub async fn list_scheduled_grants(db: &D1Database) -> Result<Vec<crate::types::ScheduledGrant>> {
+    let res = db
+        .prepare("SELECT * FROM scheduled_grants ORDER BY created_at DESC")
+        .all()
+        .await?;
+    let rows: Vec<serde_json::Value> = res.results()?;
+    Ok(rows.iter().filter_map(parse_scheduled_grant).collect())
+}
+
+pub async fn list_due_scheduled_grants(
+    db: &D1Database,
+    now_iso: &str,
+) -> Result<Vec<crate::types::ScheduledGrant>> {
+    let res = db
+        .prepare(
+            "SELECT * FROM scheduled_grants \
+             WHERE active = 1 AND next_run_at <= ? \
+             ORDER BY next_run_at ASC",
+        )
+        .bind(&[now_iso.into()])?
+        .all()
+        .await?;
+    let rows: Vec<serde_json::Value> = res.results()?;
+    Ok(rows.iter().filter_map(parse_scheduled_grant).collect())
+}
+
+pub async fn insert_scheduled_grant(
+    db: &D1Database,
+    g: &crate::types::ScheduledGrant,
+) -> Result<()> {
+    use crate::types::GrantAudience;
+    let (audience_kind, emails_json) = match &g.audience {
+        GrantAudience::Everyone => ("everyone", "[]".to_string()),
+        GrantAudience::Emails(es) => (
+            "emails",
+            serde_json::to_string(es).unwrap_or_else(|_| "[]".to_string()),
+        ),
+    };
+    db.prepare(
+        "INSERT INTO scheduled_grants \
+         (id, cadence, audience_kind, audience_emails, credits, expires_in_days, \
+          last_run_at, next_run_at, active, created_at, updated_at) \
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))",
+    )
+    .bind(&[
+        g.id.as_str().into(),
+        g.cadence.as_wire().as_str().into(),
+        audience_kind.into(),
+        emails_json.as_str().into(),
+        wasm_bindgen::JsValue::from_f64(g.credits as f64),
+        wasm_bindgen::JsValue::from_f64(g.expires_in_days as f64),
+        g.last_run_at
+            .as_deref()
+            .map(wasm_bindgen::JsValue::from_str)
+            .unwrap_or(wasm_bindgen::JsValue::null()),
+        g.next_run_at.as_str().into(),
+        wasm_bindgen::JsValue::from_f64(if g.active { 1.0 } else { 0.0 }),
+    ])?
+    .run()
+    .await?;
+    Ok(())
+}
+
+pub async fn delete_scheduled_grant(db: &D1Database, id: &str) -> Result<()> {
+    db.prepare("DELETE FROM scheduled_grants WHERE id = ?")
+        .bind(&[id.into()])?
+        .run()
+        .await?;
+    Ok(())
+}
+
+pub async fn record_scheduled_grant_run(
+    db: &D1Database,
+    id: &str,
+    last_run_at: &str,
+    next_run_at: &str,
+) -> Result<()> {
+    db.prepare(
+        "UPDATE scheduled_grants \
+         SET last_run_at = ?, next_run_at = ?, updated_at = datetime('now') \
+         WHERE id = ?",
+    )
+    .bind(&[last_run_at.into(), next_run_at.into(), id.into()])?
+    .run()
+    .await?;
+    Ok(())
+}

@@ -29,7 +29,7 @@ pub async fn handle_billing_admin(
         // Billing overview
         (Method::Get, "" | "/") => {
             let mut bill = storage::get_tenant_billing(&db, tenant_id).await?;
-            crate::billing::refresh_billing(&mut bill);
+            crate::billing::refresh_billing_async(&db, &mut bill).await;
             storage::save_tenant_billing(&db, tenant_id, &bill).await?;
             let tenant = storage::get_tenant(&db, tenant_id)
                 .await?

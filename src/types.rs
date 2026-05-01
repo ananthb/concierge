@@ -820,7 +820,30 @@ impl DigestCadence {
 
 #[cfg(test)]
 mod enum_tests {
-    use super::{ApprovalDecider, OnboardingStep, Plan};
+    use super::{ApprovalDecider, GrantCadence, OnboardingStep, Plan};
+
+    #[test]
+    fn grant_cadence_wire_round_trip() {
+        let cases = [
+            GrantCadence::Daily,
+            GrantCadence::MonthlyFirst,
+            GrantCadence::Weekly(0), // sun
+            GrantCadence::Weekly(1), // mon
+            GrantCadence::Weekly(6), // sat
+        ];
+        for c in cases {
+            let wire = c.as_wire();
+            let parsed = GrantCadence::from_wire(&wire).expect("round trip");
+            assert_eq!(parsed, c);
+        }
+    }
+
+    #[test]
+    fn grant_cadence_unknown_wire_returns_none() {
+        assert!(GrantCadence::from_wire("monthly").is_none());
+        assert!(GrantCadence::from_wire("weekly_xyz").is_none());
+        assert!(GrantCadence::from_wire("").is_none());
+    }
 
     #[test]
     fn approval_decider_round_trip() {
@@ -1290,4 +1313,83 @@ impl TenantBilling {
     pub fn total_remaining(&self) -> i64 {
         self.credits.iter().map(|e| e.amount).sum()
     }
+}
+
+// ============================================================================
+// Scheduled grants
+// ============================================================================
+
+/// Cadence at which a scheduled grant fires.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GrantCadence {
+    Daily,
+    /// Day-of-week, 0 = Sunday, 6 = Saturday.
+    Weekly(u8),
+    /// Fires on the 1st of every month at 00:00 UTC.
+    MonthlyFirst,
+}
+
+impl GrantCadence {
+    pub fn as_wire(self) -> String {
+        match self {
+            GrantCadence::Daily => "daily".to_string(),
+            GrantCadence::Weekly(d) => {
+                let codes = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
+                format!("weekly_{}", codes.get(d as usize).copied().unwrap_or("mon"))
+            }
+            GrantCadence::MonthlyFirst => "monthly_first".to_string(),
+        }
+    }
+
+    pub fn from_wire(s: &str) -> Option<Self> {
+        match s {
+            "daily" => Some(GrantCadence::Daily),
+            "monthly_first" => Some(GrantCadence::MonthlyFirst),
+            other => other.strip_prefix("weekly_").and_then(|d| match d {
+                "sun" => Some(GrantCadence::Weekly(0)),
+                "mon" => Some(GrantCadence::Weekly(1)),
+                "tue" => Some(GrantCadence::Weekly(2)),
+                "wed" => Some(GrantCadence::Weekly(3)),
+                "thu" => Some(GrantCadence::Weekly(4)),
+                "fri" => Some(GrantCadence::Weekly(5)),
+                "sat" => Some(GrantCadence::Weekly(6)),
+                _ => None,
+            }),
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            GrantCadence::Daily => "Every day at 00:00 UTC",
+            GrantCadence::Weekly(0) => "Every Sunday",
+            GrantCadence::Weekly(1) => "Every Monday",
+            GrantCadence::Weekly(2) => "Every Tuesday",
+            GrantCadence::Weekly(3) => "Every Wednesday",
+            GrantCadence::Weekly(4) => "Every Thursday",
+            GrantCadence::Weekly(5) => "Every Friday",
+            GrantCadence::Weekly(6) => "Every Saturday",
+            GrantCadence::Weekly(_) => "Every week",
+            GrantCadence::MonthlyFirst => "1st of every month",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum GrantAudience {
+    Everyone,
+    Emails(Vec<String>),
+}
+
+#[derive(Debug, Clone)]
+pub struct ScheduledGrant {
+    pub id: String,
+    pub cadence: GrantCadence,
+    pub audience: GrantAudience,
+    pub credits: i64,
+    pub expires_in_days: i64,
+    pub last_run_at: Option<String>,
+    pub next_run_at: String,
+    pub active: bool,
+    pub created_at: String,
+    pub updated_at: String,
 }
