@@ -94,12 +94,19 @@
             binaryen
             nodejs_22
             nodePackages.npm
+            # Headless Chromium for `npm run screenshots` (drives the docs
+            # gallery in doc/screenshots/ and gives us visual-regression
+            # checks against the live welcome / login templates).
+            playwright-driver.browsers
           ];
           shellHook = ''
             ${pre-commit-check.shellHook}
+            export PLAYWRIGHT_BROWSERS_PATH=${pkgs.playwright-driver.browsers}
+            export PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS=true
             echo "Concierge Worker dev environment"
             echo "  wrangler dev        - Start local dev server"
             echo "  wrangler deploy     - Deploy to Cloudflare"
+            echo "  npm run screenshots - Capture docs gallery PNGs"
             echo "  nix flake check     - Run CI checks"
           '';
         };

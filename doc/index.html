@@ -262,6 +262,37 @@
         </table>
       </div>
 
+      <h2 id="gallery">A look at the app</h2>
+      <p>
+        Live captures of the public site, regenerated from the running Worker by <code>npm run screenshots</code> (Playwright + headless Chromium, wired through the Nix devShell).
+      </p>
+      <div class="gallery">
+        <a href="screenshots/home.png" class="gallery__tile">
+          <img src="screenshots/home.png" alt="Concierge welcome page at desktop width" loading="lazy">
+          <div class="gallery__cap"><b>Welcome</b><span>/  &middot; 1280&times;800</span></div>
+        </a>
+        <a href="screenshots/login.png" class="gallery__tile">
+          <img src="screenshots/login.png" alt="Sign-in page with Google, Facebook, and WhatsApp brand buttons" loading="lazy">
+          <div class="gallery__cap"><b>Sign in</b><span>/auth/login</span></div>
+        </a>
+        <a href="screenshots/features.png" class="gallery__tile">
+          <img src="screenshots/features.png" alt="Features marketing page" loading="lazy">
+          <div class="gallery__cap"><b>Features</b><span>/features</span></div>
+        </a>
+        <a href="screenshots/pricing.png" class="gallery__tile">
+          <img src="screenshots/pricing.png" alt="Pricing marketing page" loading="lazy">
+          <div class="gallery__cap"><b>Pricing</b><span>/pricing</span></div>
+        </a>
+        <a href="screenshots/home-mobile.png" class="gallery__tile gallery__tile--mobile">
+          <img src="screenshots/home-mobile.png" alt="Welcome page at mobile width" loading="lazy">
+          <div class="gallery__cap"><b>Welcome</b><span>/ &middot; 375&times;812</span></div>
+        </a>
+        <a href="screenshots/terms.png" class="gallery__tile">
+          <img src="screenshots/terms.png" alt="Terms of service page" loading="lazy">
+          <div class="gallery__cap"><b>Legal</b><span>/terms · /privacy</span></div>
+        </a>
+      </div>
+
       <h2 id="model">Architecture model</h2>
       <p>
         Concierge runs as a single Worker. State lives in Cloudflare primitives: <strong>D1</strong> for append&#8209;only message metadata and billing, <strong>KV</strong> for tenant config and conversation context, <strong>Workers AI</strong> for reply generation and BGE embeddings, and <strong>Queues</strong> for the persona safety classifier. Inbound email is routed through Cloudflare Email Routing&rsquo;s <code>send_to_worker</code> action; outbound email uses the <code>EMAIL</code> binding.
@@ -349,6 +380,7 @@
       <h4>On this page</h4>
       <ul>
         <li class="lvl-2"><a href="#features" class="is-current">Features at a glance</a></li>
+        <li class="lvl-2"><a href="#gallery">A look at the app</a></li>
         <li class="lvl-2"><a href="#model">Architecture model</a></li>
         <li class="lvl-2"><a href="#getting-started">Getting started</a></li>
         <li class="lvl-2"><a href="#stack">Built with</a></li>

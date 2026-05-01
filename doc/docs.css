@@ -784,6 +784,58 @@ table.docs td.muted { color: var(--text-muted); }
 }
 
 /* =====================================================================
+   Screenshot gallery — shows live captures of the public site, generated
+   by `npm run screenshots`. PNGs land in doc/screenshots/.
+   ===================================================================== */
+.gallery {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 14px;
+  margin: 14px 0 28px;
+}
+@media (max-width: 720px) { .gallery { grid-template-columns: 1fr; } }
+.gallery__tile {
+  display: block;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  overflow: hidden;
+  background: var(--paper-2);
+  transition: border-color 0.1s, transform 0.08s;
+  text-decoration: none;
+}
+.gallery__tile:hover { border-color: var(--accent); }
+.gallery__tile img {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 10;
+  object-fit: cover;
+  object-position: top center;
+  background: var(--paper-3);
+}
+.gallery__tile--mobile img {
+  aspect-ratio: 9 / 16;
+  object-fit: cover;
+}
+.gallery__cap {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 14px;
+  border-top: 1px solid var(--border);
+  font-size: 13px;
+  color: var(--ink-0);
+  background: var(--surface);
+}
+.gallery__cap b { font-weight: 600; }
+.gallery__cap span {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+/* =====================================================================
    Hero / pipeline diagram (overview + how-it-works)
    ===================================================================== */
 .hero {
