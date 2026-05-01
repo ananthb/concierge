@@ -402,14 +402,65 @@ pub fn audit_html(log: &[serde_json::Value], base_url: &str, locale: &Locale) ->
     )
 }
 
-pub fn billing_overview_html(base_url: &str, locale: &Locale) -> String {
+pub fn billing_overview_html(
+    base_url: &str,
+    locale: &Locale,
+    milli_paise: i64,
+    milli_cents: i64,
+    address_paise: i64,
+    address_cents: i64,
+    email_pack_size: i64,
+) -> String {
+    // Display in major units: milli-paise / 100_000 = rupees, milli-cents / 100_000 = dollars.
+    let paise_per_reply = format!("{:.2}", milli_paise as f64 / 100_000.0);
+    let cents_per_reply = format!("{:.3}", milli_cents as f64 / 100_000.0);
+    let address_inr = format!("{:.2}", address_paise as f64 / 100.0);
+    let address_usd = format!("{:.2}", address_cents as f64 / 100.0);
+
     let content = format!(
         r##"<div class="page-pad">
   <div class="eyebrow">Billing</div>
-  <h2 class="display-sm m-0 mt-4 mb-16">Grant credits</h2>
+  <h2 class="display-sm m-0 mt-4 mb-16">Pricing &amp; grants</h2>
 
   <div class="card p-22 mb-16">
-    <p class="muted m-0">Pricing is a flat <strong>₹2 / $0.02 per reply</strong>. Tenants top up via slider on /admin/billing: no packs to manage.</p>
+    <h3 class="mb-8">AI-reply pricing</h3>
+    <p class="muted mb-12">Per-reply rate that applies to every tenant. Stored in milli-units (1/1000 of a paisa or cent) so the slider can offer fine-grained credit amounts.</p>
+    <div id="pricing-toast"></div>
+    <form hx-post="{base_url}/manage/billing/settings" hx-target="{hash}pricing-toast" hx-swap="innerHTML" hx-ext="json-enc">
+      <div class="row gap-12 wrap mb-16">
+        <label class="flex-1" style="min-width:220px">
+          <div class="eyebrow mb-4">Reply price (₹ / reply)</div>
+          <input class="input mono" name="unit_price_millipaise" type="number" min="1" required value="{milli_paise}">
+          <div class="muted fs-11 mt-4">milli-paise · currently ₹{paise_per_reply}</div>
+        </label>
+        <label class="flex-1" style="min-width:220px">
+          <div class="eyebrow mb-4">Reply price ($ / reply)</div>
+          <input class="input mono" name="unit_price_millicents" type="number" min="1" required value="{milli_cents}">
+          <div class="muted fs-11 mt-4">milli-cents · currently ${cents_per_reply}</div>
+        </label>
+      </div>
+
+      <h3 class="mb-8">Reply-email subscription</h3>
+      <p class="muted mb-12">Each pack of N addresses costs the rate below per recurring period (monthly). Tenants pay this in their selected currency.</p>
+      <div class="row gap-12 wrap mb-12">
+        <label class="flex-1" style="min-width:220px">
+          <div class="eyebrow mb-4">Pack price (₹ / month)</div>
+          <input class="input mono" name="address_price_paise" type="number" min="1" required value="{address_paise}">
+          <div class="muted fs-11 mt-4">paise · currently ₹{address_inr}</div>
+        </label>
+        <label class="flex-1" style="min-width:220px">
+          <div class="eyebrow mb-4">Pack price ($ / month)</div>
+          <input class="input mono" name="address_price_cents" type="number" min="1" required value="{address_cents}">
+          <div class="muted fs-11 mt-4">cents · currently ${address_usd}</div>
+        </label>
+        <label class="flex-1" style="min-width:160px">
+          <div class="eyebrow mb-4">Addresses per pack</div>
+          <input class="input mono" name="email_pack_size" type="number" min="1" required value="{email_pack_size}">
+          <div class="muted fs-11 mt-4">tenants get this many addresses per active pack</div>
+        </label>
+      </div>
+      <button class="btn sm" type="submit">Save pricing</button>
+    </form>
   </div>
 
   <div class="card p-18">
@@ -429,7 +480,69 @@ pub fn billing_overview_html(base_url: &str, locale: &Locale) -> String {
 </div>"##,
         base_url = base_url,
         hash = HASH,
+        milli_paise = milli_paise,
+        milli_cents = milli_cents,
+        address_paise = address_paise,
+        address_cents = address_cents,
+        email_pack_size = email_pack_size,
+        paise_per_reply = paise_per_reply,
+        cents_per_reply = cents_per_reply,
+        address_inr = address_inr,
+        address_usd = address_usd,
     );
 
     manage_shell("Billing - Concierge", &content, "Billing", base_url, locale)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn billing_overview_renders_inputs_with_db_values() {
+        let l = Locale::default_inr();
+        // Use distinctive non-default numbers so we can assert they appear.
+        let html = billing_overview_html(
+            "https://example.test",
+            &l,
+            12_345, // milli-paise
+            234,    // milli-cents
+            5_555,  // address paise
+            77,     // address cents
+            7,      // email pack size
+        );
+
+        // Form posts to the management settings endpoint.
+        assert!(
+            html.contains(r#"hx-post="https://example.test/manage/billing/settings""#),
+            "settings form missing: {html}"
+        );
+
+        // Each input renders the DB-loaded value.
+        assert!(html.contains(r#"name="unit_price_millipaise""#));
+        assert!(html.contains(r#"value="12345""#));
+        assert!(html.contains(r#"name="unit_price_millicents""#));
+        assert!(html.contains(r#"value="234""#));
+        assert!(html.contains(r#"name="address_price_paise""#));
+        assert!(html.contains(r#"value="5555""#));
+        assert!(html.contains(r#"name="address_price_cents""#));
+        assert!(html.contains(r#"value="77""#));
+        assert!(html.contains(r#"name="email_pack_size""#));
+        assert!(html.contains(r#"value="7""#));
+
+        // Per-reply hint shows the major-currency conversion.
+        // 12_345 milli-paise / 100_000 = 0.12345 ≈ 0.12
+        assert!(
+            html.contains("₹0.12"),
+            "missing INR per-reply preview: {html}"
+        );
+        // 234 milli-cents / 100_000 = 0.00234 ≈ 0.002
+        assert!(
+            html.contains("$0.002"),
+            "missing USD per-reply preview: {html}"
+        );
+        // Address prices (paise/100, cents/100) render as major units.
+        assert!(html.contains("₹55.55"), "missing addr inr: {html}");
+        assert!(html.contains("$0.77"), "missing addr usd: {html}");
+    }
 }

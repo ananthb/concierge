@@ -72,7 +72,14 @@ fn format_from(
     let mut errors = Vec::new();
     let result = bundle.format_pattern(pattern, args, &mut errors);
     if !errors.is_empty() {
+        // worker::console_log! is wasm-bindgen-backed and panics on the
+        // host targets used by `cargo test`. Gate it to wasm only so a
+        // missing-arg bug surfaces as a benign log in production but
+        // doesn't abort the host test runner.
+        #[cfg(target_arch = "wasm32")]
         worker::console_log!("i18n: {key} formatting issues: {errors:?}");
+        #[cfg(not(target_arch = "wasm32"))]
+        eprintln!("i18n: {key} formatting issues: {errors:?}");
     }
     Some(result.into_owned())
 }
@@ -113,6 +120,16 @@ pub fn t(locale: &Locale, key: &str) -> String {
     translator().t(locale, key, None)
 }
 
+/// Look up `key` and substitute `{ $name }` placeholders from `args`.
+/// Each tuple is `(name, value)` — values are coerced to FluentValue::String.
+pub fn t_args(locale: &Locale, key: &str, args: &[(&str, &str)]) -> String {
+    let mut fa = FluentArgs::new();
+    for (k, v) in args {
+        fa.set(*k, *v);
+    }
+    translator().t(locale, key, Some(&fa))
+}
+
 /// Asserts that the canonical bundle has a key for every supplied id.
 /// Used by the build-time integration test in `templates::base` to fail
 /// the build when a `t(..)` reference points at a missing FTL key.
@@ -143,5 +160,40 @@ mod tests {
         // en-US bundle is empty; lookups should fall through to en-IN.
         let l = Locale::default_usd();
         assert_eq!(t(&l, "nav-pricing"), "Pricing");
+    }
+
+    #[test]
+    fn t_args_substitutes_price_placeholders() {
+        let l = Locale::default_inr();
+        // Real key from the FTL — must contain { $inr } and { $usd }.
+        let s = t_args(
+            &l,
+            "features-card-pay-body",
+            &[("inr", "₹0.10"), ("usd", "$0.001")],
+        );
+        assert!(s.contains("₹0.10"), "missing inr substitution: {s}");
+        assert!(s.contains("$0.001"), "missing usd substitution: {s}");
+        // Sanity: placeholder syntax should not leak into output.
+        assert!(!s.contains("{ $"), "placeholder leaked: {s}");
+    }
+
+    #[test]
+    fn t_args_with_custom_prices() {
+        let l = Locale::default_inr();
+        let s = t_args(
+            &l,
+            "pricing-meta-description",
+            &[
+                ("inr", "₹0.50"),
+                ("usd", "$0.005"),
+                ("addr_inr", "₹199"),
+                ("addr_usd", "$2"),
+                ("pack_size", "5"),
+            ],
+        );
+        assert!(s.contains("₹0.50"));
+        assert!(s.contains("$0.005"));
+        assert!(s.contains("₹199"));
+        assert!(s.contains("$2"));
     }
 }

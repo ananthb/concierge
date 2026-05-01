@@ -147,3 +147,18 @@ CREATE INDEX IF NOT EXISTS idx_pa_tenant_status
     ON pending_approvals(tenant_id, status, created_at);
 CREATE INDEX IF NOT EXISTS idx_pa_status_created
     ON pending_approvals(status, created_at);
+
+-- Global settings (pricing, feature flags, etc.)
+CREATE TABLE IF NOT EXISTS global_settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    updated_at TEXT DEFAULT (datetime('now'))
+);
+
+INSERT OR IGNORE INTO global_settings (key, value) VALUES ('unit_price_millipaise', '10000');
+INSERT OR IGNORE INTO global_settings (key, value) VALUES ('unit_price_millicents', '100');
+-- Reply-email subscription: each pack of N addresses costs `address_price_*`
+-- (in paise / cents) per recurring period.
+INSERT OR IGNORE INTO global_settings (key, value) VALUES ('address_price_paise', '9900');
+INSERT OR IGNORE INTO global_settings (key, value) VALUES ('address_price_cents', '100');
+INSERT OR IGNORE INTO global_settings (key, value) VALUES ('email_pack_size', '5');

@@ -2,6 +2,7 @@
 
 use worker::*;
 
+use crate::billing;
 use crate::management::audit;
 use crate::storage;
 use crate::templates::management as tmpl;
@@ -26,8 +27,91 @@ pub async fn handle_billing(
     let locale = crate::locale::Locale::from_request(&req);
 
     match (method, parts.as_slice()) {
-        // Billing overview — grant-credits form lives here.
-        (Method::Get, []) => Response::from_html(tmpl::billing_overview_html(base_url, &locale)),
+        // Billing overview — grant-credits form and settings live here.
+        (Method::Get, []) => {
+            let milli_paise = storage::get_config_price(
+                db,
+                "unit_price_millipaise",
+                billing::UNIT_PRICE_MILLIPAISE,
+            )
+            .await;
+            let milli_cents = storage::get_config_price(
+                db,
+                "unit_price_millicents",
+                billing::UNIT_PRICE_MILLICENTS,
+            )
+            .await;
+            let address_paise =
+                storage::get_config_price(db, "address_price_paise", billing::ADDRESS_PRICE_PAISE)
+                    .await;
+            let address_cents =
+                storage::get_config_price(db, "address_price_cents", billing::ADDRESS_PRICE_CENTS)
+                    .await;
+            let pack_size =
+                storage::get_config_price(db, "email_pack_size", billing::EMAIL_PACK_SIZE).await;
+
+            Response::from_html(tmpl::billing_overview_html(
+                base_url,
+                &locale,
+                milli_paise,
+                milli_cents,
+                address_paise,
+                address_cents,
+                pack_size,
+            ))
+        }
+
+        // Update global pricing settings
+        (Method::Post, ["settings"]) => {
+            let form: serde_json::Value = req.json().await?;
+            let keys = [
+                "unit_price_millipaise",
+                "unit_price_millicents",
+                "address_price_paise",
+                "address_price_cents",
+                "email_pack_size",
+            ];
+
+            for key in keys {
+                let raw = match form.get(key) {
+                    Some(serde_json::Value::String(s)) => s.clone(),
+                    Some(serde_json::Value::Number(n)) => n.to_string(),
+                    _ => continue,
+                };
+                let parsed: i64 = match raw.parse() {
+                    Ok(n) if n > 0 => n,
+                    _ => {
+                        return Response::from_html(format!(
+                            r#"<div class="error">Invalid value for {}: must be a positive integer.</div>"#,
+                            crate::helpers::html_escape(key),
+                        ))
+                    }
+                };
+                let value = parsed.to_string();
+                db.prepare(
+                    "INSERT INTO global_settings (key, value, updated_at) \
+                     VALUES (?, ?, datetime('now')) \
+                     ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')",
+                )
+                .bind(&[key.into(), value.as_str().into()])?
+                .run()
+                .await?;
+            }
+
+            audit::log_action(
+                db,
+                actor_email,
+                "update_pricing",
+                "billing",
+                None,
+                Some(&form),
+            )
+            .await?;
+
+            Response::from_html(
+                r#"<div class="success">Pricing settings updated.</div>"#.to_string(),
+            )
+        }
 
         // Grant credits to a tenant with expiry
         (Method::Post, ["grant", tenant_id]) => {

@@ -1,12 +1,21 @@
 //! Public /features page: short, scannable overview of every capability.
 
-use crate::i18n::t;
+use crate::i18n::{t, t_args};
 use crate::locale::Locale;
 
 use super::base::{base_html_with_meta, public_nav_html, PageMeta};
 
-pub fn features_html(locale: &Locale) -> String {
+/// Format a milli-unit price (1/1000 of paisa or cent) as a major-currency
+/// string with the `₹` or `$` prefix.
+fn fmt_milli(milli: i64, symbol: &str, decimals: usize) -> String {
+    format!("{}{:.*}", symbol, decimals, milli as f64 / 100_000.0)
+}
+
+pub fn features_html(locale: &Locale, milli_paise: i64, milli_cents: i64) -> String {
     let nav = public_nav_html("features", locale);
+    let inr_price = fmt_milli(milli_paise, "₹", 2);
+    let usd_price = fmt_milli(milli_cents, "$", 3);
+    let price_args: &[(&str, &str)] = &[("inr", &inr_price), ("usd", &usd_price)];
 
     let content = format!(
         r##"{nav}
@@ -120,7 +129,7 @@ pub fn features_html(locale: &Locale) -> String {
         inj_eyebrow = t(locale, "features-card-injection-eyebrow"),
         inj_body = t(locale, "features-card-injection-body"),
         pay_eyebrow = t(locale, "features-card-pay-eyebrow"),
-        pay_body = t(locale, "features-card-pay-body"),
+        pay_body = t_args(locale, "features-card-pay-body", price_args),
         more_h = t(locale, "features-more-heading"),
         leads_eyebrow = t(locale, "features-card-leads-eyebrow"),
         leads_body = t(locale, "features-card-leads-body"),
@@ -140,7 +149,7 @@ pub fn features_html(locale: &Locale) -> String {
         "Features - Concierge",
         &content,
         &PageMeta {
-            description: t(locale, "features-meta-description"),
+            description: t_args(locale, "features-meta-description", price_args),
             og_title: t(locale, "features-og-title"),
             og_type: "website",
         },

@@ -27,7 +27,7 @@ Don't want to self-host? [concierge.calculon.tech](https://concierge.calculon.te
 - **Notification Preferences**: configurable approval + digest delivery via Discord and/or Email with batching frequency
 - **Localized**: per-tenant BCP-47 locale (`en-IN` and `en-US` shipped) drives Indian-vs-Western number grouping (₹1,00,000 vs $100,000) via icu4x; translation backbone uses fluent-rs FTL files for drop-in new languages. AI-generated reply content stays English regardless of UI locale
 - **Management Panel**: Cloudflare Access-protected admin for tenant management, billing, audit log
-- **Billing**: flat prepaid credits (₹2 / $0.02 per AI reply, 100 free every month). Static auto-replies are always free. Buy any quantity (slider, no tiers, no packs). One email address is free per account; extras are ₹99 / $1 each, one-time
+- **Billing**: flat prepaid credits (₹0.10 / $0.001 per AI reply, 100 included every month). Static auto-replies don't consume credits. Buy any quantity (slider, no tiers, no packs). Reply-email subscription: 5 addresses per ₹99 / $1 per month. All prices live in `global_settings` and are editable from the management panel
 - **Privacy-first**: no message content stored. Metadata only. GDPR data deletion
 
 ## Deploy

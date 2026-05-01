@@ -25,22 +25,22 @@ const FREE_MONTHLY_AMOUNT: i64 = 100;
 // ============================================================================
 //
 // Flat per-reply rate. No tiers, no discounts. The user picks any amount.
-pub const UNIT_PRICE_PAISE: i64 = 200; // ₹2.00 per reply
-pub const UNIT_PRICE_CENTS: i64 = 2; //   $0.02 per reply
-pub const MIN_CREDITS: i64 = 100;
+pub const UNIT_PRICE_MILLIPAISE: i64 = 10_000; // ₹0.10 (10 paise) per reply
+pub const UNIT_PRICE_MILLICENTS: i64 = 100; // $0.001 (0.1 cents) per reply
+pub const MIN_CREDITS: i64 = 500;
 pub const MAX_CREDITS: i64 = 1_000_000;
 
-// Extra email addresses: ₹99 / $1 each, one-time purchase per address.
+// Reply-email subscription: ₹99 / $1 per pack of `EMAIL_PACK_SIZE`
+// addresses, billed monthly. (Subscription enforcement is not yet wired
+// through Razorpay; today the webhook just grants `EMAIL_PACK_SIZE`
+// extras per successful payment — see doc/billing.html for the plan.)
 pub const ADDRESS_PRICE_PAISE: i64 = 9900;
 pub const ADDRESS_PRICE_CENTS: i64 = 100;
+pub const EMAIL_PACK_SIZE: i64 = 5;
 
-/// Per-reply price in the smallest currency unit (paise / cents).
-pub fn unit_price(currency: &str) -> i64 {
-    if currency == "USD" {
-        UNIT_PRICE_CENTS
-    } else {
-        UNIT_PRICE_PAISE
-    }
+/// Total price in the smallest currency unit (paise / cents) for a given credit amount.
+pub fn calculate_total(credits: i64, milli_price: i64) -> i64 {
+    (credits * milli_price + 500) / 1000
 }
 
 /// Per-extra-address price in the smallest currency unit (paise / cents).
@@ -342,5 +342,19 @@ mod tests {
         assert_eq!(b.credits[0].amount, 500);
         assert_eq!(b.credits[1].source, CreditSource::FreeMonthly);
         assert_eq!(b.credits[1].amount, 100);
+    }
+
+    #[test]
+    fn test_calculate_total() {
+        // 10 paise (10,000 milli-paise) per reply
+        assert_eq!(calculate_total(1, 10_000), 10);
+        assert_eq!(calculate_total(100, 10_000), 1000); // ₹10.00
+        assert_eq!(calculate_total(500, 10_000), 5000); // ₹50.00
+
+        // $0.001 (100 milli-cents) per reply
+        assert_eq!(calculate_total(1, 100), 0); // rounds 0.1 to 0
+        assert_eq!(calculate_total(5, 100), 1); // rounds 0.5 to 1
+        assert_eq!(calculate_total(500, 100), 50); // $0.50
+        assert_eq!(calculate_total(1000, 100), 100); // $1.00
     }
 }

@@ -74,6 +74,9 @@ pub fn billing_overview_with_addresses_html(
     base_url: &str,
     addresses_used: u32,
     address_quota: u32,
+    milli_price: i64,
+    address_price: i64,
+    email_pack_size: i64,
 ) -> String {
     let summary = summarize(billing);
 
@@ -105,28 +108,27 @@ pub fn billing_overview_with_addresses_html(
         SliderMode::Buy {
             return_to: "/admin/billing",
         },
+        milli_price,
     );
 
-    let address_price_label = format_money(
-        crate::billing::address_price(locale.currency.as_str()),
-        locale,
-    );
+    let address_price_label = format_money(address_price, locale);
     let address_card = format!(
         r##"<div class="card p-18 mb-24">
             <div class="between">
                 <div>
-                    <div class="eyebrow">Email addresses</div>
+                    <div class="eyebrow">Reply-email subscription</div>
                     <div class="stat-n serif">{addresses_used} / {address_quota}</div>
-                    <div class="mono muted fs-11">used / total quota</div>
+                    <div class="mono muted fs-11">addresses used / quota</div>
                 </div>
                 <form hx-post="{base_url}/admin/billing/address" hx-target="body" hx-swap="innerHTML">
-                    <button class="btn primary" type="submit">Buy 1 more: {address_price_label}</button>
+                    <button class="btn primary" type="submit">Add a pack ({pack_size} for {address_price_label}/mo)</button>
                 </form>
             </div>
         </div>"##,
         addresses_used = addresses_used,
         address_quota = address_quota,
         address_price_label = address_price_label,
+        pack_size = email_pack_size,
         base_url = base_url,
     );
 
@@ -248,7 +250,9 @@ document.getElementById("pay-btn").addEventListener("click", function() {{
     base_html("Checkout - Concierge", &content, locale)
 }
 
-/// Checkout for one extra email address (one-time, ₹99 / $1).
+/// Checkout for a reply-email subscription pack. The price comes from
+/// `global_settings.address_price_*` (default ₹99 / $1 per pack/month) and
+/// grants `email_pack_size` addresses (default 5) on payment success.
 pub fn address_checkout_html(
     order_id: &str,
     amount: i64,
@@ -262,8 +266,8 @@ pub fn address_checkout_html(
     let content = format!(
         r##"<div class="ta-center" style="max-width:480px;margin:4rem auto;padding:0 1rem">
   <div class="card p-28">
-    <h2 class="display-sm">Extra email address</h2>
-    <p class="muted m-0 mt-8 mb-24">One additional concierge address. One-time charge.</p>
+    <h2 class="display-sm">Reply-email subscription</h2>
+    <p class="muted m-0 mt-8 mb-24">A pack of concierge addresses, billed monthly.</p>
     <div class="stat-n serif mb-24">{display_amount}</div>
     <button id="pay-btn" class="btn primary lg w-full">Pay with Razorpay</button>
     <p class="mono muted fs-11 mt-12">Secure payment via Razorpay</p>

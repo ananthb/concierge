@@ -107,23 +107,13 @@
 
 <p>Platform operators can grant free credits to any tenant via the <a href="management.html">management panel</a>. This is useful for onboarding, promotions, or support situations. Grants are logged to the audit trail.</p>
 
-<h3>2. Paid Credit Packs (Razorpay)</h3>
+<h3>2. Paid Top-ups (Razorpay)</h3>
 
-<p>Tenants can purchase credit packs via Razorpay checkout. The available packs are configurable by management. Default packs seeded by the migration:</p>
+<p>Tenants can purchase AI-reply credits (minimum 500) via a slider in the dashboard. The system uses a flat per-reply rate which is configurable by platform operators.</p>
 
-<table>
-  <thead>
-    <tr><th>Pack</th><th>Replies</th><th>Price (INR)</th><th>Price (USD)</th></tr>
-  </thead>
-  <tbody>
-    <tr><td>Starter</td><td>500</td><td>249.00</td><td>$3.00</td></tr>
-    <tr><td>Growth</td><td>2,000</td><td>799.00</td><td>$10.00</td></tr>
-    <tr><td>Scale</td><td>10,000</td><td>2,999.00</td><td>$36.00</td></tr>
-    <tr><td>Volume</td><td>50,000</td><td>9,999.00</td><td>$120.00</td></tr>
-  </tbody>
-</table>
+<p>The unit price for each currency is stored in the <code>global_settings</code> table (as milli-units, i.e. 1/1000th of a cent or paisa). This allows operators to adjust pricing globally without changing code.</p>
 
-<p>Prices are stored in paise (INR) and cents (USD) internally.</p>
+<p>Prices are stored in paise (INR) and cents (USD) internally for the final transaction.</p>
 
 <h2>Razorpay Integration</h2>
 
@@ -146,19 +136,32 @@
   <li><code>RAZORPAY_WEBHOOK_SECRET</code>: Webhook secret for signature verification</li>
 </ul>
 
-<h2>Credit Pack Management</h2>
+<h2>Pricing Management</h2>
 
-<p>Platform operators can manage credit packs via the <a href="management.html">management panel</a> at <code>/manage/billing</code>:</p>
+<p>Platform operators set the global per-reply and per-extra-address prices via the <a href="management.html">management panel</a> at <code>/manage/billing</code>. There is one flat rate per currency — no tiers, no packs.</p>
 
-<ul>
-  <li>Create new packs with custom names, reply counts, and prices</li>
-  <li>Update existing pack details</li>
-  <li>Activate or deactivate packs (inactive packs are hidden from tenants)</li>
-  <li>Delete packs</li>
-  <li>Control sort order for display on the pricing page</li>
-</ul>
+<p>Five configurable keys live in the <code>global_settings</code> table:</p>
 
-<p>All pack management actions are recorded in the audit log.</p>
+<table>
+  <thead>
+    <tr><th>Key</th><th>Unit</th><th>Default</th><th>Used by</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>unit_price_millipaise</code></td><td>milli-paise (1/1000 paise)</td><td>10000 (₹0.10/reply)</td><td>INR Razorpay orders, INR pricing copy, slider preview</td></tr>
+    <tr><td><code>unit_price_millicents</code></td><td>milli-cents (1/1000 cent)</td><td>100 ($0.001/reply)</td><td>USD Razorpay orders, USD pricing copy, slider preview</td></tr>
+    <tr><td><code>address_price_paise</code></td><td>paise</td><td>9900 (₹99)</td><td>Reply-email subscription pack price per month (INR)</td></tr>
+    <tr><td><code>address_price_cents</code></td><td>cents</td><td>100 ($1)</td><td>Reply-email subscription pack price per month (USD)</td></tr>
+    <tr><td><code>email_pack_size</code></td><td>integer</td><td>5</td><td>Addresses granted per reply-email pack purchase</td></tr>
+  </tbody>
+</table>
+
+<p>Reply prices use milli-units so operators can set sub-paise/sub-cent prices (e.g. ₹0.10 per reply with high volumes). The <code>billing::calculate_total(credits, milli_price)</code> helper rounds the final purchase total to the nearest paise/cent. Reply-email pack prices are flat-unit (no rounding) since they're whole-currency monthly charges for a fixed-size pack.</p>
+
+<p>Edits to the pricing form trigger a <code>POST /manage/billing/settings</code>, which validates each value as a positive integer, upserts into <code>global_settings</code>, and writes an <code>update_pricing</code> entry to the audit log.</p>
+
+<p><strong>Subscription enforcement, not yet wired:</strong> the reply-email pack is described as recurring monthly, but the current Razorpay integration creates one-time orders. A successful payment grants <code>email_pack_size</code> addresses for the lifetime of the account. A follow-up change should switch this flow to Razorpay Subscriptions, with a webhook handler that revokes pack-granted addresses when the subscription lapses.</p>
+
+<p>All grants and pricing edits are recorded in the audit log.</p>
 
 <h2>Billing State</h2>
 

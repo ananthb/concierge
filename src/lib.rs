@@ -255,14 +255,25 @@ async fn handle_request(req: Request, env: Env) -> Result<Response> {
 
     // Marketing features overview
     if path == "/features" {
-        return Response::from_html(templates::features::features_html(&request_locale));
+        let db = env.d1("DB")?;
+        let milli_paise =
+            storage::get_config_price(&db, "unit_price_millipaise", billing::UNIT_PRICE_MILLIPAISE)
+                .await;
+        let milli_cents =
+            storage::get_config_price(&db, "unit_price_millicents", billing::UNIT_PRICE_MILLICENTS)
+                .await;
+        return Response::from_html(templates::features::features_html(
+            &request_locale,
+            milli_paise,
+            milli_cents,
+        ));
     }
 
     // Pricing page. ?c=usd|inr overrides the geo-IP default so the toggle
     // buttons work.
     if path == "/pricing" {
         let query: std::collections::HashMap<_, _> = url.query_pairs().collect();
-        let currency = query.get("c").map(|s| s.to_string()).unwrap_or_else(|| {
+        let currency_str = query.get("c").map(|s| s.to_string()).unwrap_or_else(|| {
             let country = req
                 .headers()
                 .get("cf-ipcountry")
@@ -275,9 +286,31 @@ async fn handle_request(req: Request, env: Env) -> Result<Response> {
                 "usd".into()
             }
         });
+
+        let db = env.d1("DB")?;
+        let milli_paise =
+            storage::get_config_price(&db, "unit_price_millipaise", billing::UNIT_PRICE_MILLIPAISE)
+                .await;
+        let milli_cents =
+            storage::get_config_price(&db, "unit_price_millicents", billing::UNIT_PRICE_MILLICENTS)
+                .await;
+        let address_paise =
+            storage::get_config_price(&db, "address_price_paise", billing::ADDRESS_PRICE_PAISE)
+                .await;
+        let address_cents =
+            storage::get_config_price(&db, "address_price_cents", billing::ADDRESS_PRICE_CENTS)
+                .await;
+        let email_pack_size =
+            storage::get_config_price(&db, "email_pack_size", billing::EMAIL_PACK_SIZE).await;
+
         return Response::from_html(templates::onboarding::pricing_html(
-            &currency,
+            &currency_str,
             &request_locale,
+            milli_paise,
+            milli_cents,
+            address_paise,
+            address_cents,
+            email_pack_size,
         ));
     }
 

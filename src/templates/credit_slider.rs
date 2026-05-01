@@ -5,7 +5,7 @@
 //! "Custom" toggle swaps in a number input that accepts any integer up to
 //! `MAX_CREDITS`. Live price preview is computed in Alpine on the client.
 
-use crate::billing::{MAX_CREDITS, MIN_CREDITS, UNIT_PRICE_CENTS, UNIT_PRICE_PAISE};
+use crate::billing::{MAX_CREDITS, MIN_CREDITS};
 use crate::helpers::{format_count, format_money};
 use crate::locale::{Currency, Locale};
 
@@ -21,18 +21,36 @@ pub enum SliderMode<'a> {
     },
 }
 
-pub fn slider_html(locale: &Locale, base_url: &str, mode: SliderMode<'_>) -> String {
+pub fn slider_html(
+    locale: &Locale,
+    base_url: &str,
+    mode: SliderMode<'_>,
+    milli_price: i64,
+) -> String {
     // Per-reply price label and the JS expression for live total. INR uses
     // `toLocaleString('en-IN')` for lakh/crore grouping; USD does standard
     // dollars-and-cents.
+    // milli_price is 1/1000th of a cent/paisa.
+    // 100,000 milli-units = 100 cents/paise = 1 dollar/rupee.
     let (per_reply_label, price_js) = match locale.currency {
         Currency::Usd => (
-            format_money(UNIT_PRICE_CENTS, locale),
-            "(credits * 2 / 100).toFixed(2)".to_string(),
+            format!(
+                "{}{:.3}",
+                locale.currency.symbol(),
+                milli_price as f64 / 100000.0
+            ),
+            format!("(credits * {} / 100000).toFixed(2)", milli_price),
         ),
         Currency::Inr => (
-            format_money(UNIT_PRICE_PAISE, locale),
-            "(credits * 2).toLocaleString('en-IN')".to_string(),
+            format!(
+                "{}{:.2}",
+                locale.currency.symbol(),
+                milli_price as f64 / 100000.0
+            ),
+            format!(
+                "(credits * {} / 100000).toLocaleString('en-IN')",
+                milli_price
+            ),
         ),
     };
     let symbol = locale.currency.symbol();
@@ -67,7 +85,7 @@ pub fn slider_html(locale: &Locale, base_url: &str, mode: SliderMode<'_>) -> Str
   <div class="between mb-12">
     <div>
       <div class="eyebrow">AI reply credits</div>
-      <p class="muted m-0 mt-4 fs-13">{per_reply_label} per AI reply. Static auto-replies are always free. 100 AI replies free every month. Purchased credits never expire.</p>
+      <p class="muted m-0 mt-4 fs-13">{per_reply_label} per AI reply. 100 AI replies included every month; static replies don't consume credits.</p>
     </div>
     <div class="ta-right">
       <div class="serif" style="font-size:34px;line-height:1"><span x-text="credits.toLocaleString(countLocale)"></span></div>
@@ -110,8 +128,8 @@ pub fn slider_html(locale: &Locale, base_url: &str, mode: SliderMode<'_>) -> Str
         min = MIN_CREDITS,
         max = MAX_CREDITS,
         max_display = format_count(MAX_CREDITS, locale),
-        min_price = price_for(MIN_CREDITS, locale),
-        max_price = price_for(10_000, locale),
+        min_price = price_for(MIN_CREDITS, locale, milli_price),
+        max_price = price_for(10_000, locale, milli_price),
         price_js = price_js,
         count_locale = count_locale,
         action_html = action_html,
@@ -119,10 +137,7 @@ pub fn slider_html(locale: &Locale, base_url: &str, mode: SliderMode<'_>) -> Str
 }
 
 /// Total price for `credits` reply units in the given locale.
-fn price_for(credits: i64, locale: &Locale) -> String {
-    let amount_minor = match locale.currency {
-        Currency::Inr => credits * UNIT_PRICE_PAISE,
-        Currency::Usd => credits * UNIT_PRICE_CENTS,
-    };
+fn price_for(credits: i64, locale: &Locale, milli_price: i64) -> String {
+    let amount_minor = crate::billing::calculate_total(credits, milli_price);
     format_money(amount_minor, locale)
 }

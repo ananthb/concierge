@@ -1036,3 +1036,28 @@ pub async fn save_tenant_billing(
     .await?;
     Ok(())
 }
+
+// ============================================================================
+// Global Settings
+// ============================================================================
+
+/// Get a global setting from the DB. Falls back to None if not found or DB error.
+pub async fn get_global_setting(db: &D1Database, key: &str) -> Option<String> {
+    let res = db
+        .prepare("SELECT value FROM global_settings WHERE key = ?")
+        .bind(&[key.into()])
+        .ok()?
+        .first::<serde_json::Value>(None)
+        .await
+        .ok()??;
+    res.get("value")?.as_str().map(|s| s.to_string())
+}
+
+/// Get a numeric pricing setting (in milli-units for reply price, or paise/cents
+/// for address price) from the DB. Falls back to `default` if not found.
+pub async fn get_config_price(db: &D1Database, key: &str, default: i64) -> i64 {
+    get_global_setting(db, key)
+        .await
+        .and_then(|s| s.parse::<i64>().ok())
+        .unwrap_or(default)
+}

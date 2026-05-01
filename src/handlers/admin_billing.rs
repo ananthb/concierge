@@ -37,12 +37,50 @@ pub async fn handle_billing_admin(
             let locale = crate::locale::Locale::from_tenant(&tenant.locale, Some(tenant.currency));
             let kv = env.kv("KV")?;
             let addrs = storage::get_email_addresses(&kv, tenant_id).await?;
+
+            let (milli_price, address_price) = if locale.currency == crate::locale::Currency::Usd {
+                (
+                    storage::get_config_price(
+                        &db,
+                        "unit_price_millicents",
+                        billing::UNIT_PRICE_MILLICENTS,
+                    )
+                    .await,
+                    storage::get_config_price(
+                        &db,
+                        "address_price_cents",
+                        billing::ADDRESS_PRICE_CENTS,
+                    )
+                    .await,
+                )
+            } else {
+                (
+                    storage::get_config_price(
+                        &db,
+                        "unit_price_millipaise",
+                        billing::UNIT_PRICE_MILLIPAISE,
+                    )
+                    .await,
+                    storage::get_config_price(
+                        &db,
+                        "address_price_paise",
+                        billing::ADDRESS_PRICE_PAISE,
+                    )
+                    .await,
+                )
+            };
+            let email_pack_size =
+                storage::get_config_price(&db, "email_pack_size", billing::EMAIL_PACK_SIZE).await;
+
             Response::from_html(tmpl::billing_overview_with_addresses_html(
                 &bill,
                 &locale,
                 base_url,
                 addrs.len() as u32,
                 tenant.email_address_quota(),
+                milli_price,
+                address_price,
+                email_pack_size,
             ))
         }
 
@@ -77,7 +115,24 @@ pub async fn handle_billing_admin(
                 .unwrap_or_default();
             let locale = crate::locale::Locale::from_tenant(&tenant.locale, Some(tenant.currency));
             let currency = locale.currency.as_str();
-            let amount = credits * billing::unit_price(currency);
+
+            let milli_price = if locale.currency == crate::locale::Currency::Usd {
+                storage::get_config_price(
+                    &db,
+                    "unit_price_millicents",
+                    billing::UNIT_PRICE_MILLICENTS,
+                )
+                .await
+            } else {
+                storage::get_config_price(
+                    &db,
+                    "unit_price_millipaise",
+                    billing::UNIT_PRICE_MILLIPAISE,
+                )
+                .await
+            };
+
+            let amount = billing::calculate_total(credits, milli_price);
 
             let key_id = env.secret("RAZORPAY_KEY_ID")?.to_string();
             let key_secret = env.secret("RAZORPAY_KEY_SECRET")?.to_string();
@@ -93,16 +148,25 @@ pub async fn handle_billing_admin(
             ))
         }
 
-        // Buy one extra email address (one-time, ₹99 / $1). Builds an order
-        // with notes.kind="address" so the webhook bumps the tenant's
-        // email_address_extras_purchased count by one.
+        // Buy a reply-email subscription pack. Price comes from
+        // global_settings.address_price_*, default ₹99 / $1 per pack/month;
+        // pack size from global_settings.email_pack_size, default 5. The
+        // order carries notes.kind="address" so the Razorpay webhook bumps
+        // the tenant's email_address_extras_purchased by the pack size.
         (Method::Post, "address") => {
             let tenant = storage::get_tenant(&db, tenant_id)
                 .await?
                 .unwrap_or_default();
             let locale = crate::locale::Locale::from_tenant(&tenant.locale, Some(tenant.currency));
             let currency = locale.currency.as_str();
-            let amount = billing::address_price(currency);
+
+            let amount = if locale.currency == crate::locale::Currency::Usd {
+                storage::get_config_price(&db, "address_price_cents", billing::ADDRESS_PRICE_CENTS)
+                    .await
+            } else {
+                storage::get_config_price(&db, "address_price_paise", billing::ADDRESS_PRICE_PAISE)
+                    .await
+            };
 
             let key_id = env.secret("RAZORPAY_KEY_ID")?.to_string();
             let key_secret = env.secret("RAZORPAY_KEY_SECRET")?.to_string();
@@ -117,7 +181,10 @@ pub async fn handle_billing_admin(
                 serde_json::json!({
                     "tenant_id": tenant_id,
                     "kind": "address",
-                    "extras": "1",
+                    // Omit "extras": the webhook falls back to the
+                    // configured email_pack_size (default 5) so adjusting
+                    // the pack size from /manage takes effect on the
+                    // next purchase without a code change here.
                 }),
             )
             .await?;

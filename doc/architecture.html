@@ -139,7 +139,7 @@
   <li><strong>Final prompt:</strong> the system prompt sent to the reply model is <code>persona.active_prompt() + "\n\n" + rule_prompt</code>. The user message wraps the inbound text and sender name as a "Context: ... Generate an appropriate response." block.</li>
   <li><strong>Injection scan:</strong> incoming bodies are truncated to 1000 chars, then a fast classifier checks for instruction-override patterns. Rejected messages skip the entire pipeline (no rule matching, no reply).</li>
   <li><strong>Billing:</strong> only the AI reply step deducts a credit; static <code>Canned</code> responses are free, and embeddings/intent matching/safety classification are free. Deduction happens before the AI call (optimistic), restored on any failure path. Free monthly grant of 100 credits per tenant.</li>
-  <li><strong>Pricing:</strong> flat $0.02 / ₹2 per AI reply, no tiers. <code>UNIT_PRICE_PAISE = 200</code>, <code>UNIT_PRICE_CENTS = 2</code> in <code>src/billing/mod.rs</code>.</li>
+  <li><strong>Pricing:</strong> flat per-AI-reply rate, no tiers. The unit price (in milli-units) for each currency is operator-configurable via the <code>global_settings</code> table and the management panel.</li>
 </ul>
 
 <h2>Persona safety queue</h2>

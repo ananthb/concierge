@@ -67,9 +67,12 @@ pub struct Tenant {
     pub locale: String,
     #[serde(default)]
     pub currency: Currency,
-    /// Count of extra email addresses the tenant has bought beyond the one
-    /// free with the account. Quota = 1 + this. Each extra is a one-time
-    /// Razorpay purchase at ₹99 / $1.
+    /// Cumulative reply-email-address quota the tenant has purchased.
+    /// Each successful pack purchase bumps this by `email_pack_size`
+    /// (default 5). Quota = this value (no implicit freebie). Pricing and
+    /// pack size live in `global_settings`; defaults are
+    /// `ADDRESS_PRICE_PAISE` / `ADDRESS_PRICE_CENTS` per pack and
+    /// `EMAIL_PACK_SIZE` addresses per pack.
     #[serde(default)]
     pub email_address_extras_purchased: u32,
     pub created_at: String,
@@ -77,8 +80,12 @@ pub struct Tenant {
 }
 
 impl Tenant {
+    /// How many reply-email addresses this tenant is allowed to provision.
+    /// Equal to the cumulative count of addresses granted by paid pack
+    /// purchases. (Operator grants and pack-purchase webhooks both bump
+    /// `email_address_extras_purchased` — see billing/webhook.rs.)
     pub fn email_address_quota(&self) -> u32 {
-        1 + self.email_address_extras_purchased
+        self.email_address_extras_purchased
     }
 }
 

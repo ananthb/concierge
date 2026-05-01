@@ -299,6 +299,9 @@ pub fn connect_html(
     discord: Option<&crate::types::DiscordConfig>,
     base_url: &str,
     locale: &crate::locale::Locale,
+    address_paise: i64,
+    address_cents: i64,
+    email_pack_size: i64,
 ) -> String {
     let ig_name = t(locale, "wizard-channels-name-instagram");
     let ig_flavor = t(locale, "wizard-channels-flavor-instagram");
@@ -397,7 +400,15 @@ pub fn connect_html(
             lead_suffix = t(locale, "wizard-channels-email-lead-suffix"),
             ph = t(locale, "wizard-channels-email-placeholder"),
             add = t(locale, "wizard-channels-email-add"),
-            help = t(locale, "wizard-channels-email-help"),
+            help = crate::i18n::t_args(
+                locale,
+                "wizard-channels-email-help",
+                &[
+                    ("inr", &format!("₹{:.0}", address_paise as f64 / 100.0)),
+                    ("usd", &format!("${:.0}", address_cents as f64 / 100.0)),
+                    ("pack_size", &email_pack_size.to_string()),
+                ],
+            ),
         )
     };
 
@@ -796,6 +807,7 @@ pub fn launch_html(
     base_domain: &str,
     locale: &crate::locale::Locale,
     base_url: &str,
+    milli_price: i64,
 ) -> String {
     let email_rows: String = email_addresses
         .iter()
@@ -837,6 +849,7 @@ pub fn launch_html(
             crate::templates::credit_slider::SliderMode::Buy {
                 return_to: "/admin/wizard/launch",
             },
+            milli_price,
         ),
         note = t(locale, "wizard-launch-credits-note"),
     );
@@ -893,9 +906,23 @@ pub fn launch_html(
 
 /// Public pricing page at /pricing. The `?c=usd` query param swaps the
 /// display currency without changing the visitor's UI language.
-pub fn pricing_html(default_currency: &str, locale: &crate::locale::Locale) -> String {
+pub fn pricing_html(
+    default_currency: &str,
+    locale: &crate::locale::Locale,
+    milli_paise: i64,
+    milli_cents: i64,
+    address_paise: i64,
+    address_cents: i64,
+    email_pack_size: i64,
+) -> String {
     use crate::helpers::format_money;
     use crate::locale::Currency;
+
+    let (milli_price, address_price) = if default_currency.eq_ignore_ascii_case("usd") {
+        (milli_cents, address_cents)
+    } else {
+        (milli_paise, address_paise)
+    };
 
     // Public pricing page. Visitors aren't logged in, so the slider's
     // checkout button is replaced with a sign-in CTA. The ?c= query param
@@ -919,15 +946,13 @@ pub fn pricing_html(default_currency: &str, locale: &crate::locale::Locale) -> S
             cta_href: "/auth/login",
             cta_label: &signin_label,
         },
+        milli_price,
     );
     let per_reply = match locale.currency {
-        Currency::Usd => format_money(crate::billing::UNIT_PRICE_CENTS, &locale),
-        Currency::Inr => format_money(crate::billing::UNIT_PRICE_PAISE, &locale),
+        Currency::Usd => format!("${:.3}", milli_price as f64 / 100_000.0),
+        Currency::Inr => format!("₹{:.2}", milli_price as f64 / 100_000.0),
     };
-    let address_price = format_money(
-        crate::billing::address_price(locale.currency.as_str()),
-        &locale,
-    );
+    let address_price_label = format_money(address_price, &locale);
     let (inr_cls, usd_cls) = match locale.currency {
         Currency::Usd => ("btn ghost sm", "btn sm"),
         Currency::Inr => ("btn sm", "btn ghost sm"),
@@ -978,24 +1003,116 @@ pub fn pricing_html(default_currency: &str, locale: &crate::locale::Locale) -> S
         credits_li_3 = crate::i18n::t(&locale, "pricing-credits-li-3"),
         email_h = crate::i18n::t(&locale, "pricing-email-heading"),
         email_body = crate::i18n::t(&locale, "pricing-email-body"),
-        quota_prefix = crate::i18n::t(&locale, "pricing-email-quota-prefix"),
+        quota_prefix = crate::i18n::t_args(
+            &locale,
+            "pricing-email-quota-prefix",
+            &[("pack_size", &email_pack_size.to_string())],
+        ),
         quota_suffix = crate::i18n::t(&locale, "pricing-email-quota-suffix"),
         billing_note = crate::i18n::t(&locale, "pricing-email-billing-note"),
         per_reply = per_reply,
-        address_price = address_price,
+        address_price = address_price_label,
         slider = slider,
         inr_cls = inr_cls,
         usd_cls = usd_cls,
     );
 
+    let meta_inr = format!("₹{:.2}", milli_paise as f64 / 100_000.0);
+    let meta_usd = format!("${:.3}", milli_cents as f64 / 100_000.0);
+    let meta_addr_inr = format_money(address_paise, &crate::locale::Locale::default_inr());
+    let meta_addr_usd = format_money(address_cents, &crate::locale::Locale::default_usd());
+    let pack_size_str = email_pack_size.to_string();
+    let meta_description = crate::i18n::t_args(
+        &locale,
+        "pricing-meta-description",
+        &[
+            ("inr", &meta_inr),
+            ("usd", &meta_usd),
+            ("addr_inr", &meta_addr_inr),
+            ("addr_usd", &meta_addr_usd),
+            ("pack_size", &pack_size_str),
+        ],
+    );
     base_html_with_meta(
         "Pricing - Concierge",
         &content,
         &PageMeta {
-            description: crate::i18n::t(&locale, "pricing-meta-description"),
+            description: meta_description,
             og_title: crate::i18n::t(&locale, "pricing-og-title"),
             og_type: "website",
         },
         &locale,
     )
+}
+
+#[cfg(test)]
+mod pricing_tests {
+    use super::*;
+
+    #[test]
+    fn connect_html_email_help_shows_db_address_price() {
+        let l = crate::locale::Locale::default_inr();
+        // Custom prices: 5-pack at ₹150 / $2 per month.
+        let html = connect_html(
+            false,
+            false,
+            &[],
+            "demo",
+            "example.com",
+            "tenant_x",
+            None,
+            "https://example.test",
+            &l,
+            15_000, // address_paise = 150 rupees per pack/month
+            200,    // address_cents = 2 dollars per pack/month
+            5,      // pack_size
+        );
+        assert!(html.contains("₹150"), "wizard help missing INR: {html}");
+        assert!(html.contains("$2"), "wizard help missing USD: {html}");
+        assert!(html.contains("5"), "wizard help missing pack size: {html}");
+    }
+
+    #[test]
+    fn pricing_html_shows_db_inr_price() {
+        let l = crate::locale::Locale::default_inr();
+        // 25_000 milli-paise = 0.25 → ₹0.25 per reply.
+        let html = pricing_html("INR", &l, 25_000, 250, 19_900, 200, 5);
+        assert!(html.contains("₹0.25"), "headline price missing: {html}");
+        // Address row uses format_money — paise to ₹.
+        assert!(html.contains("₹199"), "address inr missing");
+        // Meta description should embed both currencies.
+        assert!(html.contains("$0.003"), "meta usd missing"); // 250 / 100_000 = 0.0025 → 0.003 (3 dp)
+    }
+
+    #[test]
+    fn pricing_html_usd_currency_uses_cents() {
+        let l = crate::locale::Locale::default_inr(); // langid; pricing_html overrides currency from arg
+        let html = pricing_html("usd", &l, 25_000, 250, 19_900, 200, 5);
+        // 250 milli-cents / 100_000 = 0.0025 → "$0.003"
+        assert!(html.contains("$0.003"), "headline usd price: {html}");
+        // address_cents=200 → $2.00
+        assert!(html.contains("$2"), "address usd missing: {html}");
+    }
+
+    #[test]
+    fn pricing_html_no_free_forever_copy() {
+        let l = crate::locale::Locale::default_inr();
+        let html = pricing_html("INR", &l, 25_000, 250, 19_900, 200, 5);
+        // Guard against regression: the user explicitly asked for these
+        // claims to stay out of the rendered marketing copy.
+        let banned = [
+            "free, forever",
+            "always free",
+            "always <strong>free</strong>",
+            "1 address free",
+            "First address is free",
+            "never expires",
+        ];
+        for needle in banned {
+            assert!(
+                !html.contains(needle),
+                "rendered pricing page contains banned phrase {needle:?}: {html}"
+            );
+        }
+    }
 }

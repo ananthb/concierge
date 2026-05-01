@@ -43,7 +43,7 @@ maintenance-body = Concierge is briefly unavailable while we finish a configurat
 maintenance-tail = If this persists, please check back shortly.
 
 # Default OpenGraph / meta description for pages that don't override.
-meta-default-description = Automated customer messaging for small businesses. Auto-reply across WhatsApp, Instagram DMs, and email. 100 replies free every month.
+meta-default-description = Automated customer messaging for small businesses. Auto-reply across WhatsApp, Instagram DMs, and email. 100 AI replies included every month.
 
 # Inline JS-driven UI strings (rendered into data-* attributes server-side
 # so the script can read them without re-fetching the bundle).
@@ -54,12 +54,12 @@ js-htmx-error-toast = Something went wrong. Please try again.
 # Welcome / landing page (/).
 welcome-eyebrow = // automated customer engagement
 welcome-headline = Hello. I'll be answering <br>every <em>DM, WhatsApp &amp; email</em> <br>so you don't have to.
-welcome-lead = Concierge is an automated customer-messaging service for small businesses. Connect your channels, set a tone, and I'll auto-reply across WhatsApp, Instagram, Discord, and email. 100 AI replies free every month; static replies always free.
+welcome-lead = Concierge is an automated customer-messaging service for small businesses. Connect your channels, set a tone, and I'll auto-reply across WhatsApp, Instagram, Discord, and email. 100 AI replies included every month; static replies don't draw from your credit balance.
 welcome-cta-primary = Get started →
 welcome-cta-secondary = See features
 
 # Features page (/features).
-features-meta-description = Concierge auto-replies on WhatsApp, Instagram, Discord, and email. Static replies free; AI replies ₹2 / $0.02 with 100 free per month. 5-minute setup. Open source.
+features-meta-description = Concierge auto-replies on WhatsApp, Instagram, Discord, and email. AI replies { $inr } / { $usd }, 100 included per month; static replies don't consume credits. 5-minute setup. Open source.
 features-og-title = Concierge Features
 features-headline = One assistant. Every channel.
 features-lead = Concierge replies for you on WhatsApp, Instagram, Discord, and email: instantly, in your voice, and only when it should.
@@ -85,7 +85,7 @@ features-card-voice-body = Set tone, biz type, and things the AI must never do. 
 features-card-injection-eyebrow = Prompt-injection screening
 features-card-injection-body = Inbound text is scanned before it reaches the model. Suspicious messages are skipped, not auto-replied.
 features-card-pay-eyebrow = Pay only for AI
-features-card-pay-body = Static auto-replies are free, forever. AI replies cost ₹2 / $0.02 each, with 100 free per month.
+features-card-pay-body = AI replies cost { $inr } / { $usd } each, with 100 included per month. Static auto-replies you author yourself don't consume credits.
 features-more-heading = More that just works
 features-card-leads-eyebrow = Lead capture
 features-card-leads-body = Embed a phone-number form on any page. Submissions trigger an instant WhatsApp message.
@@ -101,21 +101,21 @@ features-cta-primary = Get started →
 features-cta-secondary = See pricing
 
 # Pricing page (/pricing).
-pricing-meta-description = Simple, prepaid pricing for Concierge. ₹2 / $0.02 per AI reply, no tiers. Static auto-replies free. 100 free AI replies every month. 1 free email address; ₹99 / $1 per extra address.
+pricing-meta-description = Simple, prepaid pricing for Concierge. { $inr } / { $usd } per AI reply, no tiers. 100 AI replies included every month. Reply-email subscription: { $pack_size } addresses for { $addr_inr } / { $addr_usd } per month.
 pricing-og-title = Concierge Pricing
-pricing-headline-prefix = per AI reply. Everything else is free.
+pricing-headline-prefix = per AI reply. Static auto-replies don't consume credits.
 pricing-currency-inr-label = Indian rupees
 pricing-currency-usd-label = US dollars
-pricing-lead = 100 free AI replies every account every month. After that, top up with as many credits as you want: no tiers, no contracts. Purchased credits never expire.
+pricing-lead = 100 AI replies included with every account every month. After that, top up with as many credits as you want: no tiers, no contracts.
 pricing-credits-eyebrow = What costs a credit?
 pricing-credits-li-1 = <strong>AI auto-replies</strong> on WhatsApp, Instagram, email, or Discord: <strong>1 credit each.</strong>
-pricing-credits-li-2 = <strong>Static auto-replies</strong> (canned text you wrote yourself): always <strong>free</strong>.
-pricing-credits-li-3 = Inbound messages, notification CCs/BCCs, Discord relay, slash commands: always <strong>free</strong>.
-pricing-email-heading = Email addresses
+pricing-credits-li-2 = <strong>Static auto-replies</strong> (canned text you wrote yourself): no credits consumed.
+pricing-credits-li-3 = Inbound messages, notification CCs/BCCs, Discord relay, slash commands: no credits consumed.
+pricing-email-heading = Reply-email subscription
 pricing-email-body = Each address you set up at <code>name@cncg.email</code> can auto-reply to inbound mail. Replies go to the original sender; you and your team get a copy via Cc/Bcc.
-pricing-email-quota-prefix = <strong>1 address free per account.</strong> Need more?
-pricing-email-quota-suffix = per extra address, one-time, never expires.
-pricing-email-billing-note = Static replies stay free; AI replies draw from your credit balance above.
+pricing-email-quota-prefix = <strong>{ $pack_size } addresses per pack</strong>, billed
+pricing-email-quota-suffix = per pack, monthly. Cancel any time.
+pricing-email-billing-note = AI replies draw from your credit balance above. Static replies don't consume credits.
 pricing-slider-cta-signin = Sign in to buy
 
 # Onboarding wizard chrome.
@@ -168,7 +168,7 @@ wizard-launch-status-body = Hit finish to open your dashboard. Connect channels,
 wizard-launch-finish = Finish setup →
 wizard-launch-email-eyebrow = Email addresses
 wizard-launch-email-body = These addresses are live. Inbound mail will be auto-replied if you turn on auto-reply for them in Email.
-wizard-launch-credits-note = Optional: 100 replies are free every month. Top up later from Billing if you need.
+wizard-launch-credits-note = Optional: 100 AI replies are included every month. Top up later from Billing if you need.
 
 # Admin: shared bits.
 admin-back = ← Back
@@ -404,7 +404,7 @@ wizard-channels-email-lead-prefix = Pick a name to receive mail at
 wizard-channels-email-lead-suffix = . Replies go to the sender; you and your team get a copy via Cc/Bcc.
 wizard-channels-email-placeholder = your-name
 wizard-channels-email-add = Add
-wizard-channels-email-help = First address is free. Need more? ₹99 / $1 per extra, one-time.
+wizard-channels-email-help = Reply-email subscription: { $pack_size } addresses per pack at { $inr } / { $usd } per month.
 wizard-channels-card-active = active
 wizard-channels-card-manage = Manage
 wizard-channels-card-connect = Connect →
@@ -569,7 +569,7 @@ admin-discord-ar-rules-prefix = This is the default reply when no rule matches. 
 admin-discord-ar-rules-link = Reply rules
 admin-discord-ar-enabled = Enabled
 admin-discord-ar-mode = Mode
-admin-discord-ar-mode-canned = Static (canned text: free)
+admin-discord-ar-mode-canned = Static (canned text: doesn't consume credits)
 admin-discord-ar-mode-prompt = AI (uses 1 credit per reply)
 admin-discord-ar-prompt-system = System prompt
 admin-discord-ar-prompt-reply = Reply text
@@ -621,7 +621,7 @@ admin-rules-form-description-help = Describe the kind of message that should mat
 admin-rules-form-threshold-prefix = Threshold:
 admin-rules-form-threshold-help = Higher = stricter match. Default 0.72.
 admin-rules-form-respond-with = Respond with
-admin-rules-form-response-canned = Canned text (free, no AI)
+admin-rules-form-response-canned = Canned text (no AI, no credit charge)
 admin-rules-form-response-prompt = AI prompt (1 credit per reply)
 admin-rules-form-response-text-sr = Reply text
 admin-rules-form-response-placeholder = Hi! Here's what we recommend...

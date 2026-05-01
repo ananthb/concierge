@@ -300,6 +300,25 @@ async fn render_step(
                 .map(|v| v.to_string())
                 .unwrap_or_default();
             let discord = get_discord_config_by_tenant(kv, tenant_id).await?;
+            let db = env.d1("DB")?;
+            let address_paise = crate::storage::get_config_price(
+                &db,
+                "address_price_paise",
+                crate::billing::ADDRESS_PRICE_PAISE,
+            )
+            .await;
+            let address_cents = crate::storage::get_config_price(
+                &db,
+                "address_price_cents",
+                crate::billing::ADDRESS_PRICE_CENTS,
+            )
+            .await;
+            let email_pack_size = crate::storage::get_config_price(
+                &db,
+                "email_pack_size",
+                crate::billing::EMAIL_PACK_SIZE,
+            )
+            .await;
             Response::from_html(connect_html(
                 !ig.is_empty(),
                 !wa.is_empty(),
@@ -310,6 +329,9 @@ async fn render_step(
                 discord.as_ref(),
                 base_url,
                 locale,
+                address_paise,
+                address_cents,
+                email_pack_size,
             ))
         }
         OnboardingStep::Notifications => {
@@ -342,11 +364,28 @@ async fn render_step(
             // currency set.
             let tenant_locale =
                 crate::locale::Locale::from_tenant(&tenant.locale, Some(tenant.currency));
+            let milli_price = if tenant_locale.currency == crate::locale::Currency::Usd {
+                crate::storage::get_config_price(
+                    &db,
+                    "unit_price_millicents",
+                    crate::billing::UNIT_PRICE_MILLICENTS,
+                )
+                .await
+            } else {
+                crate::storage::get_config_price(
+                    &db,
+                    "unit_price_millipaise",
+                    crate::billing::UNIT_PRICE_MILLIPAISE,
+                )
+                .await
+            };
+
             Response::from_html(launch_html(
                 &email_addrs,
                 &base_domain,
                 &tenant_locale,
                 base_url,
+                milli_price,
             ))
         }
     }
