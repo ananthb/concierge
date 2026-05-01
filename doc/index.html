@@ -264,12 +264,13 @@
 
       <h2 id="gallery">A look at the app</h2>
       <p>
-        Live captures of the public site, regenerated from the running Worker by <code>npm run screenshots</code>.
+        Live captures of the public site, regenerated from the running Worker by <code>npm run screenshots</code>. Each page is captured at desktop (1280&times;800) and mobile (375&times;812) widths so layout regressions show up against a baseline. The same script also runs a layout sanity check (page&nbsp;overflow + nav clipping) and exits non&#8209;zero on a fail, so re&#8209;running it serves as a smoke test for the marketing surface.
       </p>
+      <h3 class="gallery__heading">Desktop</h3>
       <div class="gallery">
         <a href="screenshots/home.png" class="gallery__tile">
           <img src="screenshots/home.png" alt="Concierge welcome page at desktop width" loading="lazy">
-          <div class="gallery__cap"><b>Welcome</b><span>/  &middot; 1280&times;800</span></div>
+          <div class="gallery__cap"><b>Welcome</b><span>/ &middot; 1280&times;800</span></div>
         </a>
         <a href="screenshots/login.png" class="gallery__tile">
           <img src="screenshots/login.png" alt="Sign-in page with Google, Facebook, and WhatsApp brand buttons" loading="lazy">
@@ -283,13 +284,32 @@
           <img src="screenshots/pricing.png" alt="Pricing marketing page" loading="lazy">
           <div class="gallery__cap"><b>Pricing</b><span>/pricing</span></div>
         </a>
+        <a href="screenshots/terms.png" class="gallery__tile">
+          <img src="screenshots/terms.png" alt="Terms of service page" loading="lazy">
+          <div class="gallery__cap"><b>Legal</b><span>/terms &middot; /privacy</span></div>
+        </a>
+      </div>
+      <h3 class="gallery__heading">Mobile</h3>
+      <div class="gallery gallery--mobile">
         <a href="screenshots/home-mobile.png" class="gallery__tile gallery__tile--mobile">
           <img src="screenshots/home-mobile.png" alt="Welcome page at mobile width" loading="lazy">
           <div class="gallery__cap"><b>Welcome</b><span>/ &middot; 375&times;812</span></div>
         </a>
-        <a href="screenshots/terms.png" class="gallery__tile">
-          <img src="screenshots/terms.png" alt="Terms of service page" loading="lazy">
-          <div class="gallery__cap"><b>Legal</b><span>/terms · /privacy</span></div>
+        <a href="screenshots/login-mobile.png" class="gallery__tile gallery__tile--mobile">
+          <img src="screenshots/login-mobile.png" alt="Sign-in page at mobile width" loading="lazy">
+          <div class="gallery__cap"><b>Sign in</b><span>/auth/login</span></div>
+        </a>
+        <a href="screenshots/features-mobile.png" class="gallery__tile gallery__tile--mobile">
+          <img src="screenshots/features-mobile.png" alt="Features page at mobile width" loading="lazy">
+          <div class="gallery__cap"><b>Features</b><span>/features</span></div>
+        </a>
+        <a href="screenshots/pricing-mobile.png" class="gallery__tile gallery__tile--mobile">
+          <img src="screenshots/pricing-mobile.png" alt="Pricing page at mobile width" loading="lazy">
+          <div class="gallery__cap"><b>Pricing</b><span>/pricing</span></div>
+        </a>
+        <a href="screenshots/terms-mobile.png" class="gallery__tile gallery__tile--mobile">
+          <img src="screenshots/terms-mobile.png" alt="Terms page at mobile width" loading="lazy">
+          <div class="gallery__cap"><b>Legal</b><span>/terms &middot; /privacy</span></div>
         </a>
       </div>
 

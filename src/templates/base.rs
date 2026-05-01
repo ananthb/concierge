@@ -353,8 +353,23 @@ code {
 /* HTMX loading state */
 .htmx-request .btn { opacity: 0.6; pointer-events: none; }
 
+/* The two external nav buttons (Docs ↑ / Open source ↑) get hidden well
+   before the 600px mobile breakpoint: with all five buttons on one row,
+   the header crams to two lines anywhere in the 600–720px band, which
+   reads as a broken header. They're duplicated in the footer, so the
+   information isn't lost. */
+@media(max-width:760px){
+  .site-header .nav-ext { display:none; }
+}
+
 /* Mobile */
 @media(max-width:600px){
+  .site-header { padding:14px 16px; gap:12px; flex-wrap:wrap; }
+  .site-header .brand { gap:8px; font-size:18px; }
+  .site-header .brand .serif { font-size:20px; }
+  .site-header .site-nav { gap:6px; flex-wrap:wrap; justify-content:flex-end; }
+  .site-header .site-nav .btn.sm { padding:5px 10px; font-size:12px; }
+  .site-footer { padding:18px 16px; line-height:1.9; }
   .page { padding:24px 16px 40px; }
   .display { font-size:clamp(32px,8vw,44px); margin:0 0 12px; }
   .display br { display:none; }
@@ -385,6 +400,14 @@ code {
 @media(max-width:480px){
   .rail-labels span:not(.active):not(.done) { display:none; }
 }
+/* iPhone SE / 320–360px sliver: the brand + 3 buttons still don't fit
+   one row at default sizing, so squeeze the whole top bar harder. */
+@media(max-width:360px){
+  .site-header { gap:8px; padding:12px 12px; }
+  .site-header .brand .serif { font-size:18px; }
+  .site-header .site-nav { gap:4px; }
+  .site-header .site-nav .btn.sm { padding:4px 8px; font-size:11px; }
+}
 
 /* Scrollbars */
 ::-webkit-scrollbar { width:10px; height:10px; }
@@ -406,6 +429,10 @@ pub fn brand_mark() -> String {
 /// Shared header for public marketing pages (home, /features, /pricing,
 /// /docs). `active` is the slug of the current page so the matching nav
 /// item lights up: pass "" to highlight nothing.
+///
+/// External-pointer links (Docs, Open source) get the `nav-ext` class so
+/// the mobile stylesheet can drop them — they're duplicated in the footer
+/// and shedding them is what lets the row fit a 375px viewport.
 pub fn public_nav_html(active: &str, locale: &Locale) -> String {
     let item = |slug: &str, label: &str, href: &str| -> String {
         let cls = if slug == active {
@@ -419,18 +446,18 @@ pub fn public_nav_html(active: &str, locale: &Locale) -> String {
     let pricing = item("pricing", &t(locale, "nav-pricing"), "/pricing");
     let docs_label = t(locale, "nav-docs");
     let docs = format!(
-        r#"<a href="https://ananthb.github.io/concierge/" class="btn ghost sm" target="_blank" rel="noopener">{docs_label}</a>"#,
+        r#"<a href="https://ananthb.github.io/concierge/" class="btn ghost sm nav-ext" target="_blank" rel="noopener">{docs_label}</a>"#,
     );
     let github_label = t(locale, "nav-open-source");
     let github = format!(
-        r#"<a href="https://github.com/ananthb/concierge" class="btn ghost sm" target="_blank" rel="noopener">{github_label}</a>"#,
+        r#"<a href="https://github.com/ananthb/concierge" class="btn ghost sm nav-ext" target="_blank" rel="noopener">{github_label}</a>"#,
     );
     let signin_label = t(locale, "nav-sign-in");
     let signin = format!(r#"<a href="/auth/login" class="btn primary sm">{signin_label}</a>"#,);
     format!(
         r#"<header class="site-header">
   {brand}
-  <nav class="row gap-8 ml-auto">
+  <nav class="site-nav row gap-8 ml-auto" aria-label="Primary">
     {features}{pricing}{docs}{github}{signin}
   </nav>
 </header>"#,

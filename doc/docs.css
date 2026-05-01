@@ -794,6 +794,18 @@ table.docs td.muted { color: var(--text-muted); }
   margin: 14px 0 28px;
 }
 @media (max-width: 720px) { .gallery { grid-template-columns: 1fr; } }
+/* Mobile captures are tall + narrow; pack four across so they read as a
+   filmstrip rather than each filling a full content column. */
+.gallery--mobile { grid-template-columns: repeat(4, 1fr); }
+@media (max-width: 720px) { .gallery--mobile { grid-template-columns: repeat(2, 1fr); } }
+.gallery__heading {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  margin: 22px 0 6px;
+}
 .gallery__tile {
   display: block;
   border: 1px solid var(--border);
