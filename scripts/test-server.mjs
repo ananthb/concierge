@@ -33,9 +33,14 @@ writeFileSync(
   ].join('\n'),
 );
 
+// `--local` disables remote bindings entirely. We only have one remote
+// binding (the AI one), and the test suite doesn't exercise it; without
+// `--local` wrangler tries to open a remote proxy session for AI, which
+// needs `wrangler login` creds — works on a developer's laptop where
+// they're cached, breaks in CI.
 const wrangler = spawn(
   'wrangler',
-  ['dev', '--port', PORT, '--env-file', ENV_FILE],
+  ['dev', '--local', '--port', PORT, '--env-file', ENV_FILE],
   { stdio: 'inherit', env: { ...process.env, FORCE_COLOR: '0' } },
 );
 
