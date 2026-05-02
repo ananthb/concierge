@@ -24,7 +24,7 @@ mail-parser = "0.9"
 base64 = "0.22"
 subtle = "2.6"
 futures = "0.3"
-botrelay = { git = "https://github.com/ananthb/botrelay-rs", branch = "main" }
+botrelay = "0.1"
 
 # Localization: icu4x for number/currency/date formatting; unic-langid for
 # BCP-47 tag handling; accept-language for parsing the request header.
