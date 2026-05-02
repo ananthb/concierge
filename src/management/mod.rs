@@ -65,17 +65,44 @@ pub async fn handle_management(
 
 /// Verify the Cloudflare Access JWT and return the authenticated email.
 ///
-/// 1. Reads the `Cf-Access-Jwt-Assertion` header
-/// 2. Fetches the team JWKS from `https://<team>.cloudflareaccess.com/cdn-cgi/access/certs`
-/// 3. Verifies the RS256 signature via Web Crypto
-/// 4. Checks `aud` matches CF_ACCESS_AUD
+/// Token lookup tries the `Cf-Access-Jwt-Assertion` header first, then
+/// falls back to the `CF_Authorization` cookie. Access sets *both* on
+/// requests it forwards to the worker, but if the header is somehow
+/// stripped (proxy, custom domain config, browser caching the original
+/// pre-Access response), the cookie still carries a valid JWT.
 ///
-/// Anyone with a valid Access JWT is authorized — scope access via your Access policy.
+/// Misconfiguration (missing CF_ACCESS_AUD / CF_ACCESS_TEAM, neither
+/// header nor cookie present, signature mismatch) all log a specific
+/// diagnostic to `console_log!` so failed-Access debugging from
+/// `wrangler tail` shows *why* the 403 happened.
 async fn verify_access(req: &Request, env: &Env) -> Option<String> {
-    let token = req.headers().get("Cf-Access-Jwt-Assertion").ok()??;
+    let token = match req.headers().get("Cf-Access-Jwt-Assertion").ok().flatten() {
+        Some(t) => t,
+        None => match crate::handlers::auth::get_cookie(req, "CF_Authorization") {
+            Some(t) => t,
+            None => {
+                worker::console_log!(
+                    "Access: no Cf-Access-Jwt-Assertion header and no CF_Authorization cookie"
+                );
+                return None;
+            }
+        },
+    };
 
-    let aud = env.var("CF_ACCESS_AUD").map(|v| v.to_string()).ok()?;
-    let team_domain = env.var("CF_ACCESS_TEAM").map(|v| v.to_string()).ok()?;
+    let aud = match env.var("CF_ACCESS_AUD").map(|v| v.to_string()).ok() {
+        Some(a) if !a.is_empty() => a,
+        _ => {
+            worker::console_log!("Access: CF_ACCESS_AUD not set or empty");
+            return None;
+        }
+    };
+    let team_domain = match env.var("CF_ACCESS_TEAM").map(|v| v.to_string()).ok() {
+        Some(t) if !t.is_empty() => t,
+        _ => {
+            worker::console_log!("Access: CF_ACCESS_TEAM not set or empty");
+            return None;
+        }
+    };
 
     match verify_cf_jwt(&token, &aud, &team_domain).await {
         Ok(email) => Some(email),
