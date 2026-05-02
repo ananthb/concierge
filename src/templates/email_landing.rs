@@ -11,6 +11,10 @@ use crate::helpers::html_escape;
 
 pub fn email_landing_html(public_base_url: &str) -> String {
     let target = html_escape(public_base_url);
+    let display_host = target
+        .trim_start_matches("https://")
+        .trim_start_matches("http://")
+        .trim_end_matches('/');
     format!(
         r##"<!DOCTYPE html>
 <html lang="en">
@@ -39,8 +43,9 @@ pub fn email_landing_html(public_base_url: &str) -> String {
   <div class="wrap">
     <div class="card">
       <h1>Concierge Email</h1>
-      <p>Concierge is automated customer messaging for small businesses — auto-replies across WhatsApp, Instagram DMs, Discord, and email.</p>
-      <p>This domain hosts each tenant's customer-facing email addresses. There's nothing to see here in a browser.</p>
+      <p>Concierge automates customer messaging for small businesses.</p>
+      <p>This domain hosts customer-facing email addresses. There's nothing to see here in a browser.</p>
+      <p>If you are a customer, log in at <a href="{target}/auth/login">{display_host}</a>.</p>
       <a class="btn" href="{target}">Visit Concierge</a>
       <span class="countdown">Redirecting in <span id="n">5</span>s…</span>
     </div>
