@@ -87,8 +87,9 @@ name = "EMAIL"
 ENVIRONMENT = "production"
 EMAIL_DOMAIN = "cncg.email" # Single platform email domain. MX records on the apex.
 
-CF_ACCESS_TEAM = "kedi-dev"
-CF_ACCESS_AUD = "26725d64652a31a304eec066f5ff9e556e56a3eb10c047ef5da34b48ff00e048"
+# CF_ACCESS_TEAM and CF_ACCESS_AUD are injected at deploy time from build
+# environment variables of the same name (see `npm run deploy` in package.json).
+# Set them once in Workers → Settings → Builds → Build environment variables.
 
 # ============================================================================
 # Cron triggers:
