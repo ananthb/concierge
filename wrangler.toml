@@ -87,6 +87,9 @@ name = "EMAIL"
 ENVIRONMENT = "production"
 EMAIL_DOMAIN = "cncg.email" # Single platform email domain. MX records on the apex.
 
+CF_ACCESS_TEAM = "kedi-dev"
+CF_ACCESS_AUD = "26725d64652a31a304eec066f5ff9e556e56a3eb10c047ef5da34b48ff00e048"
+
 # ============================================================================
 # Cron triggers:
 #   "*/15 * * * *" — approval-digest sweep: scan pending_approvals, send
@@ -105,22 +108,7 @@ enabled = true
 invocation_logs = true
 
 # ============================================================================
-# Per-deployment configuration
-# ============================================================================
-# All runtime vars and secrets (apart from the static defaults above) are
-# managed in the Cloudflare dashboard (Workers → concierge → Settings →
-# Variables and Secrets) so this file stays portable for forks. Cloudflare
-# Builds redeploys preserve them.
-#
-# Plain-text variables (Settings → Variables):
-#   CF_ACCESS_TEAM             Cloudflare Access team name (e.g. "myteam")
-#   CF_ACCESS_AUD              Application Audience (AUD) tag from Access app
-#   AI_MODEL                   Workers AI reply model (default llama-4-scout-17b-16e-instruct)
-#   AI_FAST_MODEL              Workers AI scanning model (default llama-3.1-8b-instruct-fast)
-#   WHATSAPP_WABA_ID           WhatsApp Business Account ID
-#   WHATSAPP_SIGNUP_CONFIG_ID  Meta Embedded Signup config ID
-#
-# Secrets (Settings → Secrets):
+# Secrets the worker reads (set via `wrangler secret put`):
 #   ENCRYPTION_KEY             32-byte hex key for AES-256-GCM token encryption
 #   GOOGLE_OAUTH_CLIENT_ID     Google OAuth client ID
 #   GOOGLE_OAUTH_CLIENT_SECRET Google OAuth client secret
@@ -135,3 +123,10 @@ invocation_logs = true
 #   RAZORPAY_KEY_ID            Razorpay key ID
 #   RAZORPAY_KEY_SECRET        Razorpay key secret
 #   RAZORPAY_WEBHOOK_SECRET    Razorpay webhook secret
+# ============================================================================
+# Optional overrides (defaults baked into the worker):
+#   AI_MODEL                   Workers AI reply model (default llama-4-scout-17b-16e-instruct)
+#   AI_FAST_MODEL              Workers AI scanning model (default llama-3.1-8b-instruct-fast)
+#   WHATSAPP_WABA_ID           WhatsApp Business Account ID
+#   WHATSAPP_SIGNUP_CONFIG_ID  Meta Embedded Signup config ID
+# ============================================================================
