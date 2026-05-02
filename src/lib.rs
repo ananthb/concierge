@@ -242,9 +242,7 @@ async fn handle_request(req: Request, env: Env) -> Result<Response> {
         && !public_base.is_empty()
         && (host == email_base || host.ends_with(&format!(".{email_base}")))
     {
-        let headers = Headers::new();
-        headers.set("Location", &public_base)?;
-        return Ok(Response::empty()?.with_status(301).with_headers(headers));
+        return Response::from_html(templates::email_landing::email_landing_html(&public_base));
     }
 
     // Static assets
