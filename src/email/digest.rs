@@ -49,15 +49,17 @@ pub async fn sweep(env: &Env) -> Result<()> {
         .var("PUBLIC_BASE_URL")
         .ok()
         .map(|v| v.to_string())
-        .unwrap_or_else(|| "https://concierge.calculon.tech".to_string());
-    let from_addr = format!(
-        "noreply@{}",
-        env.var("EMAIL_DOMAIN")
-            .ok()
-            .map(|v| v.to_string())
-            .filter(|s| !s.is_empty())
-            .unwrap_or_else(|| "cncg.email".to_string())
-    );
+        .filter(|s| !s.is_empty());
+    let email_domain = env
+        .var("EMAIL_DOMAIN")
+        .ok()
+        .map(|v| v.to_string())
+        .filter(|s| !s.is_empty());
+    let (Some(base_url), Some(email_domain)) = (base_url, email_domain) else {
+        console_log!("Digest sweep skipped: PUBLIC_BASE_URL and EMAIL_DOMAIN must both be set");
+        return Ok(());
+    };
+    let from_addr = format!("noreply@{email_domain}");
 
     for tenant_id in tenants {
         if let Err(e) = sweep_one(

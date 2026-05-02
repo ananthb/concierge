@@ -7,7 +7,9 @@ command = "worker-build --release"
 
 # ============================================================================
 # D1 Database for messages and submissions.
-# Forks: replace `database_id` with your own from `wrangler d1 create`.
+# The Deploy-to-Cloudflare button provisions a fresh D1 and rewrites
+# `database_id` for the fork. For local `wrangler deploy`, replace the ID
+# with one from `wrangler d1 create`.
 # ============================================================================
 [[d1_databases]]
 binding = "DB"
@@ -15,7 +17,7 @@ database_name = "concierge"
 database_id = "95687fdd-d529-4993-8b84-e55db87159c2"
 
 # ============================================================================
-# KV Namespace for configs. `id` bound via dashboard / Deploy button.
+# KV Namespace for configs. The Deploy button provisions and binds `id`.
 # ============================================================================
 [[kv_namespaces]]
 binding = "KV"
@@ -62,7 +64,7 @@ binding = "AI"
 # src/lib.rs) re-reads the persona, runs the classifier, and writes the
 # verdict back. Failed jobs go to the DLQ after 3 retries.
 #
-# Both queues must exist before deploy:
+# The Deploy button creates both queues. For local `wrangler deploy`, run:
 #   wrangler queues create concierge-safety
 #   wrangler queues create concierge-safety-dlq
 # ============================================================================
@@ -85,11 +87,14 @@ name = "EMAIL"
 
 [vars]
 ENVIRONMENT = "production"
-EMAIL_DOMAIN = "cncg.email" # Single platform email domain. MX records on the apex.
 
-# CF_ACCESS_TEAM and CF_ACCESS_AUD are injected at deploy time from build
-# environment variables of the same name (see `npm run deploy` in package.json).
-# Set them once in Workers → Settings → Builds → Build environment variables.
+# These are injected at deploy time from build environment variables of the
+# same name (see `npm run deploy` in package.json). Set them once in
+# Workers → Settings → Builds → Build environment variables:
+#   CF_ACCESS_TEAM    Cloudflare Access team name
+#   CF_ACCESS_AUD     Cloudflare Access application AUD tag
+#   PUBLIC_BASE_URL   Primary site URL, e.g. https://concierge.example.com
+#   EMAIL_DOMAIN      Email domain you control (apex; MX wired in CF Email Routing)
 
 # ============================================================================
 # Cron triggers:

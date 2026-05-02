@@ -227,31 +227,40 @@ async fn handle_request(req: Request, env: Env) -> Result<Response> {
     let path = url.path();
     let method = req.method();
 
-    // Redirect cncg.email (and subdomains) to the main site
+    // Redirect requests on the email domain (and subdomains) to the primary
+    // site, when both EMAIL_DOMAIN and PUBLIC_BASE_URL are configured.
     let host = url.host_str().unwrap_or("");
     let email_base = env
         .var("EMAIL_DOMAIN")
         .map(|v| v.to_string())
         .unwrap_or_default();
-    if !email_base.is_empty() && (host == email_base || host.ends_with(&format!(".{email_base}"))) {
+    let public_base = env
+        .var("PUBLIC_BASE_URL")
+        .map(|v| v.to_string())
+        .unwrap_or_default();
+    if !email_base.is_empty()
+        && !public_base.is_empty()
+        && (host == email_base || host.ends_with(&format!(".{email_base}")))
+    {
         let headers = Headers::new();
-        headers.set("Location", "https://concierge.calculon.tech")?;
+        headers.set("Location", &public_base)?;
         return Ok(Response::empty()?.with_status(301).with_headers(headers));
     }
 
     // Static assets
+    let req_base = format!("{}://{}", url.scheme(), host);
     match path {
         "/robots.txt" => {
-            return serve_text(
-                "User-agent: *\nAllow: /\nAllow: /features\nAllow: /pricing\nAllow: /terms\nAllow: /privacy\nDisallow: /admin\nDisallow: /manage\nDisallow: /auth\nDisallow: /webhook\nDisallow: /discord\nDisallow: /instagram\nDisallow: /whatsapp\n\nSitemap: https://concierge.calculon.tech/sitemap.txt\n",
-                "text/plain",
+            let body = format!(
+                "User-agent: *\nAllow: /\nAllow: /features\nAllow: /pricing\nAllow: /terms\nAllow: /privacy\nDisallow: /admin\nDisallow: /manage\nDisallow: /auth\nDisallow: /webhook\nDisallow: /discord\nDisallow: /instagram\nDisallow: /whatsapp\n\nSitemap: {req_base}/sitemap.txt\n"
             );
+            return serve_text(&body, "text/plain");
         }
         "/sitemap.txt" => {
-            return serve_text(
-                "https://concierge.calculon.tech/\nhttps://concierge.calculon.tech/features\nhttps://concierge.calculon.tech/pricing\nhttps://concierge.calculon.tech/terms\nhttps://concierge.calculon.tech/privacy\nhttps://ananthb.github.io/concierge/\n",
-                "text/plain",
+            let body = format!(
+                "{req_base}/\n{req_base}/features\n{req_base}/pricing\n{req_base}/terms\n{req_base}/privacy\n"
             );
+            return serve_text(&body, "text/plain");
         }
         "/logo.svg" => return serve_text(LOGO_SVG, "image/svg+xml"),
         "/site.webmanifest" => return serve_text(WEBMANIFEST, "application/manifest+json"),
