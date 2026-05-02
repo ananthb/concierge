@@ -635,7 +635,7 @@ pub fn base_html_with_meta(title: &str, content: &str, meta: &PageMeta, locale: 
 <meta property="og:title" content="{og_title}">
 <meta property="og:description" content="{description}">
 <meta property="og:type" content="{og_type}">
-<meta property="og:image" content="https://concierge.calculon.tech/logo-192.png">
+<meta property="og:image" content="/logo-192.png">
 <meta property="og:image:width" content="192">
 <meta property="og:image:height" content="192">
 <meta property="og:site_name" content="Concierge">

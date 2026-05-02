@@ -105,24 +105,47 @@
       </div>
 
       <h2 id="env">Environment variables</h2>
-      <p>Plain&#8209;text vars in the <code>[vars]</code> block of <code>wrangler.toml</code>. Safe to commit.</p>
+      <p>The Worker reads three groups of plain&#8209;text vars: a static default in <code>wrangler.toml</code>, deployment&#8209;specific values injected at deploy time, and optional integration overrides set in the dashboard.</p>
 
       <div class="table-wrap">
         <div class="table-wrap__head">
-          <b>[vars]</b><span>wrangler.toml · plaintext, committable</span>
-          <span class="count">8 vars</span>
+          <b>Static</b><span>wrangler.toml · <code>[vars]</code></span>
         </div>
         <table class="docs">
           <thead><tr><th style="width:30%">Variable</th><th>Description</th></tr></thead>
           <tbody>
             <tr><td><code>ENVIRONMENT</code></td><td class="muted"><code>production</code> or <code>development</code>. Dev mode bypasses some auth checks.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="table-wrap">
+        <div class="table-wrap__head">
+          <b>Per&#8209;deployment</b><span>Workers &rsaquo; Settings &rsaquo; Builds &rsaquo; Build environment variables</span>
+        </div>
+        <table class="docs">
+          <thead><tr><th style="width:30%">Variable</th><th>Description</th></tr></thead>
+          <tbody>
             <tr><td><code>CF_ACCESS_TEAM</code></td><td class="muted">Cloudflare Access team name (the subdomain in <code>myteam.cloudflareaccess.com</code>).</td></tr>
             <tr><td><code>CF_ACCESS_AUD</code></td><td class="muted">Cloudflare Access Application Audience (AUD) tag. Configure the Access app with the path <code>your-domain/manage*</code> &mdash; no slash before the asterisk, so it covers both the <code>/manage</code> dashboard and every subroute.</td></tr>
+            <tr><td><code>PUBLIC_BASE_URL</code></td><td class="muted">Your deployment&rsquo;s primary URL, e.g. <code>https://concierge.example.com</code>. Used in approval&#8209;digest email links and the email&#8209;domain redirect.</td></tr>
+            <tr><td><code>EMAIL_DOMAIN</code></td><td class="muted">Email domain you control; configure MX records manually on its apex and wire it into Cloudflare Email Routing.</td></tr>
+          </tbody>
+        </table>
+        <p class="muted" style="margin-top:0.5rem">The npm <code>deploy</code> script reads these from <code>process.env</code> and passes them as <code>--var</code> flags. Build env vars persist across deploys; Worker plain&#8209;text vars set in the dashboard get wiped on each deploy.</p>
+      </div>
+
+      <div class="table-wrap">
+        <div class="table-wrap__head">
+          <b>Optional overrides</b><span>Workers &rsaquo; Settings &rsaquo; Variables (dashboard)</span>
+        </div>
+        <table class="docs">
+          <thead><tr><th style="width:30%">Variable</th><th>Description</th></tr></thead>
+          <tbody>
             <tr><td><code>WHATSAPP_WABA_ID</code></td><td class="muted">Your WhatsApp Business Account ID.</td></tr>
             <tr><td><code>WHATSAPP_SIGNUP_CONFIG_ID</code></td><td class="muted">Meta Embedded Signup configuration ID.</td></tr>
-            <tr><td><code>EMAIL_DOMAIN</code></td><td class="muted">Single platform email domain. Set to a domain you control; configure MX records manually on its apex and wire it into Cloudflare Email Routing.</td></tr>
-            <tr><td><code>AI_MODEL</code></td><td class="muted">Optional override for the Workers AI model used for replies. Default <code>@cf/meta/llama-4-scout-17b-16e-instruct</code>.</td></tr>
-            <tr><td><code>AI_FAST_MODEL</code></td><td class="muted">Optional override for the fast classifier model (prompt&#8209;injection scan + persona safety check). Default <code>@cf/meta/llama-3.1-8b-instruct-fast</code>.</td></tr>
+            <tr><td><code>AI_MODEL</code></td><td class="muted">Workers AI reply model. Default <code>@cf/meta/llama-4-scout-17b-16e-instruct</code>.</td></tr>
+            <tr><td><code>AI_FAST_MODEL</code></td><td class="muted">Fast classifier model (prompt&#8209;injection scan + persona safety check). Default <code>@cf/meta/llama-3.1-8b-instruct-fast</code>.</td></tr>
           </tbody>
         </table>
       </div>
@@ -293,13 +316,9 @@
 <span class="tok-v">main</span> = <span class="tok-s">"worker-shim.mjs"</span>
 <span class="tok-v">compatibility_date</span> = <span class="tok-s">"2024-01-01"</span>
 
-<span class="tok-c"># Plain-text variables</span>
+<span class="tok-c"># Plain-text variables (deployment-specific values come in via --var at deploy time)</span>
 [<span class="tok-k">vars</span>]
 <span class="tok-v">ENVIRONMENT</span>           = <span class="tok-s">"production"</span>
-<span class="tok-v">CF_ACCESS_TEAM</span>        = <span class="tok-s">"calculon"</span>
-<span class="tok-v">CF_ACCESS_AUD</span>         = <span class="tok-s">"abcd1234…"</span>
-<span class="tok-v">WHATSAPP_WABA_ID</span>      = <span class="tok-s">"123456789012345"</span>
-<span class="tok-v">EMAIL_DOMAIN</span>     = <span class="tok-s">"cncg.email"</span>
 
 <span class="tok-c"># Bindings</span>
 [[<span class="tok-k">d1_databases</span>]]
