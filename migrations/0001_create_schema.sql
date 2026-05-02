@@ -3,6 +3,11 @@
 -- already run. To change a deployed schema, add a fresh `000N_*.sql`
 -- migration with the deltas, or drop the relevant tables and re-execute
 -- this file with `wrangler d1 execute --file`.
+--
+-- TODO: this single-migration shape is a development convenience so the
+-- schema stays readable in one place. Before the first production
+-- deploy, freeze this file and switch to additive `000N_*.sql` delta
+-- migrations — and delete this comment block.
 
 -- Tenants
 CREATE TABLE IF NOT EXISTS tenants (
