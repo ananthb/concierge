@@ -117,7 +117,7 @@
           <tbody>
             <tr><td><code>ENVIRONMENT</code></td><td class="muted"><code>production</code> or <code>development</code>. Dev mode bypasses some auth checks.</td></tr>
             <tr><td><code>CF_ACCESS_TEAM</code></td><td class="muted">Cloudflare Access team name (the subdomain in <code>myteam.cloudflareaccess.com</code>).</td></tr>
-            <tr><td><code>CF_ACCESS_AUD</code></td><td class="muted">Cloudflare Access Application Audience (AUD) tag for <code>/manage/*</code>.</td></tr>
+            <tr><td><code>CF_ACCESS_AUD</code></td><td class="muted">Cloudflare Access Application Audience (AUD) tag. Configure the Access app with the path <code>your-domain/manage*</code> &mdash; no slash before the asterisk, so it covers both the <code>/manage</code> dashboard and every subroute.</td></tr>
             <tr><td><code>WHATSAPP_WABA_ID</code></td><td class="muted">Your WhatsApp Business Account ID.</td></tr>
             <tr><td><code>WHATSAPP_SIGNUP_CONFIG_ID</code></td><td class="muted">Meta Embedded Signup configuration ID.</td></tr>
             <tr><td><code>EMAIL_DOMAIN</code></td><td class="muted">Single platform email domain. Set to a domain you control; configure MX records manually on its apex and wire it into Cloudflare Email Routing.</td></tr>

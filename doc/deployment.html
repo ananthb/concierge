@@ -210,7 +210,7 @@
               <thead><tr><th>Variable</th><th>What it&rsquo;s for</th></tr></thead>
               <tbody>
                 <tr><td><code>CF_ACCESS_TEAM</code></td><td class="muted">Your Cloudflare Access team name (the subdomain in <code>myteam.cloudflareaccess.com</code>).</td></tr>
-                <tr><td><code>CF_ACCESS_AUD</code></td><td class="muted">Application Audience (AUD) tag from your Access app for <code>/manage/*</code>.</td></tr>
+                <tr><td><code>CF_ACCESS_AUD</code></td><td class="muted">Application Audience (AUD) tag from your Access app (path <code>/manage*</code>).</td></tr>
                 <tr><td><code>WHATSAPP_WABA_ID</code></td><td class="muted">Your WhatsApp Business Account ID.</td></tr>
                 <tr><td><code>WHATSAPP_SIGNUP_CONFIG_ID</code></td><td class="muted">Meta Embedded Signup configuration ID.</td></tr>
                 <tr><td><code>EMAIL_DOMAIN</code></td><td class="muted">Email domain you control. Set MX records on its apex and add it to Cloudflare Email Routing.</td></tr>
@@ -273,11 +273,11 @@
           <h3>Set up Cloudflare Access for management</h3>
           <ol>
             <li>In the Cloudflare dashboard, go to <strong>Zero Trust → Access → Applications</strong>.</li>
-            <li>Create an application for <code>your-domain/manage/*</code>.</li>
-            <li>Copy the <strong>Application Audience (AUD) Tag</strong> and set it as the <code>CF_ACCESS_AUD</code> variable under <strong>Workers &rsaquo; concierge &rsaquo; Settings &rsaquo; Variables and Secrets</strong>.</li>
+            <li>Create an application with the path <code>your-domain/manage*</code> &mdash; no slash before the asterisk. <code>/manage/*</code> would leave the bare <code>/manage</code> dashboard exposed; <code>/manage</code> alone would leave every subroute exposed; <code>/manage*</code> covers both.</li>
+            <li>Copy the <strong>Application Audience (AUD) Tag</strong> and set it as the <code>CF_ACCESS_AUD</code> variable under <strong>Workers &rsaquo; concierge &rsaquo; Settings &rsaquo; Variables and Secrets</strong>. Also set <code>CF_ACCESS_TEAM</code> there.</li>
             <li>Add a policy allowing the emails that should have management access.</li>
           </ol>
-          <p>See the <a href="management.html">Management panel</a> page.</p>
+          <p>See the <a href="management.html">Management panel</a> page. If <code>/manage</code> 403&rsquo;s with &ldquo;Forbidden: Cloudflare Access required&rdquo; <em>after</em> a successful Access login, run <code>wrangler tail</code> while reloading &mdash; the worker logs the specific failure mode (missing token, missing env var, JWT verification error).</p>
         </li>
 
         <li>

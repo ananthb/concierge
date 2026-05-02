@@ -159,12 +159,21 @@
 
 <ol>
   <li>In the Cloudflare dashboard, go to <strong>Zero Trust &gt; Access &gt; Applications</strong></li>
-  <li>Create a Self-hosted application for <code>your-domain/manage/*</code></li>
+  <li>Create a Self-hosted application with the path <code>your-domain/manage*</code> (no slash before the asterisk)</li>
   <li>Copy the <strong>Application Audience (AUD) Tag</strong> from the application overview</li>
-  <li>Set <code>CF_ACCESS_TEAM</code> (your team name) and <code>CF_ACCESS_AUD</code> in <code>wrangler.toml</code></li>
+  <li>Set <code>CF_ACCESS_TEAM</code> (your team name) and <code>CF_ACCESS_AUD</code> as plain&#8209;text variables in <strong>Workers &rsaquo; concierge &rsaquo; Settings &rsaquo; Variables and Secrets</strong></li>
   <li>Add a policy allowing the emails that should have management access</li>
   <li>Deploy with <code>wrangler deploy</code></li>
 </ol>
+
+<div class="callout callout--note">
+  <div class="callout__icon">i</div>
+  <div class="callout__body">
+    <strong>Use <code>/manage*</code>, not <code>/manage/*</code> or <code>/manage</code>.</strong>
+    <p>The wildcard placement matters. <code>/manage</code> alone matches the dashboard but lets <code>/manage/audit</code>, <code>/manage/tenants/&hellip;</code>, and <code>/manage/billing/&hellip;</code> through unauthenticated. <code>/manage/*</code> protects the subroutes but leaves the bare <code>/manage</code> dashboard exposed. <code>/manage*</code> covers both.</p>
+    <p>If <code>/manage</code> 403&rsquo;s with &ldquo;Forbidden: Cloudflare Access required&rdquo; <em>after</em> a successful Access login, run <code>wrangler tail</code> while reloading the page &mdash; the worker logs the specific reason (missing token, missing <code>CF_ACCESS_AUD</code>/<code>CF_ACCESS_TEAM</code>, JWT verification error) instead of a bare 403.</p>
+  </div>
+</div>
 
       <nav class="pagernav">
         <a href="billing.html" class="pagernav__item">
