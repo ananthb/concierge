@@ -91,10 +91,12 @@ ENVIRONMENT = "production"
 # These are injected at deploy time from build environment variables of the
 # same name (see `npm run deploy` in package.json). Set them once in
 # Workers → Settings → Builds → Build environment variables:
-#   CF_ACCESS_TEAM    Cloudflare Access team name
-#   CF_ACCESS_AUD     Cloudflare Access application AUD tag
-#   PUBLIC_BASE_URL   Primary site URL, e.g. https://concierge.example.com
-#   EMAIL_DOMAIN      Email domain you control (apex; MX wired in CF Email Routing)
+#   CF_ACCESS_TEAM             Cloudflare Access team name
+#   CF_ACCESS_AUD              Cloudflare Access application AUD tag
+#   PUBLIC_BASE_URL            Primary site URL, e.g. https://concierge.example.com
+#   EMAIL_DOMAIN               Email domain you control (apex; MX wired in CF Email Routing)
+#   WHATSAPP_WABA_ID           Your WhatsApp Business Account ID (only if running WhatsApp)
+#   WHATSAPP_SIGNUP_CONFIG_ID  Meta Embedded Signup config ID (only if running WhatsApp)
 
 # ============================================================================
 # Cron triggers:
@@ -133,6 +135,4 @@ invocation_logs = true
 # Optional overrides (defaults baked into the worker):
 #   AI_MODEL                   Workers AI reply model (default llama-4-scout-17b-16e-instruct)
 #   AI_FAST_MODEL              Workers AI scanning model (default llama-3.1-8b-instruct-fast)
-#   WHATSAPP_WABA_ID           WhatsApp Business Account ID
-#   WHATSAPP_SIGNUP_CONFIG_ID  Meta Embedded Signup config ID
 # ============================================================================

@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "scripts": {
-    "deploy": "(command -v cargo || curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain none) && . $HOME/.cargo/env && cargo install -q worker-build --version ^0.7 && wrangler deploy --var CF_ACCESS_TEAM:\"$CF_ACCESS_TEAM\" --var CF_ACCESS_AUD:\"$CF_ACCESS_AUD\" --var PUBLIC_BASE_URL:\"$PUBLIC_BASE_URL\" --var EMAIL_DOMAIN:\"$EMAIL_DOMAIN\"",
+    "deploy": "(command -v cargo || curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain none) && . $HOME/.cargo/env && cargo install -q worker-build --version ^0.7 && wrangler deploy --var CF_ACCESS_TEAM:\"$CF_ACCESS_TEAM\" --var CF_ACCESS_AUD:\"$CF_ACCESS_AUD\" --var PUBLIC_BASE_URL:\"$PUBLIC_BASE_URL\" --var EMAIL_DOMAIN:\"$EMAIL_DOMAIN\" --var WHATSAPP_WABA_ID:\"$WHATSAPP_WABA_ID\" --var WHATSAPP_SIGNUP_CONFIG_ID:\"$WHATSAPP_SIGNUP_CONFIG_ID\"",
     "dev": "wrangler dev",
     "test": "playwright test",
     "test:ui": "playwright test --ui",

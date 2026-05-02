@@ -227,21 +227,31 @@ async fn handle_request(req: Request, env: Env) -> Result<Response> {
     let path = url.path();
     let method = req.method();
 
-    // Redirect requests on the email domain (and subdomains) to the primary
-    // site, when both EMAIL_DOMAIN and PUBLIC_BASE_URL are configured.
+    // PUBLIC_BASE_URL is required for every response path: it's used in
+    // approval-digest emails, the email-domain landing page, and anywhere
+    // the worker has to emit an absolute URL outside of a request context.
+    // Refuse to serve anything without it rather than silently degrade.
+    let public_base = env
+        .var("PUBLIC_BASE_URL")
+        .map(|v| v.to_string())
+        .unwrap_or_default();
+    if public_base.is_empty() {
+        console_log!("PUBLIC_BASE_URL is not set");
+        return Response::error(
+            "Service unavailable: PUBLIC_BASE_URL is not configured",
+            503,
+        );
+    }
+
+    // Render the email-domain landing page when the request comes in on
+    // EMAIL_DOMAIN (or any subdomain) — these visitors landed in a browser
+    // by accident and we want to nudge them back to the main site.
     let host = url.host_str().unwrap_or("");
     let email_base = env
         .var("EMAIL_DOMAIN")
         .map(|v| v.to_string())
         .unwrap_or_default();
-    let public_base = env
-        .var("PUBLIC_BASE_URL")
-        .map(|v| v.to_string())
-        .unwrap_or_default();
-    if !email_base.is_empty()
-        && !public_base.is_empty()
-        && (host == email_base || host.ends_with(&format!(".{email_base}")))
-    {
+    if !email_base.is_empty() && (host == email_base || host.ends_with(&format!(".{email_base}"))) {
         return Response::from_html(templates::email_landing::email_landing_html(&public_base));
     }
 
