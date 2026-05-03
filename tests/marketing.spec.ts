@@ -46,3 +46,55 @@ test('brand link returns home', async ({ page }) => {
   const brand = page.locator('header.site-header a.brand');
   await expect(brand).toHaveAttribute('href', '/');
 });
+
+test('demo-chat modal opens, posts to /demo/chat, renders assistant reply', async ({ page }) => {
+  // Stub the AI call so the test doesn't need a Workers AI binding to work
+  // and so the assertion is on a deterministic string.
+  let postedBody: unknown = null;
+  await page.route('**/demo/chat', async (route) => {
+    postedBody = route.request().postDataJSON();
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ reply: 'I cover WhatsApp, Instagram, Discord, and email.' }),
+    });
+  });
+
+  await page.goto('/');
+  await page.getByRole('button', { name: /ask me about concierge/i }).click();
+
+  const dialog = page.getByRole('dialog', { name: /chat with concierge/i });
+  await expect(dialog).toBeVisible();
+  // Greeting message shows on open.
+  await expect(dialog.getByText(/i'm Concierge/i)).toBeVisible();
+
+  await dialog.getByRole('textbox').fill('what channels do you cover?');
+  await dialog.getByRole('button', { name: 'Send' }).click();
+
+  await expect(dialog.getByText(/I cover WhatsApp, Instagram, Discord, and email\./)).toBeVisible();
+
+  // The request shape: greeting + user turn, in that order.
+  expect(postedBody).toMatchObject({
+    messages: [
+      { role: 'assistant' },
+      { role: 'user', content: 'what channels do you cover?' },
+    ],
+  });
+});
+
+test('demo-chat surfaces the rate-limit message on 429', async ({ page }) => {
+  await page.route('**/demo/chat', (route) =>
+    route.fulfill({
+      status: 429,
+      contentType: 'application/json',
+      body: JSON.stringify({ error: 'rl' }),
+    }),
+  );
+
+  await page.goto('/');
+  await page.getByRole('button', { name: /ask me about concierge/i }).click();
+  const dialog = page.getByRole('dialog', { name: /chat with concierge/i });
+  await dialog.getByRole('textbox').fill('hello?');
+  await dialog.getByRole('button', { name: 'Send' }).click();
+  await expect(dialog.getByText(/quite a few messages/i)).toBeVisible();
+});

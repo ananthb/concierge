@@ -382,6 +382,11 @@ async fn handle_request(req: Request, env: Env) -> Result<Response> {
         return handlers::handle_lead_form(req, env, path, method).await;
     }
 
+    // Public live-demo chat (anyone can hit this from the welcome page).
+    if path == "/demo/chat" && method == Method::Post {
+        return handlers::handle_demo_chat(req, env).await;
+    }
+
     // Instagram OAuth routes
     if path.starts_with("/instagram/") {
         return handlers::handle_instagram(req, env, path, method).await;

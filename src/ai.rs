@@ -72,6 +72,64 @@ pub async fn generate_response(
     run_ai_model(env, &model, &request).await
 }
 
+/// Generate a multi-turn chat reply. Distinct from `generate_response`,
+/// which packs a context map into a single user message — here, the
+/// caller passes the actual `(role, content)` history and we forward
+/// it verbatim. Used by the public `/demo/chat` endpoint, which needs
+/// real turn-taking and a token cap.
+pub async fn generate_chat_reply(
+    env: &Env,
+    system_prompt: &str,
+    history: &[(String, String)],
+    max_tokens: u32,
+) -> Result<String> {
+    let mut messages = Vec::with_capacity(history.len() + 1);
+    messages.push(Message {
+        role: "system".to_string(),
+        content: system_prompt.to_string(),
+    });
+    for (role, content) in history {
+        messages.push(Message {
+            role: role.clone(),
+            content: content.clone(),
+        });
+    }
+    let request = AiRequest { messages };
+    let request_json = serde_json::to_string(&request)
+        .map_err(|e| Error::from(format!("Failed to serialize chat request: {}", e)))?;
+    let mut input: serde_json::Value = serde_json::from_str(&request_json)
+        .map_err(|e| Error::from(format!("Failed to parse chat request: {}", e)))?;
+    if let Some(obj) = input.as_object_mut() {
+        obj.insert(
+            "max_tokens".to_string(),
+            serde_json::Value::from(max_tokens),
+        );
+    }
+
+    let model = get_model(env);
+    let ai = env.ai("AI")?;
+    let response: serde_json::Value = ai
+        .run(&model, input)
+        .await
+        .map_err(|e| Error::from(format!("AI chat model error: {:?}", e)))?;
+
+    let response_str = response
+        .as_str()
+        .map(|s| s.to_string())
+        .or_else(|| {
+            response
+                .get("response")
+                .and_then(|r| r.as_str())
+                .map(|s| s.to_string())
+        })
+        .unwrap_or_default();
+    if response_str.is_empty() {
+        Err(Error::from("AI returned empty chat response"))
+    } else {
+        Ok(response_str)
+    }
+}
+
 // ============================================================================
 // Prompt Injection Detection
 // ============================================================================

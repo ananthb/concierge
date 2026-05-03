@@ -139,8 +139,25 @@ pub fn welcome_html(_base_url: &str, locale: &crate::locale::Locale) -> String {
         .join(",");
     let rotator = HERO_ROTATOR_JS.replace("__VARIANTS__", &format!("[{variants_json}]"));
 
+    let chat_greeting = t(locale, "demo-chat-greeting");
+    let chat_error = t(locale, "demo-chat-error");
+    let chat_rate_limited = t(locale, "demo-chat-rate-limited");
+    let chat_script = HERO_CHAT_JS
+        .replace("__GREETING__", &js_string_for_html(&chat_greeting))
+        .replace("__ERROR__", &js_string_for_html(&chat_error))
+        .replace("__RATE_LIMITED__", &js_string_for_html(&chat_rate_limited));
+
+    let chat_cta = html_escape(&t(locale, "demo-chat-cta"));
+    let chat_title = html_escape(&t(locale, "demo-chat-title"));
+    let chat_subtitle = html_escape(&t(locale, "demo-chat-subtitle"));
+    let chat_placeholder = html_escape(&t(locale, "demo-chat-placeholder"));
+    let chat_send = html_escape(&t(locale, "demo-chat-send"));
+    let chat_close = html_escape(&t(locale, "demo-chat-close"));
+    let chat_thinking = html_escape(&t(locale, "demo-chat-thinking"));
+
     let content = format!(
         r#"{header}
+<div x-data="conciergeChat()" x-effect="window.__heroPaused = open">
 <section class="page welcome">
   <div class="welcome-left">
     <div class="eyebrow">{eyebrow}</div>
@@ -149,6 +166,7 @@ pub fn welcome_html(_base_url: &str, locale: &crate::locale::Locale) -> String {
     <div class="row gap-12 wrap mt-16">
       <a href="/auth/login" class="btn primary lg">{cta_primary}</a>
       <a href="/features" class="btn ghost lg">{cta_secondary}</a>
+      <button type="button" class="btn ghost lg" @click="open = true">{chat_cta}</button>
     </div>
   </div>
   <aside class="postcard" aria-hidden="true">
@@ -165,15 +183,52 @@ pub fn welcome_html(_base_url: &str, locale: &crate::locale::Locale) -> String {
     <div class="stamp">ON<br>DUTY<br>24/7</div>
   </aside>
 </section>
-{rotator}"#,
+<div x-show="open" x-cloak
+  role="dialog" aria-modal="true" aria-labelledby="demo-chat-modal-title"
+  x-trap.noscroll.inert="open"
+  @keydown.escape.window="open = false"
+  style="position:fixed;inset:0;background:rgba(0,0,0,0.4);display:flex;align-items:flex-end;justify-content:center;z-index:1000;padding:20px">
+  <div class="card" style="max-width:560px;width:100%;display:flex;flex-direction:column;padding:18px 22px 16px;max-height:80vh;margin-bottom:max(20px,env(safe-area-inset-bottom))">
+    <div class="between mb-8">
+      <div>
+        <h2 id="demo-chat-modal-title" class="display-sm" style="margin:0">{chat_title}</h2>
+        <p class="muted fs-13" style="margin:2px 0 0">{chat_subtitle}</p>
+      </div>
+      <button type="button" class="btn icon ghost" @click="open = false" aria-label="{chat_close}" style="padding:4px 10px;font-size:18px;line-height:1">&times;</button>
+    </div>
+    <div class="chat-messages" x-ref="msgs">
+      <template x-for="(m, i) in messages" :key="i">
+        <div :class="'chat-msg ' + m.role" x-text="m.content"></div>
+      </template>
+      <div class="chat-thinking" x-show="sending">{chat_thinking}</div>
+    </div>
+    <div class="chat-error" x-show="error" x-text="error"></div>
+    <form @submit.prevent="send()" class="row gap-8 mt-12">
+      <input class="input" type="text" x-model="input" placeholder="{chat_placeholder}"
+        :disabled="sending" x-ref="input" maxlength="600" autocomplete="off" autocorrect="off" autocapitalize="off">
+      <button type="submit" class="btn primary" :disabled="sending || !input.trim()">{chat_send}</button>
+    </form>
+  </div>
+</div>
+</div>
+{rotator}
+{chat_script}"#,
         header = header,
         eyebrow = t(locale, "welcome-eyebrow"),
         headline = variants[0],
         lead = t(locale, "welcome-lead"),
         cta_primary = t(locale, "welcome-cta-primary"),
         cta_secondary = t(locale, "welcome-cta-secondary"),
+        chat_cta = chat_cta,
+        chat_title = chat_title,
+        chat_subtitle = chat_subtitle,
+        chat_placeholder = chat_placeholder,
+        chat_send = chat_send,
+        chat_close = chat_close,
+        chat_thinking = chat_thinking,
         hash = HASH,
         rotator = rotator,
+        chat_script = chat_script,
     );
 
     base_html("Concierge - Automated customer messaging", &content, locale)
@@ -192,10 +247,11 @@ fn js_string_for_html(s: &str) -> String {
 }
 
 /// Typewriter rotator for the welcome page hero. The static headline is
-/// rendered server-side; this script waits long enough for the visitor
-/// to read it, then backspaces and types out a different variant. The
-/// rotation pauses long enough that the change isn't disorienting, and
-/// is suppressed entirely when the user prefers reduced motion.
+/// rendered server-side; this script settles for ~10s, then mimics the
+/// "type a few backspaces, give up, hit Ctrl+A, delete" pattern before
+/// typing out a different variant. Suppressed entirely when the user
+/// prefers reduced motion. Stands down while `window.__heroPaused` is
+/// set (the chat modal flips that flag while it's open).
 const HERO_ROTATOR_JS: &str = r##"<script type="module" nonce="__CSP_NONCE__">
 ((variants) => {
   const el = document.getElementById('hero-headline');
@@ -236,16 +292,31 @@ const HERO_ROTATOR_JS: &str = r##"<script type="module" nonce="__CSP_NONCE__">
 
   const cycle = async () => {
     while (true) {
-      await sleep(15000 + Math.random() * 7000);
+      await sleep(10000);
+      while (window.__heroPaused) await sleep(500);
       let next = idx;
       while (next === idx) next = Math.floor(Math.random() * variants.length);
       const target = tokenize(variants[next]);
-      while (current.length) {
+      // Backspace burst: chip away a few trailing chars, like a user starting
+      // to delete and then giving up.
+      let burst = Math.min(4, Math.max(1, Math.floor(current.length / 6)));
+      while (current.length && burst > 0) {
         const top = current.pop();
         render(true);
-        if (!isTag(top)) await sleep(18 + Math.random() * 16);
+        if (!isTag(top)) {
+          burst -= 1;
+          await sleep(40 + Math.random() * 30);
+        }
       }
-      await sleep(280);
+      // Ctrl+A flash: highlight everything that's left, briefly.
+      if (current.length) {
+        el.innerHTML = '<span class="hero-select">' + current.join('') + '</span>';
+        await sleep(280);
+      }
+      // Delete: clear the field instantly, hold the caret while the cursor sits at the start.
+      current.length = 0;
+      render(true);
+      await sleep(90);
       for (const tok of target) {
         current.push(tok);
         render(true);
@@ -258,6 +329,76 @@ const HERO_ROTATOR_JS: &str = r##"<script type="module" nonce="__CSP_NONCE__">
   };
   cycle().catch(() => {});
 })(__VARIANTS__);
+</script>"##;
+
+/// Alpine factory for the welcome-page chat modal. Powers the "Ask me
+/// about Concierge" CTA: opens the modal, posts the running transcript
+/// to `/demo/chat`, and renders the model's reply. Pauses the headline
+/// rotator (`window.__heroPaused`) while open so the headline doesn't
+/// mutate behind the modal.
+///
+/// Plain `<script>` (not `type="module"`) on purpose: it must define
+/// `window.conciergeChat` *before* Alpine's deferred script in `<head>`
+/// boots and processes `x-data="conciergeChat()"`. Inline classic
+/// scripts run synchronously during parsing; module scripts are
+/// deferred and would be too late.
+const HERO_CHAT_JS: &str = r##"<script nonce="__CSP_NONCE__">
+window.conciergeChat = () => ({
+  open: false,
+  sending: false,
+  error: '',
+  input: '',
+  messages: [{ role: 'assistant', content: __GREETING__ }],
+  init() {
+    this.$watch('open', (v) => {
+      window.__heroPaused = !!v;
+      if (v) {
+        this.$nextTick(() => {
+          if (this.$refs.input) this.$refs.input.focus();
+          this.scrollDown();
+        });
+      }
+    });
+  },
+  scrollDown() {
+    const el = this.$refs.msgs;
+    if (el) el.scrollTop = el.scrollHeight;
+  },
+  async send() {
+    const text = this.input.trim();
+    if (!text || this.sending) return;
+    this.error = '';
+    this.input = '';
+    this.messages.push({ role: 'user', content: text });
+    this.$nextTick(() => this.scrollDown());
+    this.sending = true;
+    try {
+      const r = await fetch('/demo/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: this.messages.map((m) => ({ role: m.role, content: m.content })) }),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        this.error = (r.status === 429) ? __RATE_LIMITED__ : (data && data.error) || __ERROR__;
+        if (r.status >= 400 && r.status !== 429) {
+          this.messages.pop();
+        }
+      } else if (data && typeof data.reply === 'string' && data.reply.length) {
+        this.messages.push({ role: 'assistant', content: data.reply });
+      } else {
+        this.error = __ERROR__;
+      }
+    } catch (e) {
+      this.error = __ERROR__;
+    }
+    this.sending = false;
+    this.$nextTick(() => {
+      this.scrollDown();
+      if (this.$refs.input) this.$refs.input.focus();
+    });
+  },
+});
 </script>"##;
 
 pub fn basics_html(
