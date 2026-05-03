@@ -135,6 +135,25 @@
   <li><strong>Grant credits</strong>: Give free reply credits to a specific tenant (at <code>/manage/billing/grant/{tenant_id}</code>)</li>
 </ul>
 
+<h2>Persona Catalog</h2>
+
+<p>At <code>/manage/personas</code>, operators curate the platform&#8209;wide catalog of persona archetypes that the public demo persona picker and the tenant onboarding wizard read from. Each row is a slug + label + description + a serialized <code>PersonaSource</code> (the editable middle, either <code>builder</code> with archetype + sample business fields or <code>custom</code> raw text) + a greeting + a safety verdict.</p>
+
+<ul>
+  <li><strong>List</strong>: every row, including drafts and rejects. Tenants and the public demo only see <code>approved</code> rows.</li>
+  <li><strong>Create / edit</strong>: the same builder fields a tenant fills in (voice archetype, business name + type, city, goal, catch&#8209;phrases, off&#8209;topics, handoff conditions). Every save resets <code>safety_status</code> to <code>draft</code> and enqueues a <code>SafetyJob</code> on <code>SAFETY_QUEUE</code> keyed by slug. The classifier's verdict (<code>approved</code> or <code>rejected</code> with a vague user&#8209;facing reason) lands back on the row.</li>
+  <li><strong>System rows</strong>: rows with <code>is_system=1</code> are undeletable. The seed migration ships one — <code>concierge</code> — which powers the homepage live demo.</li>
+  <li><strong>Audit</strong>: <code>create_persona</code>, <code>update_persona</code>, <code>delete_persona</code> all write to the audit log with the actor email and the slug.</li>
+</ul>
+
+<div class="callout callout--note">
+  <div class="callout__icon">i</div>
+  <div class="callout__body">
+    <strong>Snapshotting, not referencing.</strong>
+    <p>When a tenant picks an archetype during onboarding, the catalog row is <em>copied</em> into their <code>PersonaConfig</code> rather than referenced by slug. Subsequent management edits to the catalog don't reach back into existing tenants — each tenant owns their own snapshot and mutates it independently from <code>/admin/persona</code>.</p>
+  </div>
+</div>
+
 <h2>Audit Log</h2>
 
 <p>At <code>/manage/audit</code>, operators can review a chronological log of all management actions. Each entry records:</p>

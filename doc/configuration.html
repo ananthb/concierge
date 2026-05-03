@@ -281,6 +281,43 @@
         Adding a new locale is a drop&#8209;in change: place a translated <code>messages.ftl</code> at <code>assets/locales/{tag}/</code>, register the tag in <code>src/i18n.rs::Translator::new</code> and <code>src/locale.rs::Locale::from_request</code>, then rebuild. CLDR data for number / currency formatting ships automatically via icu4x&rsquo;s <code>compiled_data</code> feature. AI&#8209;generated reply content stays English regardless of the UI locale.
       </p>
 
+      <h2 id="conversation">Conversation timing</h2>
+      <p>
+        Three per&#8209;tenant knobs control how the worker treats a customer thread. They live on <code>OnboardingState.conversation</code> (a <code>ConversationConfig</code>) in KV at <code>onboarding:{tenant}</code>; each is <code>Option&lt;u32&gt;</code> and falls back to a constant in <code>src/prompt.rs</code> when unset. Tenants edit them from the <em>Conversation Timing</em> card on <code>/admin/settings</code>; <code>PUT /admin/settings/conversation</code> validates bounds and the cross&#8209;field invariant before persisting.
+      </p>
+      <div class="table-wrap">
+        <div class="table-wrap__head">
+          <b>ConversationConfig</b><span>per&#8209;tenant runtime knobs</span>
+          <span class="count">3 knobs</span>
+        </div>
+        <table class="docs">
+          <thead><tr><th style="width:30%">Field</th><th>Bounds</th><th>Default</th><th>Effect</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><code>idle_gap_mins</code></td>
+              <td>5&hellip;1440 mins</td>
+              <td>360 (6 h) &mdash; <code>DEFAULT_CONVERSATION_IDLE_GAP_MINS</code></td>
+              <td class="muted">After this much customer silence, the next inbound starts a fresh conversation: history clears, handoff state is wiped, the persona replies normally.</td>
+            </tr>
+            <tr>
+              <td><code>handoff_cooldown_mins</code></td>
+              <td>5&hellip;1440 mins</td>
+              <td>60 &mdash; <code>DEFAULT_HANDOFF_COOLDOWN_MINS</code></td>
+              <td class="muted">After the model emits <code>[[HANDOFF]]</code>, replies switch to the holding&#8209;pattern voice for this long; past it, the worker stays silent.</td>
+            </tr>
+            <tr>
+              <td><code>max_history_messages</code></td>
+              <td>1&hellip;200 turns</td>
+              <td>20 &mdash; <code>DEFAULT_CONVERSATION_MAX_MESSAGES</code></td>
+              <td class="muted">Cap on the number of recent <code>(role, content)</code> turns passed to the reply model on each AI call.</td>
+            </tr>
+          </tbody>
+        </table>
+        <p class="muted" style="margin-top:0.5rem">
+          Cross&#8209;field invariant: <code>idle_gap_mins &gt; handoff_cooldown_mins</code>. The form rejects saves that would let an active handoff be wiped before its cooldown ended.
+        </p>
+      </div>
+
       <h2 id="oauth">OAuth redirect URIs</h2>
       <p>Register these in the respective developer consoles:</p>
       <ul>
@@ -396,6 +433,7 @@
         <li class="lvl-2"><a href="#bindings">Bindings</a></li>
         <li class="lvl-2"><a href="#queues">Cloudflare Queues</a></li>
         <li class="lvl-2"><a href="#locale">Locale</a></li>
+        <li class="lvl-2"><a href="#conversation">Conversation timing</a></li>
         <li class="lvl-2"><a href="#oauth">OAuth redirect URIs</a></li>
         <li class="lvl-2"><a href="#webhooks">Webhook URLs</a></li>
         <li class="lvl-2"><a href="#cron">Cron triggers</a></li>
