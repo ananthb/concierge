@@ -206,7 +206,7 @@ async fn handle_auto_reply(
     // sourced from the tenant's effective `ConversationWindow`:
     //
     //   1. Conversation idle gap: if the customer has been silent for
-    //      at least this long, the previous conversation is over — we
+    //      at least this long, the previous conversation is over: we
     //      wipe any in-progress handoff and the message history, mint
     //      a fresh conversation_id, and treat this inbound as a fresh
     //      question.
@@ -219,7 +219,7 @@ async fn handle_auto_reply(
     // Three handoff branches:
     //   - None:           reply under the persona normally.
     //   - HoldingPattern: swap to HOLDING_PATTERN_MIDDLE.
-    //   - Silent:         return early — the human owns the thread.
+    //   - Silent:         return early. The human owns the thread.
     enum HandoffMode {
         None,
         HoldingPattern,
@@ -296,7 +296,7 @@ async fn handle_auto_reply(
             msg.sender
         );
         // Still update last_inbound_at so the idle gap is measured
-        // from this ping — that way the customer eventually escapes
+        // from this ping. That way the customer eventually escapes
         // the silent window once they actually go quiet. Append the
         // inbound to history so the audit/context is complete; the
         // history isn't used while we're silent, but max-cap guards
@@ -329,7 +329,7 @@ async fn handle_auto_reply(
 
     // Build the chat history we'll hand to the model: prior turns
     // (capped) plus the new inbound as the latest user turn. The same
-    // shape — Vec<(role, content)> — is also what `generate_chat_reply`
+    // shape (`Vec<(role, content)>`) is also what `generate_chat_reply`
     // expects, so we can pass it through verbatim.
     let now_iso = crate::helpers::now_iso();
     let mut session_messages = prior_messages;
@@ -411,8 +411,8 @@ async fn handle_auto_reply(
     // Skip the gate entirely for the handoff path:
     //   - holding-pattern replies are pre-approved by construction
     //     (the model is just saying "a human is on the way"), and
-    //   - the turn that *signals* a handoff also bypasses the queue —
-    //     it's a polite holding sentence, and we want it on the
+    //   - the turn that *signals* a handoff also bypasses the queue.
+    //     It's a polite holding sentence, and we want it on the
     //     customer's screen immediately while we page the tenant.
     let in_handoff_mode = matches!(handoff_mode, HandoffMode::HoldingPattern);
     if is_ai && !in_handoff_mode && !new_handoff {
@@ -446,7 +446,7 @@ async fn handle_auto_reply(
                 console_log!("Failed to log queued message: {:?}", e);
             }
             // Persist the inbound turn we just appended, but do NOT
-            // append the queued draft as an assistant turn — only
+            // append the queued draft as an assistant turn. Only
             // sent outbounds enter the conversation history. (If the
             // draft is rejected or edited later, an unsent assistant
             // turn would poison the next AI call.)
@@ -522,11 +522,11 @@ async fn handle_auto_reply(
     //     already running with (still in holding-pattern, or none).
     //   - If we actually sent an AI reply (vs canned), append the
     //     assistant turn to history so the next turn has it as
-    //     context. Canned replies skip session writes entirely —
+    //     context. Canned replies skip session writes entirely;
     //     they don't use the conversation machinery.
     //
     // For a brand-new handoff we then page the tenant exactly once.
-    // The notify call is best-effort — failing to fan out shouldn't
+    // The notify call is best-effort. Failing to fan out shouldn't
     // tear down the inbound flow.
     if !is_ai {
         return Ok(());
@@ -554,7 +554,7 @@ async fn handle_auto_reply(
         {
             console_log!("Handoff notify failed: {:?}", e);
         }
-        // Flip notified=true after the dispatch attempt — even if it
+        // Flip notified=true after the dispatch attempt. Even if it
         // partially failed we don't want to re-page on the next turn.
         if let Some(ref mut h) = session_handoff {
             h.notified = true;
@@ -592,7 +592,7 @@ async fn handle_auto_reply(
 
 /// Append a user turn to the running `messages` list and trim from the
 /// front to keep the cap honored. The cap is the tenant's effective
-/// `max_history_messages` — never zero in practice (resolver clamps
+/// `max_history_messages`. Never zero in practice (resolver clamps
 /// to the default), so we don't bother special-casing it. `at` is the
 /// turn's RFC3339 timestamp; the caller's "now" works for both
 /// inbound (just-arrived) and assistant (just-sent) turns.
@@ -655,8 +655,8 @@ fn age_minutes(timestamp: &str) -> Option<i64> {
 }
 
 /// Decide whether a single rule's matcher fires on the inbound text.
-/// `body_embedding` is `None` if no Prompt rules exist or embedding failed —
-/// in that case Prompt matchers can never fire.
+/// `body_embedding` is `None` if no Prompt rules exist or embedding failed.
+/// In that case Prompt matchers can never fire.
 fn matches_rule(matcher: &ReplyMatcher, body: &str, body_embedding: Option<&[f32]>) -> bool {
     match matcher {
         ReplyMatcher::Default => false, // default fires only via fallback path

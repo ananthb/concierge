@@ -61,7 +61,7 @@ pub fn manage_html(
     let guild = cfg.guild_name.as_deref().unwrap_or("Discord server");
 
     let options_html = |selected: Option<&str>| -> String {
-        let mut out = String::from(r#"<option value="">— none —</option>"#);
+        let mut out = String::from(r#"<option value="">(none)</option>"#);
         for ch in channels {
             let sel = if Some(ch.id.as_str()) == selected {
                 " selected"

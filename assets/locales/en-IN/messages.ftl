@@ -1,4 +1,4 @@
-# Concierge UI strings — en-IN (India / Indian English).
+# Concierge UI strings, en-IN (India / Indian English).
 #
 # This is the canonical source of truth for translatable copy. Any new
 # string in templates/handlers MUST appear here first; the build script
@@ -66,14 +66,14 @@ welcome-cta-secondary = See features
 
 # Live demo chat ("ask me about Concierge"). Triggered from the welcome
 # CTA row; backed by /demo/chat.
-demo-chat-hint = click to chat with me — try the live demo
+demo-chat-hint = click to try the live demo
 demo-chat-title = Live demo
 demo-chat-subtitle = Pick a sample business, then message it as if you were one of its customers. You'll see exactly the kind of reply Concierge would send for you.
-demo-chat-subtitle-concierge = Ask me anything about Concierge — what I do, channels, pricing, setup.
+demo-chat-subtitle-concierge = Ask me anything about Concierge: what I do, channels, pricing, setup.
 demo-chat-persona-label = Sample business
 demo-chat-roleplay-prefix = You're chatting as a customer of
 demo-chat-roleplay-suffix = . The reply you get is what Concierge would send on this business's behalf.
-demo-chat-channels-note = In real use, your customers reach you on WhatsApp, Instagram DMs, Discord, or email — not in a chat window like this. This window is just the live demo.
+demo-chat-channels-note = In real use, your customers reach you on WhatsApp, Instagram DMs, Discord, or email, not in a chat window like this. This window is just the live demo.
 demo-chat-business-hours = Hours
 demo-chat-business-city = City
 demo-chat-business-type = Type
@@ -82,7 +82,7 @@ demo-chat-handoff-chip = A teammate has been notified. Concierge is holding the 
 demo-chat-view-prompt = View system prompt
 demo-chat-hide-prompt = Hide system prompt
 demo-chat-prompt-heading = System prompt sent to the model
-demo-chat-envelope-note = The shaded sections are Concierge's safety wrapper — added to every prompt and not editable. The middle section is what the persona supplies, plus (for sample businesses) a one-time demo frame that asks the AI to nudge you to sign up at the end of the conversation.
+demo-chat-envelope-note = The shaded sections are Concierge's safety wrapper, added to every prompt and not editable. The middle section is what the persona supplies, plus (for sample businesses) a one-time demo frame that asks the AI to nudge you to sign up at the end of the conversation.
 demo-chat-placeholder = Ask me anything…
 demo-chat-placeholder-customer-prefix = Message
 demo-chat-placeholder-customer-suffix = as a customer…
@@ -90,7 +90,7 @@ demo-chat-send = Send
 demo-chat-close = Close
 demo-chat-thinking = Thinking…
 demo-chat-error = Something went wrong. Try again in a moment.
-demo-chat-rate-limited = You've sent quite a few messages — give me a minute and try again.
+demo-chat-rate-limited = You've sent quite a few messages. Give me a minute and try again.
 
 # Features page (/features).
 features-meta-description = Concierge auto-replies on WhatsApp, Instagram, Discord, and email. AI replies { $inr } / { $usd }, 100 included per month; static replies don't consume credits. 5-minute setup. Open source.
@@ -166,7 +166,7 @@ wizard-continue = Continue →
 # Wizard step 1: The basics.
 wizard-basics-eyebrow = The basics
 wizard-basics-headline = Tell us about you.
-wizard-basics-lead = For invoicing and compliance. Your details are never shared.
+wizard-basics-lead = Used on your invoices.
 wizard-basics-label-name = Brand name *
 wizard-basics-label-contact = Your name *
 wizard-basics-label-phone = Phone *
@@ -192,7 +192,7 @@ wizard-basics-type-partnership = Partnership
 wizard-basics-type-pvt-ltd = Private Limited
 wizard-basics-type-llp = LLP
 
-# Wizard step 5: Launch (everything else uses inline strings — tracked as
+# Wizard step 5: Launch (everything else uses inline strings, tracked as
 # follow-up after first translator handoff).
 wizard-launch-eyebrow = Ship it
 wizard-launch-headline = You're all set.
@@ -256,7 +256,7 @@ admin-settings-conversation-default-prefix = Default:
 admin-settings-conversation-error-idle-bounds = Idle gap must be between 5 and 1440 minutes.
 admin-settings-conversation-error-cooldown-bounds = Handoff cooldown must be between 5 and 1440 minutes.
 admin-settings-conversation-error-history-bounds = History size must be between 1 and 200 turns.
-admin-settings-conversation-error-idle-vs-cooldown = Idle gap must be longer than handoff cooldown — otherwise an active handoff can be wiped before its cooldown ends.
+admin-settings-conversation-error-idle-vs-cooldown = Idle gap must be longer than handoff cooldown. Otherwise an active handoff can be wiped before its cooldown ends.
 admin-settings-conversation-saved = Saved.
 admin-settings-session-h2 = Session
 admin-settings-signout = Sign Out
@@ -441,7 +441,7 @@ privacy-p-contact = Questions? Open an issue at <a href="https://github.com/anan
 # Wizard step 2: Connect channels.
 wizard-channels-eyebrow = Plug in
 wizard-channels-headline = Where do your customers already talk to you?
-wizard-channels-lead = Connect your channels. Skip anything you don't use — you can add more from the dashboard later.
+wizard-channels-lead = Connect your channels. Skip anything you don't use. You can add more from the dashboard later.
 wizard-channels-continue = Continue →
 wizard-channels-skip = Skip →
 wizard-channels-name-instagram = Instagram DMs
@@ -487,7 +487,7 @@ wizard-replies-lead-prefix = Each preset comes with a tone and a small set of de
 wizard-replies-lead-link = Persona settings
 wizard-replies-lead-suffix = after launch.
 wizard-replies-goal-eyebrow = What should customers do next?
-wizard-replies-goal-lead = One short verb phrase the AI can drive toward — keep it simple. Optional but strongly encouraged.
+wizard-replies-goal-lead = One short verb phrase the AI can aim for. Keep it simple. Optional but strongly encouraged.
 wizard-replies-goal-placeholder = e.g. book a delivery slot
 wizard-replies-goal-url-label = Where should they go to do it? (optional)
 wizard-replies-goal-url-placeholder = /book or https://example.com/book
@@ -567,7 +567,7 @@ admin-email-verify-h1 = Email verification
 admin-email-verify-back = Back to Concierge
 
 # Admin: Persona builder.
-admin-persona-title = Persona — Concierge
+admin-persona-title = Persona · Concierge
 admin-persona-back = ← Dashboard
 admin-persona-h1 = Persona
 admin-persona-lead = The persona is your AI assistant's voice. Every AI-generated reply uses this prompt as its system prompt.
@@ -591,7 +591,7 @@ admin-persona-placeholder-catch-phrases = One catch-phrase per line
 admin-persona-placeholder-off-topics = politics, medical advice, refunds...
 admin-persona-label-goal = Goal (what to drive customers toward)
 admin-persona-placeholder-goal = book a delivery slot
-admin-persona-hint-goal = Optional but strongly encouraged. Keep it short — one verb phrase the AI can hit in a couple of replies.
+admin-persona-hint-goal = Optional but strongly encouraged. Keep it short: one verb phrase the AI can hit in a couple of replies.
 admin-persona-label-goal-url = Goal URL (optional)
 admin-persona-placeholder-goal-url = /book or https://example.com/book
 admin-persona-label-handoff = Hand off to a human if (one per line, max 5)
@@ -649,7 +649,7 @@ admin-discord-ar-prompt-reply = Reply text
 admin-discord-ar-wait-prefix = Wait before replying:
 admin-discord-ar-wait-instant = instant
 admin-discord-ar-wait-help = 0 = reply immediately. Higher values let users send a burst of messages and get one combined reply.
-admin-discord-empty-channels = No text channels detected. The bot might not have access yet — invite it again, or check the Discord server settings.
+admin-discord-empty-channels = No text channels detected. The bot might not have access yet. Invite it again, or check the Discord server settings.
 admin-discord-save = Save
 
 # Admin: Rules editor.
@@ -704,7 +704,7 @@ admin-rules-form-cancel = Cancel
 admin-rules-form-save = Save
 admin-rules-approval-eyebrow = When should this AI reply send?
 admin-rules-approval-auto = Auto: send unless the safety check pauses it
-admin-rules-approval-auto-detail = Default. We send the draft straight away unless our heuristic spots a risk (money, commitments, off-persona) — then it goes to your approval queue.
+admin-rules-approval-auto-detail = Default. We send the draft straight away unless our heuristic spots a risk (money, commitments, off-persona); then it goes to your approval queue.
 admin-rules-approval-always = Ask me first for every reply
 admin-rules-approval-always-detail = Every AI reply waits for your approval before it sends.
 admin-rules-approval-no-gate = Send without any safety check

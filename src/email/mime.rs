@@ -1,6 +1,6 @@
 use mail_parser::{HeaderValue, MessageParser};
 
-/// Parsed representation of an inbound email — only the fields we need to
+/// Parsed representation of an inbound email. Only the fields we need to
 /// reconstruct an outbound message via Cloudflare Email Service.
 pub struct ParsedEmail {
     pub subject: String,
@@ -9,10 +9,10 @@ pub struct ParsedEmail {
     pub text_body: Option<String>,
     pub html_body: Option<String>,
     pub has_attachment: bool,
-    /// Reply-To header (first address) — preferred for routing replies back
+    /// Reply-To header (first address). Preferred for routing replies back
     /// to the real human when an inbound is forwarded mail.
     pub reply_to: Option<String>,
-    /// X-Forwarded-For / X-Original-From — set by some mail forwarders to
+    /// X-Forwarded-For / X-Original-From. Set by some mail forwarders to
     /// preserve the original sender when the From address gets rewritten.
     pub x_forwarded_for: Option<String>,
     pub x_original_from: Option<String>,

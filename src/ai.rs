@@ -73,7 +73,7 @@ pub async fn generate_response(
 }
 
 /// Generate a multi-turn chat reply. Distinct from `generate_response`,
-/// which packs a context map into a single user message — here, the
+/// which packs a context map into a single user message. Here, the
 /// caller passes the actual `(role, content)` history and we forward
 /// it verbatim. Used by the public `/demo/chat` endpoint AND the main
 /// pipeline (which hands over the conversation history stored on the
@@ -85,7 +85,7 @@ pub async fn generate_response(
 /// short via the system prompt; we don't pass `max_tokens` because
 /// some Workers AI model bindings reject unrecognized request keys.
 ///
-/// Empty history is allowed but unusual — the model will see only the
+/// Empty history is allowed but unusual: the model will see only the
 /// system prompt and have nothing to reply to. The pipeline always
 /// appends the inbound that just arrived before calling, so this
 /// degenerate case is reserved for tests / smoke checks.
@@ -147,7 +147,7 @@ pub async fn is_prompt_injection(env: &Env, text: &str) -> bool {
         Err(_) => return true, // fail closed
     };
 
-    // Pass the struct directly — see `run_ai_model` for the JS Map vs Object trap.
+    // Pass the struct directly. See `run_ai_model` for the JS Map vs Object trap.
     let result: std::result::Result<serde_json::Value, _> = ai.run(&model, &request).await;
     match result {
         Ok(response) => {
@@ -182,7 +182,7 @@ pub async fn embed(env: &Env, text: &str) -> Result<Vec<f32>> {
         text: [&'a str; 1],
     }
     let ai = env.ai("AI")?;
-    // Pass the struct directly — see `run_ai_model` for the JS Map vs Object trap.
+    // Pass the struct directly. See `run_ai_model` for the JS Map vs Object trap.
     let response: serde_json::Value = ai
         .run(EMBEDDING_MODEL, &EmbedRequest { text: [text] })
         .await

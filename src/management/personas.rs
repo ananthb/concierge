@@ -36,7 +36,7 @@ pub async fn handle_personas(
     let locale = crate::locale::Locale::from_request(&req);
 
     match (method, parts.as_slice()) {
-        // List all personas (drafts + approved + rejected — operators see everything)
+        // List all personas (drafts + approved + rejected; operators see everything)
         (Method::Get, []) => {
             let rows = storage::list_personas(db, false).await?;
             Response::from_html(tmpl::personas_list_html(&rows, base_url, &locale))
@@ -60,7 +60,7 @@ pub async fn handle_personas(
                 }
             };
 
-            // Slug uniqueness — if it already exists, refuse so the operator
+            // Slug uniqueness. If it already exists, refuse so the operator
             // doesn't accidentally overwrite an unrelated row.
             if storage::get_persona(db, &row.slug).await?.is_some() {
                 return Response::from_html(

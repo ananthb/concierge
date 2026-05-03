@@ -142,13 +142,13 @@
 
 <h2>Pricing Management</h2>
 
-<p>Platform operators set the global per-reply and per-extra-address prices via the <a href="management.html">management panel</a> at <code>/manage/billing</code>. There is one flat rate per currency — no tiers, no packs.</p>
+<p>Platform operators set the global per-reply and per-extra-address prices via the <a href="management.html">management panel</a> at <code>/manage/billing</code>. There is one flat rate per currency. No tiers, no packs.</p>
 
-<p>Prices are stored per-currency, in each currency's own units — there's no exchange rate and no conversion. The schema is split into two tables:</p>
+<p>Prices are stored per-currency, in each currency's own units. There's no exchange rate and no conversion. The schema is split into two tables:</p>
 
 <ul>
-  <li><code>pricing_config</code> — singleton (id = 1) holding currency-agnostic settings. Today that's just <code>email_pack_size</code> (default 5).</li>
-  <li><code>pricing_amount(concept, currency_code, amount)</code> — one row per <code>(concept, currency)</code> cell. Currency codes are ISO 4217 (INR, USD, EUR, JPY, KWD, …). The unit is determined by the concept and is the same for every currency.</li>
+  <li><code>pricing_config</code>: singleton (id = 1) holding currency-agnostic settings. Today that's just <code>email_pack_size</code> (default 5).</li>
+  <li><code>pricing_amount(concept, currency_code, amount)</code>: one row per <code>(concept, currency)</code> cell. Currency codes are ISO 4217 (INR, USD, EUR, JPY, KWD, …). The unit is determined by the concept and is the same for every currency.</li>
 </ul>
 
 <table>
@@ -174,7 +174,7 @@
 
 <h2>Recurring credit grants</h2>
 
-<p>Operators can configure recurring credit grants on a calendar cadence from <code>/manage/billing</code>. Recurring grants always apply to every tenant — they're the platform's lever for handing out a baseline AI-reply allowance (e.g. "100 free replies on the 1st of every month"). Each scheduled grant has:</p>
+<p>Operators can configure recurring credit grants on a calendar cadence from <code>/manage/billing</code>. Recurring grants always apply to every tenant. They're the platform's lever for handing out a baseline AI-reply allowance (e.g. "100 free replies on the 1st of every month"). Each scheduled grant has:</p>
 
 <ul>
   <li><strong>Cadence:</strong> <code>daily</code>, <code>weekly_{sun..sat}</code>, or <code>monthly_first</code> (the 1st of every month at 00:00 UTC).</li>
@@ -198,8 +198,8 @@
 <p>Operators can also grant credits or extra reply-email addresses to a specific tenant from that tenant's detail page (<code>/manage/tenants/{id}</code>):</p>
 
 <ul>
-  <li><strong>Grant free replies</strong> &mdash; adds an expiring batch of credits straight to the tenant's ledger. Backed by <code>POST /manage/tenants/{id}/grant-replies</code>.</li>
-  <li><strong>Grant reply-email addresses</strong> &mdash; bumps the tenant's <code>email_address_extras_purchased</code> counter so they can claim more local-parts without a Razorpay round-trip. Backed by <code>POST /manage/tenants/{id}/grant-addresses</code>.</li>
+  <li><strong>Grant free replies</strong>: adds an expiring batch of credits straight to the tenant's ledger. Backed by <code>POST /manage/tenants/{id}/grant-replies</code>.</li>
+  <li><strong>Grant reply-email addresses</strong>: bumps the tenant's <code>email_address_extras_purchased</code> counter so they can claim more local-parts without a Razorpay round-trip. Backed by <code>POST /manage/tenants/{id}/grant-addresses</code>.</li>
 </ul>
 
 <h2>Billing State</h2>

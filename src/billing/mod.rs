@@ -1,4 +1,4 @@
-//! Billing — reply credit tracking with expiry + Razorpay payments.
+//! Billing: reply credit tracking with expiry + Razorpay payments.
 //!
 //! Credits are stored as a ledger of entries, each with an optional expiry.
 //! - Purchased credits never expire.
@@ -20,7 +20,7 @@ use crate::storage;
 use crate::types::{CreditEntry, CreditSource, TenantBilling};
 
 // Slider bounds for the credit purchase flow. These are pure UI knobs,
-// not pricing — keeping them as Rust constants because they don't make
+// not pricing. Keeping them as Rust constants because they don't make
 // sense to edit at runtime from /manage.
 pub const MIN_CREDITS: i64 = 500;
 pub const MAX_CREDITS: i64 = 1_000_000;
@@ -112,7 +112,7 @@ pub async fn grant_with_expiry(
     storage::save_tenant_billing(db, tenant_id, &billing).await
 }
 
-/// Prepare billing for display — prunes expired entries and sorts the
+/// Prepare billing for display. Prunes expired entries and sorts the
 /// ledger so soonest-expiring credits are consumed first. Call this
 /// before rendering billing UI.
 pub fn refresh_billing(billing: &mut TenantBilling) {

@@ -53,8 +53,8 @@ pub fn auth_login_html(
     );
     // WhatsApp button is JS-driven (Meta Embedded Signup). If the page lacks
     // the Meta app id, omit the button rather than render a dud. The click
-    // handler is wired via addEventListener in the module script below — no
-    // inline onclick — so the module can keep its handler closures private.
+    // handler is wired via addEventListener in the module script below.
+    // No inline onclick, so the module keeps its handler closures private.
     let wa_btn = if meta_app_id.is_empty() {
         String::new()
     } else {
@@ -79,7 +79,7 @@ pub fn auth_login_html(
         format!(
             r#"<script async defer crossorigin="anonymous" src="https://connect.facebook.net/en_US/sdk.js"></script>
 <script type="module" nonce="__CSP_NONCE__">
-// The SDK loads `async defer` — an early click would otherwise hit
+// The SDK loads `async defer`. Without this guard an early click hits
 // `FB is not defined`. We expose a Promise resolved from inside
 // `fbAsyncInit` and have the click handler await it (with a timeout
 // so a blocked / failed load surfaces an error instead of hanging).
@@ -211,8 +211,8 @@ fn conversation_settings_card(base_url: &str, cfg: &ConversationConfig, locale: 
     let default_prefix = t(locale, "admin-settings-conversation-default-prefix");
     let save = t(locale, "admin-save");
 
-    // Defaults shown both as input placeholder and inline hint —
-    // tenants who haven't set a value see what number actually gets
+    // Defaults are shown twice: as input placeholder and as inline hint.
+    // Tenants who haven't set a value see what number actually gets
     // used at runtime.
     let default_idle = crate::prompt::DEFAULT_CONVERSATION_IDLE_GAP_MINS;
     let default_cooldown = crate::prompt::DEFAULT_HANDOFF_COOLDOWN_MINS;
@@ -860,8 +860,8 @@ pub fn admin_whatsapp_signup_html(
         </div>
         <script async defer crossorigin="anonymous" src="https://connect.facebook.net/en_US/sdk.js"></script>
         <script type="module" nonce="__CSP_NONCE__">
-// Module scripts are deferred — handle the case where the SDK ran first
-// (FB already exists) as well as the normal case (SDK still loading).
+// Module scripts are deferred. Handle both cases: the SDK ran first
+// (FB already exists), and the normal case (SDK still loading).
 const fbReady = new Promise((resolve) => {{
   const init = () => {{
     FB.init({{

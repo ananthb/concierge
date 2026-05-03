@@ -103,7 +103,7 @@ fn make_bundle(
 
 /// `Sync` wrapper for the translator. `FluentBundle` carries an internal
 /// `RefCell` for custom transforms, so it isn't auto-`Sync`. WASM workers
-/// are single-threaded by spec so the unsafe impl is sound — no two
+/// are single-threaded by spec so the unsafe impl is sound: no two
 /// concurrent borrows can exist. Same pattern as `worker::Queue`.
 struct SyncTranslator(Translator);
 unsafe impl Sync for SyncTranslator {}
@@ -121,7 +121,7 @@ pub fn t(locale: &Locale, key: &str) -> String {
 }
 
 /// Look up `key` and substitute `{ $name }` placeholders from `args`.
-/// Each tuple is `(name, value)` — values are coerced to FluentValue::String.
+/// Each tuple is `(name, value)`. Values are coerced to FluentValue::String.
 pub fn t_args(locale: &Locale, key: &str, args: &[(&str, &str)]) -> String {
     let mut fa = FluentArgs::new();
     for (k, v) in args {
@@ -165,7 +165,7 @@ mod tests {
     #[test]
     fn t_args_substitutes_price_placeholders() {
         let l = Locale::default_inr();
-        // Real key from the FTL — must contain { $inr } and { $usd }.
+        // Real key from the FTL. Must contain { $inr } and { $usd }.
         let s = t_args(
             &l,
             "features-card-pay-body",

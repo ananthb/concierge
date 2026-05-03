@@ -1,4 +1,4 @@
-//! Razorpay webhook handler — processes payment events.
+//! Razorpay webhook handler. Processes payment events.
 //! Idempotent: checks payment_id in D1 before granting credits or address packs.
 
 use wasm_bindgen::JsValue;
@@ -85,7 +85,7 @@ pub async fn handle_razorpay_webhook(mut req: Request, env: Env) -> Result<Respo
                     )
                     .await?;
                     // Auto-refund. If the API call fails we log and move
-                    // on — the tenant is already marked verified, so an
+                    // on. The tenant is already marked verified, so an
                     // operator can issue the refund manually from the
                     // Razorpay dashboard.
                     let key_id = env.secret("RAZORPAY_KEY_ID")?.to_string();

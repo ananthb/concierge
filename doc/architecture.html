@@ -213,7 +213,7 @@
   <li><code>messages</code>: unified inbound/outbound metadata (channel, direction, sender, recipient, action_taken, <code>conversation_id</code>). No body content. Indexed on tenant+time, channel+tenant+time, channel_account_id, and <code>conversation_id</code>+time so a conversation thread can be reconstructed for audit. AI flows stamp <code>conversation_id</code>; canned-only flows leave it NULL.</li>
   <li><code>whatsapp_messages</code>, <code>instagram_messages</code>, <code>email_messages</code>, <code>email_metrics</code>, <code>lead_form_submissions</code>: channel-specific logs.</li>
   <li><code>tenant_billing</code>: credit ledger as JSON (entries with optional expiry).</li>
-  <li><code>payments</code>: Razorpay event log for compliance.</li>
+  <li><code>payments</code>: Razorpay event log, kept for dispute and tax records.</li>
   <li><code>audit_log</code>: management-action history.</li>
   <li><code>personas</code>: curated archetype catalog (slug, label, description, <code>source_json</code> = serialized <code>PersonaSource</code>, greeting, <code>is_system</code>, <code>safety_status</code>, <code>safety_checked_at</code>, <code>safety_vague_reason</code>). Edited from <code>/manage/personas</code>; consumed by the public demo persona picker and snapshotted into a tenant's onboarding state when they pick one. Every edit resets <code>safety_status</code> to <code>draft</code> and enqueues a <code>SafetyJob</code>; only <code>approved</code> rows are visible to demo and onboarding. The <code>concierge</code> row is <code>is_system=1</code> (undeletable) and powers the homepage demo.</li>
 </ul>

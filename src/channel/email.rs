@@ -12,7 +12,7 @@ use crate::types::*;
 /// - `original_subject`, `message_id`, `references`: for thread headers.
 ///
 /// CC and BCC recipients come from the address's verified
-/// `notification_recipients` list — owner is always present.
+/// `notification_recipients` list. Owner is always present.
 pub async fn send_reply(
     env: &Env,
     metadata: &serde_json::Value,

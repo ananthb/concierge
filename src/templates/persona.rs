@@ -1,4 +1,4 @@
-//! `/admin/persona` — render the three-mode (Preset/Builder/Custom)
+//! `/admin/persona`: render the three-mode (Preset/Builder/Custom)
 //! persona editor with a live prompt preview and a safety badge.
 //!
 //! The page is a single Alpine `x-data` form; the active mode swaps the
@@ -14,7 +14,7 @@ use crate::types::{PersonaConfig, PersonaPreset, PersonaSafetyStatus, PersonaSou
 use super::base::{app_shell, base_html};
 
 pub fn persona_admin_html(persona: &PersonaConfig, base_url: &str, locale: &Locale) -> String {
-    // After the archetype refactor, `PersonaSource::Preset` is gone — picking
+    // After the archetype refactor, `PersonaSource::Preset` is gone; picking
     // an archetype card just stamps it onto a `Builder` source. We pre-fill
     // the form depending on which source variant the tenant has saved.
     let (active_mode, builder, custom_prompt) = match &persona.source {

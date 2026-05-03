@@ -20,7 +20,7 @@ pub enum EmailResult {
     /// Reject the email at SMTP time with a message.
     Reject(String),
     /// Send a single outbound email immediately (used for reverse-alias
-    /// reply routing — synchronous, no buffering).
+    /// reply routing; synchronous, no buffering).
     Send(OutboundEmail),
 }
 
@@ -46,7 +46,7 @@ pub async fn handle_email(
         .map(|v| v.to_string())
         .unwrap_or_default();
     if domain != base_domain {
-        console_log!("Mail to non-platform domain {domain} — rejecting");
+        console_log!("Mail to non-platform domain {domain}, rejecting");
         return Ok(EmailResult::Reject("Unknown domain".into()));
     }
 
@@ -70,7 +70,7 @@ pub async fn handle_email(
 
     let parsed = mime::parse_email(raw_bytes);
 
-    // Reply that arrived at a reverse alias — route it back to the original
+    // Reply that arrived at a reverse alias. Route it back to the original
     // human via the saved alias mapping.
     if forward::is_reverse_alias(&to_lower) {
         return handle_reverse_alias(&to_lower, &parsed, &kv).await;
@@ -111,7 +111,7 @@ pub async fn handle_email(
         subject: Some(subject.clone()),
         has_attachment,
         tenant_id: tenant_id.clone(),
-        // For email the "channel account" is the local-part — uniquely
+        // For email the "channel account" is the local-part. Uniquely
         // identifies the address that received the message.
         channel_account_id: local_part.clone(),
         raw_metadata: serde_json::json!({
@@ -134,7 +134,7 @@ pub async fn handle_email(
 }
 
 /// Route a reply that arrived at a reverse alias back to the original
-/// recipient. This is synchronous because there's no rule/AI step — the
+/// recipient. This is synchronous because there's no rule/AI step. The
 /// alias mapping tells us exactly where to send.
 async fn handle_reverse_alias(
     to_lower: &str,

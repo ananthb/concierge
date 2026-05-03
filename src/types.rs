@@ -86,7 +86,7 @@ impl Tenant {
     /// How many reply-email addresses this tenant is allowed to provision.
     /// Equal to the cumulative count of addresses granted by paid pack
     /// purchases. (Operator grants and pack-purchase webhooks both bump
-    /// `email_address_extras_purchased` — see billing/webhook.rs.)
+    /// `email_address_extras_purchased`. See billing/webhook.rs.)
     pub fn email_address_quota(&self) -> u32 {
         self.email_address_extras_purchased
     }
@@ -712,7 +712,7 @@ pub struct InboundMessage {
 /// the AI emits the handoff token in a reply, the pipeline records
 /// `handoff_signaled_at` here so subsequent customer messages on the
 /// same conversation route through the holding-pattern prompt instead
-/// of the persona — and stop replying entirely after the tenant's
+/// of the persona, and stop replying entirely after the tenant's
 /// effective handoff cooldown (see
 /// [`crate::prompt::DEFAULT_HANDOFF_COOLDOWN_MINS`]).
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -751,7 +751,7 @@ pub struct ConversationContext {
 /// `(tenant_id, channel, channel_account_id, sender)` (see
 /// `storage::save_session`).
 ///
-/// Concierge doesn't have a formal "thread" object — a Session is the
+/// Concierge doesn't have a formal "thread" object. A Session is the
 /// soft equivalent. A conversation is considered ended once the
 /// customer has been silent for the tenant's effective idle gap (see
 /// [`crate::prompt::DEFAULT_CONVERSATION_IDLE_GAP_MINS`] and
@@ -767,7 +767,7 @@ pub struct ConversationContext {
 pub struct Session {
     /// RFC3339 timestamp of the most recent inbound message we
     /// processed for this thread. Updated on every inbound, including
-    /// during the post-cooldown silent window — so as long as the
+    /// during the post-cooldown silent window. As long as the
     /// customer keeps pinging within the idle gap, the thread stays
     /// bound to the same conversation (and the same handoff record,
     /// if any).
@@ -793,7 +793,7 @@ pub struct Session {
 }
 
 /// One turn inside a `Session.messages` list. Roles mirror what
-/// Workers AI expects in its `messages` array — `User` for inbound
+/// Workers AI expects in its `messages` array: `User` for inbound
 /// customer text, `Assistant` for outbound replies we actually sent.
 /// Drafts queued for approval are NOT recorded here: only sent
 /// outbounds become history.
@@ -889,7 +889,7 @@ pub struct ConversationWindow {
     pub max_history_messages: u32,
 }
 
-/// Business information for KYC / Indian regulatory compliance.
+/// Business information collected at onboarding. Used for invoicing.
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct BusinessInfo {
     #[serde(default)]
@@ -1184,8 +1184,8 @@ pub struct OnboardingState {
 }
 
 /// Tenant-wide AI persona used as the system prompt for every AI reply.
-/// The persona is one of three sources (Preset, Builder, Custom) — never a
-/// mix — so there is exactly one source of truth for the active prompt.
+/// The persona is one of three sources (Preset, Builder, Custom), never a
+/// mix, so there is exactly one source of truth for the active prompt.
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct PersonaConfig {
     pub source: PersonaSource,
@@ -1250,7 +1250,7 @@ impl PersonaSource {
     }
 }
 
-/// Voice archetype — the *tone* a persona speaks in. Decoupled from
+/// Voice archetype: the *tone* a persona speaks in. Decoupled from
 /// business type: a "Friendly" archetype works for a florist, a clinic,
 /// or a tech-support helpdesk. Catalog rows in D1 carry one of these.
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
@@ -1294,7 +1294,7 @@ pub struct PersonaBuilder {
     #[serde(default)]
     pub goal: String,
     /// Optional landing place for the goal: a relative path (`/book`) or
-    /// an absolute `https://` URL. Sanitised on save —
+    /// an absolute `https://` URL. Sanitised on save:
     /// `javascript:`/`data:`/bare domains are rejected.
     #[serde(default)]
     pub goal_url: String,
@@ -1310,7 +1310,7 @@ pub struct PersonaBuilder {
     /// "Hand off to a human if any of these come up: …" block. The
     /// universal triggers (model confused, customer asks for a person,
     /// medical/legal/financial/safety territory) live in the immutable
-    /// postamble — these are tenant-specific additions.
+    /// postamble. These are tenant-specific additions.
     #[serde(default)]
     pub handoff_conditions: Vec<String>,
 }
@@ -1340,7 +1340,7 @@ impl PersonaCatalogRow {
     /// rows differ from tenant `PersonaConfig` here: every approval
     /// path for a catalog row goes through the classifier (the upsert
     /// handler always resets to Draft and enqueues a `SafetyJob`), so
-    /// hash-drift detection isn't needed — Approved is Approved.
+    /// hash-drift detection isn't needed. Approved is Approved.
     pub fn is_safe_to_use(&self) -> bool {
         matches!(self.safety.status, PersonaSafetyStatus::Approved)
     }
@@ -1357,7 +1357,7 @@ pub struct PersonaSafety {
     pub checked_prompt_hash: Option<String>,
     #[serde(default)]
     pub checked_at: Option<String>,
-    /// User-facing decline reason for the Rejected case. Always vague — the
+    /// User-facing decline reason for the Rejected case. Always vague: the
     /// internal classifier category is logged but not exposed so users can't
     /// iterate prompts against the classifier.
     #[serde(default)]
@@ -1613,7 +1613,7 @@ mod tests {
     fn session_deserializes_legacy_records_without_messages_field() {
         // Old KV records (pre-conversation-history) lack messages,
         // conversation_id. With #[serde(default)] they should still
-        // load — empty list, empty id — and the pipeline will mint a
+        // load (empty list, empty id), and the pipeline will mint a
         // fresh conversation_id on next turn.
         let legacy_json = r#"{
             "last_inbound_at": "2026-05-04T12:00:00.000Z",
@@ -1734,7 +1734,7 @@ impl GrantCadence {
     }
 }
 
-/// Recurring credit grant. Always applies to every tenant — there is no
+/// Recurring credit grant. Always applies to every tenant. There is no
 /// per-grant audience selector, on the assumption that operator-controlled
 /// recurring drops are always platform-wide.
 #[derive(Debug, Clone)]

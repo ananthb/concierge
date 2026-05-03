@@ -1,6 +1,6 @@
 //! `/admin/approvals`: list of pending AI drafts awaiting human approval.
 //!
-//! The list refreshes via HTMX polling (`hx-trigger="every 5s"`) — fine for
+//! The list refreshes via HTMX polling (`hx-trigger="every 5s"`); fine for
 //! Phase 2. A future Phase 2.5 may swap the polling block for an SSE
 //! endpoint backed by a per-tenant Durable Object.
 

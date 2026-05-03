@@ -225,7 +225,7 @@ pub async fn handle_admin(req: Request, env: Env, path: &str, method: Method) ->
 /// Each of the three fields is optional: a missing or empty value
 /// clears the override (falls back to the prompt-default at runtime).
 /// Validation enforces sane bounds and the
-/// `idle_gap_mins > handoff_cooldown_mins` invariant — otherwise an
+/// `idle_gap_mins > handoff_cooldown_mins` invariant. Otherwise an
 /// active handoff could be wiped before its cooldown ended. On
 /// failure we render an error toast and don't write.
 async fn save_conversation_settings(

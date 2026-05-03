@@ -1,4 +1,4 @@
-//! Management billing — pricing settings and recurring credit grants.
+//! Management billing: pricing settings and recurring credit grants.
 
 use worker::*;
 
@@ -26,7 +26,7 @@ pub async fn handle_billing(
     let locale = crate::locale::Locale::from_request(&req);
 
     match (method, parts.as_slice()) {
-        // Billing overview — pricing form + recurring grants.
+        // Billing overview: pricing form + recurring grants.
         (Method::Get, []) => {
             let cfg = storage::get_pricing(db).await;
             let scheduled = storage::list_scheduled_grants(db).await.unwrap_or_default();

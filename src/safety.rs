@@ -154,7 +154,7 @@ fn parse_verdict(raw: &str) -> SafetyVerdict {
     }
 }
 
-/// Map an internal classifier category to user-facing text. Always vague —
+/// Map an internal classifier category to user-facing text. Always vague:
 /// the literal category is logged but never echoed so users can't iterate
 /// prompts against the classifier.
 fn vague_reason_for(category: &str) -> String {

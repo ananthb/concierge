@@ -154,7 +154,7 @@ pub const CSP_NONCE_PLACEHOLDER: &str = "__CSP_NONCE__";
 /// - **style-src**: keeps `'unsafe-inline'` because we have many `style="…"`
 ///   attrs; the per-script nonce alone wouldn't cover them.
 /// - **connect-src**: FB Embedded Signup posts to `*.facebook.com` (login
-///   dialog + impression telemetry — the SDK silently aborts when these
+///   dialog + impression telemetry; the SDK silently aborts when these
 ///   are blocked, which is how the WhatsApp button mysteriously "cancelled"
 ///   on production); Razorpay's verify call goes to `api.razorpay.com`.
 /// - **frame-src**: FB login popup + Razorpay checkout iframe.
@@ -246,7 +246,7 @@ async fn handle_request(req: Request, env: Env) -> Result<Response> {
     }
 
     // Render the email-domain landing page when the request comes in on
-    // EMAIL_DOMAIN (or any subdomain) — these visitors landed in a browser
+    // EMAIL_DOMAIN (or any subdomain). These visitors landed in a browser
     // by accident and we want to nudge them back to the main site.
     let host = url.host_str().unwrap_or("");
     let email_base = env
@@ -388,7 +388,7 @@ async fn handle_request(req: Request, env: Env) -> Result<Response> {
     if path == "/demo/chat" && method == Method::Post {
         return handlers::handle_demo_chat(req, env).await;
     }
-    // Demo persona picker — D1 catalog filtered to Approved.
+    // Demo persona picker. D1 catalog filtered to Approved.
     if path == "/demo/personas" && method == Method::Get {
         return handlers::handle_demo_personas(req, env).await;
     }
