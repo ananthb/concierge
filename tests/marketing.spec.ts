@@ -82,6 +82,30 @@ test('demo-chat modal opens, posts to /demo/chat, renders assistant reply', asyn
   });
 });
 
+test('clicking the hero headline also opens the chat modal', async ({ page }) => {
+  await page.route('**/demo/chat', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ reply: 'ok' }),
+    }),
+  );
+  await page.goto('/');
+  await page.locator('#hero-headline').click();
+  const dialog = page.getByRole('dialog', { name: /chat with concierge/i });
+  await expect(dialog).toBeVisible();
+});
+
+test('hero hint informs users the headline is clickable', async ({ page }) => {
+  await page.goto('/');
+  // The hint text is in the DOM as an aria-describedby target so screen
+  // readers see it; sighted users get the tooltip via the initial pulse
+  // and on hover.
+  const headline = page.locator('#hero-headline');
+  await expect(headline).toHaveAttribute('aria-describedby', 'demo-chat-hint-text');
+  await expect(page.locator('#demo-chat-hint-text')).toContainText(/click to chat/i);
+});
+
 test('demo-chat surfaces the rate-limit message on 429', async ({ page }) => {
   await page.route('**/demo/chat', (route) =>
     route.fulfill({

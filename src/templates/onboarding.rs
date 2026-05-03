@@ -148,6 +148,7 @@ pub fn welcome_html(_base_url: &str, locale: &crate::locale::Locale) -> String {
         .replace("__RATE_LIMITED__", &js_string_for_html(&chat_rate_limited));
 
     let chat_cta = html_escape(&t(locale, "demo-chat-cta"));
+    let chat_hint = html_escape(&t(locale, "demo-chat-hint"));
     let chat_title = html_escape(&t(locale, "demo-chat-title"));
     let chat_subtitle = html_escape(&t(locale, "demo-chat-subtitle"));
     let chat_placeholder = html_escape(&t(locale, "demo-chat-placeholder"));
@@ -161,7 +162,14 @@ pub fn welcome_html(_base_url: &str, locale: &crate::locale::Locale) -> String {
 <section class="page welcome">
   <div class="welcome-left">
     <div class="eyebrow">{eyebrow}</div>
-    <h1 class="display" id="hero-headline">{headline}</h1>
+    <div class="hero-hint-anchor">
+      <h1 class="display hero-clickable" id="hero-headline"
+          tabindex="0" aria-describedby="demo-chat-hint-text"
+          @click="open = true"
+          @keydown.enter.prevent="open = true"
+          @keydown.space.prevent="open = true">{headline}<span class="hero-caret" aria-hidden="true"></span></h1>
+      <div id="demo-chat-hint-text" class="hero-hint" :class="{{ 'is-hint-on': hint }}">{chat_hint}</div>
+    </div>
     <p class="lead">{lead}</p>
     <div class="row gap-12 wrap mt-16">
       <a href="/auth/login" class="btn primary lg">{cta_primary}</a>
@@ -297,33 +305,34 @@ const HERO_ROTATOR_JS: &str = r##"<script type="module" nonce="__CSP_NONCE__">
       let next = idx;
       while (next === idx) next = Math.floor(Math.random() * variants.length);
       const target = tokenize(variants[next]);
-      // Backspace burst: chip away a few trailing chars, like a user starting
-      // to delete and then giving up.
-      let burst = Math.min(4, Math.max(1, Math.floor(current.length / 6)));
+      // Backspace burst: chip away a couple of words, like a user starting
+      // to delete and then giving up. Targets ~10 chars on the default
+      // headline and scales with length.
+      let burst = Math.min(12, Math.max(4, Math.floor(current.length / 8)));
       while (current.length && burst > 0) {
         const top = current.pop();
         render(true);
         if (!isTag(top)) {
           burst -= 1;
-          await sleep(40 + Math.random() * 30);
+          await sleep(50 + Math.random() * 30);
         }
       }
-      // Ctrl+A flash: highlight everything that's left, briefly.
+      // Ctrl+A flash: highlight everything that's left and hold long enough
+      // to read as a deliberate select-all.
       if (current.length) {
-        el.innerHTML = '<span class="hero-select">' + current.join('') + '</span>';
-        await sleep(280);
+        el.innerHTML = '<span class="hero-select">' + current.join('') + '</span>' + caret;
+        await sleep(540);
       }
-      // Delete: clear the field instantly, hold the caret while the cursor sits at the start.
+      // Delete: clear the field, hold the caret at the start for a beat.
       current.length = 0;
       render(true);
-      await sleep(90);
+      await sleep(220);
       for (const tok of target) {
         current.push(tok);
         render(true);
         if (!isTag(tok)) await sleep(28 + Math.random() * 30);
       }
-      await sleep(900);
-      render(false);
+      // Caret stays visible at idle — never call render(false).
       idx = next;
     }
   };
@@ -348,17 +357,20 @@ window.conciergeChat = () => ({
   sending: false,
   error: '',
   input: '',
+  hint: true,
   messages: [{ role: 'assistant', content: __GREETING__ }],
   init() {
     this.$watch('open', (v) => {
       window.__heroPaused = !!v;
       if (v) {
+        this.hint = false;
         this.$nextTick(() => {
           if (this.$refs.input) this.$refs.input.focus();
           this.scrollDown();
         });
       }
     });
+    setTimeout(() => { this.hint = false; }, 5500);
   },
   scrollDown() {
     const el = this.$refs.msgs;

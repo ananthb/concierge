@@ -67,6 +67,7 @@ welcome-cta-secondary = See features
 # Live demo chat ("ask me about Concierge"). Triggered from the welcome
 # CTA row; backed by /demo/chat.
 demo-chat-cta = Ask me about Concierge →
+demo-chat-hint = ↑ click to chat with me about Concierge
 demo-chat-title = Chat with Concierge
 demo-chat-subtitle = Ask me anything about what I do, how I'm priced, or how to set me up.
 demo-chat-greeting = Hi! I'm Concierge. Ask me what I do, which channels I cover, how pricing works, or how to set me up.
