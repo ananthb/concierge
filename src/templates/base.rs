@@ -339,10 +339,16 @@ code {
 .chat-controls { display:flex; align-items:flex-end; gap:10px; margin:0 0 6px; flex-wrap:wrap; }
 .chat-persona-label { display:flex; flex-direction:column; gap:4px; flex:1 1 220px; min-width:180px; }
 .chat-persona-label .eyebrow { font-size:11px; }
-.chat-persona-select { padding:8px 10px; font-size:14px; }
+/* min-width keeps the native dropdown arrow aligned even when the
+   options list is empty (placeholder-only state). */
+.chat-persona-select { padding:8px 10px; font-size:14px; min-width:180px; }
 .chat-persona-desc { margin:0 0 8px; }
-.chat-prompt-panel { background:var(--cream-2); border:1px solid var(--hair); border-radius:10px; padding:12px 14px; margin:6px 0 12px; }
-.chat-prompt-body { margin:0; padding:8px 10px; border-radius:6px; font-family:var(--f-mono); font-size:12px; line-height:1.55; color:var(--ink-2); white-space:pre-wrap; word-break:break-word; max-height:30vh; overflow-y:auto; }
+/* Single scroll region holding the prompt panel + the message list.
+   `min-height:0` is the flex-shrink unlock — without it the form gets
+   pushed off the card when the prompt panel is open. */
+.chat-scroll { flex:1 1 auto; min-height:0; overflow-y:auto; padding:0; display:flex; flex-direction:column; gap:10px; scroll-behavior:smooth; }
+.chat-prompt-panel { background:var(--cream-2); border:1px solid var(--hair); border-radius:10px; padding:12px 14px; flex:none; }
+.chat-prompt-body { margin:0; padding:8px 10px; border-radius:6px; font-family:var(--f-mono); font-size:12px; line-height:1.55; color:var(--ink-2); white-space:pre-wrap; word-break:break-word; max-height:24vh; overflow-y:auto; }
 .chat-prompt-body + .chat-prompt-body { margin-top:6px; }
 .chat-prompt-fixed { background:rgba(27,24,20,.06); border-left:3px solid var(--hair-2); }
 .chat-prompt-middle { background:var(--paper); border-left:3px solid var(--accent); }
@@ -353,7 +359,9 @@ code {
 .prompt-preview + .prompt-preview { margin-top:6px; }
 .prompt-preview-fixed { background:rgba(245,239,228,.06); border-left:3px solid rgba(245,239,228,.18); opacity:.8; }
 .prompt-preview-middle { background:rgba(245,239,228,.10); border-left:3px solid var(--accent); }
-.chat-messages { flex:1 1 auto; min-height:120px; overflow-y:auto; padding:12px 2px; display:flex; flex-direction:column; gap:10px; scroll-behavior:smooth; }
+/* Inside `.chat-scroll`. The wrapper handles overflow; this is just the
+   bubble layout. */
+.chat-messages { flex:1 1 auto; min-height:80px; padding:8px 2px; display:flex; flex-direction:column; gap:10px; }
 .chat-msg { padding:10px 14px; border-radius:14px; max-width:85%; line-height:1.45; font-size:14px; white-space:pre-wrap; word-break:break-word; }
 .chat-msg.user { align-self:flex-end; background:var(--ink); color:var(--cream); border-bottom-right-radius:4px; }
 .chat-msg.assistant { align-self:flex-start; background:var(--cream-2); color:var(--ink); border-bottom-left-radius:4px; }

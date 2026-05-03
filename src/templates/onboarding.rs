@@ -219,36 +219,48 @@ pub fn welcome_html(_base_url: &str, locale: &crate::locale::Locale) -> String {
     <div class="chat-controls">
       <label class="chat-persona-label">
         <span class="eyebrow">{chat_persona_label}</span>
-        <select class="select chat-persona-select" x-model="personaSlug" data-testid="demo-chat-persona">
+        <select class="select chat-persona-select" x-model="personaSlug" :disabled="!personas.length" data-testid="demo-chat-persona">
+          <!-- Placeholder while the catalog is loading or empty. `x-if`
+               (vs `x-show`) actually removes the <option> from the DOM —
+               browsers treat `display:none` on <option> inconsistently
+               otherwise, which manifests as a cropped/misaligned arrow. -->
+          <template x-if="!personas.length">
+            <option :value="personaSlug" x-text="personasLoaded ? '— no personas available —' : 'Loading…'"></option>
+          </template>
           <template x-for="p in personas" :key="p.slug">
             <option :value="p.slug" x-text="p.label"></option>
           </template>
         </select>
       </label>
-      <button type="button" class="btn ghost sm" @click="showPrompt = !showPrompt" :aria-expanded="showPrompt" aria-controls="demo-chat-prompt-panel">
+      <button type="button" class="btn ghost sm" @click="showPrompt = !showPrompt" :aria-expanded="showPrompt" :disabled="!personas.length" aria-controls="demo-chat-prompt-panel">
         <span x-show="!showPrompt">{chat_view_prompt}</span>
         <span x-show="showPrompt" x-cloak>{chat_hide_prompt}</span>
       </button>
     </div>
-    <p class="muted fs-13 chat-persona-desc" x-text="currentPersona.description"></p>
-    <section id="demo-chat-prompt-panel" class="chat-prompt-panel" x-show="showPrompt" x-cloak aria-live="polite">
-      <div class="eyebrow mb-6">{chat_prompt_heading}</div>
-      <p class="muted fs-12 mb-6">{chat_envelope_note}</p>
-      <pre class="chat-prompt-body chat-prompt-fixed" x-text="preamble"></pre>
-      <pre class="chat-prompt-body chat-prompt-middle" x-text="currentPersona.prompt"></pre>
-      <pre class="chat-prompt-body chat-prompt-fixed" x-text="postamble"></pre>
-    </section>
-    <div class="chat-messages" x-ref="msgs">
-      <template x-for="(m, i) in messages" :key="i">
-        <div :class="'chat-msg ' + m.role" x-text="m.content"></div>
-      </template>
-      <div class="chat-thinking" x-show="sending">{chat_thinking}</div>
+    <p class="muted fs-13 chat-persona-desc" x-text="personas.length ? currentPersona.description : (personasLoaded ? 'The persona catalog isn\'t ready yet — apply the migration on the production D1 to populate it.' : 'Loading personas…')"></p>
+    <!-- Single scroll region for the conversation + the toggleable prompt
+         panel. Form stays pinned at the bottom even when the prompt panel
+         is open and pushes the messages region's content overflow. -->
+    <div class="chat-scroll" x-ref="msgs">
+      <section id="demo-chat-prompt-panel" class="chat-prompt-panel" x-show="showPrompt" x-cloak aria-live="polite">
+        <div class="eyebrow mb-6">{chat_prompt_heading}</div>
+        <p class="muted fs-12 mb-6">{chat_envelope_note}</p>
+        <pre class="chat-prompt-body chat-prompt-fixed" x-text="preamble"></pre>
+        <pre class="chat-prompt-body chat-prompt-middle" x-text="currentPersona.prompt"></pre>
+        <pre class="chat-prompt-body chat-prompt-fixed" x-text="postamble"></pre>
+      </section>
+      <div class="chat-messages">
+        <template x-for="(m, i) in messages" :key="i">
+          <div :class="'chat-msg ' + m.role" x-text="m.content"></div>
+        </template>
+        <div class="chat-thinking" x-show="sending">{chat_thinking}</div>
+      </div>
     </div>
     <div class="chat-error" x-show="error" x-text="error"></div>
     <form @submit.prevent="send()" class="row gap-8 mt-12">
       <input class="input" type="text" x-model="input" :placeholder="currentPersona.slug === 'concierge' ? '{chat_placeholder}' : ('Message ' + currentPersona.label + '…')"
-        :disabled="sending" x-ref="input" maxlength="600" autocomplete="off" autocorrect="off" autocapitalize="off">
-      <button type="submit" class="btn primary" :disabled="sending || !input.trim()">{chat_send}</button>
+        :disabled="sending || !personas.length" x-ref="input" maxlength="600" autocomplete="off" autocorrect="off" autocapitalize="off">
+      <button type="submit" class="btn primary" :disabled="sending || !input.trim() || !personas.length">{chat_send}</button>
     </form>
   </div>
 </div>
