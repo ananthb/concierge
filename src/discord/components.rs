@@ -196,7 +196,7 @@ async fn handle_approve(ctx_id: &str, interaction: &Interaction, env: &Env) -> R
         &ctx.tenant_id,
         &ctx.channel_account_id,
         Some(MessageAction::AiApproved),
-        None,
+        ctx_conversation_id(&ctx),
     )
     .await;
 
@@ -248,7 +248,7 @@ async fn handle_reject(ctx_id: &str, interaction: &Interaction, env: &Env) -> Re
             &ctx.tenant_id,
             &ctx.channel_account_id,
             Some(MessageAction::AiRejected),
-            None,
+            ctx_conversation_id(ctx),
         )
         .await;
     }
@@ -269,6 +269,18 @@ async fn handle_drop(ctx_id: &str, env: &Env) -> Result<Response> {
 
 fn ephemeral(content: &str) -> Result<Response> {
     Response::from_json(&InteractionResponse::ephemeral_message(content))
+}
+
+/// Read the conversation_id off a `ConversationContext` for stamping
+/// onto post-approval outbound rows. Empty string maps to `None` so
+/// pre-conversation_id records (or the relay path, which sets it
+/// blank by design) leave the column NULL.
+fn ctx_conversation_id(ctx: &crate::types::ConversationContext) -> Option<&str> {
+    if ctx.conversation_id.is_empty() {
+        None
+    } else {
+        Some(ctx.conversation_id.as_str())
+    }
 }
 
 #[cfg(test)]

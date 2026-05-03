@@ -738,6 +738,13 @@ pub struct ConversationContext {
     /// holding-pattern window don't re-spam them.
     #[serde(default)]
     pub handoff_notified: bool,
+    /// `Session.conversation_id` at the time this approval was queued.
+    /// Threaded through to the post-approval send paths
+    /// (Discord button, web admin) so the outbound row that finally
+    /// goes out gets stamped with the right conversation. Empty for
+    /// records created before this field existed.
+    #[serde(default)]
+    pub conversation_id: String,
 }
 
 /// Per-customer conversation session. Stable-keyed by
@@ -1479,6 +1486,7 @@ mod tests {
             created_at: "2026-01-01T00:00:00Z".into(),
             handoff_signaled_at: None,
             handoff_notified: false,
+            conversation_id: "conv-1".into(),
         };
         let json = serde_json::to_string(&ctx).unwrap();
         let parsed: ConversationContext = serde_json::from_str(&json).unwrap();

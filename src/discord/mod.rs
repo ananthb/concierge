@@ -57,6 +57,9 @@ pub async fn post_forwarded_message(
         created_at: crate::helpers::now_iso(),
         handoff_signaled_at: None,
         handoff_notified: false,
+        // Relay path (no AI): no active conversation. The downstream
+        // outbound row is logged with NULL conversation_id.
+        conversation_id: String::new(),
     };
 
     let (color, channel_label) = match msg.channel {

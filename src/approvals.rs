@@ -23,6 +23,7 @@ pub async fn enqueue(
     rule: &ReplyRule,
     draft: &str,
     reason: QueueReason,
+    conversation_id: &str,
 ) -> Result<()> {
     let kv = env.kv("KV")?;
     let db = env.d1("DB")?;
@@ -50,6 +51,7 @@ pub async fn enqueue(
         created_at: now_iso(),
         handoff_signaled_at: None,
         handoff_notified: false,
+        conversation_id: conversation_id.to_string(),
     };
 
     save_conversation_context(&kv, &ctx).await?;

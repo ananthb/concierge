@@ -275,6 +275,20 @@ async fn handle_auto_reply(
         None => HandoffMode::None,
     };
 
+    // Stamp the inbound row (logged earlier in `process_inbound` with
+    // NULL conversation_id) with the resolved id. We're past the
+    // is_ai gate, so this only runs when the inbound is actually
+    // entering a conversation. Best-effort: if the UPDATE fails the
+    // outbound rows still get stamped, and the row is reconstructable
+    // by adjacency.
+    if is_ai {
+        if let Err(e) =
+            crate::storage::update_message_conversation_id(db, &msg.id, &conversation_id).await
+        {
+            console_log!("Failed to stamp inbound conversation_id: {:?}", e);
+        }
+    }
+
     if matches!(handoff_mode, HandoffMode::Silent) {
         console_log!(
             "Handoff cooldown expired for tenant={} sender={}, going silent",
@@ -406,7 +420,9 @@ async fn handle_auto_reply(
         let persona_ref = persona.as_ref().expect("AI rule must have loaded persona");
         let decision = approval::decide(matched, &reply, persona_ref, allow_no_gate);
         if let approval::ApprovalDecision::Queue { reason } = decision {
-            if let Err(e) = approvals::enqueue(env, msg, matched, &reply, reason).await {
+            if let Err(e) =
+                approvals::enqueue(env, msg, matched, &reply, reason, &conversation_id).await
+            {
                 // Enqueue failed: don't send (we'd bypass the human review
                 // the rule asked for) and don't restore credit (the AI ran).
                 // Log for visibility and bail.

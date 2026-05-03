@@ -151,6 +151,11 @@ async fn approve(
         console_log!("Failed to mark approval row decided: {e:?}");
     }
 
+    let conversation_id_arg = if ctx.conversation_id.is_empty() {
+        None
+    } else {
+        Some(ctx.conversation_id.as_str())
+    };
     let _ = save_message(
         db,
         &generate_id(),
@@ -161,7 +166,7 @@ async fn approve(
         &ctx.tenant_id,
         &ctx.channel_account_id,
         Some(MessageAction::AiApproved),
-        None,
+        conversation_id_arg,
     )
     .await;
 
@@ -199,6 +204,15 @@ async fn reject(
         console_log!("Failed to restore credit on rejection: {e:?}");
     }
 
+    // Pull the ConversationContext so we can stamp the rejected
+    // outbound row with its conversation_id. Pre-conversation_id
+    // records (or a missing ctx) leave the column NULL.
+    let ctx = get_conversation_context(kv, &row.id).await.ok().flatten();
+    let conversation_id_arg = ctx
+        .as_ref()
+        .map(|c| c.conversation_id.as_str())
+        .filter(|s| !s.is_empty());
+
     let _ = save_message(
         db,
         &generate_id(),
@@ -209,7 +223,7 @@ async fn reject(
         &row.tenant_id,
         &row.channel_account_id,
         Some(MessageAction::AiRejected),
-        None,
+        conversation_id_arg,
     )
     .await;
 

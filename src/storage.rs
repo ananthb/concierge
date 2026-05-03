@@ -1037,6 +1037,27 @@ pub async fn save_inbound_message(
     .await
 }
 
+/// Stamp an existing message row with its `conversation_id`. Called
+/// from `handle_auto_reply` after we resolve the active conversation:
+/// the inbound row was logged at pipeline entry (before we knew the
+/// id), so we write it back here. Idempotent: re-running with the
+/// same id is harmless.
+///
+/// Note: in the buffered-DO path, only the *last* inbound's row in a
+/// batch gets stamped (it's the one carried as the synthetic
+/// `msg.id`). Earlier rows in the same batch stay NULL.
+pub async fn update_message_conversation_id(
+    db: &D1Database,
+    message_id: &str,
+    conversation_id: &str,
+) -> Result<()> {
+    let stmt = db.prepare("UPDATE messages SET conversation_id = ? WHERE id = ?");
+    stmt.bind(&[conversation_id.into(), message_id.into()])?
+        .run()
+        .await?;
+    Ok(())
+}
+
 /// Get recent unified messages for a tenant.
 pub async fn get_messages(
     db: &D1Database,
