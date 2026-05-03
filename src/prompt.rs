@@ -75,21 +75,32 @@ pub const HANDOFF_TOKEN: &str = "[[HANDOFF]]";
 /// human is already on the way.
 pub const HOLDING_PATTERN_MIDDLE: &str = "Voice: brief, calm, polite. The conversation has already been escalated to a human.\n\nA person on the team has been notified and will respond directly. Your job until they take over is to keep the customer comfortable, nothing more.\n\nFor any further customer message:\n- Acknowledge it in a single sentence.\n- Confirm a human is on the way.\n- Do not attempt to answer the underlying question.\n- Do not promise a response time.\n- Do not ask for more details.\n- Never emit [[HANDOFF]] again — handoff has already happened.";
 
-/// How long after the first handoff signal the worker stays in the
-/// holding-pattern path. Past this window, the worker stops replying
-/// entirely and lets the human take it from there. Hardcoded for now;
-/// promote to `NotificationConfig` if/when tenants need to tune it.
-pub const HANDOFF_COOLDOWN_MINS: i64 = 60;
+/// Default for how long after the first handoff signal the worker
+/// stays in the holding-pattern path. Past this window, the worker
+/// stops replying entirely and lets the human take it from there.
+/// Tenants can override via `ConversationConfig::handoff_cooldown_mins`;
+/// callers should resolve through
+/// [`crate::helpers::effective_conversation_window`] rather than
+/// reading this constant directly.
+pub const DEFAULT_HANDOFF_COOLDOWN_MINS: i64 = 60;
 
-/// Conversation boundary: when the customer has been silent on this
-/// thread for at least this long, the *next* inbound starts a fresh
-/// conversation — any in-progress handoff state is wiped, and the
-/// pipeline replies under the normal persona again. Six hours is long
-/// enough that a customer mulling a quote over lunch isn't kicked
-/// out, short enough that the next morning's message is genuinely
-/// fresh. Tenants can't tune this today; promote to
-/// `NotificationConfig` when real usage shows the default pinching.
-pub const CONVERSATION_IDLE_GAP_MINS: i64 = 6 * 60;
+/// Default conversation boundary: when the customer has been silent
+/// on this thread for at least this long, the *next* inbound starts
+/// a fresh conversation — any in-progress handoff state is wiped,
+/// the message history is cleared, and the pipeline replies under
+/// the normal persona again. Six hours is long enough that a
+/// customer mulling a quote over lunch isn't kicked out, short
+/// enough that the next morning's message is genuinely fresh.
+/// Per-tenant override lives on `ConversationConfig::idle_gap_mins`.
+pub const DEFAULT_CONVERSATION_IDLE_GAP_MINS: i64 = 6 * 60;
+
+/// Default cap on the number of recent (user/assistant) turns we
+/// keep as chat context for the AI on each turn. Twenty turns is
+/// roughly ten back-and-forths — plenty for the model to track a
+/// conversation, well below any token budget concerns even with the
+/// envelope and persona prepended. Per-tenant override lives on
+/// `ConversationConfig::max_history_messages`.
+pub const DEFAULT_CONVERSATION_MAX_MESSAGES: u32 = 20;
 
 /// Pure result of scanning a model reply for the handoff sentinel.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -362,8 +373,8 @@ mod tests {
     fn handoff_cooldown_is_a_reasonable_window() {
         // Sanity: not zero (would make the holding-pattern useless),
         // not absurdly long.
-        assert!(HANDOFF_COOLDOWN_MINS >= 5);
-        assert!(HANDOFF_COOLDOWN_MINS <= 24 * 60);
+        assert!(DEFAULT_HANDOFF_COOLDOWN_MINS >= 5);
+        assert!(DEFAULT_HANDOFF_COOLDOWN_MINS <= 24 * 60);
     }
 
     #[test]
@@ -371,10 +382,19 @@ mod tests {
         // Conversation must not "end" before the holding-pattern
         // window itself does — otherwise an active handoff would be
         // wiped while the human is still on the hook to take over.
-        assert!(CONVERSATION_IDLE_GAP_MINS > HANDOFF_COOLDOWN_MINS);
+        assert!(DEFAULT_CONVERSATION_IDLE_GAP_MINS > DEFAULT_HANDOFF_COOLDOWN_MINS);
         // Also sanity-cap so a bad edit doesn't silently persist
         // sessions for weeks.
-        assert!(CONVERSATION_IDLE_GAP_MINS <= 24 * 60);
+        assert!(DEFAULT_CONVERSATION_IDLE_GAP_MINS <= 24 * 60);
+    }
+
+    #[test]
+    fn max_history_messages_default_is_reasonable() {
+        // Cap should be high enough to track a real conversation
+        // (a dozen-ish turns), low enough that the prompt stays
+        // bounded under any plausible token budget.
+        assert!(DEFAULT_CONVERSATION_MAX_MESSAGES >= 4);
+        assert!(DEFAULT_CONVERSATION_MAX_MESSAGES <= 200);
     }
 
     #[test]

@@ -75,13 +75,20 @@ pub async fn generate_response(
 /// Generate a multi-turn chat reply. Distinct from `generate_response`,
 /// which packs a context map into a single user message — here, the
 /// caller passes the actual `(role, content)` history and we forward
-/// it verbatim. Used by the public `/demo/chat` endpoint.
+/// it verbatim. Used by the public `/demo/chat` endpoint AND the main
+/// pipeline (which hands over the conversation history stored on the
+/// `Session`).
 ///
 /// Shape mirrors `generate_response` exactly (no extra request fields)
 /// so it goes through the same Workers AI code path the lead form
 /// already exercises in production. Caller is expected to keep replies
 /// short via the system prompt; we don't pass `max_tokens` because
 /// some Workers AI model bindings reject unrecognized request keys.
+///
+/// Empty history is allowed but unusual — the model will see only the
+/// system prompt and have nothing to reply to. The pipeline always
+/// appends the inbound that just arrived before calling, so this
+/// degenerate case is reserved for tests / smoke checks.
 pub async fn generate_chat_reply(
     env: &Env,
     system_prompt: &str,

@@ -133,6 +133,7 @@ async fn expire_pass(db: &D1Database) {
                     &row.tenant_id,
                     &row.channel_account_id,
                     Some(MessageAction::AiExpired),
+                    None,
                 )
                 .await;
                 console_log!(

@@ -161,6 +161,7 @@ async fn approve(
         &ctx.tenant_id,
         &ctx.channel_account_id,
         Some(MessageAction::AiApproved),
+        None,
     )
     .await;
 
@@ -208,6 +209,7 @@ async fn reject(
         &row.tenant_id,
         &row.channel_account_id,
         Some(MessageAction::AiRejected),
+        None,
     )
     .await;
 

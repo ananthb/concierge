@@ -976,6 +976,10 @@ use crate::types::{
 };
 
 /// Save a unified message to D1. No message content stored: metadata only.
+///
+/// `conversation_id` ties this row to a `Session.conversation_id`. AI
+/// flows always pass `Some(...)`; canned-only or pre-AI inbound flows
+/// pass `None` because no conversation exists yet.
 pub async fn save_message(
     db: &D1Database,
     id: &str,
@@ -986,10 +990,11 @@ pub async fn save_message(
     tenant_id: &str,
     channel_account_id: &str,
     action_taken: Option<MessageAction>,
+    conversation_id: Option<&str>,
 ) -> Result<()> {
     let stmt = db.prepare(
-        "INSERT INTO messages (id, channel, direction, sender, recipient, tenant_id, channel_account_id, action_taken)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO messages (id, channel, direction, sender, recipient, tenant_id, channel_account_id, action_taken, conversation_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
     );
     stmt.bind(&[
         id.into(),
@@ -1001,6 +1006,9 @@ pub async fn save_message(
         channel_account_id.into(),
         action_taken
             .map(|a| JsValue::from(a.as_str()))
+            .unwrap_or(JsValue::null()),
+        conversation_id
+            .map(JsValue::from)
             .unwrap_or(JsValue::null()),
     ])?
     .run()
@@ -1024,6 +1032,7 @@ pub async fn save_inbound_message(
         &msg.tenant_id,
         &msg.channel_account_id,
         action_taken,
+        None,
     )
     .await
 }

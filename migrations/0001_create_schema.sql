@@ -80,7 +80,16 @@ CREATE INDEX IF NOT EXISTS idx_instagram_messages_account
 CREATE INDEX IF NOT EXISTS idx_instagram_messages_tenant
     ON instagram_messages(tenant_id, created_at);
 
--- Unified message log (all channels)
+-- Unified message log (all channels).
+--
+-- `conversation_id` ties a row to a `Session.conversation_id` (KV).
+-- AI flows always stamp it on outbound rows; inbound rows leave it
+-- NULL today (the inbound is logged before we know whether it'll
+-- enter an AI conversation). Canned-only flows leave it NULL too —
+-- those threads don't run through the conversation/handoff machine.
+-- Reconstructing a conversation from this table = filter by
+-- conversation_id on outbounds, then join to nearby inbounds via
+-- (sender, channel_account_id) and timestamp.
 CREATE TABLE IF NOT EXISTS messages (
     id TEXT PRIMARY KEY,
     channel TEXT NOT NULL,
@@ -90,11 +99,13 @@ CREATE TABLE IF NOT EXISTS messages (
     tenant_id TEXT NOT NULL,
     channel_account_id TEXT NOT NULL DEFAULT '',
     action_taken TEXT,
+    conversation_id TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_messages_tenant ON messages(tenant_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_messages_channel ON messages(channel, tenant_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_messages_channel_account ON messages(channel_account_id);
+CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(conversation_id, created_at);
 
 -- Payment history
 CREATE TABLE IF NOT EXISTS payments (

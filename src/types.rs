@@ -712,8 +712,9 @@ pub struct InboundMessage {
 /// the AI emits the handoff token in a reply, the pipeline records
 /// `handoff_signaled_at` here so subsequent customer messages on the
 /// same conversation route through the holding-pattern prompt instead
-/// of the persona — and stop replying entirely after
-/// [`crate::prompt::HANDOFF_COOLDOWN_MINS`].
+/// of the persona — and stop replying entirely after the tenant's
+/// effective handoff cooldown (see
+/// [`crate::prompt::DEFAULT_HANDOFF_COOLDOWN_MINS`]).
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct ConversationContext {
     pub id: String,
@@ -745,15 +746,17 @@ pub struct ConversationContext {
 ///
 /// Concierge doesn't have a formal "thread" object — a Session is the
 /// soft equivalent. A conversation is considered ended once the
-/// customer has been silent for
-/// [`crate::prompt::CONVERSATION_IDLE_GAP_MINS`]: the next inbound
-/// after that gap starts a fresh conversation (any in-progress handoff
-/// state is wiped). Within the gap, all inbound from the same sender
-/// belong to the same conversation regardless of length.
+/// customer has been silent for the tenant's effective idle gap (see
+/// [`crate::prompt::DEFAULT_CONVERSATION_IDLE_GAP_MINS`] and
+/// [`ConversationConfig`]): the next inbound after that gap starts a
+/// fresh conversation (any in-progress handoff state is wiped, and
+/// the message history is cleared). Within the gap, all inbound from
+/// the same sender belong to the same conversation regardless of
+/// length.
 ///
 /// This is distinct from `ConversationContext` (which is per
 /// AI-draft-approval). Sessions are per-thread.
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct Session {
     /// RFC3339 timestamp of the most recent inbound message we
     /// processed for this thread. Updated on every inbound, including
@@ -761,25 +764,122 @@ pub struct Session {
     /// customer keeps pinging within the idle gap, the thread stays
     /// bound to the same conversation (and the same handoff record,
     /// if any).
+    #[serde(default)]
     pub last_inbound_at: String,
     /// In-progress handoff sub-state. `None` for a normal conversation;
     /// populated once the AI signals a handoff. Cleared at conversation
     /// boundaries (idle gap exceeded).
     #[serde(default)]
     pub handoff: Option<HandoffState>,
+    /// Stable id for the active conversation. Bumped when the idle-gap
+    /// fires and a fresh conversation starts. Stamped onto every D1
+    /// `messages` row written for this thread so an audit log can
+    /// reconstruct who said what to whom in which conversation.
+    #[serde(default)]
+    pub conversation_id: String,
+    /// Bounded list of recent turns within this conversation,
+    /// forming the chat context handed back to the model on each
+    /// turn. Capped to the tenant's effective `max_history_messages`.
+    /// Cleared when a fresh conversation starts.
+    #[serde(default)]
+    pub messages: Vec<ConversationMessage>,
+}
+
+/// One turn inside a `Session.messages` list. Roles mirror what
+/// Workers AI expects in its `messages` array — `User` for inbound
+/// customer text, `Assistant` for outbound replies we actually sent.
+/// Drafts queued for approval are NOT recorded here: only sent
+/// outbounds become history.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct ConversationMessage {
+    pub role: ConversationRole,
+    pub content: String,
+    /// RFC3339 timestamp of the turn. Useful for audit/diagnostics;
+    /// not currently used by the AI call itself.
+    pub at: String,
+}
+
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ConversationRole {
+    User,
+    Assistant,
+}
+
+impl ConversationRole {
+    pub fn as_wire(self) -> &'static str {
+        match self {
+            ConversationRole::User => "user",
+            ConversationRole::Assistant => "assistant",
+        }
+    }
 }
 
 /// Per-conversation handoff state. Lives inside `Session::handoff`.
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct HandoffState {
     /// RFC3339 timestamp of the AI turn that emitted the handoff
-    /// token. Used to compute the cooldown window
-    /// ([`crate::prompt::HANDOFF_COOLDOWN_MINS`]).
+    /// token. Used to compute the cooldown window (see
+    /// [`crate::prompt::DEFAULT_HANDOFF_COOLDOWN_MINS`] and the
+    /// per-tenant override in [`ConversationConfig`]).
     pub signaled_at: String,
     /// One-shot guard so additional customer messages inside the
     /// holding-pattern window don't re-page the tenant.
     #[serde(default)]
     pub notified: bool,
+}
+
+/// Per-tenant overrides for the conversation timing knobs. All fields
+/// are `Option`: a `None` means "use the global default" from
+/// `prompt::DEFAULT_*`. Lives on `OnboardingState`. Pipeline collapses
+/// the optionals into concrete numbers via [`ConversationConfig::resolve`].
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+pub struct ConversationConfig {
+    /// How long the customer can stay silent before the next inbound
+    /// is treated as a fresh conversation. Falls back to
+    /// [`crate::prompt::DEFAULT_CONVERSATION_IDLE_GAP_MINS`].
+    #[serde(default)]
+    pub idle_gap_mins: Option<u32>,
+    /// How long after a handoff signal we keep replying with the
+    /// holding-pattern voice before going silent. Falls back to
+    /// [`crate::prompt::DEFAULT_HANDOFF_COOLDOWN_MINS`].
+    #[serde(default)]
+    pub handoff_cooldown_mins: Option<u32>,
+    /// How many recent turns we keep as chat context for the AI.
+    /// Falls back to
+    /// [`crate::prompt::DEFAULT_CONVERSATION_MAX_MESSAGES`].
+    #[serde(default)]
+    pub max_history_messages: Option<u32>,
+}
+
+impl ConversationConfig {
+    /// Collapse the optional per-tenant overrides into concrete
+    /// numbers, falling back to the `prompt::DEFAULT_*` constants for
+    /// any field the tenant has not overridden. Pure: no KV/D1 reads.
+    pub fn resolve(&self) -> ConversationWindow {
+        ConversationWindow {
+            idle_gap_mins: self
+                .idle_gap_mins
+                .map(|v| v as i64)
+                .unwrap_or(crate::prompt::DEFAULT_CONVERSATION_IDLE_GAP_MINS),
+            handoff_cooldown_mins: self
+                .handoff_cooldown_mins
+                .map(|v| v as i64)
+                .unwrap_or(crate::prompt::DEFAULT_HANDOFF_COOLDOWN_MINS),
+            max_history_messages: self
+                .max_history_messages
+                .unwrap_or(crate::prompt::DEFAULT_CONVERSATION_MAX_MESSAGES),
+        }
+    }
+}
+
+/// Concrete per-turn conversation window. Output of
+/// [`ConversationConfig::resolve`]; consumed by the pipeline.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ConversationWindow {
+    pub idle_gap_mins: i64,
+    pub handoff_cooldown_mins: i64,
+    pub max_history_messages: u32,
 }
 
 /// Business information for KYC / Indian regulatory compliance.
@@ -1060,6 +1160,8 @@ pub struct OnboardingState {
     pub business: BusinessInfo,
     #[serde(default)]
     pub notifications: NotificationConfig,
+    #[serde(default)]
+    pub conversation: ConversationConfig,
     #[serde(default)]
     pub persona: PersonaConfig,
     /// Default wait_seconds copied into ReplyConfig on every channel account
@@ -1417,6 +1519,111 @@ mod tests {
                 .as_deref(),
             Some("Hello!")
         );
+    }
+
+    #[test]
+    fn conversation_config_resolve_uses_defaults_when_unset() {
+        let cfg = ConversationConfig::default();
+        let win = cfg.resolve();
+        assert_eq!(
+            win.idle_gap_mins,
+            crate::prompt::DEFAULT_CONVERSATION_IDLE_GAP_MINS
+        );
+        assert_eq!(
+            win.handoff_cooldown_mins,
+            crate::prompt::DEFAULT_HANDOFF_COOLDOWN_MINS
+        );
+        assert_eq!(
+            win.max_history_messages,
+            crate::prompt::DEFAULT_CONVERSATION_MAX_MESSAGES
+        );
+    }
+
+    #[test]
+    fn conversation_config_resolve_honors_overrides() {
+        let cfg = ConversationConfig {
+            idle_gap_mins: Some(30),
+            handoff_cooldown_mins: Some(15),
+            max_history_messages: Some(8),
+        };
+        let win = cfg.resolve();
+        assert_eq!(win.idle_gap_mins, 30);
+        assert_eq!(win.handoff_cooldown_mins, 15);
+        assert_eq!(win.max_history_messages, 8);
+    }
+
+    #[test]
+    fn conversation_config_resolve_partial_overrides_fall_back_per_field() {
+        // Only idle_gap is overridden; the other two should pick up
+        // their defaults independently.
+        let cfg = ConversationConfig {
+            idle_gap_mins: Some(45),
+            handoff_cooldown_mins: None,
+            max_history_messages: None,
+        };
+        let win = cfg.resolve();
+        assert_eq!(win.idle_gap_mins, 45);
+        assert_eq!(
+            win.handoff_cooldown_mins,
+            crate::prompt::DEFAULT_HANDOFF_COOLDOWN_MINS
+        );
+        assert_eq!(
+            win.max_history_messages,
+            crate::prompt::DEFAULT_CONVERSATION_MAX_MESSAGES
+        );
+    }
+
+    #[test]
+    fn session_round_trips_with_messages_and_conversation_id() {
+        let session = Session {
+            last_inbound_at: "2026-05-04T12:00:00.000Z".to_string(),
+            handoff: None,
+            conversation_id: "conv-abc".to_string(),
+            messages: vec![
+                ConversationMessage {
+                    role: ConversationRole::User,
+                    content: "hi there".to_string(),
+                    at: "2026-05-04T12:00:00.000Z".to_string(),
+                },
+                ConversationMessage {
+                    role: ConversationRole::Assistant,
+                    content: "hello!".to_string(),
+                    at: "2026-05-04T12:00:01.000Z".to_string(),
+                },
+            ],
+        };
+        let s = serde_json::to_string(&session).unwrap();
+        let back: Session = serde_json::from_str(&s).unwrap();
+        assert_eq!(back.conversation_id, "conv-abc");
+        assert_eq!(back.messages.len(), 2);
+        assert_eq!(back.messages[0].role, ConversationRole::User);
+        assert_eq!(back.messages[1].role, ConversationRole::Assistant);
+        assert_eq!(back.messages[1].content, "hello!");
+    }
+
+    #[test]
+    fn session_deserializes_legacy_records_without_messages_field() {
+        // Old KV records (pre-conversation-history) lack messages,
+        // conversation_id. With #[serde(default)] they should still
+        // load — empty list, empty id — and the pipeline will mint a
+        // fresh conversation_id on next turn.
+        let legacy_json = r#"{
+            "last_inbound_at": "2026-05-04T12:00:00.000Z",
+            "handoff": null
+        }"#;
+        let parsed: Session = serde_json::from_str(legacy_json).unwrap();
+        assert_eq!(parsed.last_inbound_at, "2026-05-04T12:00:00.000Z");
+        assert!(parsed.handoff.is_none());
+        assert!(parsed.conversation_id.is_empty());
+        assert!(parsed.messages.is_empty());
+    }
+
+    #[test]
+    fn conversation_role_wire_strings_are_stable() {
+        // Workers AI's chat schema requires "user" / "assistant" exact
+        // strings; the pipeline relies on these wire values.
+        assert_eq!(ConversationRole::User.as_wire(), "user");
+        assert_eq!(ConversationRole::Assistant.as_wire(), "assistant");
     }
 }
 

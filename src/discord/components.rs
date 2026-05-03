@@ -124,6 +124,7 @@ async fn send_relay_reply(ctx_id: &str, reply_text: &str, env: &Env) -> Result<R
         &ctx.tenant_id,
         &ctx.channel_account_id,
         Some(MessageAction::Relay),
+        None,
     )
     .await;
 
@@ -195,6 +196,7 @@ async fn handle_approve(ctx_id: &str, interaction: &Interaction, env: &Env) -> R
         &ctx.tenant_id,
         &ctx.channel_account_id,
         Some(MessageAction::AiApproved),
+        None,
     )
     .await;
 
@@ -246,6 +248,7 @@ async fn handle_reject(ctx_id: &str, interaction: &Interaction, env: &Env) -> Re
             &ctx.tenant_id,
             &ctx.channel_account_id,
             Some(MessageAction::AiRejected),
+            None,
         )
         .await;
     }

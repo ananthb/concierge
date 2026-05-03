@@ -167,16 +167,23 @@ async fn handle_auto_reply(
         .find(|rule| matches_rule(&rule.matcher, &safe_body, body_embedding.as_deref()))
         .unwrap_or(&config.default_rule);
 
-    // Load persona for AI-mode rules. Skip the load entirely when the
-    // matched rule is canned — saves a KV hit on the hot keyword path.
-    let needs_persona = matches!(matched.response, ReplyResponse::Prompt { .. });
-    let persona = if needs_persona {
-        Some(get_onboarding(kv, &msg.tenant_id).await?.persona)
+    let is_ai = matches!(matched.response, ReplyResponse::Prompt { .. });
+
+    // Load full onboarding state once for AI-mode rules. We need the
+    // persona (for the prompt) AND the conversation knobs (for the
+    // idle-gap / handoff-cooldown / history-cap window). Skipping the
+    // load on canned-only rules saves a KV hit on the hot keyword
+    // path.
+    let onboarding = if is_ai {
+        Some(get_onboarding(kv, &msg.tenant_id).await?)
     } else {
         None
     };
-
-    let is_ai = matches!(matched.response, ReplyResponse::Prompt { .. });
+    let persona = onboarding.as_ref().map(|o| o.persona.clone());
+    let window = onboarding
+        .as_ref()
+        .map(|o| o.conversation.resolve())
+        .unwrap_or_else(|| crate::types::ConversationConfig::default().resolve());
 
     // Block AI replies unless the persona has been approved AND the prompt
     // hasn't drifted since approval.
@@ -195,18 +202,19 @@ async fn handle_auto_reply(
     }
 
     // Resolve the conversation session for this customer thread before
-    // we burn an AI credit. Two boundaries shape the behavior:
+    // we burn an AI credit. Two boundaries shape the behavior, both
+    // sourced from the tenant's effective `ConversationWindow`:
     //
-    //   1. Conversation idle gap (CONVERSATION_IDLE_GAP_MINS): if the
-    //      customer has been silent for at least this long, the
-    //      previous conversation is over — we wipe any in-progress
-    //      handoff and treat this inbound as a fresh question.
+    //   1. Conversation idle gap: if the customer has been silent for
+    //      at least this long, the previous conversation is over — we
+    //      wipe any in-progress handoff and the message history, mint
+    //      a fresh conversation_id, and treat this inbound as a fresh
+    //      question.
     //
-    //   2. Handoff cooldown (HANDOFF_COOLDOWN_MINS): once the AI has
-    //      signaled handoff on this conversation, the next
-    //      cooldown-window of replies are holding-pattern, then we go
-    //      silent until the conversation ends (idle gap or the human
-    //      taking over via the channel).
+    //   2. Handoff cooldown: once the AI has signaled handoff on this
+    //      conversation, the next cooldown-window of replies are
+    //      holding-pattern, then we go silent until the conversation
+    //      ends (idle gap or the human taking over via the channel).
     //
     // Three handoff branches:
     //   - None:           reply under the persona normally.
@@ -233,7 +241,7 @@ async fn handle_auto_reply(
     let conversation_ended = match existing_session.as_ref() {
         Some(s) => match age_minutes(&s.last_inbound_at) {
             // Idle gap exceeded: conversation is over.
-            Some(mins) => mins >= crate::prompt::CONVERSATION_IDLE_GAP_MINS,
+            Some(mins) => mins >= window.idle_gap_mins,
             // Unparseable timestamp: treat as fresh.
             None => true,
         },
@@ -244,11 +252,23 @@ async fn handle_auto_reply(
     } else {
         existing_session.as_ref().and_then(|s| s.handoff.clone())
     };
+    // Carry the conversation_id and message history if (and only if)
+    // we're continuing the same conversation. Idle-gap reset wipes
+    // both. A non-empty existing id with no idle-gap reset is reused;
+    // anything else mints a fresh id.
+    let (conversation_id, prior_messages) = if conversation_ended {
+        (crate::helpers::generate_id(), Vec::new())
+    } else {
+        match existing_session.as_ref() {
+            Some(s) if !s.conversation_id.is_empty() => {
+                (s.conversation_id.clone(), s.messages.clone())
+            }
+            _ => (crate::helpers::generate_id(), Vec::new()),
+        }
+    };
     let handoff_mode = match active_handoff.as_ref() {
         Some(h) => match age_minutes(&h.signaled_at) {
-            Some(mins) if mins < crate::prompt::HANDOFF_COOLDOWN_MINS => {
-                HandoffMode::HoldingPattern
-            }
+            Some(mins) if mins < window.handoff_cooldown_mins => HandoffMode::HoldingPattern,
             Some(_) => HandoffMode::Silent,
             None => HandoffMode::None,
         },
@@ -263,11 +283,18 @@ async fn handle_auto_reply(
         );
         // Still update last_inbound_at so the idle gap is measured
         // from this ping — that way the customer eventually escapes
-        // the silent window once they actually go quiet.
+        // the silent window once they actually go quiet. Append the
+        // inbound to history so the audit/context is complete; the
+        // history isn't used while we're silent, but max-cap guards
+        // against unbounded growth.
         let now = crate::helpers::now_iso();
+        let mut messages = prior_messages;
+        push_user_turn(&mut messages, &safe_body, &now, window.max_history_messages);
         let new_session = crate::types::Session {
             last_inbound_at: now,
             handoff: active_handoff.clone(),
+            conversation_id: conversation_id.clone(),
+            messages,
         };
         let _ = crate::storage::save_conversation_session(
             kv,
@@ -285,6 +312,19 @@ async fn handle_auto_reply(
         console_log!("Tenant {} out of AI-reply credits, skipping", msg.tenant_id);
         return Ok(());
     }
+
+    // Build the chat history we'll hand to the model: prior turns
+    // (capped) plus the new inbound as the latest user turn. The same
+    // shape — Vec<(role, content)> — is also what `generate_chat_reply`
+    // expects, so we can pass it through verbatim.
+    let now_iso = crate::helpers::now_iso();
+    let mut session_messages = prior_messages;
+    push_user_turn(
+        &mut session_messages,
+        &safe_body,
+        &now_iso,
+        window.max_history_messages,
+    );
 
     let reply = match &matched.response {
         ReplyResponse::Canned { text } => text.clone(),
@@ -316,17 +356,12 @@ async fn handle_auto_reply(
                 }
             };
 
-            let mut context = serde_json::Map::new();
-            if let Some(ref name) = msg.sender_name {
-                let safe_name: String = name.chars().take(100).collect();
-                context.insert("sender_name".into(), serde_json::Value::String(safe_name));
-            }
-            context.insert(
-                "message".into(),
-                serde_json::Value::String(safe_body.clone()),
-            );
+            let history: Vec<(String, String)> = session_messages
+                .iter()
+                .map(|m| (m.role.as_wire().to_string(), m.content.clone()))
+                .collect();
 
-            match ai::generate_response(env, &wrapped, &context).await {
+            match ai::generate_chat_reply(env, &wrapped, &history).await {
                 Ok(r) => r,
                 Err(e) => {
                     console_log!("AI auto-reply error: {:?}", e);
@@ -388,10 +423,34 @@ async fn handle_auto_reply(
                 &msg.tenant_id,
                 &msg.channel_account_id,
                 Some(MessageAction::AiQueued),
+                Some(&conversation_id),
             )
             .await
             {
                 console_log!("Failed to log queued message: {:?}", e);
+            }
+            // Persist the inbound turn we just appended, but do NOT
+            // append the queued draft as an assistant turn — only
+            // sent outbounds enter the conversation history. (If the
+            // draft is rejected or edited later, an unsent assistant
+            // turn would poison the next AI call.)
+            let new_session = crate::types::Session {
+                last_inbound_at: now_iso,
+                handoff: active_handoff.clone(),
+                conversation_id: conversation_id.clone(),
+                messages: session_messages,
+            };
+            if let Err(e) = crate::storage::save_conversation_session(
+                kv,
+                &msg.tenant_id,
+                &msg.channel,
+                &msg.channel_account_id,
+                &msg.sender,
+                &new_session,
+            )
+            .await
+            {
+                console_log!("Failed to persist conversation session: {:?}", e);
             }
             return Ok(());
         }
@@ -416,6 +475,11 @@ async fn handle_auto_reply(
         return Ok(());
     }
 
+    let outbound_conversation_id: Option<&str> = if is_ai {
+        Some(conversation_id.as_str())
+    } else {
+        None
+    };
     if let Err(e) = save_message(
         db,
         &generate_id(),
@@ -426,27 +490,35 @@ async fn handle_auto_reply(
         &msg.tenant_id,
         &msg.channel_account_id,
         Some(MessageAction::AutoReply),
+        outbound_conversation_id,
     )
     .await
     {
         console_log!("Failed to log outbound message: {:?}", e);
     }
 
-    // Persist the conversation session. Three things happen here:
+    // Persist the conversation session. Four things happen here:
     //   - `last_inbound_at` is bumped to now so the idle-gap clock
     //     restarts from this ping.
     //   - If the model just signaled handoff on this turn, stamp a
     //     fresh `HandoffState` in.
     //   - Otherwise carry over whatever handoff sub-state we were
     //     already running with (still in holding-pattern, or none).
+    //   - If we actually sent an AI reply (vs canned), append the
+    //     assistant turn to history so the next turn has it as
+    //     context. Canned replies skip session writes entirely —
+    //     they don't use the conversation machinery.
     //
     // For a brand-new handoff we then page the tenant exactly once.
     // The notify call is best-effort — failing to fan out shouldn't
     // tear down the inbound flow.
-    let now = crate::helpers::now_iso();
+    if !is_ai {
+        return Ok(());
+    }
+
     let mut session_handoff = if new_handoff {
         Some(crate::types::HandoffState {
-            signaled_at: now.clone(),
+            signaled_at: now_iso.clone(),
             notified: false,
         })
     } else {
@@ -473,9 +545,18 @@ async fn handle_auto_reply(
         }
     }
 
+    push_assistant_turn(
+        &mut session_messages,
+        &reply,
+        &now_iso,
+        window.max_history_messages,
+    );
+
     let new_session = crate::types::Session {
-        last_inbound_at: now,
+        last_inbound_at: now_iso,
         handoff: session_handoff,
+        conversation_id,
+        messages: session_messages,
     };
     if let Err(e) = crate::storage::save_conversation_session(
         kv,
@@ -491,6 +572,52 @@ async fn handle_auto_reply(
     }
 
     Ok(())
+}
+
+/// Append a user turn to the running `messages` list and trim from the
+/// front to keep the cap honored. The cap is the tenant's effective
+/// `max_history_messages` — never zero in practice (resolver clamps
+/// to the default), so we don't bother special-casing it. `at` is the
+/// turn's RFC3339 timestamp; the caller's "now" works for both
+/// inbound (just-arrived) and assistant (just-sent) turns.
+fn push_user_turn(
+    messages: &mut Vec<crate::types::ConversationMessage>,
+    body: &str,
+    at: &str,
+    max: u32,
+) {
+    messages.push(crate::types::ConversationMessage {
+        role: crate::types::ConversationRole::User,
+        content: body.to_string(),
+        at: at.to_string(),
+    });
+    trim_to_max(messages, max);
+}
+
+fn push_assistant_turn(
+    messages: &mut Vec<crate::types::ConversationMessage>,
+    body: &str,
+    at: &str,
+    max: u32,
+) {
+    messages.push(crate::types::ConversationMessage {
+        role: crate::types::ConversationRole::Assistant,
+        content: body.to_string(),
+        at: at.to_string(),
+    });
+    trim_to_max(messages, max);
+}
+
+fn trim_to_max(messages: &mut Vec<crate::types::ConversationMessage>, max: u32) {
+    let max = max as usize;
+    if max == 0 {
+        messages.clear();
+        return;
+    }
+    if messages.len() > max {
+        let excess = messages.len() - max;
+        messages.drain(0..excess);
+    }
 }
 
 /// Minutes between an ISO/RFC3339 timestamp and now. Uses the
@@ -536,5 +663,89 @@ fn matches_rule(matcher: &ReplyMatcher, body: &str, body_embedding: Option<&[f32
             }
             ai::cosine(body_vec, embedding) >= *threshold
         }
+    }
+}
+
+#[cfg(test)]
+mod history_tests {
+    use super::*;
+    use crate::types::{ConversationMessage, ConversationRole};
+
+    fn msg(role: ConversationRole, content: &str) -> ConversationMessage {
+        ConversationMessage {
+            role,
+            content: content.to_string(),
+            at: "2026-05-04T12:00:00.000Z".to_string(),
+        }
+    }
+
+    #[test]
+    fn push_user_turn_appends_and_keeps_role() {
+        let mut messages = vec![msg(ConversationRole::Assistant, "hi")];
+        push_user_turn(&mut messages, "hello again", "2026-05-04T12:01:00.000Z", 10);
+        assert_eq!(messages.len(), 2);
+        assert_eq!(messages[1].role, ConversationRole::User);
+        assert_eq!(messages[1].content, "hello again");
+        assert_eq!(messages[1].at, "2026-05-04T12:01:00.000Z");
+    }
+
+    #[test]
+    fn push_assistant_turn_appends_and_keeps_role() {
+        let mut messages = vec![msg(ConversationRole::User, "ping")];
+        push_assistant_turn(&mut messages, "pong", "2026-05-04T12:01:00.000Z", 10);
+        assert_eq!(messages.len(), 2);
+        assert_eq!(messages[1].role, ConversationRole::Assistant);
+        assert_eq!(messages[1].content, "pong");
+    }
+
+    #[test]
+    fn trim_drops_oldest_when_over_cap() {
+        let mut messages = vec![
+            msg(ConversationRole::User, "u1"),
+            msg(ConversationRole::Assistant, "a1"),
+            msg(ConversationRole::User, "u2"),
+            msg(ConversationRole::Assistant, "a2"),
+            msg(ConversationRole::User, "u3"),
+        ];
+        trim_to_max(&mut messages, 3);
+        assert_eq!(messages.len(), 3);
+        // Oldest two ("u1", "a1") were drained; the most recent three remain.
+        assert_eq!(messages[0].content, "u2");
+        assert_eq!(messages[1].content, "a2");
+        assert_eq!(messages[2].content, "u3");
+    }
+
+    #[test]
+    fn trim_no_op_when_under_cap() {
+        let mut messages = vec![
+            msg(ConversationRole::User, "u1"),
+            msg(ConversationRole::Assistant, "a1"),
+        ];
+        trim_to_max(&mut messages, 10);
+        assert_eq!(messages.len(), 2);
+    }
+
+    #[test]
+    fn trim_with_zero_cap_clears() {
+        // A pathological 0 max (only reachable if a tenant explicitly
+        // sets max_history_messages to 0) clears history entirely
+        // rather than tripping a slice underflow.
+        let mut messages = vec![msg(ConversationRole::User, "u1")];
+        trim_to_max(&mut messages, 0);
+        assert!(messages.is_empty());
+    }
+
+    #[test]
+    fn push_user_turn_caps_at_max_when_already_full() {
+        let mut messages = vec![
+            msg(ConversationRole::User, "u1"),
+            msg(ConversationRole::Assistant, "a1"),
+            msg(ConversationRole::User, "u2"),
+        ];
+        push_user_turn(&mut messages, "u3", "2026-05-04T12:01:00.000Z", 3);
+        assert_eq!(messages.len(), 3);
+        // u1 was evicted; the new u3 is at the tail.
+        assert_eq!(messages[0].content, "a1");
+        assert_eq!(messages[2].content, "u3");
     }
 }
