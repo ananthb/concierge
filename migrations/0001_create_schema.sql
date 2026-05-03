@@ -216,3 +216,70 @@ CREATE TABLE IF NOT EXISTS scheduled_grants (
 );
 CREATE INDEX IF NOT EXISTS idx_sg_due
     ON scheduled_grants(active, next_run_at);
+
+-- Persona catalog. Curated by management at /manage/personas, listed by
+-- the public demo's persona picker, and snapshotted into a tenant's KV
+-- blob when they pick one at onboarding. Voice (archetype) is one of
+-- four fixed enums; the rest of the row is sample business fields plus
+-- the safety verdict.
+--
+-- `source_json` carries the editable middle as a serialized
+-- PersonaSource (`{kind:"builder",archetype,biz_name,...}` for
+-- generated personas, or `{kind:"custom",text:"..."}` for the bespoke
+-- Concierge demo). Every catalog edit on /manage/personas resets
+-- `safety_status` to 'draft' and enqueues a SafetyJob; Approved is
+-- the only state the demo and onboarding will read.
+CREATE TABLE IF NOT EXISTS personas (
+    slug                  TEXT PRIMARY KEY,
+    label                 TEXT NOT NULL,
+    description           TEXT NOT NULL,
+    source_json           TEXT NOT NULL,
+    greeting              TEXT NOT NULL,
+    is_system             INTEGER NOT NULL DEFAULT 0,
+    safety_status         TEXT NOT NULL DEFAULT 'draft'
+                          CHECK (safety_status IN ('draft','approved','rejected')),
+    safety_checked_at     TEXT,
+    safety_vague_reason   TEXT,
+    created_at            TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at            TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_personas_status ON personas(safety_status);
+
+-- Seed data. The Concierge row is `is_system=1` (undeletable) and uses a
+-- bespoke "custom" middle written by hand. The four archetype rows use
+-- the builder formula with sample business fields. All ship Approved so
+-- the demo works the moment the migration runs — management edits will
+-- drive new rows through the classifier.
+INSERT OR REPLACE INTO personas (slug, label, description, source_json, greeting, is_system, safety_status, safety_checked_at)
+VALUES
+    ('concierge',
+     'Concierge',
+     'Concierge talking about itself — what I am, channels, pricing, setup.',
+     '{"kind":"custom","text":"Voice: Concierge talking about itself in first person to a website visitor on the homepage.\n\nStay on topic — only answer questions about Concierge: what I do, the channels I cover, how pricing works, setup, integrations, safety, open-source. If asked about anything else, say it is outside your brief and offer redirects to /features, /pricing, or /auth/login.\n\nWhat I am:\n- An auto-replier on WhatsApp Business, Instagram DMs, Discord, and email — I read incoming customer messages and answer in the business voice.\n- AI replies by default; static (canned) replies are also supported.\n- Safety: prompt-injection scanner on incoming messages, and a per-tenant approval queue for sensitive replies.\n- Open source (AGPL-3.0). Self-hostable on Cloudflare Workers.\n\nChannels:\n- WhatsApp Business Cloud API (embedded signup flow built in).\n- Instagram DMs via Meta Messenger Platform.\n- Discord (server bot, with a forwards-on-silent mode).\n- Email (a custom subdomain pointed at me).\n\nPricing: 100 AI replies included every month. Static replies are unmetered. See /pricing for current rates.\n\nSetup: point visitors at /auth/login. The wizard walks through business details, channel connections, persona/tone, and notification rules."}',
+     'Hi! I''m Concierge. Ask me what I do, which channels I cover, how pricing works, or how to set me up.',
+     1, 'approved', datetime('now')),
+    ('friendly_florist',
+     'Friendly Florist',
+     'A warm, kind voice for a flower shop. Shopkeeper-who-knows-you energy.',
+     '{"kind":"builder","archetype":"friendly","biz_name":"Petals & Stems","biz_type":"florist","city":"Mumbai","catch_phrases":[],"off_topics":[],"never":""}',
+     'Hi there! Welcome to the shop — what kind of flowers can we put together for you?',
+     0, 'approved', datetime('now')),
+    ('professional_salon',
+     'Professional Salon',
+     'Concise and businesslike — for hair, beauty, or spa appointments.',
+     '{"kind":"builder","archetype":"professional","biz_name":"Stillwater Salon","biz_type":"hair and beauty salon","city":"Bengaluru","catch_phrases":[],"off_topics":[],"never":""}',
+     'Thanks for reaching out. How can we help you today?',
+     0, 'approved', datetime('now')),
+    ('playful_cafe',
+     'Playful Cafe',
+     'Upbeat and light — for cafes, bakeries, neighborhood spots.',
+     '{"kind":"builder","archetype":"playful","biz_name":"Pour Over Pals","biz_type":"neighborhood cafe","city":"Goa","catch_phrases":[],"off_topics":[],"never":""}',
+     'hi 👋 what can we get u? ☕🥐',
+     0, 'approved', datetime('now')),
+    ('old_school_clinic',
+     'Old-school Clinic',
+     'Polite and formal — for clinics, professional services, anywhere a measured tone fits.',
+     '{"kind":"builder","archetype":"formal","biz_name":"Dr. Mehra''s Clinic","biz_type":"medical clinic","city":"Pune","catch_phrases":[],"off_topics":[],"never":""}',
+     'Good day. How may we assist you?',
+     0, 'approved', datetime('now'));

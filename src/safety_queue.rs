@@ -1,12 +1,14 @@
 //! Cloudflare Queue producer + consumer for persona safety checks.
 //!
-//! When a tenant saves a persona, the admin handler enqueues a `SafetyJob`.
-//! The queue consumer (wired in `lib.rs` via `#[event(queue)]`) re-reads the
-//! persona, confirms the prompt hash hasn't drifted (a newer save would
-//! supersede this job), runs the classifier, and writes the verdict back.
+//! When a tenant saves a persona OR a management user saves a catalog
+//! row, the corresponding handler enqueues a `SafetyJob`. The consumer
+//! (wired in `lib.rs` via `#[event(queue)]`) re-reads the persona,
+//! confirms it hasn't drifted (a newer save would supersede this job),
+//! runs the classifier, and writes the verdict back to either KV
+//! (tenant) or D1 (catalog) depending on the job's target.
 //!
-//! Failures are surfaced via `message.retry()` so the queue's DLQ retry
-//! policy applies.
+//! Failures are surfaced via `message.retry()` so the queue's DLQ
+//! retry policy applies.
 
 use serde::{Deserialize, Serialize};
 use worker::*;
@@ -14,33 +16,44 @@ use worker::*;
 use worker::MessageExt;
 
 use crate::safety::{classify_persona, SafetyVerdict};
-use crate::storage::{get_onboarding, save_onboarding};
+use crate::storage::{get_onboarding, get_persona, save_onboarding, set_persona_safety};
 use crate::types::{PersonaSafety, PersonaSafetyStatus};
 
 /// Queue binding name in `wrangler.toml`.
 pub const QUEUE_BINDING: &str = "SAFETY_QUEUE";
 
+/// What this safety job is gating. Tenant jobs write the verdict back
+/// to the tenant's `OnboardingState` in KV; catalog jobs write it to
+/// the persona row in D1.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum SafetyJobTarget {
+    Tenant { tenant_id: String },
+    Catalog { slug: String },
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct SafetyJob {
-    pub tenant_id: String,
-    /// SHA-256 of the active prompt at the time the job was enqueued. The
-    /// consumer ignores the job if the persona's current active prompt has a
-    /// different hash, on the assumption that a newer save has already
-    /// re-enqueued.
+    /// Whether this job vets a tenant's persona or a catalog row.
+    pub target: SafetyJobTarget,
+    /// SHA-256 of the active prompt at the time the job was enqueued.
+    /// For tenant jobs we drop the job if the prompt has drifted (a
+    /// newer save will have re-enqueued). Catalog jobs don't carry a
+    /// drift check — every catalog save resets the row to Draft and
+    /// enqueues a fresh job, so the latest job is always authoritative.
     pub prompt_hash: String,
 }
 
 /// Send a safety job onto the queue. Logs and returns `Ok(())` if the queue
 /// binding is missing (e.g. local dev without a queue configured) so the
-/// caller's save flow always succeeds — the persona will simply remain in
-/// `Pending` until the next save reaches a properly-bound environment.
+/// caller's save flow always succeeds — the persona stays Pending/Draft
+/// until the next save reaches a properly-bound environment.
 pub async fn enqueue(env: &Env, job: SafetyJob) -> Result<()> {
     let queue = match env.queue(QUEUE_BINDING) {
         Ok(q) => q,
         Err(e) => {
             console_log!(
-                "Safety queue '{QUEUE_BINDING}' not configured ({e:?}); skipping enqueue. \
-                 Persona stays Pending."
+                "Safety queue '{QUEUE_BINDING}' not configured ({e:?}); skipping enqueue."
             );
             return Ok(());
         }
@@ -48,12 +61,9 @@ pub async fn enqueue(env: &Env, job: SafetyJob) -> Result<()> {
     queue.send(&job).await
 }
 
-/// Process one batch of safety jobs. Called from the worker's `#[event(queue)]`
-/// handler in `lib.rs`. Each job is acknowledged on success, retried on
-/// transient KV errors so the queue's retry policy can take over.
+/// Process one batch of safety jobs. Called from the worker's
+/// `#[event(queue)]` handler in `lib.rs`.
 pub async fn handle_batch(batch: MessageBatch<SafetyJob>, env: Env) -> Result<()> {
-    let kv = env.kv("KV")?;
-
     for msg_result in batch.iter() {
         let msg = match msg_result {
             Ok(m) => m,
@@ -65,58 +75,102 @@ pub async fn handle_batch(batch: MessageBatch<SafetyJob>, env: Env) -> Result<()
 
         let job = msg.body();
 
-        let mut state = match get_onboarding(&kv, &job.tenant_id).await {
-            Ok(s) => s,
-            Err(e) => {
-                console_log!(
-                    "Safety queue: load onboarding for {} failed: {e:?}",
-                    job.tenant_id
-                );
-                msg.retry();
-                continue;
+        match &job.target {
+            SafetyJobTarget::Tenant { tenant_id } => {
+                if let Err(()) = process_tenant_job(&env, tenant_id, &job.prompt_hash).await {
+                    msg.retry();
+                    continue;
+                }
+                msg.ack();
             }
-        };
-
-        // Stale-check: if the active prompt has changed since this job was
-        // enqueued, a newer save has already re-enqueued. Drop this one.
-        let current_hash = state.persona.active_prompt_hash();
-        if current_hash != job.prompt_hash {
-            console_log!(
-                "Safety queue: stale job for {} (hash drifted), skipping",
-                job.tenant_id
-            );
-            msg.ack();
-            continue;
-        }
-
-        let verdict = classify_persona(&env, &state.persona.active_prompt()).await;
-        let now = crate::helpers::now_iso();
-        state.persona.safety = match verdict {
-            SafetyVerdict::Approved => PersonaSafety {
-                status: PersonaSafetyStatus::Approved,
-                checked_prompt_hash: Some(current_hash),
-                checked_at: Some(now),
-                vague_reason: None,
-            },
-            SafetyVerdict::Rejected { vague_reason } => PersonaSafety {
-                status: PersonaSafetyStatus::Rejected,
-                checked_prompt_hash: Some(current_hash),
-                checked_at: Some(now),
-                vague_reason: Some(vague_reason),
-            },
-        };
-
-        match save_onboarding(&kv, &job.tenant_id, &state).await {
-            Ok(()) => msg.ack(),
-            Err(e) => {
-                console_log!(
-                    "Safety queue: write-back for {} failed: {e:?}",
-                    job.tenant_id
-                );
-                msg.retry();
+            SafetyJobTarget::Catalog { slug } => {
+                if let Err(()) = process_catalog_job(&env, slug).await {
+                    msg.retry();
+                    continue;
+                }
+                msg.ack();
             }
         }
     }
 
     Ok(())
+}
+
+async fn process_tenant_job(
+    env: &Env,
+    tenant_id: &str,
+    expected_hash: &str,
+) -> std::result::Result<(), ()> {
+    let kv = env.kv("KV").map_err(|e| {
+        console_log!("Safety queue: KV binding missing: {e:?}");
+    })?;
+
+    let mut state = match get_onboarding(&kv, tenant_id).await {
+        Ok(s) => s,
+        Err(e) => {
+            console_log!("Safety queue: load onboarding for {tenant_id} failed: {e:?}");
+            return Err(());
+        }
+    };
+
+    // Stale-check: if the active prompt has changed since enqueue, a
+    // newer save has already re-enqueued. Drop this one.
+    let current_hash = state.persona.active_prompt_hash();
+    if current_hash != expected_hash {
+        console_log!("Safety queue: stale tenant job for {tenant_id} (hash drifted), skipping");
+        return Ok(());
+    }
+
+    let verdict = classify_persona(env, &state.persona.active_prompt()).await;
+    let now = crate::helpers::now_iso();
+    state.persona.safety = match verdict {
+        SafetyVerdict::Approved => PersonaSafety {
+            status: PersonaSafetyStatus::Approved,
+            checked_prompt_hash: Some(current_hash),
+            checked_at: Some(now),
+            vague_reason: None,
+        },
+        SafetyVerdict::Rejected { vague_reason } => PersonaSafety {
+            status: PersonaSafetyStatus::Rejected,
+            checked_prompt_hash: Some(current_hash),
+            checked_at: Some(now),
+            vague_reason: Some(vague_reason),
+        },
+    };
+
+    match save_onboarding(&kv, tenant_id, &state).await {
+        Ok(()) => Ok(()),
+        Err(e) => {
+            console_log!("Safety queue: write-back for tenant {tenant_id} failed: {e:?}");
+            Err(())
+        }
+    }
+}
+
+async fn process_catalog_job(env: &Env, slug: &str) -> std::result::Result<(), ()> {
+    let db = env.d1("DB").map_err(|e| {
+        console_log!("Safety queue: D1 binding missing: {e:?}");
+    })?;
+
+    let row = match get_persona(&db, slug).await {
+        Ok(Some(r)) => r,
+        Ok(None) => {
+            console_log!("Safety queue: catalog persona {slug} no longer exists, skipping");
+            return Ok(());
+        }
+        Err(e) => {
+            console_log!("Safety queue: load persona {slug} failed: {e:?}");
+            return Err(());
+        }
+    };
+
+    let verdict = classify_persona(env, &row.source.active_prompt()).await;
+
+    match set_persona_safety(&db, slug, &verdict).await {
+        Ok(()) => Ok(()),
+        Err(e) => {
+            console_log!("Safety queue: write-back for catalog {slug} failed: {e:?}");
+            Err(())
+        }
+    }
 }

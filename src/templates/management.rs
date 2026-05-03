@@ -17,6 +17,7 @@ fn manage_shell(
     let nav_items = [
         ("Dashboard", "/manage"),
         ("Tenants", "/manage/tenants"),
+        ("Personas", "/manage/personas"),
         ("Billing", "/manage/billing"),
         ("Audit Log", "/manage/audit"),
     ];
@@ -729,6 +730,299 @@ fn currency_info(code: &str) -> CurrencyDisplay {
 struct CurrencyDisplay {
     symbol: String,
     name: String,
+}
+
+// =====================================================================
+// Persona catalog
+// =====================================================================
+
+pub fn personas_list_html(
+    rows: &[crate::types::PersonaCatalogRow],
+    base_url: &str,
+    locale: &Locale,
+) -> String {
+    let row_html: String = rows
+        .iter()
+        .map(|r| {
+            let status_chip = persona_status_chip(&r.safety.status);
+            let archetype_label = match &r.source {
+                crate::types::PersonaSource::Builder(b) => b.archetype.label(),
+                crate::types::PersonaSource::Custom(_) => "Custom",
+            };
+            let system_badge = if r.is_system {
+                r#"<span class="chip" style="margin-left:6px">system</span>"#
+            } else {
+                ""
+            };
+            format!(
+                r##"<tr>
+  <td><a href="{base_url}/manage/personas/{slug}">{slug}</a>{system_badge}</td>
+  <td>{label}</td>
+  <td>{archetype}</td>
+  <td>{status}</td>
+</tr>"##,
+                base_url = base_url,
+                slug = html_escape(&r.slug),
+                system_badge = system_badge,
+                label = html_escape(&r.label),
+                archetype = html_escape(archetype_label),
+                status = status_chip,
+            )
+        })
+        .collect();
+
+    let content = format!(
+        r##"<div class="page-pad">
+  <div class="row between mb-16">
+    <h1 class="display-sm m-0">Persona catalog</h1>
+    <a class="btn primary" href="{base_url}/manage/personas/new">+ New persona</a>
+  </div>
+  <p class="muted mb-16">Catalog rows surface in the public demo and to tenants picking a starter persona at onboarding. Every save runs through the safety classifier; only Approved rows are visible outside this page.</p>
+  <table class="rt">
+    <thead><tr>
+      <th>Slug</th><th>Label</th><th>Archetype</th><th>Safety</th>
+    </tr></thead>
+    <tbody>{rows}</tbody>
+  </table>
+</div>"##,
+        base_url = base_url,
+        rows = row_html,
+    );
+    manage_shell(
+        "Personas — Concierge",
+        &content,
+        "Personas",
+        base_url,
+        locale,
+    )
+}
+
+fn persona_status_chip(status: &PersonaSafetyStatus) -> String {
+    match status {
+        PersonaSafetyStatus::Approved => r#"<span class="chip ok">approved</span>"#.to_string(),
+        PersonaSafetyStatus::Pending => {
+            r#"<span class="chip warn">draft / classifying</span>"#.to_string()
+        }
+        PersonaSafetyStatus::Rejected => r#"<span class="chip warn">rejected</span>"#.to_string(),
+    }
+}
+
+pub fn persona_edit_html(
+    row: Option<&crate::types::PersonaCatalogRow>,
+    base_url: &str,
+    locale: &Locale,
+) -> String {
+    let is_new = row.is_none();
+    let blank_builder = crate::types::PersonaBuilder::default();
+    let blank_row;
+    let row_ref = match row {
+        Some(r) => r,
+        None => {
+            blank_row = crate::types::PersonaCatalogRow {
+                slug: String::new(),
+                label: String::new(),
+                description: String::new(),
+                source: crate::types::PersonaSource::Builder(blank_builder.clone()),
+                greeting: String::new(),
+                is_system: false,
+                safety: crate::types::PersonaSafety::default(),
+                created_at: None,
+                updated_at: None,
+            };
+            &blank_row
+        }
+    };
+
+    let (mode, builder, custom_text) = match &row_ref.source {
+        crate::types::PersonaSource::Builder(b) => ("builder", b.clone(), String::new()),
+        crate::types::PersonaSource::Custom(s) => {
+            ("custom", crate::types::PersonaBuilder::default(), s.clone())
+        }
+    };
+
+    let archetype_options: String = PersonaPreset::ALL
+        .iter()
+        .map(|a| {
+            format!(
+                r#"<label class="row gap-6"><input type="radio" name="archetype" value="{slug}" x-model="builder.archetype"> {label}</label>"#,
+                slug = html_escape(a.slug()),
+                label = html_escape(a.label()),
+            )
+        })
+        .collect();
+
+    let action = if is_new {
+        format!("{base_url}/manage/personas/new")
+    } else {
+        format!("{base_url}/manage/personas/{}", row_ref.slug)
+    };
+
+    let safety_chip = persona_status_chip(&row_ref.safety.status);
+    let safety_detail = match (
+        &row_ref.safety.status,
+        row_ref.safety.checked_at.as_deref(),
+        row_ref.safety.vague_reason.as_deref(),
+    ) {
+        (PersonaSafetyStatus::Approved, Some(at), _) => format!("Approved {at}"),
+        (PersonaSafetyStatus::Rejected, _, Some(reason)) => {
+            format!("Rejected: {}", html_escape(reason))
+        }
+        (PersonaSafetyStatus::Rejected, _, None) => "Rejected".to_string(),
+        _ => "Awaiting classifier".to_string(),
+    };
+
+    let delete_button = if is_new || row_ref.is_system {
+        String::new()
+    } else {
+        format!(
+            r##"<form hx-post="{action}/delete" hx-target="body" hx-swap="innerHTML" style="display:inline">
+              <button type="submit" class="btn ghost sm" style="color:var(--warn)" onclick="return confirm('Delete this persona? This cannot be undone.')">Delete</button>
+            </form>"##,
+            action = action,
+        )
+    };
+
+    let slug_field = if is_new {
+        format!(
+            r#"<div class="mt-12">
+              <label for="persona-slug" class="eyebrow lbl">Slug (lowercase, _ or -)</label>
+              <input id="persona-slug" class="input" name="slug" required pattern="[a-z0-9_-]+">
+            </div>"#
+        )
+    } else {
+        format!(
+            r#"<input type="hidden" name="slug" value="{}">"#,
+            html_escape(&row_ref.slug)
+        )
+    };
+
+    fn esc_js(s: &str) -> String {
+        s.replace('\\', "\\\\")
+            .replace('\'', "\\'")
+            .replace('\n', "\\n")
+            .replace('\r', "\\r")
+    }
+
+    let x_data = format!(
+        "{{ mode: '{mode}', customText: '{custom}', builder: {{ archetype: '{archetype}', biz_name: '{biz_name}', biz_type: '{biz_type}', city: '{city}', catch_phrases: '{cp}', off_topics: '{ot}', never: '{never}' }} }}",
+        mode = esc_js(mode),
+        custom = esc_js(&custom_text),
+        archetype = esc_js(builder.archetype.slug()),
+        biz_name = esc_js(&builder.biz_name),
+        biz_type = esc_js(&builder.biz_type),
+        city = esc_js(&builder.city),
+        cp = esc_js(&builder.catch_phrases.join("\n")),
+        ot = esc_js(&builder.off_topics.join("\n")),
+        never = esc_js(&builder.never),
+    );
+
+    let h1 = if is_new {
+        "New persona".to_string()
+    } else {
+        format!("Edit persona — {}", html_escape(&row_ref.label))
+    };
+
+    let content = format!(
+        r##"<div class="page-pad" x-data="{x_data}" hx-ext="json-enc">
+  <p><a href="{base_url}/manage/personas" class="btn ghost sm">← Back</a></p>
+  <h1 class="display-sm m-0 mb-4">{h1}</h1>
+  <p class="muted fs-13 mb-16">Catalog row. Saves reset the safety verdict to Draft and re-run the classifier. Tenants and the demo only see Approved rows.</p>
+
+  <div class="card p-14 mb-16 row gap-10" style="align-items:center">
+    {safety_chip}
+    <span class="muted fs-13">{safety_detail}</span>
+  </div>
+
+  <form hx-post="{action}" hx-target="body" hx-swap="innerHTML">
+    <input type="hidden" name="mode" :value="mode">
+
+    <div class="card p-22 mb-16">
+      {slug_field}
+      <div class="mt-12">
+        <label for="persona-label" class="eyebrow lbl">Label</label>
+        <input id="persona-label" class="input" name="label" value="{label}" required>
+      </div>
+      <div class="mt-12">
+        <label for="persona-description" class="eyebrow lbl">Description</label>
+        <input id="persona-description" class="input" name="description" value="{description}" required>
+      </div>
+      <div class="mt-12">
+        <label for="persona-greeting" class="eyebrow lbl">Greeting (first assistant turn in the demo)</label>
+        <input id="persona-greeting" class="input" name="greeting" value="{greeting}" required>
+      </div>
+
+      <div class="mt-16 eyebrow lbl">Source mode</div>
+      <div class="row gap-8 mb-12" style="flex-wrap:wrap">
+        <label class="row gap-6"><input type="radio" name="mode" value="builder" x-model="mode"> Builder</label>
+        <label class="row gap-6"><input type="radio" name="mode" value="custom" x-model="mode"> Custom (raw middle)</label>
+      </div>
+
+      <!-- BUILDER -->
+      <div x-show="mode === 'builder'" x-cloak :aria-hidden="mode !== 'builder'">
+        <div class="eyebrow lbl mb-6">Archetype (voice)</div>
+        <div class="row gap-12 mb-12" style="flex-wrap:wrap">{archetype_options}</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div>
+            <label for="persona-biz-name" class="eyebrow lbl">Business name</label>
+            <input id="persona-biz-name" class="input" name="biz_name" x-model="builder.biz_name">
+          </div>
+          <div>
+            <label for="persona-biz-type" class="eyebrow lbl">Business type (e.g. florist)</label>
+            <input id="persona-biz-type" class="input" name="biz_type" x-model="builder.biz_type">
+          </div>
+          <div>
+            <label for="persona-city" class="eyebrow lbl">City (optional)</label>
+            <input id="persona-city" class="input" name="city" x-model="builder.city">
+          </div>
+          <div>
+            <label for="persona-never" class="eyebrow lbl">Never (one short rule)</label>
+            <input id="persona-never" class="input" name="never" x-model="builder.never">
+          </div>
+        </div>
+        <div class="mt-12">
+          <label for="persona-catch" class="eyebrow lbl">Catch phrases (one per line)</label>
+          <textarea id="persona-catch" class="textarea" name="catch_phrases" x-model="builder.catch_phrases" rows="3"></textarea>
+        </div>
+        <div class="mt-12">
+          <label for="persona-off" class="eyebrow lbl">Off-topic subjects (one per line)</label>
+          <textarea id="persona-off" class="textarea" name="off_topics" x-model="builder.off_topics" rows="3"></textarea>
+        </div>
+      </div>
+
+      <!-- CUSTOM -->
+      <div x-show="mode === 'custom'" x-cloak :aria-hidden="mode !== 'custom'">
+        <label for="persona-custom" class="eyebrow lbl">Custom prompt middle (still envelope-wrapped at AI-call time)</label>
+        <textarea id="persona-custom" class="textarea mono" name="custom_text" x-model="customText" rows="14" maxlength="2000"></textarea>
+        <p class="muted fs-12 mt-4"><span x-text="customText.length"></span> / 2000</p>
+      </div>
+    </div>
+
+    <div class="row gap-8" style="justify-content:space-between">
+      <div>{delete_button}</div>
+      <button type="submit" class="btn primary">Save</button>
+    </div>
+  </form>
+</div>"##,
+        x_data = x_data,
+        base_url = base_url,
+        h1 = h1,
+        safety_chip = safety_chip,
+        safety_detail = safety_detail,
+        action = action,
+        slug_field = slug_field,
+        label = html_escape(&row_ref.label),
+        description = html_escape(&row_ref.description),
+        greeting = html_escape(&row_ref.greeting),
+        archetype_options = archetype_options,
+        delete_button = delete_button,
+    );
+    manage_shell(
+        "Persona — Concierge",
+        &content,
+        "Personas",
+        base_url,
+        locale,
+    )
 }
 
 #[cfg(test)]

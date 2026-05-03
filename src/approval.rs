@@ -129,12 +129,10 @@ mod tests {
     fn persona_builder(off_topics: Vec<&str>, never: &str) -> PersonaConfig {
         PersonaConfig {
             source: PersonaSource::Builder(PersonaBuilder {
-                biz_type: String::new(),
-                city: String::new(),
-                tone: String::new(),
                 catch_phrases: vec![],
                 off_topics: off_topics.into_iter().map(String::from).collect(),
                 never: never.into(),
+                ..Default::default()
             }),
             safety: PersonaSafety::default(),
         }

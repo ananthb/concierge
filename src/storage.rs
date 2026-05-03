@@ -160,6 +160,184 @@ pub async fn count_tenants(db: &D1Database) -> Result<usize> {
 }
 
 // ============================================================================
+// Persona catalog (D1)
+// ============================================================================
+
+/// Default persona slug surfaced when the demo doesn't carry one.
+pub const DEMO_DEFAULT_PERSONA_SLUG: &str = "concierge";
+
+/// List rows from the personas catalog. `only_approved` filters by
+/// `safety_status = 'approved'` — used for the demo picker and the
+/// tenant-onboarding starter set; the management UI passes `false` to
+/// see drafts and rejections too.
+pub async fn list_personas(
+    db: &D1Database,
+    only_approved: bool,
+) -> Result<Vec<crate::types::PersonaCatalogRow>> {
+    let stmt = if only_approved {
+        "SELECT * FROM personas WHERE safety_status = 'approved' ORDER BY is_system DESC, label ASC"
+    } else {
+        "SELECT * FROM personas ORDER BY is_system DESC, label ASC"
+    };
+    let results = db.prepare(stmt).all().await?;
+    let rows: Vec<serde_json::Value> = results.results()?;
+    Ok(rows.iter().filter_map(row_to_persona).collect())
+}
+
+pub async fn get_persona(
+    db: &D1Database,
+    slug: &str,
+) -> Result<Option<crate::types::PersonaCatalogRow>> {
+    let row = db
+        .prepare("SELECT * FROM personas WHERE slug = ?")
+        .bind(&[slug.into()])?
+        .first::<serde_json::Value>(None)
+        .await?;
+    Ok(row.as_ref().and_then(row_to_persona))
+}
+
+/// Create or update a persona row. The caller is responsible for
+/// resetting the safety verdict to Draft and enqueueing a SafetyJob
+/// before calling this — `upsert_persona` itself is dumb.
+pub async fn upsert_persona(db: &D1Database, row: &crate::types::PersonaCatalogRow) -> Result<()> {
+    let source_json = serde_json::to_string(&row.source)
+        .map_err(|e| Error::from(format!("serialise persona source: {e}")))?;
+    let safety_status = match row.safety.status {
+        crate::types::PersonaSafetyStatus::Approved => "approved",
+        crate::types::PersonaSafetyStatus::Rejected => "rejected",
+        crate::types::PersonaSafetyStatus::Pending => "draft",
+    };
+    let checked_at: JsValue = match &row.safety.checked_at {
+        Some(s) => s.as_str().into(),
+        None => JsValue::NULL,
+    };
+    let vague_reason: JsValue = match &row.safety.vague_reason {
+        Some(s) => s.as_str().into(),
+        None => JsValue::NULL,
+    };
+    db.prepare(
+        "INSERT INTO personas (slug, label, description, source_json, greeting, is_system,
+                                safety_status, safety_checked_at, safety_vague_reason,
+                                created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+         ON CONFLICT(slug) DO UPDATE SET
+           label = excluded.label,
+           description = excluded.description,
+           source_json = excluded.source_json,
+           greeting = excluded.greeting,
+           safety_status = excluded.safety_status,
+           safety_checked_at = excluded.safety_checked_at,
+           safety_vague_reason = excluded.safety_vague_reason,
+           updated_at = datetime('now')",
+    )
+    .bind(&[
+        row.slug.as_str().into(),
+        row.label.as_str().into(),
+        row.description.as_str().into(),
+        source_json.as_str().into(),
+        row.greeting.as_str().into(),
+        JsValue::from(if row.is_system { 1.0 } else { 0.0 }),
+        safety_status.into(),
+        checked_at,
+        vague_reason,
+    ])?
+    .run()
+    .await?;
+    Ok(())
+}
+
+/// Hard-delete a persona row. Refuses with an error when the row's
+/// `is_system` flag is set (the homepage Concierge demo can't be
+/// removed).
+pub async fn delete_persona(db: &D1Database, slug: &str) -> Result<()> {
+    if let Some(row) = get_persona(db, slug).await? {
+        if row.is_system {
+            return Err(Error::from("Cannot delete a system persona"));
+        }
+    } else {
+        return Ok(()); // already gone, nothing to do
+    }
+    db.prepare("DELETE FROM personas WHERE slug = ?")
+        .bind(&[slug.into()])?
+        .run()
+        .await?;
+    Ok(())
+}
+
+/// Record the safety classifier's verdict for a persona row. Called by
+/// the queue consumer after the classifier returns.
+pub async fn set_persona_safety(
+    db: &D1Database,
+    slug: &str,
+    verdict: &crate::safety::SafetyVerdict,
+) -> Result<()> {
+    let (status, reason): (&str, JsValue) = match verdict {
+        crate::safety::SafetyVerdict::Approved => ("approved", JsValue::NULL),
+        crate::safety::SafetyVerdict::Rejected { vague_reason } => {
+            ("rejected", vague_reason.as_str().into())
+        }
+    };
+    db.prepare(
+        "UPDATE personas
+            SET safety_status = ?, safety_checked_at = datetime('now'),
+                safety_vague_reason = ?, updated_at = datetime('now')
+            WHERE slug = ?",
+    )
+    .bind(&[status.into(), reason, slug.into()])?
+    .run()
+    .await?;
+    Ok(())
+}
+
+fn row_to_persona(row: &serde_json::Value) -> Option<crate::types::PersonaCatalogRow> {
+    let slug = row.get("slug")?.as_str()?.to_string();
+    let label = row.get("label")?.as_str()?.to_string();
+    let description = row.get("description")?.as_str()?.to_string();
+    let source_json = row.get("source_json")?.as_str()?;
+    let source: crate::types::PersonaSource = serde_json::from_str(source_json).ok()?;
+    let greeting = row.get("greeting")?.as_str()?.to_string();
+    let is_system = row.get("is_system").and_then(|v| v.as_i64()).unwrap_or(0) != 0;
+    let safety_status = match row
+        .get("safety_status")
+        .and_then(|v| v.as_str())
+        .unwrap_or("draft")
+    {
+        "approved" => crate::types::PersonaSafetyStatus::Approved,
+        "rejected" => crate::types::PersonaSafetyStatus::Rejected,
+        _ => crate::types::PersonaSafetyStatus::Pending,
+    };
+    let safety = crate::types::PersonaSafety {
+        status: safety_status,
+        checked_prompt_hash: None,
+        checked_at: row
+            .get("safety_checked_at")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string()),
+        vague_reason: row
+            .get("safety_vague_reason")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string()),
+    };
+    Some(crate::types::PersonaCatalogRow {
+        slug,
+        label,
+        description,
+        source,
+        greeting,
+        is_system,
+        safety,
+        created_at: row
+            .get("created_at")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string()),
+        updated_at: row
+            .get("updated_at")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string()),
+    })
+}
+
+// ============================================================================
 // Session KV Operations
 // ============================================================================
 

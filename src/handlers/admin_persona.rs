@@ -41,15 +41,9 @@ pub async fn handle_persona_admin(
             let mode = form
                 .get("mode")
                 .and_then(|v| v.as_str())
-                .unwrap_or("preset");
+                .unwrap_or("builder");
 
             let new_source = match mode {
-                "preset" => {
-                    let slug = form.get("preset_id").and_then(|v| v.as_str()).unwrap_or("");
-                    let preset =
-                        PersonaPreset::from_slug(slug).unwrap_or(PersonaPreset::FriendlyFlorist);
-                    PersonaSource::Preset(preset)
-                }
                 "builder" => {
                     let s = |k: &str| {
                         form.get(k)
@@ -68,10 +62,12 @@ pub async fn handle_persona_admin(
                             .take(10)
                             .collect()
                     };
+                    let archetype = PersonaPreset::from_slug(&s("archetype")).unwrap_or_default();
                     PersonaSource::Builder(PersonaBuilder {
+                        archetype,
+                        biz_name: s("biz_name"),
                         biz_type: s("biz_type"),
                         city: s("city"),
-                        tone: s("tone"),
                         catch_phrases: parse_chips("catch_phrases").into_iter().take(5).collect(),
                         off_topics: parse_chips("off_topics"),
                         never: s("never"),
@@ -125,7 +121,9 @@ pub async fn handle_persona_admin(
 
             if prompt_changed {
                 let job = crate::safety_queue::SafetyJob {
-                    tenant_id: tenant_id.to_string(),
+                    target: crate::safety_queue::SafetyJobTarget::Tenant {
+                        tenant_id: tenant_id.to_string(),
+                    },
                     prompt_hash: new_hash,
                 };
                 let _ = crate::safety_queue::enqueue(&env, job).await;
@@ -157,10 +155,12 @@ pub async fn handle_persona_admin(
                     .filter(|s| !s.is_empty())
                     .collect()
             };
+            let archetype = PersonaPreset::from_slug(&s("archetype")).unwrap_or_default();
             let builder = PersonaBuilder {
+                archetype,
+                biz_name: s("biz_name"),
                 biz_type: s("biz_type"),
                 city: s("city"),
-                tone: s("tone"),
                 catch_phrases: chips("catch_phrases").into_iter().take(5).collect(),
                 off_topics: chips("off_topics").into_iter().take(10).collect(),
                 never: s("never"),

@@ -30,7 +30,6 @@ mod approvals;
 mod billing;
 mod channel;
 mod crypto;
-mod demo_personas;
 mod discord;
 mod durable_objects;
 mod email;
@@ -387,6 +386,10 @@ async fn handle_request(req: Request, env: Env) -> Result<Response> {
     // Public live-demo chat (anyone can hit this from the welcome page).
     if path == "/demo/chat" && method == Method::Post {
         return handlers::handle_demo_chat(req, env).await;
+    }
+    // Demo persona picker — D1 catalog filtered to Approved.
+    if path == "/demo/personas" && method == Method::Get {
+        return handlers::handle_demo_personas(req, env).await;
     }
 
     // Instagram OAuth routes

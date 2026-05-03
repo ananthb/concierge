@@ -14,39 +14,25 @@ use crate::types::{PersonaConfig, PersonaPreset, PersonaSafetyStatus, PersonaSou
 use super::base::{app_shell, base_html};
 
 pub fn persona_admin_html(persona: &PersonaConfig, base_url: &str, locale: &Locale) -> String {
-    // Active mode + a shadow copy of every field so switching modes doesn't
-    // lose user input.
-    let (active_mode, active_preset_slug, builder, custom_prompt) = match &persona.source {
-        PersonaSource::Preset(p) => (
-            "preset",
-            p.slug(),
-            crate::types::PersonaBuilder::default(),
-            String::new(),
-        ),
-        PersonaSource::Builder(b) => ("builder", "", b.clone(), String::new()),
-        PersonaSource::Custom(s) => (
-            "custom",
-            "",
-            crate::types::PersonaBuilder::default(),
-            s.clone(),
-        ),
+    // After the archetype refactor, `PersonaSource::Preset` is gone — picking
+    // an archetype card just stamps it onto a `Builder` source. We pre-fill
+    // the form depending on which source variant the tenant has saved.
+    let (active_mode, builder, custom_prompt) = match &persona.source {
+        PersonaSource::Builder(b) => ("builder", b.clone(), String::new()),
+        PersonaSource::Custom(s) => ("custom", crate::types::PersonaBuilder::default(), s.clone()),
     };
+    let active_archetype_slug = builder.archetype.slug();
 
-    let preset_options: String = PersonaPreset::ALL
+    let archetype_options: String = PersonaPreset::ALL
         .iter()
         .map(|p| {
             let slug = p.slug();
             let label = p.label();
             let desc = p.description();
-            let checked = if slug == active_preset_slug {
-                " checked"
-            } else {
-                ""
-            };
             format!(
                 r#"<label class="card p-14" style="cursor:pointer;display:block">
   <div class="row gap-10" style="align-items:flex-start">
-    <input type="radio" name="preset_id" value="{slug}" x-model="presetId"{checked} style="margin-top:4px">
+    <input type="radio" name="archetype" value="{slug}" x-model="builder.archetype" style="margin-top:4px">
     <div class="flex-1">
       <div class="eyebrow mb-2">{label}</div>
       <p class="m-0 fs-13 muted">{desc}</p>
@@ -61,10 +47,10 @@ pub fn persona_admin_html(persona: &PersonaConfig, base_url: &str, locale: &Loca
         .collect();
 
     let initial_preview = match &persona.source {
-        PersonaSource::Preset(p) => p.prompt().to_string(),
         PersonaSource::Builder(b) => personas::generate(b),
         PersonaSource::Custom(s) => s.clone(),
     };
+    let _ = active_archetype_slug;
 
     let safety_badge = render_safety_badge(persona, locale);
 
@@ -79,7 +65,6 @@ pub fn persona_admin_html(persona: &PersonaConfig, base_url: &str, locale: &Loca
   <div class="card p-22 mb-16">
     <div class="eyebrow mb-12" id="persona-mode-label">{mode_eyebrow}</div>
     <div class="row gap-8 mb-16" style="flex-wrap:wrap" role="radiogroup" aria-labelledby="persona-mode-label">
-      <label class="row gap-6"><input type="radio" name="mode" value="preset" x-model="mode"> {mode_preset}</label>
       <label class="row gap-6"><input type="radio" name="mode" value="builder" x-model="mode"> {mode_builder}</label>
       <label class="row gap-6"><input type="radio" name="mode" value="custom" x-model="mode"> {mode_custom}</label>
     </div>
@@ -87,30 +72,25 @@ pub fn persona_admin_html(persona: &PersonaConfig, base_url: &str, locale: &Loca
     <form hx-post="{base_url}/admin/persona" hx-target="body" hx-swap="innerHTML">
       <input type="hidden" name="mode" :value="mode">
 
-      <!-- PRESET -->
-      <div x-show="mode === 'preset'" x-cloak :aria-hidden="mode !== 'preset'">
-        <p class="muted fs-13 mb-12">{preset_lead}</p>
-        <div style="display:grid;gap:10px;grid-template-columns:1fr 1fr">
-          {preset_options}
-        </div>
-        <input type="hidden" name="preset_id" :value="presetId">
-      </div>
-
       <!-- BUILDER -->
       <div x-show="mode === 'builder'" x-cloak :aria-hidden="mode !== 'builder'">
         <p class="muted fs-13 mb-12">{builder_lead}</p>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div class="eyebrow lbl mb-6">{lbl_archetype}</div>
+        <div style="display:grid;gap:10px;grid-template-columns:1fr 1fr">
+          {archetype_options}
+        </div>
+        <div class="mt-12" style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div>
+            <label for="persona-biz-name" class="eyebrow lbl">{lbl_biz_name}</label>
+            <input id="persona-biz-name" class="input" name="biz_name" x-model="builder.biz_name" placeholder="{ph_biz_name}" required>
+          </div>
           <div>
             <label for="persona-biz-type" class="eyebrow lbl">{lbl_biz_type}</label>
-            <input id="persona-biz-type" class="input" name="biz_type" x-model="builder.biz_type" placeholder="{ph_biz_type}">
+            <input id="persona-biz-type" class="input" name="biz_type" x-model="builder.biz_type" placeholder="{ph_biz_type}" required>
           </div>
           <div>
             <label for="persona-city" class="eyebrow lbl">{lbl_city}</label>
             <input id="persona-city" class="input" name="city" x-model="builder.city" placeholder="{ph_city}">
-          </div>
-          <div>
-            <label for="persona-tone" class="eyebrow lbl">{lbl_tone}</label>
-            <input id="persona-tone" class="input" name="tone" x-model="builder.tone" placeholder="{ph_tone}">
           </div>
           <div>
             <label for="persona-never" class="eyebrow lbl">{lbl_never}</label>
@@ -148,33 +128,32 @@ pub fn persona_admin_html(persona: &PersonaConfig, base_url: &str, locale: &Loca
     <pre id="prompt-preview" class="prompt-preview prompt-preview-middle">{initial_preview}</pre>
     <pre class="prompt-preview prompt-preview-fixed" aria-label="{postamble_label}">{postamble}</pre>
     <div class="row gap-8 mt-8" x-show="mode === 'builder'" x-cloak :aria-hidden="mode !== 'builder'">
-      <button type="button" class="btn ghost sm" hx-post="{base_url}/admin/persona/preview" hx-target="#prompt-preview" hx-swap="outerHTML" hx-include="[name='biz_type'],[name='city'],[name='tone'],[name='never'],[name='catch_phrases'],[name='off_topics']">{refresh}</button>
+      <button type="button" class="btn ghost sm" hx-post="{base_url}/admin/persona/preview" hx-target="#prompt-preview" hx-swap="outerHTML" hx-include="[name='archetype'],[name='biz_name'],[name='biz_type'],[name='city'],[name='never'],[name='catch_phrases'],[name='off_topics']">{refresh}</button>
     </div>
   </div>
 </div>"##,
         base_url = base_url,
         safety_badge = safety_badge,
-        preset_options = preset_options,
+        archetype_options = archetype_options,
         initial_preview = html_escape(&initial_preview),
-        x_data = build_x_data(active_mode, active_preset_slug, &builder, &custom_prompt),
+        x_data = build_x_data(active_mode, &builder, &custom_prompt),
         back = t(locale, "admin-persona-back"),
         h1 = t(locale, "admin-persona-h1"),
         lead = t(locale, "admin-persona-lead"),
         mode_eyebrow = t(locale, "admin-persona-mode-eyebrow"),
-        mode_preset = t(locale, "admin-persona-mode-preset"),
         mode_builder = t(locale, "admin-persona-mode-builder"),
         mode_custom = t(locale, "admin-persona-mode-custom"),
-        preset_lead = t(locale, "admin-persona-preset-lead"),
         builder_lead = t(locale, "admin-persona-builder-lead"),
+        lbl_archetype = t(locale, "admin-persona-label-archetype"),
+        lbl_biz_name = t(locale, "admin-persona-label-biz-name"),
         lbl_biz_type = t(locale, "admin-persona-label-biz-type"),
         lbl_city = t(locale, "admin-persona-label-city"),
-        lbl_tone = t(locale, "admin-persona-label-tone"),
         lbl_never = t(locale, "admin-persona-label-never"),
         lbl_catch = t(locale, "admin-persona-label-catch-phrases"),
         lbl_off = t(locale, "admin-persona-label-off-topics"),
+        ph_biz_name = t(locale, "admin-persona-placeholder-biz-name"),
         ph_biz_type = t(locale, "admin-persona-placeholder-biz-type"),
         ph_city = t(locale, "admin-persona-placeholder-city"),
-        ph_tone = t(locale, "admin-persona-placeholder-tone"),
         ph_never = t(locale, "admin-persona-placeholder-never"),
         ph_catch = t(locale, "admin-persona-placeholder-catch-phrases"),
         ph_off = t(locale, "admin-persona-placeholder-off-topics"),
@@ -249,12 +228,7 @@ fn render_safety_badge(persona: &PersonaConfig, locale: &Locale) -> String {
     )
 }
 
-fn build_x_data(
-    mode: &str,
-    preset_slug: &str,
-    builder: &crate::types::PersonaBuilder,
-    custom_prompt: &str,
-) -> String {
+fn build_x_data(mode: &str, builder: &crate::types::PersonaBuilder, custom_prompt: &str) -> String {
     fn esc(s: &str) -> String {
         s.replace('\\', "\\\\")
             .replace('\'', "\\'")
@@ -262,13 +236,13 @@ fn build_x_data(
             .replace('\r', "\\r")
     }
     format!(
-        "{{ mode: '{mode}', presetId: '{preset}', customPrompt: '{custom}', builder: {{ biz_type: '{biz}', city: '{city}', tone: '{tone}', never: '{never}', catch_phrases: '{cp}', off_topics: '{ot}' }} }}",
+        "{{ mode: '{mode}', customPrompt: '{custom}', builder: {{ archetype: '{archetype}', biz_name: '{biz_name}', biz_type: '{biz_type}', city: '{city}', never: '{never}', catch_phrases: '{cp}', off_topics: '{ot}' }} }}",
         mode = esc(mode),
-        preset = esc(preset_slug),
         custom = esc(custom_prompt),
-        biz = esc(&builder.biz_type),
+        archetype = esc(builder.archetype.slug()),
+        biz_name = esc(&builder.biz_name),
+        biz_type = esc(&builder.biz_type),
         city = esc(&builder.city),
-        tone = esc(&builder.tone),
         never = esc(&builder.never),
         cp = esc(&builder.catch_phrases.join("\n")),
         ot = esc(&builder.off_topics.join("\n")),
