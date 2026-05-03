@@ -207,13 +207,18 @@ pub fn generate(b: &PersonaBuilder) -> String {
 /// it falls back to the tenant-friendly default. Every prompt must
 /// have a concrete endpoint, even before the owner has decided what
 /// they want.
+///
+/// When the goal is set but no URL has been configured, the line
+/// explicitly forbids inventing one: the model would otherwise
+/// happily guess plausible paths (`/book`, `/contact`) and send
+/// customers to dead links.
 fn goal_line(goal: &str, goal_url: &str) -> String {
     let g = goal.trim().trim_end_matches('.');
     let u = goal_url.trim();
     if g.is_empty() {
         "Goal: answer the customer's question and let them know a human will follow up.".to_string()
     } else if u.is_empty() {
-        format!("Goal: guide the customer to {g}.")
+        format!("Goal: guide the customer to {g}. Do not invent or include a URL or path; none has been configured.")
     } else {
         format!("Goal: guide the customer to {g} at {u}.")
     }
@@ -299,6 +304,17 @@ mod tests {
         b.goal = "book a delivery slot".to_string();
         let p = generate(&b);
         assert!(p.contains("Goal: guide the customer to book a delivery slot."));
+        // Goal set, URL unset: model must not fabricate a path.
+        assert!(p.contains("Do not invent or include a URL or path"));
+    }
+
+    #[test]
+    fn generate_omits_no_url_clause_when_url_provided() {
+        let mut b = minimal();
+        b.goal = "book a delivery slot".to_string();
+        b.goal_url = "/book".to_string();
+        let p = generate(&b);
+        assert!(!p.contains("Do not invent or include a URL"));
     }
 
     #[test]
