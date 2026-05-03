@@ -50,6 +50,7 @@ pub async fn handle_admin(req: Request, env: Env, path: &str, method: Method) ->
         let wa = list_whatsapp_accounts(&kv, &tenant_id).await?;
         let ig = list_instagram_accounts(&kv, &tenant_id).await?;
         let dc = get_discord_config_by_tenant(&kv, &tenant_id).await?;
+        let onboarding = get_onboarding(&kv, &tenant_id).await?;
         return Response::from_html(admin_settings_html(
             &tenant,
             &base_url,
@@ -58,6 +59,7 @@ pub async fn handle_admin(req: Request, env: Env, path: &str, method: Method) ->
             &wa,
             &ig,
             dc.as_ref(),
+            &onboarding.conversation,
             &tenant_id,
             &locale,
         ));
@@ -100,6 +102,10 @@ pub async fn handle_admin(req: Request, env: Env, path: &str, method: Method) ->
         }
 
         return Response::from_html("<div class=\"success\">Settings updated.</div>".to_string());
+    }
+
+    if path == "/admin/settings/conversation" && method == Method::Put {
+        return save_conversation_settings(req, &env, &kv, &tenant_id, &locale).await;
     }
 
     if path == "/admin/delete-account" && method == Method::Delete {
@@ -211,4 +217,134 @@ pub async fn handle_admin(req: Request, env: Env, path: &str, method: Method) ->
     }
 
     Response::error("Not Found", 404)
+}
+
+/// PUT /admin/settings/conversation
+///
+/// Updates the tenant's `ConversationConfig` on `OnboardingState`.
+/// Each of the three fields is optional: a missing or empty value
+/// clears the override (falls back to the prompt-default at runtime).
+/// Validation enforces sane bounds and the
+/// `idle_gap_mins > handoff_cooldown_mins` invariant — otherwise an
+/// active handoff could be wiped before its cooldown ended. On
+/// failure we render an error toast and don't write.
+async fn save_conversation_settings(
+    mut req: Request,
+    env: &Env,
+    kv: &kv::KvStore,
+    tenant_id: &str,
+    locale: &crate::locale::Locale,
+) -> Result<Response> {
+    use crate::i18n::t;
+    let _ = env;
+
+    let form: serde_json::Value = req.json().await?;
+
+    fn parse_optional_u32(
+        form: &serde_json::Value,
+        key: &str,
+    ) -> std::result::Result<Option<u32>, ()> {
+        let raw = form.get(key);
+        match raw {
+            None | Some(serde_json::Value::Null) => Ok(None),
+            Some(serde_json::Value::String(s)) => {
+                let trimmed = s.trim();
+                if trimmed.is_empty() {
+                    Ok(None)
+                } else {
+                    trimmed.parse::<u32>().map(Some).map_err(|_| ())
+                }
+            }
+            Some(serde_json::Value::Number(n)) => match n.as_u64() {
+                Some(v) if v <= u32::MAX as u64 => Ok(Some(v as u32)),
+                _ => Err(()),
+            },
+            _ => Err(()),
+        }
+    }
+
+    let idle_gap_mins = match parse_optional_u32(&form, "idle_gap_mins") {
+        Ok(v) => v,
+        Err(()) => {
+            return error_toast(&t(locale, "admin-settings-conversation-error-idle-bounds"));
+        }
+    };
+    let handoff_cooldown_mins = match parse_optional_u32(&form, "handoff_cooldown_mins") {
+        Ok(v) => v,
+        Err(()) => {
+            return error_toast(&t(
+                locale,
+                "admin-settings-conversation-error-cooldown-bounds",
+            ));
+        }
+    };
+    let max_history_messages = match parse_optional_u32(&form, "max_history_messages") {
+        Ok(v) => v,
+        Err(()) => {
+            return error_toast(&t(
+                locale,
+                "admin-settings-conversation-error-history-bounds",
+            ));
+        }
+    };
+
+    if let Some(v) = idle_gap_mins {
+        if !(5..=1440).contains(&v) {
+            return error_toast(&t(locale, "admin-settings-conversation-error-idle-bounds"));
+        }
+    }
+    if let Some(v) = handoff_cooldown_mins {
+        if !(5..=1440).contains(&v) {
+            return error_toast(&t(
+                locale,
+                "admin-settings-conversation-error-cooldown-bounds",
+            ));
+        }
+    }
+    if let Some(v) = max_history_messages {
+        if !(1..=200).contains(&v) {
+            return error_toast(&t(
+                locale,
+                "admin-settings-conversation-error-history-bounds",
+            ));
+        }
+    }
+
+    // Cross-field invariant: a non-default idle gap must still be
+    // strictly larger than the (effective) cooldown, otherwise the
+    // conversation can end mid-handoff and wipe the holding-pattern
+    // state. Compare against effective values so the form catches
+    // even the case where one field is set and the other isn't.
+    let effective_idle = idle_gap_mins
+        .map(|v| v as i64)
+        .unwrap_or(crate::prompt::DEFAULT_CONVERSATION_IDLE_GAP_MINS);
+    let effective_cooldown = handoff_cooldown_mins
+        .map(|v| v as i64)
+        .unwrap_or(crate::prompt::DEFAULT_HANDOFF_COOLDOWN_MINS);
+    if effective_idle <= effective_cooldown {
+        return error_toast(&t(
+            locale,
+            "admin-settings-conversation-error-idle-vs-cooldown",
+        ));
+    }
+
+    let mut state = crate::storage::get_onboarding(kv, tenant_id).await?;
+    state.conversation = crate::types::ConversationConfig {
+        idle_gap_mins,
+        handoff_cooldown_mins,
+        max_history_messages,
+    };
+    crate::storage::save_onboarding(kv, tenant_id, &state).await?;
+
+    Response::from_html(format!(
+        "<div class=\"success\">{}</div>",
+        t(locale, "admin-settings-conversation-saved")
+    ))
+}
+
+fn error_toast(message: &str) -> Result<Response> {
+    Response::from_html(format!(
+        "<div class=\"error\">{}</div>",
+        crate::helpers::html_escape(message)
+    ))
 }
