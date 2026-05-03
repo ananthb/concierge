@@ -97,6 +97,8 @@
   <li>Credits are deducted <em>before</em> the reply is sent (optimistic deduction)</li>
   <li>If the AI generation or message send fails, the credit is automatically restored</li>
   <li>An empty reply (e.g., AI returns nothing) also triggers a credit restore</li>
+  <li>One AI reply &equiv; one credit, regardless of how much chat history is fed to the model. The multi&#8209;turn context (capped by <code>ConversationConfig::max_history_messages</code>) sharpens the answer but doesn&rsquo;t multiply the bill.</li>
+  <li>Static (canned) responses, prompt&#8209;injection scanning, persona safety classification, and BGE embedding lookups are all free &mdash; only the reply&#8209;model call deducts. Handoff turns under the cooldown are still AI&#8209;generated and still deduct one credit each; once the worker switches to silent mode past the cooldown, no further credits are spent.</li>
 </ul>
 
 <h2>Getting Credits</h2>

@@ -130,7 +130,7 @@
             <div class="pipeline__core-step"><span class="num">01</span><span><b>InboundMessage</b> &nbsp;normalize</span></div>
             <div class="pipeline__core-step"><span class="num">02</span><span>Tenant lookup &amp; <b>credit check</b></span></div>
             <div class="pipeline__core-step"><span class="num">03</span><span>Reply rules &middot; keyword + embedding match</span></div>
-            <div class="pipeline__core-step"><span class="num">04</span><span>Persona prompt + action dispatch</span></div>
+            <div class="pipeline__core-step"><span class="num">04</span><span>Persona + envelope + multi&#8209;turn history</span></div>
             <div class="pipeline__core-step"><span class="num">05</span><span>Metadata to D1 &middot; <em class="serif">no content</em></span></div>
           </div>
 
@@ -206,7 +206,7 @@
       <div class="table-wrap">
         <div class="table-wrap__head">
           <b>Surface area</b><span>What ships in the box</span>
-          <span class="count">12 modules</span>
+          <span class="count">15 modules</span>
         </div>
         <table class="docs">
           <tbody>
@@ -224,7 +224,23 @@
             </tr>
             <tr>
               <td><code>Persona builder</code></td>
-              <td>Tenant&#8209;wide AI persona via curated preset, guided builder, or raw prompt. Every change runs through an async safety classifier before AI replies resume.</td>
+              <td>Tenant&#8209;wide AI persona via guided builder (voice archetype, business, <em>goal</em>, catch&#8209;phrases, off&#8209;topics, <em>handoff conditions</em>), a curated archetype copied from the platform&rsquo;s D1 catalog, or raw prompt. Every change runs through an async safety classifier before AI replies resume.</td>
+            </tr>
+            <tr>
+              <td><code>Prompt envelope</code></td>
+              <td>Every AI reply is sandwiched by a fixed preamble + postamble (in <code>src/prompt.rs</code>) that establishes the operating manual, jailbreak rails, and the universal handoff sentinel. Tenant content sits in the editable middle.</td>
+            </tr>
+            <tr>
+              <td><code>Conversation sessions</code></td>
+              <td>Per&#8209;customer threads carry a stable <code>conversation_id</code>, recent message history, and any active handoff state. A tenant&#8209;tunable idle gap (default 6&nbsp;h) starts a fresh conversation; a tenant&#8209;tunable history cap (default 20 turns) bounds the multi&#8209;turn context fed to the AI.</td>
+            </tr>
+            <tr>
+              <td><code>Human handoff</code></td>
+              <td>The model can emit <code>[[HANDOFF]]</code> when triggers in the postamble or persona conditions fire (confusion, customer asks for a person, medical / legal / financial / safety territory). The pipeline strips the token, switches to a holding&#8209;pattern voice for the cooldown (default 60&nbsp;min), then goes silent. Tenant is paged once via the configured approval channels.</td>
+            </tr>
+            <tr>
+              <td><code>Live demo chat</code></td>
+              <td>Public welcome page hosts an interactive chat where visitors roleplay as a customer of a sample business. Persona picker pulls from the safety&#8209;approved D1 archetype catalog; a "View prompt" panel reveals the exact envelope sent to the model. Real customer messages never arrive here.</td>
             </tr>
             <tr>
               <td><code>Email routing</code></td>

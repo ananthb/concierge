@@ -124,8 +124,9 @@
             <div class="pipeline__core-step"><span class="num">01</span><span><b>Normalize</b> → <em class="serif">InboundMessage</em></span></div>
             <div class="pipeline__core-step"><span class="num">02</span><span><b>Tenant</b> + <b>credit</b> check</span></div>
             <div class="pipeline__core-step"><span class="num">03</span><span><b>Reply rules</b> · keyword + embedding</span></div>
-            <div class="pipeline__core-step"><span class="num">04</span><span><b>Persona</b> prompt + action dispatch</span></div>
-            <div class="pipeline__core-step"><span class="num">05</span><span><b>Log metadata</b> &middot; D1</span></div>
+            <div class="pipeline__core-step"><span class="num">04</span><span><b>Envelope</b> + persona + history</span></div>
+            <div class="pipeline__core-step"><span class="num">05</span><span><b>Action</b> dispatch &middot; <b>handoff</b> check</span></div>
+            <div class="pipeline__core-step"><span class="num">06</span><span><b>Log metadata</b> &middot; D1</span></div>
           </div>
 
           <div class="pipeline__connector">
@@ -167,8 +168,20 @@
           <p>Each channel carries an ordered <code>ReplyConfig</code>. Rules pair a matcher (case&#8209;insensitive keyword substring or BGE&#8209;embedding cosine similarity over a user&#8209;written intent description) with a response (canned text or an AI prompt). First match wins; the mandatory default rule fires if nothing else does.</p>
         </li>
         <li>
-          <h3>Action dispatches &middot; canned text or LLM call</h3>
-          <p>Canned responses send verbatim, no credit charge. Prompt responses concatenate the tenant&rsquo;s <em>persona prompt</em> with the rule&rsquo;s prompt and run the main reply model; one credit is deducted before the call (optimistic) and restored if generation or send fails. AI replies are blocked unless the persona&rsquo;s asynchronous safety check has approved the current prompt.</p>
+          <h3>Resolve the conversation session</h3>
+          <p>Per&#8209;customer threads are tracked in KV at <code>convsession:{tenant}:{channel}:{sender}</code>. If the customer has been silent for longer than <code>idle_gap_mins</code> (default 6&nbsp;h), a fresh conversation begins: a new <code>conversation_id</code> is minted, message history clears, any handoff state is wiped. Otherwise the existing session is loaded and the inbound is appended to its messages list.</p>
+        </li>
+        <li>
+          <h3>Build the prompt envelope</h3>
+          <p>The system prompt sent to the reply model is always a sandwich: a fixed <em>preamble</em> framing the model as a small&#8209;business reply assistant, the <em>editable middle</em> (the tenant&rsquo;s persona prompt + the rule prompt + the persona&rsquo;s goal &amp; handoff conditions), and a fixed <em>postamble</em> with universal house rules, jailbreak rails, and handoff triggers. The preamble and postamble are constants in <code>src/prompt.rs</code>; tenant content can never reach the model alone.</p>
+        </li>
+        <li>
+          <h3>Action dispatches &middot; canned text or multi&#8209;turn LLM call</h3>
+          <p>Canned responses send verbatim, no credit charge. Prompt responses run the reply model with the envelope above as the system message and the session&rsquo;s recent message history (capped by <code>max_history_messages</code>, default 20) as the prior turns. One credit is deducted before the call (optimistic) and restored if generation or send fails. AI replies are blocked unless the persona&rsquo;s asynchronous safety check has approved the current prompt.</p>
+        </li>
+        <li>
+          <h3>Handoff scan</h3>
+          <p>Every model reply is scanned for the <code>[[HANDOFF]]</code> sentinel before it leaves the worker. If present, the token is stripped, the session is flipped into the holding&#8209;pattern path for <code>handoff_cooldown_mins</code> (default 60&nbsp;min), and the tenant is paged once via their configured approval channels (Discord embed and/or immediate email). Past the cooldown the worker stays silent until the idle gap resets the conversation.</p>
         </li>
       </ol>
 
@@ -193,11 +206,37 @@
 
       <h2 id="persona">Persona &amp; safety check</h2>
       <ol>
-        <li>The tenant picks a curated preset, fills in the builder (tone / catch&#8209;phrases / off&#8209;topic boundaries), or writes a raw custom prompt at <code>/admin/persona</code>.</li>
-        <li>On save, the active prompt is hashed; if the hash differs from the last&#8209;vetted hash, status flips to <em>Pending</em> and a <code>SafetyJob</code> is enqueued onto Cloudflare Queue <code>concierge-safety</code>.</li>
+        <li>The tenant fills in the persona builder at <code>/admin/persona</code>: a voice archetype (Friendly / Professional / Playful / Formal), business name and type, a <em>goal</em> (what to drive customers toward, free text + optional URL), catch&#8209;phrases, off&#8209;topic boundaries, and <em>handoff conditions</em> (what to escalate to a human). Alternatively the tenant copies a curated archetype from the platform&rsquo;s D1 catalog (<code>/manage/personas</code>) or writes a raw custom prompt.</li>
+        <li>On save, the rendered active prompt is hashed; if the hash differs from the last&#8209;vetted hash, status flips to <em>Pending</em> and a <code>SafetyJob</code> is enqueued onto Cloudflare Queue <code>concierge-safety</code>.</li>
         <li>The queue consumer reads the job, re&#8209;checks the hash (drops stale jobs), and runs the safety classifier with Calculon Tech&rsquo;s content policy.</li>
         <li>The result lands back in KV as <em>Approved</em> or <em>Rejected</em> with a vague user&#8209;facing reason.</li>
         <li>While <em>Pending</em> or <em>Rejected</em>, AI replies are blocked tenant&#8209;wide; canned default replies still send.</li>
+      </ol>
+
+      <h2 id="conversations">Conversations &amp; handoff</h2>
+      <p>
+        Inbound messages don&rsquo;t live in a vacuum. Each customer&times;channel pair has a <em>conversation session</em> in KV (<code>convsession:{tenant}:{channel}:{sender}</code>) holding a stable <code>conversation_id</code>, a bounded list of recent <code>(role, content)</code> turns, the timestamp of the last inbound, and an optional handoff sub&#8209;state. The session is also stamped onto matching rows in the unified <code>messages</code> D1 table via a <code>conversation_id</code> column so a thread can be reconstructed for audit.
+      </p>
+      <ol>
+        <li><strong>Idle gap.</strong> If the customer has been silent for longer than <code>idle_gap_mins</code> (default 6&nbsp;h), the next inbound starts a fresh conversation: history clears, handoff is wiped, the persona replies normally. Six hours is long enough for a customer mulling a quote over lunch, short enough that next morning&rsquo;s message is genuinely fresh.</li>
+        <li><strong>Multi&#8209;turn context.</strong> Up to <code>max_history_messages</code> recent turns (default 20, roughly ten back&#8209;and&#8209;forths) are passed to the reply model as the prior chat history on every AI call. Queued draft replies are <em>not</em> appended to history &mdash; a draft that gets rejected can&rsquo;t poison the next AI call.</li>
+        <li><strong>Handoff signal.</strong> The postamble defines the universal triggers (the model doesn&rsquo;t understand the request; the customer asks for a person; the message touches medical / legal / financial / safety territory) and the persona&rsquo;s <em>handoff conditions</em> add tenant&#8209;specific ones. To escalate, the model writes one polite holding sentence and ends the reply with <code>[[HANDOFF]]</code> on its own line.</li>
+        <li><strong>Pipeline reaction.</strong> The token is stripped before the customer sees the reply. The session flips into the holding pattern, replacing the persona middle with a calm "a person has been notified" voice for any follow&#8209;up turns within <code>handoff_cooldown_mins</code> (default 60&nbsp;min). Past the cooldown the worker stays silent until the idle gap resets the conversation.</li>
+        <li><strong>Tenant page.</strong> The tenant is paged once per handoff via their configured approval&#8209;notification channels &mdash; Discord embed (via the bot) and/or immediate email through <code>send_outbound</code>. This is not the digest cron: the page goes out the moment the handoff fires.</li>
+      </ol>
+      <p>
+        Operators tune all three knobs (<code>idle_gap_mins</code>, <code>handoff_cooldown_mins</code>, <code>max_history_messages</code>) per&#8209;tenant from the Conversation Timing card on <code>/admin/settings</code>. The form enforces sensible bounds (5&ndash;1440 min, 1&ndash;200 turns) and a cross&#8209;field invariant: idle gap must be longer than handoff cooldown, otherwise an active handoff could be wiped before its cooldown ended. Empty fields fall back to the in&#8209;code defaults.
+      </p>
+
+      <h2 id="demo">Live demo chat</h2>
+      <p>
+        The public welcome page hosts a live demo modal so visitors can see the AI in action without signing up. It&rsquo;s framed explicitly: visitors roleplay as a customer of a sample business (florist, salon, cafe, &hellip;) and watch the AI reply in real time. Real customer messages still arrive on WhatsApp, Instagram, email, or Discord &mdash; the demo chat box is never a customer surface.
+      </p>
+      <ol>
+        <li><code>GET /demo/personas</code> returns the safety&#8209;Approved archetypes from the D1 personas catalog, with sample business fields (name, type, city, goal) for the picker.</li>
+        <li>The chat&#8209;input form posts to <code>POST /demo/chat</code> with the picked persona slug, the visitor&rsquo;s message, the prior turns kept client&#8209;side, and a stateless handoff flag.</li>
+        <li>The handler runs the message through the same prompt envelope and reply model the production pipeline uses, gates on the same safety classifier, and respects the same handoff sentinel. The "View prompt" panel reveals the exact envelope being sent so visitors can see what the model receives.</li>
+        <li>Handoff round&#8209;trips statelessly via <code>{handoff: bool}</code> on the wire and an Alpine flag in the modal; persona switch and modal close reset it.</li>
       </ol>
 
       <h2 id="email">Email routing</h2>
@@ -335,6 +374,8 @@
         <li class="lvl-2"><a href="#pipeline" class="is-current">The unified pipeline</a></li>
         <li class="lvl-2"><a href="#whatsapp">WhatsApp / Instagram auto-reply</a></li>
         <li class="lvl-2"><a href="#persona">Persona &amp; safety check</a></li>
+        <li class="lvl-2"><a href="#conversations">Conversations &amp; handoff</a></li>
+        <li class="lvl-2"><a href="#demo">Live demo chat</a></li>
         <li class="lvl-2"><a href="#email">Email routing</a></li>
         <li class="lvl-2"><a href="#discord">Discord relay</a></li>
         <li class="lvl-2"><a href="#lead-forms">Lead capture forms</a></li>
