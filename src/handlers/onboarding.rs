@@ -221,11 +221,40 @@ pub async fn handle_wizard(
             // the business name from the basics step so the generated
             // prompt mentions the actual business; biz_type is a
             // description ("florist", "cafe") and lives on /admin/persona.
+            //
+            // Goal + handoff conditions are wizard-collected (the two
+            // questions tenants are best-positioned to answer up front),
+            // sanitised and capped here. The rest of the builder fields
+            // (catch_phrases, off_topics, etc.) still get filled in at
+            // /admin/persona later.
             let archetype = PersonaPreset::from_slug(preset_slug).unwrap_or_default();
+            let goal_raw = form
+                .get("goal")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .trim();
+            let goal: String = goal_raw.chars().take(120).collect();
+            let goal_url_raw = form.get("goal_url").and_then(|v| v.as_str()).unwrap_or("");
+            let goal_url: String = crate::personas::sanitize_goal_url(goal_url_raw)
+                .chars()
+                .take(200)
+                .collect();
+            let handoff_conditions: Vec<String> = form
+                .get("handoff_conditions")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .split('\n')
+                .map(|s| s.trim().chars().take(120).collect::<String>())
+                .filter(|s| !s.is_empty())
+                .take(5)
+                .collect();
             state.persona = PersonaConfig {
                 source: PersonaSource::Builder(crate::types::PersonaBuilder {
                     archetype,
                     biz_name: state.business.name.clone(),
+                    goal,
+                    goal_url,
+                    handoff_conditions,
                     ..Default::default()
                 }),
                 safety: PersonaSafety::default(),

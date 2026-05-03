@@ -65,6 +65,7 @@ async function stubDemoPersonas(page: any) {
             label: 'Concierge',
             description: 'Talks about Concierge.',
             greeting: "Hi! I'm Concierge.",
+            is_system: true,
             prompt: CONCIERGE_DEMO_PROMPT,
           },
           {
@@ -72,6 +73,15 @@ async function stubDemoPersonas(page: any) {
             label: 'Friendly Florist',
             description: 'Florist voice.',
             greeting: 'Hi there! Welcome to the shop.',
+            is_system: false,
+            business: {
+              name: 'Petals & Stems',
+              business_type: 'florist',
+              city: 'Mumbai',
+              hours: 'Tue–Sun 9am–7pm',
+              goal: 'book a delivery slot',
+              goal_url: '/book',
+            },
             prompt: 'Business: Petals & Stems, a florist.',
           },
         ],
@@ -217,4 +227,78 @@ test('demo-chat surfaces the rate-limit message on 429', async ({ page }) => {
   await dialog.getByRole('textbox').fill('hello?');
   await dialog.getByRole('button', { name: 'Send' }).click();
   await expect(dialog.getByText(/quite a few messages/i)).toBeVisible();
+});
+
+test('demo-chat shows business goal row in card', async ({ page }) => {
+  await stubDemoPersonas(page);
+  await page.goto('/');
+  await page.locator('#demo-chat-hint-text').click();
+  const dialog = page.getByRole('dialog', { name: /live demo/i });
+  // Switch to a builder persona so the business card renders.
+  const select = dialog.locator('[data-testid="demo-chat-persona"]');
+  await select.selectOption('friendly_florist');
+  // Goal row text comes from the stub payload's business.goal field.
+  await expect(dialog.locator('.chat-business-card')).toContainText(
+    /book a delivery slot/i,
+  );
+});
+
+test('demo-chat flips into holding pattern when server returns handoff:true', async ({
+  page,
+}) => {
+  await stubDemoPersonas(page);
+  // First send: server flags handoff. Second send: client must echo
+  // `handoff: true` in the request body and the server's holding-pattern
+  // reply gets shown; the chip stays visible.
+  let firstBody: any = null;
+  let secondBody: any = null;
+  let calls = 0;
+  await page.route('**/demo/chat', async (route) => {
+    calls += 1;
+    const body = route.request().postDataJSON();
+    if (calls === 1) {
+      firstBody = body;
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          reply: 'I have flagged a teammate. They will be in touch.',
+          handoff: true,
+        }),
+      });
+    } else {
+      secondBody = body;
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          reply: 'Still holding for a teammate — they will reply directly.',
+          handoff: true,
+        }),
+      });
+    }
+  });
+
+  await page.goto('/');
+  await page.locator('#demo-chat-hint-text').click();
+  const dialog = page.getByRole('dialog', { name: /live demo/i });
+  // Switch to florist so we're not on Concierge (handoff applies to
+  // builder personas in real use; the demo accepts it on any).
+  await dialog.locator('[data-testid="demo-chat-persona"]').selectOption('friendly_florist');
+
+  await dialog.getByRole('textbox').fill('actually I want a refund');
+  await dialog.getByRole('button', { name: 'Send' }).click();
+  await expect(dialog.locator('.chat-handoff-chip')).toBeVisible();
+  expect(firstBody).toMatchObject({ handoff: false });
+
+  // Pressing Enter on the input dispatches the same submit handler
+  // and avoids button-visibility flakes when the modal scrolls on
+  // mobile. The handler is `@submit.prevent="send()"` so either path
+  // exercises the same code.
+  const input = dialog.getByRole('textbox');
+  await input.fill('are you still there?');
+  await input.press('Enter');
+  await expect(dialog.getByText(/Still holding for a teammate/i)).toBeVisible();
+  // Client must echo handoff:true on subsequent sends.
+  expect(secondBody).toMatchObject({ handoff: true });
 });

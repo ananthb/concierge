@@ -5,6 +5,13 @@
 //! AI under that persona's system prompt. Per-IP rate-limited; every
 //! reply also runs through the prompt-injection scanner and the
 //! Approved-only persona gate. No bypass.
+//!
+//! Handoff: the demo handler is stateless on the server. The client
+//! tracks `handoff` in modal state; once set, every subsequent send
+//! includes `handoff: true` and the server swaps the persona middle
+//! for [`crate::prompt::HOLDING_PATTERN_MIDDLE`]. There's no real
+//! human to escalate to in the demo, so the holding pattern lasts as
+//! long as the modal session does — there's no cooldown branch.
 
 use serde::{Deserialize, Serialize};
 use worker::*;
@@ -23,6 +30,11 @@ struct ChatRequest {
     #[serde(default)]
     persona: String,
     messages: Vec<ChatMessage>,
+    /// Set by the client once a previous turn flagged a handoff. When
+    /// true the server replies under the holding-pattern middle, not
+    /// the persona's prompt.
+    #[serde(default)]
+    handoff: bool,
 }
 
 #[derive(Deserialize)]
@@ -34,6 +46,11 @@ struct ChatMessage {
 #[derive(Serialize)]
 struct ChatReply<'a> {
     reply: &'a str,
+    /// True iff the AI's reply contained the handoff token. The token
+    /// is stripped from `reply` before sending; the client uses this
+    /// flag to flip into the holding-pattern UI and to echo
+    /// `handoff: true` on subsequent sends.
+    handoff: bool,
 }
 
 #[derive(Serialize)]
@@ -144,25 +161,50 @@ pub async fn handle_demo_chat(mut req: Request, env: Env) -> Result<Response> {
         );
     }
 
-    // Same envelope every tenant prompt gets — the demo is just another
-    // small business in the wrapper's eyes.
-    let middle = row.source.active_prompt();
-    let wrapped_prompt = crate::prompt::wrap(&middle);
+    // Same envelope every tenant prompt gets — but on top of that, the
+    // demo prepends a one-off "you're inside Concierge's marketing-site
+    // demo, the visitor is a prospect roleplaying as a customer, nudge
+    // them at conversation-end" frame for builder personas. The system
+    // Concierge row is exempt: it already speaks to the visitor as a
+    // prospect directly.
+    //
+    // Once the client signals `handoff: true`, the persona middle is
+    // replaced wholesale by [`crate::prompt::HOLDING_PATTERN_MIDDLE`]
+    // — no demo frame, no goal-driving — until the modal session ends.
+    let wrapped_prompt = if parsed.handoff {
+        crate::prompt::wrap(crate::prompt::HOLDING_PATTERN_MIDDLE)
+    } else {
+        let persona_middle = row.source.active_prompt();
+        let demo_middle = crate::prompt::compose_demo_middle(&persona_middle, row.is_system);
+        crate::prompt::wrap(&demo_middle)
+    };
     let history: Vec<(String, String)> = parsed
         .messages
         .into_iter()
         .map(|m| (m.role, m.content))
         .collect();
 
-    let reply = match ai::generate_chat_reply(&env, &wrapped_prompt, &history).await {
-        Ok(r) => r.trim().to_string(),
+    let raw_reply = match ai::generate_chat_reply(&env, &wrapped_prompt, &history).await {
+        Ok(r) => r,
         Err(e) => {
             console_log!("Demo chat AI error (persona={}): {:?}", row.slug, e);
             return json_error("Couldn't generate a reply right now.", 502);
         }
     };
 
-    json_response(&ChatReply { reply: &reply }, 200)
+    // Scan for the handoff sentinel before the customer ever sees it.
+    // If we're already in the holding pattern, the postamble told the
+    // model not to re-emit; this just defends against the model
+    // ignoring that instruction.
+    let stripped = crate::prompt::detect_and_strip_handoff(&raw_reply);
+    let handoff_signaled = stripped.handoff && !parsed.handoff;
+    json_response(
+        &ChatReply {
+            reply: &stripped.reply,
+            handoff: handoff_signaled || parsed.handoff,
+        },
+        200,
+    )
 }
 
 fn json_response<T: Serialize>(body: &T, status: u16) -> Result<Response> {

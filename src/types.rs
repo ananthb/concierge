@@ -707,6 +707,13 @@ pub struct InboundMessage {
 }
 
 /// Conversation context for cross-channel Discord relay.
+///
+/// Doubles as the per-conversation state store for human-handoff: when
+/// the AI emits the handoff token in a reply, the pipeline records
+/// `handoff_signaled_at` here so subsequent customer messages on the
+/// same conversation route through the holding-pattern prompt instead
+/// of the persona — and stop replying entirely after
+/// [`crate::prompt::HANDOFF_COOLDOWN_MINS`].
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct ConversationContext {
     pub id: String,
@@ -720,6 +727,59 @@ pub struct ConversationContext {
     #[serde(default)]
     pub ai_draft: Option<String>,
     pub created_at: String,
+    /// RFC3339 timestamp of the *first* turn on this conversation that
+    /// emitted the handoff token. Once set, every subsequent turn
+    /// follows the holding-pattern path until the cooldown expires.
+    #[serde(default)]
+    pub handoff_signaled_at: Option<String>,
+    /// One-shot guard: flips to true once the tenant has been alerted
+    /// (Discord + email) so additional customer turns inside the
+    /// holding-pattern window don't re-spam them.
+    #[serde(default)]
+    pub handoff_notified: bool,
+}
+
+/// Per-customer conversation session. Stable-keyed by
+/// `(tenant_id, channel, channel_account_id, sender)` (see
+/// `storage::save_session`).
+///
+/// Concierge doesn't have a formal "thread" object — a Session is the
+/// soft equivalent. A conversation is considered ended once the
+/// customer has been silent for
+/// [`crate::prompt::CONVERSATION_IDLE_GAP_MINS`]: the next inbound
+/// after that gap starts a fresh conversation (any in-progress handoff
+/// state is wiped). Within the gap, all inbound from the same sender
+/// belong to the same conversation regardless of length.
+///
+/// This is distinct from `ConversationContext` (which is per
+/// AI-draft-approval). Sessions are per-thread.
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct Session {
+    /// RFC3339 timestamp of the most recent inbound message we
+    /// processed for this thread. Updated on every inbound, including
+    /// during the post-cooldown silent window — so as long as the
+    /// customer keeps pinging within the idle gap, the thread stays
+    /// bound to the same conversation (and the same handoff record,
+    /// if any).
+    pub last_inbound_at: String,
+    /// In-progress handoff sub-state. `None` for a normal conversation;
+    /// populated once the AI signals a handoff. Cleared at conversation
+    /// boundaries (idle gap exceeded).
+    #[serde(default)]
+    pub handoff: Option<HandoffState>,
+}
+
+/// Per-conversation handoff state. Lives inside `Session::handoff`.
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct HandoffState {
+    /// RFC3339 timestamp of the AI turn that emitted the handoff
+    /// token. Used to compute the cooldown window
+    /// ([`crate::prompt::HANDOFF_COOLDOWN_MINS`]).
+    pub signaled_at: String,
+    /// One-shot guard so additional customer messages inside the
+    /// holding-pattern window don't re-page the tenant.
+    #[serde(default)]
+    pub notified: bool,
 }
 
 /// Business information for KYC / Indian regulatory compliance.
@@ -1112,12 +1172,38 @@ pub struct PersonaBuilder {
     pub biz_type: String,
     #[serde(default)]
     pub city: String,
+    /// Free-text business hours (e.g. "Tue–Sun 9am–7pm"). Optional.
+    /// Plugged into the generated prompt as a "Hours: …" line so the
+    /// AI can reference them when a customer asks "are you open?".
+    #[serde(default)]
+    pub hours: String,
+    /// The single outcome the AI should drive customers toward
+    /// (e.g. "book a delivery slot"). Optional but strongly encouraged.
+    /// When blank, [`crate::personas::generate`] emits a default
+    /// "answer the question and let them know a human will follow up"
+    /// goal so every prompt has a concrete endpoint.
+    #[serde(default)]
+    pub goal: String,
+    /// Optional landing place for the goal: a relative path (`/book`) or
+    /// an absolute `https://` URL. Sanitised on save —
+    /// `javascript:`/`data:`/bare domains are rejected.
+    #[serde(default)]
+    pub goal_url: String,
     #[serde(default)]
     pub catch_phrases: Vec<String>,
     #[serde(default)]
     pub off_topics: Vec<String>,
     #[serde(default)]
     pub never: String,
+    /// Free-text conditions under which the AI should stop trying and
+    /// hand off to a human (e.g. "the customer is upset", "any refund
+    /// or complaint"). Optional but recommended. Rendered as a
+    /// "Hand off to a human if any of these come up: …" block. The
+    /// universal triggers (model confused, customer asks for a person,
+    /// medical/legal/financial/safety territory) live in the immutable
+    /// postamble — these are tenant-specific additions.
+    #[serde(default)]
+    pub handoff_conditions: Vec<String>,
 }
 
 /// One row in the `personas` D1 catalog. Curated by management, listed
@@ -1289,11 +1375,15 @@ mod tests {
             reply_metadata: serde_json::json!({"domain": "example.com"}),
             ai_draft: Some("Draft reply text".into()),
             created_at: "2026-01-01T00:00:00Z".into(),
+            handoff_signaled_at: None,
+            handoff_notified: false,
         };
         let json = serde_json::to_string(&ctx).unwrap();
         let parsed: ConversationContext = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed.origin_channel, Channel::Email);
         assert_eq!(parsed.ai_draft.as_deref(), Some("Draft reply text"));
+        assert!(parsed.handoff_signaled_at.is_none());
+        assert!(!parsed.handoff_notified);
     }
 
     #[test]

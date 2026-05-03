@@ -904,16 +904,20 @@ pub fn persona_edit_html(
     }
 
     let x_data = format!(
-        "{{ mode: '{mode}', customText: '{custom}', builder: {{ archetype: '{archetype}', biz_name: '{biz_name}', biz_type: '{biz_type}', city: '{city}', catch_phrases: '{cp}', off_topics: '{ot}', never: '{never}' }} }}",
+        "{{ mode: '{mode}', customText: '{custom}', builder: {{ archetype: '{archetype}', biz_name: '{biz_name}', biz_type: '{biz_type}', city: '{city}', hours: '{hours}', goal: '{goal}', goal_url: '{goal_url}', catch_phrases: '{cp}', off_topics: '{ot}', never: '{never}', handoff_conditions: '{handoff}' }} }}",
         mode = esc_js(mode),
         custom = esc_js(&custom_text),
         archetype = esc_js(builder.archetype.slug()),
         biz_name = esc_js(&builder.biz_name),
         biz_type = esc_js(&builder.biz_type),
         city = esc_js(&builder.city),
+        hours = esc_js(&builder.hours),
+        goal = esc_js(&builder.goal),
+        goal_url = esc_js(&builder.goal_url),
         cp = esc_js(&builder.catch_phrases.join("\n")),
         ot = esc_js(&builder.off_topics.join("\n")),
         never = esc_js(&builder.never),
+        handoff = esc_js(&builder.handoff_conditions.join("\n")),
     );
 
     let h1 = if is_new {
@@ -975,8 +979,20 @@ pub fn persona_edit_html(
             <input id="persona-city" class="input" name="city" x-model="builder.city">
           </div>
           <div>
+            <label for="persona-hours" class="eyebrow lbl">Hours (optional)</label>
+            <input id="persona-hours" class="input" name="hours" x-model="builder.hours" placeholder="Tue–Sun 9am–7pm">
+          </div>
+          <div>
             <label for="persona-never" class="eyebrow lbl">Never (one short rule)</label>
             <input id="persona-never" class="input" name="never" x-model="builder.never">
+          </div>
+          <div>
+            <label for="persona-goal" class="eyebrow lbl">Goal (drives the conversation)</label>
+            <input id="persona-goal" class="input" name="goal" x-model="builder.goal" maxlength="120" placeholder="book a delivery slot">
+          </div>
+          <div>
+            <label for="persona-goal-url" class="eyebrow lbl">Goal URL (optional)</label>
+            <input id="persona-goal-url" class="input" name="goal_url" x-model="builder.goal_url" maxlength="200" placeholder="/book">
           </div>
         </div>
         <div class="mt-12">
@@ -986,6 +1002,10 @@ pub fn persona_edit_html(
         <div class="mt-12">
           <label for="persona-off" class="eyebrow lbl">Off-topic subjects (one per line)</label>
           <textarea id="persona-off" class="textarea" name="off_topics" x-model="builder.off_topics" rows="3"></textarea>
+        </div>
+        <div class="mt-12">
+          <label for="persona-handoff" class="eyebrow lbl">Hand off to a human if (one per line, max 5)</label>
+          <textarea id="persona-handoff" class="textarea" name="handoff_conditions" x-model="builder.handoff_conditions" rows="3" placeholder="refund or complaint&#10;the customer is upset"></textarea>
         </div>
       </div>
 
