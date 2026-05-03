@@ -211,6 +211,12 @@ async fn handle_auto_reply(
             } else {
                 format!("{persona_prompt}\n\n{rule_prompt}")
             };
+            // Wrap the tenant's persona+rule text in the safety/alignment
+            // envelope. The envelope is non-editable and ships globally;
+            // the bookends are visible everywhere the user views a prompt
+            // so there's no surprise about what's actually sent to the
+            // model.
+            let wrapped = crate::prompt::wrap(&combined);
 
             let mut context = serde_json::Map::new();
             if let Some(ref name) = msg.sender_name {
@@ -222,7 +228,7 @@ async fn handle_auto_reply(
                 serde_json::Value::String(safe_body.clone()),
             );
 
-            match ai::generate_response(env, &combined, &context).await {
+            match ai::generate_response(env, &wrapped, &context).await {
                 Ok(r) => r,
                 Err(e) => {
                     console_log!("AI auto-reply error: {:?}", e);

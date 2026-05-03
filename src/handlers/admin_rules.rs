@@ -35,7 +35,8 @@ const MAX_LABEL: usize = 80;
 const MAX_KEYWORDS: usize = 20;
 const MAX_KEYWORD_LEN: usize = 80;
 const MAX_DESCRIPTION: usize = 200;
-const MAX_RESPONSE: usize = 2000;
+/// Same limit every other prompt-bearing handler uses — see `crate::prompt`.
+const MAX_RESPONSE: usize = crate::prompt::MAX_CUSTOM_PROMPT;
 const MAX_RULES: usize = 50;
 
 pub enum ChannelRef<'a> {

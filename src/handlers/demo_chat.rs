@@ -109,13 +109,16 @@ pub async fn handle_demo_chat(mut req: Request, env: Env) -> Result<Response> {
     }
 
     let persona = demo_personas::lookup(&parsed.persona);
+    // Same envelope every tenant prompt gets — the demo is just another
+    // small business in the wrapper's eyes.
+    let wrapped_prompt = crate::prompt::wrap(persona.prompt);
     let history: Vec<(String, String)> = parsed
         .messages
         .into_iter()
         .map(|m| (m.role, m.content))
         .collect();
 
-    let reply = match ai::generate_chat_reply(&env, persona.prompt, &history).await {
+    let reply = match ai::generate_chat_reply(&env, &wrapped_prompt, &history).await {
         Ok(r) => r.trim().to_string(),
         Err(e) => {
             console_log!("Demo chat AI error (persona={}): {:?}", persona.slug, e);

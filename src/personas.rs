@@ -62,10 +62,10 @@ impl PersonaPreset {
 
     pub fn prompt(&self) -> &'static str {
         match self {
-            PersonaPreset::FriendlyFlorist => FRIENDLY_FLORIST_PROMPT,
-            PersonaPreset::ProfessionalSalon => PROFESSIONAL_SALON_PROMPT,
-            PersonaPreset::PlayfulCafe => PLAYFUL_CAFE_PROMPT,
-            PersonaPreset::OldSchoolClinic => OLD_SCHOOL_CLINIC_PROMPT,
+            PersonaPreset::FriendlyFlorist => crate::prompt::PRESET_FRIENDLY_FLORIST,
+            PersonaPreset::ProfessionalSalon => crate::prompt::PRESET_PROFESSIONAL_SALON,
+            PersonaPreset::PlayfulCafe => crate::prompt::PRESET_PLAYFUL_CAFE,
+            PersonaPreset::OldSchoolClinic => crate::prompt::PRESET_OLD_SCHOOL_CLINIC,
         }
     }
 
@@ -221,10 +221,11 @@ impl PersonaPreset {
 }
 
 /// Pure function: render a `PersonaBuilder` to its prompt text. Used both by
-/// `PersonaConfig::active_prompt()` and the admin UI's live preview.
+/// `PersonaConfig::active_prompt()` and the admin UI's live preview. The
+/// opening and closing lines come from `crate::prompt`; everything between
+/// them is built from the user's builder fields.
 pub fn generate(b: &PersonaBuilder) -> String {
-    let mut parts: Vec<String> =
-        vec!["You are a helpful messaging assistant for a small business.".to_string()];
+    let mut parts: Vec<String> = vec![crate::prompt::BUILDER_OPENING.to_string()];
 
     if !b.biz_type.is_empty() {
         let loc = if b.city.is_empty() {
@@ -277,39 +278,6 @@ pub fn generate(b: &PersonaBuilder) -> String {
         ));
     }
 
-    parts.push("Keep replies short (1-3 sentences). If unsure, hand off to the owner.".to_string());
+    parts.push(crate::prompt::BUILDER_CLOSING.to_string());
     parts.join("\n")
 }
-
-const FRIENDLY_FLORIST_PROMPT: &str = "\
-You are a warm, friendly assistant for a small florist. \
-Speak like a kind shopkeeper who's known the customer for years. \
-Confirm you'd love to help, ask one clarifying question if you need it, \
-and let the customer know the owner will follow up to confirm details. \
-Never quote firm prices; never promise a delivery date or arrangement detail. \
-Politely decline non-flower topics like politics or relationship advice. \
-Keep replies short (1-3 sentences) and kind.";
-
-const PROFESSIONAL_SALON_PROMPT: &str = "\
-You are a concise, professional assistant for a hair and beauty salon. \
-Greet briefly, confirm what's possible, and ask for the missing detail (service, day, stylist). \
-Defer firm bookings to the salon's front desk. \
-Never give medical advice, hair-loss diagnoses, or product allergy guidance. \
-Keep replies short (1-3 sentences) and to the point.";
-
-const PLAYFUL_CAFE_PROMPT: &str = "\
-You are a playful, upbeat assistant for a neighborhood cafe. \
-Use emoji sparingly (☕ or 🌿) when it fits. \
-Answer simple questions about hours and the menu cheerfully; for orders, ask the customer to \
-swing by or say a human will confirm. \
-Never give nutrition or allergy advice. \
-Keep replies short (1-2 sentences) and warm.";
-
-const OLD_SCHOOL_CLINIC_PROMPT: &str = "\
-You are a polite, formal assistant for a small medical clinic. \
-Address the patient respectfully. \
-For appointments, ask for the patient's name and preferred day; confirm a human will follow up \
-during clinic hours. \
-Never diagnose, prescribe, suggest medications, or interpret symptoms. \
-For anything that sounds urgent, advise contacting emergency services. \
-Keep replies short (1-3 sentences) and respectful.";
