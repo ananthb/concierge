@@ -71,11 +71,11 @@ pub fn dashboard_html(
       <div class="mono muted fs-11">Tenants</div>
     </div>
     <div class="card p-18 ta-center">
-      <div class="stat-n serif">—</div>
+      <div class="stat-n serif">–</div>
       <div class="mono muted fs-11">MRR</div>
     </div>
     <div class="card p-18 ta-center">
-      <div class="stat-n serif">—</div>
+      <div class="stat-n serif">–</div>
       <div class="mono muted fs-11">Active</div>
     </div>
   </div>
@@ -173,7 +173,7 @@ pub fn tenants_list_html(tenants: &[Tenant], base_url: &str, locale: &Locale) ->
                 base_url = base_url,
                 id = html_escape(&t.id),
                 email = html_escape(&t.email),
-                name = html_escape(t.name.as_deref().unwrap_or("—")),
+                name = html_escape(t.name.as_deref().unwrap_or("–")),
                 plan = html_escape(t.plan.label()),
                 created = html_escape(&t.created_at.get(..10).unwrap_or(&t.created_at)),
             )
@@ -317,7 +317,7 @@ pub fn tenant_detail_html(
         hash = HASH,
         id = html_escape(&tenant.id),
         email = html_escape(&tenant.email),
-        name = html_escape(tenant.name.as_deref().unwrap_or("—")),
+        name = html_escape(tenant.name.as_deref().unwrap_or("–")),
         plan = html_escape(tenant.plan.label()),
         created = html_escape(&tenant.created_at.get(..10).unwrap_or(&tenant.created_at)),
         plan_options = crate::types::Plan::ALL
@@ -444,7 +444,7 @@ fn scheduled_grants_table(scheduled: &[crate::types::ScheduledGrant], base_url: 
             } else {
                 format!("{}d", g.expires_in_days)
             };
-            let last_run = g.last_run_at.as_deref().unwrap_or("—");
+            let last_run = g.last_run_at.as_deref().unwrap_or("–");
             let active = if g.active { "active" } else { "off" };
             format!(
                 r##"<tr>
@@ -667,7 +667,7 @@ fn add_currency_form(base_url: &str, existing: &[String]) -> String {
         .map(|c| {
             let info = currency_info(c);
             format!(
-                r#"<option value="{code}">{code} — {name} ({symbol})</option>"#,
+                r#"<option value="{code}">{code} · {name} ({symbol})</option>"#,
                 code = c,
                 name = html_escape(&info.name),
                 symbol = html_escape(&info.symbol),
@@ -789,7 +789,7 @@ pub fn personas_list_html(
         rows = row_html,
     );
     manage_shell(
-        "Personas — Concierge",
+        "Personas · Concierge",
         &content,
         "Personas",
         base_url,
@@ -923,7 +923,7 @@ pub fn persona_edit_html(
     let h1 = if is_new {
         "New persona".to_string()
     } else {
-        format!("Edit persona — {}", html_escape(&row_ref.label))
+        format!("Edit persona · {}", html_escape(&row_ref.label))
     };
 
     let content = format!(
@@ -1037,7 +1037,7 @@ pub fn persona_edit_html(
         delete_button = delete_button,
     );
     manage_shell(
-        "Persona — Concierge",
+        "Persona · Concierge",
         &content,
         "Personas",
         base_url,
@@ -1094,7 +1094,7 @@ mod tests {
         assert!(html.contains("Indian Rupee"));
         assert!(html.contains("United States Dollar"));
 
-        // No conversion text — currencies render side-by-side, not derived.
+        // No conversion text; currencies render side-by-side, not derived.
         assert!(!html.contains("paise_per_usd"));
         assert!(!html.contains("USD exchange rate"));
 

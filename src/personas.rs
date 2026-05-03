@@ -1,7 +1,7 @@
 //! Persona archetypes (voice only) + the builder → prompt generator.
 //!
 //! `PersonaPreset` is now a *voice archetype* (Friendly / Professional /
-//! Playful / Formal) — decoupled from any business type. Curated
+//! Playful / Formal), decoupled from any business type. Curated
 //! personas with sample business fields live in the D1 `personas`
 //! catalog (see `migrations/0001_create_schema.sql`). Adding a new
 //! archetype is a code change here + a `crate::prompt::VOICE_*`
@@ -62,7 +62,7 @@ impl PersonaPreset {
     }
 
     /// Default reply rules seeded into a new channel's `ReplyConfig`.
-    /// Thin and archetype-flavoured — a Pricing rule and an After-hours
+    /// Thin and archetype-flavoured: a Pricing rule and an After-hours
     /// rule, voiced per archetype. Tenants curate the rest themselves
     /// after onboarding (delivery for florists, booking for salons,
     /// emergencies for clinics, etc.).
@@ -113,7 +113,7 @@ impl PersonaPreset {
     }
 }
 
-/// Pure function: render a `PersonaBuilder` to its prompt text — the
+/// Pure function: render a `PersonaBuilder` to its prompt text. The
 /// editable middle that gets envelope-wrapped at AI-call time.
 ///
 /// Shape:
@@ -145,7 +145,7 @@ pub fn generate(b: &PersonaBuilder) -> String {
 
     parts.push(b.archetype.voice().to_string());
 
-    // Goal is policy-adjacent to voice and is *always* emitted — when
+    // Goal is policy-adjacent to voice and is *always* emitted. When
     // blank, we substitute a sensible default so the rendered middle is
     // deterministic (and the safety classifier sees the same prompt the
     // model will). Order matters: keep Goal next to Voice so the model
@@ -204,7 +204,7 @@ pub fn generate(b: &PersonaBuilder) -> String {
 
 /// Render the always-emitted Goal line. When `goal` is non-empty, it
 /// reads `Goal: guide the customer to {goal}{ at {url}}.`. When blank,
-/// it falls back to the tenant-friendly default — every prompt must
+/// it falls back to the tenant-friendly default. Every prompt must
 /// have a concrete endpoint, even before the owner has decided what
 /// they want.
 fn goal_line(goal: &str, goal_url: &str) -> String {

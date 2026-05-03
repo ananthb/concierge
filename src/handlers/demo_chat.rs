@@ -11,7 +11,7 @@
 //! includes `handoff: true` and the server swaps the persona middle
 //! for [`crate::prompt::HOLDING_PATTERN_MIDDLE`]. There's no real
 //! human to escalate to in the demo, so the holding pattern lasts as
-//! long as the modal session does — there's no cooldown branch.
+//! long as the modal session does. There's no cooldown branch.
 
 use serde::{Deserialize, Serialize};
 use worker::*;
@@ -84,7 +84,7 @@ pub async fn handle_demo_chat(mut req: Request, env: Env) -> Result<Response> {
         }
     }
     // Llama chat templates expect the first non-system message to be a user
-    // turn — leading with assistant content (e.g. a client-side greeting)
+    // turn. Leading with assistant content (e.g. a client-side greeting)
     // confuses generation. Strip any leading assistant messages here.
     while parsed.messages.first().map(|m| m.role.as_str()) == Some("assistant") {
         parsed.messages.remove(0);
@@ -127,7 +127,7 @@ pub async fn handle_demo_chat(mut req: Request, env: Env) -> Result<Response> {
     }
 
     // Resolve the persona from the D1 catalog. Refuse with 503 if the
-    // requested slug isn't there or isn't Approved — no bypass even if a
+    // requested slug isn't there or isn't Approved. No bypass even if a
     // management user is testing.
     let db = env.d1("DB")?;
     let slug = if parsed.persona.is_empty() {
@@ -161,7 +161,7 @@ pub async fn handle_demo_chat(mut req: Request, env: Env) -> Result<Response> {
         );
     }
 
-    // Same envelope every tenant prompt gets — but on top of that, the
+    // Same envelope every tenant prompt gets. On top of that, the
     // demo prepends a one-off "you're inside Concierge's marketing-site
     // demo, the visitor is a prospect roleplaying as a customer, nudge
     // them at conversation-end" frame for builder personas. The system
@@ -170,7 +170,7 @@ pub async fn handle_demo_chat(mut req: Request, env: Env) -> Result<Response> {
     //
     // Once the client signals `handoff: true`, the persona middle is
     // replaced wholesale by [`crate::prompt::HOLDING_PATTERN_MIDDLE`]
-    // — no demo frame, no goal-driving — until the modal session ends.
+    // (no demo frame, no goal-driving) until the modal session ends.
     let wrapped_prompt = if parsed.handoff {
         crate::prompt::wrap(crate::prompt::HOLDING_PATTERN_MIDDLE)
     } else {

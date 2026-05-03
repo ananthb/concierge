@@ -1,4 +1,4 @@
-//! Discord integration — top-level helpers built on the `botrelay` crate,
+//! Discord integration. Top-level helpers built on the `botrelay` crate,
 //! plus the interaction-dispatch entry point and slash-command / component
 //! handlers.
 

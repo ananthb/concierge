@@ -28,7 +28,7 @@ Don't want to self-host? [concierge.calculon.tech](https://concierge.calculon.te
 - **Localized**: per-tenant BCP-47 locale (`en-IN` and `en-US` shipped) drives Indian-vs-Western number grouping (₹1,00,000 vs $100,000) via icu4x; translation backbone uses fluent-rs FTL files for drop-in new languages. AI-generated reply content stays English regardless of UI locale
 - **Management Panel**: Cloudflare Access-protected admin for tenant management, billing, audit log
 - **Billing**: flat prepaid credits (₹0.10 / $0.001 per AI reply, 100 included every month). Static auto-replies don't consume credits. Buy any quantity (slider, no tiers, no packs). Reply-email subscription: 5 addresses per ₹99 / $1 per month. All prices live in `global_settings` and are editable from the management panel
-- **Privacy-first**: no message content stored. Metadata only. GDPR data deletion
+- **Metadata-only logging**: message bodies pass through the Worker but are never written to durable storage. Only channel, direction, sender, recipient, and timestamp are persisted. A `/data-deletion` endpoint wipes the metadata that is stored.
 
 ## Deploy
 
@@ -40,10 +40,10 @@ To wire up your fork:
 
 1. In the Cloudflare dashboard, create a Worker named (e.g.) `concierge` and connect this repo under **Settings → Builds**.
    - **Build command:** leave default (CF Builds runs `npm install` from `package.json`)
-   - **Deploy command:** `npm run deploy` (defined in `package.json` — installs `worker-build` then runs `wrangler deploy`)
+   - **Deploy command:** `npm run deploy` (defined in `package.json`; installs `worker-build` then runs `wrangler deploy`)
 2. Bind a D1 database (`DB`), KV namespace (`KV`), Workers AI (`AI`), Email Routing send-binding (`EMAIL`), Durable Objects (`REPLY_BUFFER` → `ReplyBufferDO`, `APPROVALS_DO` → `ApprovalsDO`), and Queues (`SAFETY_QUEUE` producer + `concierge-safety` / `concierge-safety-dlq` consumers) under **Settings → Bindings**. Names must match the `binding` values in [`wrangler.toml`](wrangler.toml).
-3. Set runtime variables and secrets under **Settings → Variables and Secrets** — full list is documented at the bottom of [`wrangler.toml`](wrangler.toml).
-4. Push to `main`. Cloudflare Builds runs the build command, then `wrangler deploy` — which picks up `[build] command = "worker-build --release"` from `wrangler.toml` to compile the Rust crate to WASM.
+3. Set runtime variables and secrets under **Settings → Variables and Secrets**. The full list is documented at the bottom of [`wrangler.toml`](wrangler.toml).
+4. Push to `main`. Cloudflare Builds runs the build command, then `wrangler deploy`, which picks up `[build] command = "worker-build --release"` from `wrangler.toml` to compile the Rust crate to WASM.
 
 ## Architecture
 
@@ -66,7 +66,7 @@ wrangler dev       # local dev server
 wrangler deploy    # deploy to Cloudflare
 ```
 
-Nix is for local convenience only — Cloudflare Builds installs the same toolchain via rustup, which reads the channel from [`rust-toolchain.toml`](rust-toolchain.toml).
+Nix is for local convenience only. Cloudflare Builds installs the same toolchain via rustup, which reads the channel from [`rust-toolchain.toml`](rust-toolchain.toml).
 
 ## License
 

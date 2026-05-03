@@ -324,8 +324,8 @@
       <div class="callout callout--note">
         <div class="callout__icon">i</div>
         <div class="callout__body">
-          <strong>Privacy posture</strong>
-          <p>Inbound message bodies pass through the Worker but are never written to durable storage. AI replies are generated synchronously and discarded. Cloudflare retains nothing past the request lifecycle. There is a data&#8209;deletion endpoint at <code>/data-deletion</code> for the metadata that <em>is</em> stored, plus account&#8209;wide deletion from the admin Settings page.</p>
+          <strong>What gets stored</strong>
+          <p>Inbound message bodies pass through the Worker but are never written to D1 or KV. AI replies are generated synchronously and discarded after send. Only metadata (channel, direction, sender, recipient, timestamp) lands in D1. A <code>/data-deletion</code> endpoint wipes that metadata; account-wide deletion is on the admin Settings page.</p>
         </div>
       </div>
 

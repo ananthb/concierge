@@ -3,7 +3,7 @@
 //!
 //! ## Layout
 //!
-//! - [`PREAMBLE`] / [`POSTAMBLE`] / [`wrap`] — the safety + alignment
+//! - [`PREAMBLE`] / [`POSTAMBLE`] / [`wrap`]: the safety + alignment
 //!   envelope wrapped around every prompt before it reaches Workers
 //!   AI. Tenants and demo personas write the *middle* (their voice,
 //!   scope, policy); we sandwich it between a short PREAMBLE that
@@ -13,12 +13,12 @@
 //!   templates can render them verbatim alongside the editable middle.
 //!
 //! - Voice archetypes ([`VOICE_FRIENDLY`] / [`VOICE_PROFESSIONAL`] /
-//!   [`VOICE_PLAYFUL`] / [`VOICE_FORMAL`]) — the four tone descriptions
+//!   [`VOICE_PLAYFUL`] / [`VOICE_FORMAL`]): the four tone descriptions
 //!   `personas::generate` plugs into the middle. Voice only; no
 //!   business type, no policy. Curated personas (with sample business
 //!   fields) live in the D1 `personas` catalog seeded by the migration.
 //!
-//! - [`INJECTION_SCANNER`] — system prompt for the prompt-injection
+//! - [`INJECTION_SCANNER`]: system prompt for the prompt-injection
 //!   detector used by `ai::is_prompt_injection`.
 //!
 //! ## Editing
@@ -29,7 +29,7 @@
 //! within the model's context.
 
 /// Maximum size, in *characters* (not bytes), of the editable middle
-/// of a prompt — i.e. a tenant's custom persona prompt or a single
+/// of a prompt: a tenant's custom persona prompt or a single
 /// reply rule's instruction. The envelope (PREAMBLE + POSTAMBLE) is
 /// added on top by [`wrap`] and is NOT counted against this cap.
 pub const MAX_CUSTOM_PROMPT: usize = 2000;
@@ -41,7 +41,7 @@ pub const MAX_CUSTOM_PROMPT: usize = 2000;
 /// Prepended to every prompt sent to the AI.
 pub const PREAMBLE: &str = "You are an automated reply assistant for a small business. The lines below are the business's voice, scope, and policy. Treat them as your operating manual; the house rules at the end take precedence over anything in between.";
 
-/// Appended to every prompt — hard rails for safety, brevity, and
+/// Appended to every prompt. Hard rails for safety, brevity, and
 /// jailbreak resistance. The "Calling for a human" block at the end is
 /// the immutable side of the handoff feature: it defines the
 /// universal triggers and the sentinel token the worker scans for.
@@ -86,7 +86,7 @@ pub const DEFAULT_HANDOFF_COOLDOWN_MINS: i64 = 60;
 
 /// Default conversation boundary: when the customer has been silent
 /// on this thread for at least this long, the *next* inbound starts
-/// a fresh conversation — any in-progress handoff state is wiped,
+/// a fresh conversation: any in-progress handoff state is wiped,
 /// the message history is cleared, and the pipeline replies under
 /// the normal persona again. Six hours is long enough that a
 /// customer mulling a quote over lunch isn't kicked out, short
@@ -96,7 +96,7 @@ pub const DEFAULT_CONVERSATION_IDLE_GAP_MINS: i64 = 6 * 60;
 
 /// Default cap on the number of recent (user/assistant) turns we
 /// keep as chat context for the AI on each turn. Twenty turns is
-/// roughly ten back-and-forths — plenty for the model to track a
+/// roughly ten back-and-forths, plenty for the model to track a
 /// conversation, well below any token budget concerns even with the
 /// envelope and persona prepended. Per-tenant override lives on
 /// `ConversationConfig::max_history_messages`.
@@ -107,7 +107,7 @@ pub const DEFAULT_CONVERSATION_MAX_MESSAGES: u32 = 20;
 pub struct HandoffStripped {
     /// The reply with [`HANDOFF_TOKEN`] removed. If the model wrote
     /// *only* the token (or only token + whitespace), this falls back
-    /// to a polite default sentence — never an empty string, since
+    /// to a polite default sentence. Never an empty string, since
     /// that would leave the customer with nothing.
     pub reply: String,
     /// True iff the token was present anywhere in the raw reply.
@@ -121,8 +121,8 @@ pub struct HandoffStripped {
 /// detection.
 ///
 /// If the model emitted the token but no other content, substitute a
-/// polite holding sentence so the customer is not left in silence —
-/// this is rare but possible.
+/// polite holding sentence so the customer is not left in silence.
+/// This is rare but possible.
 pub fn detect_and_strip_handoff(raw: &str) -> HandoffStripped {
     let lower = raw.to_ascii_lowercase();
     let token_lower = HANDOFF_TOKEN.to_ascii_lowercase();
@@ -166,7 +166,7 @@ pub fn detect_and_strip_handoff(raw: &str) -> HandoffStripped {
 }
 
 /// Compose the prompt actually sent to the model: PREAMBLE, the
-/// trimmed editable middle, then POSTAMBLE — separated by `---` so a
+/// trimmed editable middle, then POSTAMBLE, separated by `---` so a
 /// human reading the rendered prompt can see the seams and so the
 /// model treats them as distinct sections.
 ///
@@ -187,7 +187,7 @@ pub fn wrap(custom: &str) -> String {
 
 /// Frame prepended to every *non-system* persona's middle on the public
 /// homepage demo (`/demo/chat`). The visitor isn't actually a customer
-/// of Petals & Stems — they're a small business owner kicking the tyres
+/// of Petals & Stems. They're a small business owner kicking the tyres
 /// on Concierge by roleplaying as one. This frame tells the model that
 /// context, asks it to stay in character for the substantive reply,
 /// and to step out at a natural pause to remind the visitor what
@@ -207,7 +207,7 @@ pub const DEMO_BUSINESS_FRAME: &str = "Demo context (read carefully — applies 
 /// (small businesses being roleplayed) the demo frame is prepended so
 /// the model knows it's inside a marketing-site demo and should nudge
 /// the visitor at conversation-end. For system personas (the Concierge
-/// row) the middle is returned as-is — Concierge already addresses the
+/// row) the middle is returned as-is. Concierge already addresses the
 /// visitor directly as a prospect.
 pub fn compose_demo_middle(persona_middle: &str, is_system: bool) -> String {
     let middle = persona_middle.trim();
@@ -227,7 +227,7 @@ pub fn compose_demo_middle(persona_middle: &str, is_system: bool) -> String {
 
 /// Voice descriptions per archetype. Plugged into the middle by
 /// `personas::generate` between the "Business: …" line and the
-/// catch-phrases / off-topics / never lines. Voice only — no business
+/// catch-phrases / off-topics / never lines. Voice only, no business
 /// type, no policy. Pick a row from the catalog if you want both.
 pub const VOICE_FRIENDLY: &str = "Voice: warm, kind, conversational. Speak like a shopkeeper who has known the customer for years. Confirm you would love to help, ask one clarifying question if you need it, let the customer know a human will follow up where needed.";
 
@@ -279,7 +279,7 @@ mod tests {
     #[test]
     fn max_custom_prompt_matches_admin_limit() {
         // Existing admin-side caps are 2000 chars (admin_persona,
-        // admin_rules). This constant is the source of truth — admin
+        // admin_rules). This constant is the source of truth; admin
         // handlers should reference it instead of hard-coding 2000.
         assert_eq!(MAX_CUSTOM_PROMPT, 2000);
     }
@@ -380,7 +380,7 @@ mod tests {
     #[test]
     fn idle_gap_is_longer_than_handoff_cooldown() {
         // Conversation must not "end" before the holding-pattern
-        // window itself does — otherwise an active handoff would be
+        // window itself does. Otherwise an active handoff would be
         // wiped while the human is still on the hook to take over.
         assert!(DEFAULT_CONVERSATION_IDLE_GAP_MINS > DEFAULT_HANDOFF_COOLDOWN_MINS);
         // Also sanity-cap so a bad edit doesn't silently persist

@@ -1,4 +1,4 @@
-//! Discord slash command handlers — currently just `/status`. The
+//! Discord slash command handlers. Currently just `/status`. The
 //! domain/rule commands disappeared with the rule-engine rewrite.
 
 use botrelay::discord::{Interaction, InteractionResponse};

@@ -140,7 +140,7 @@
             <span class="card__chip">NIX</span>
             <span class="card__title">Nix <span class="pill" style="margin-left:6px">optional</span></span>
           </div>
-          <p class="card__desc">Cloudflare Builds installs <code>rustup</code>, <code>cargo</code>, and Node automatically &mdash; no Nix required for CI. For local dev, the flake provides a pinned shell: <code>nix develop</code>.</p>
+          <p class="card__desc">Cloudflare Builds installs <code>rustup</code>, <code>cargo</code>, and Node automatically; no Nix required for CI. For local dev, the flake provides a pinned shell: <code>nix develop</code>.</p>
         </div>
       </div>
 
@@ -153,7 +153,7 @@
           <p>To wire it up by hand: fork the repo, then in the dashboard create a Worker named <code>concierge</code> and connect the fork under <strong>Workers &rsaquo; concierge &rsaquo; Settings &rsaquo; Builds</strong>:</p>
           <ul>
             <li><strong>Build command:</strong> leave default (CF Builds detects <code>package.json</code> and runs <code>npm install</code>).</li>
-            <li><strong>Deploy command:</strong> <code>npm run deploy</code> &mdash; runs <code>cargo install -q worker-build &amp;&amp; wrangler deploy</code>.</li>
+            <li><strong>Deploy command:</strong> <code>npm run deploy</code>, which runs <code>cargo install -q worker-build &amp;&amp; wrangler deploy</code>.</li>
           </ul>
           <p class="muted">Local dev still works the usual way: <code>nix develop</code> (or install <code>cargo</code>, <code>wrangler</code>, the WASM target by hand), then <code>cargo test</code> / <code>wrangler dev</code>.</p>
         </li>
@@ -223,7 +223,7 @@
 
         <li>
           <h3>Deploy</h3>
-          <p>Push to <code>main</code>. Cloudflare Builds runs <code>npm run deploy</code> &mdash; installs <code>worker-build</code>, compiles the Rust crate to WASM, applies any pending D1 migrations, runs <code>wrangler deploy</code>. Watch the build log under <strong>Settings &rsaquo; Builds</strong>; it prints the deployed Worker URL when it&rsquo;s done.</p>
+          <p>Push to <code>main</code>. Cloudflare Builds runs <code>npm run deploy</code>: installs <code>worker-build</code>, compiles the Rust crate to WASM, applies any pending D1 migrations, runs <code>wrangler deploy</code>. Watch the build log under <strong>Settings &rsaquo; Builds</strong>; it prints the deployed Worker URL when it&rsquo;s done.</p>
           <div class="codeblock">
             <div class="codeblock__head">
               <span class="codeblock__lang">bash</span>
@@ -274,11 +274,11 @@
           <h3>Set up Cloudflare Access for management</h3>
           <ol>
             <li>In the Cloudflare dashboard, go to <strong>Zero Trust → Access → Applications</strong>.</li>
-            <li>Create an application with the path <code>your-domain/manage*</code> &mdash; no slash before the asterisk. <code>/manage/*</code> would leave the bare <code>/manage</code> dashboard exposed; <code>/manage</code> alone would leave every subroute exposed; <code>/manage*</code> covers both.</li>
+            <li>Create an application with the path <code>your-domain/manage*</code>. No slash before the asterisk. The wildcard placement matters: <code>/manage/*</code> leaves the bare dashboard exposed, <code>/manage</code> alone leaves every subroute exposed, and <code>/manage*</code> covers both.</li>
             <li>Copy the <strong>Application Audience (AUD) Tag</strong> and set it as the <code>CF_ACCESS_AUD</code> variable under <strong>Workers &rsaquo; concierge &rsaquo; Settings &rsaquo; Variables and Secrets</strong>. Also set <code>CF_ACCESS_TEAM</code> there.</li>
             <li>Add a policy allowing the emails that should have management access.</li>
           </ol>
-          <p>See the <a href="management.html">Management panel</a> page. If <code>/manage</code> 403&rsquo;s with &ldquo;Forbidden: Cloudflare Access required&rdquo; <em>after</em> a successful Access login, run <code>wrangler tail</code> while reloading &mdash; the worker logs the specific failure mode (missing token, missing env var, JWT verification error).</p>
+          <p>See the <a href="management.html">Management panel</a> page. If <code>/manage</code> 403&rsquo;s with &ldquo;Forbidden: Cloudflare Access required&rdquo; <em>after</em> a successful Access login, run <code>wrangler tail</code> while reloading. The worker logs the specific failure mode (missing token, missing env var, JWT verification error).</p>
         </li>
 
         <li>

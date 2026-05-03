@@ -6,7 +6,7 @@
 //! once. This module owns that one-shot fan-out: it reads the tenant's
 //! existing [`NotificationConfig`] (the same config that powers the
 //! approval queue) and dispatches a Discord embed and/or an immediate
-//! email — whichever the tenant has enabled.
+//! email, whichever the tenant has enabled.
 //!
 //! Failures are logged but not propagated. A handoff alert that
 //! doesn't reach the tenant is unfortunate; an alert that errors and
@@ -23,7 +23,7 @@ use crate::storage::{get_discord_config_by_tenant, get_onboarding, get_tenant};
 use crate::types::Channel;
 
 const PREVIEW_LEN: usize = 200;
-const HANDOFF_COLOR: u32 = 0xF19E1C; // Concierge accent — warmer than Discord red.
+const HANDOFF_COLOR: u32 = 0xF19E1C; // Concierge accent, warmer than Discord red.
 
 /// One-shot notification: a customer message just tripped a handoff.
 ///
@@ -56,7 +56,7 @@ pub async fn notify_human_requested(
         )
         .await
         {
-            // Non-fatal — keep going so email still gets a chance.
+            // Non-fatal. Keep going so email still gets a chance.
             console_log!("Handoff Discord notify failed for {tenant_id}: {e:?}");
         }
     }

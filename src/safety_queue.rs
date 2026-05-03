@@ -39,14 +39,14 @@ pub struct SafetyJob {
     /// SHA-256 of the active prompt at the time the job was enqueued.
     /// For tenant jobs we drop the job if the prompt has drifted (a
     /// newer save will have re-enqueued). Catalog jobs don't carry a
-    /// drift check — every catalog save resets the row to Draft and
+    /// drift check. Every catalog save resets the row to Draft and
     /// enqueues a fresh job, so the latest job is always authoritative.
     pub prompt_hash: String,
 }
 
 /// Send a safety job onto the queue. Logs and returns `Ok(())` if the queue
 /// binding is missing (e.g. local dev without a queue configured) so the
-/// caller's save flow always succeeds — the persona stays Pending/Draft
+/// caller's save flow always succeeds. The persona stays Pending/Draft
 /// until the next save reaches a properly-bound environment.
 pub async fn enqueue(env: &Env, job: SafetyJob) -> Result<()> {
     let queue = match env.queue(QUEUE_BINDING) {

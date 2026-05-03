@@ -1,4 +1,4 @@
-//! Management panel — super-admin routes gated by Cloudflare Access.
+//! Management panel: super-admin routes gated by Cloudflare Access.
 //! Verifies the Cf-Access-Jwt-Assertion JWT against the team's JWKS.
 
 pub mod audit;

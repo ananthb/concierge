@@ -11,7 +11,7 @@ use crate::helpers::{format_count, format_money};
 use crate::locale::{Currency, Locale};
 
 /// Upper bound of the slider. Past this, the "choose your own amount" box
-/// takes over — its minimum is this value, its maximum is `MAX_CREDITS`.
+/// takes over; its minimum is this value, its maximum is `MAX_CREDITS`.
 pub const SLIDER_MAX: i64 = 10_000;
 
 /// Variant of the slider: controls the bottom action area.

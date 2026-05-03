@@ -358,7 +358,7 @@ code {
   background-repeat:no-repeat;
   background-position:right 12px center;
 }
-/* Multi-line input for the demo chat — proper textarea sized for a
+/* Multi-line input for the demo chat: proper textarea sized for a
    sentence or two, but without the mono font and tall min-height the
    global .textarea uses for prompt-editing surfaces. */
 .chat-input {
@@ -372,14 +372,14 @@ code {
 .chat-form { align-items:flex-end; }
 .chat-persona-desc { margin:0 0 8px; }
 /* Single scroll region holding the prompt panel + the message list.
-   `min-height:0` is the flex-shrink unlock — without it the form gets
+   `min-height:0` is the flex-shrink unlock; without it the form gets
    pushed off the card when the prompt panel is open. */
 .chat-scroll { flex:1 1 auto; min-height:0; overflow-y:auto; padding:0; display:flex; flex-direction:column; gap:10px; scroll-behavior:smooth; }
 /* "You're chatting as a customer of …" framing card + channel hint shown
    below the persona picker. The card explains the roleplay frame and
    lists the sample business's profile (type, city, hours, goal); the
    hint below reminds the visitor that real customer messages would
-   arrive on WhatsApp / IG / Discord / email — never in this chat box. */
+   arrive on WhatsApp / IG / Discord / email, never in this chat box. */
 .chat-business-card { background:var(--paper); border:1px solid var(--hair);
   border-left:3px solid var(--accent); border-radius:8px;
   padding:10px 14px; margin:6px 0 8px; font-size:13px; line-height:1.45; }
@@ -395,7 +395,7 @@ code {
 .chat-channels-note { color:var(--muted); font-size:12px; line-height:1.45;
   margin:8px 0 0; padding:8px 10px; background:var(--cream-2);
   border:1px dashed var(--hair); border-radius:8px; }
-/* Handoff chip — sits above the channels-note once the demo flips into
+/* Handoff chip: sits above the channels-note once the demo flips into
    holding-pattern mode. Pure UX theater in the demo (no real human
    gets paged); same shape we'll surface in the tenant dashboard once
    the real-channel side ships. */
@@ -411,7 +411,7 @@ code {
 .chat-prompt-fixed { background:rgba(27,24,20,.06); border-left:3px solid var(--hair-2); }
 .chat-prompt-middle { background:var(--paper); border-left:3px solid var(--accent); }
 
-/* Persona admin preview — three-section envelope. The card around it is
+/* Persona admin preview: three-section envelope. The card around it is
    ink-on-cream, so these variants tune for that dark backdrop. */
 .prompt-preview { margin:0; padding:8px 10px; border-radius:6px; font-family:var(--f-mono); font-size:12px; line-height:1.55; color:var(--cream); white-space:pre-wrap; word-break:break-word; }
 .prompt-preview + .prompt-preview { margin-top:6px; }
@@ -562,7 +562,7 @@ pub fn brand_mark() -> String {
 /// `active` is the slug of the current page so the matching nav item
 /// lights up: pass "" to highlight nothing.
 ///
-/// "Open source" gets the `nav-ext` class so it's hidden up to 760px —
+/// "Open source" gets the `nav-ext` class so it's hidden up to 760px;
 /// it's duplicated in the footer and shedding it is what lets the row
 /// fit a phone-sized viewport. "Docs" lives only in the footer (it's
 /// architecture/dev docs, not user-facing help).
@@ -823,7 +823,7 @@ pub fn base_html_with_meta(title: &str, content: &str, meta: &PageMeta, locale: 
 <a href="#main" class="skip-link">{skip_link}</a>
 <div class="app-root"><main id="main" class="app-main">{content}</main>{footer}</div>
 <script type="module" nonce="__CSP_NONCE__">
-// Copy-to-clipboard via delegated click — `<button class="copy-btn"
+// Copy-to-clipboard via delegated click on `<button class="copy-btn"
 // data-copy-url="...">`. We used to wire this with inline `onclick=`,
 // but that requires `'unsafe-inline'` in script-src; the delegated
 // listener works under a strict nonce-only CSP.
@@ -897,7 +897,7 @@ pub fn maintenance_html(locale: &Locale) -> String {
 pub fn app_shell(content: &str, active_nav: &str, base_url: &str, locale: &Locale) -> String {
     // Each entry: (active_key, FTL key, href).
     // active_key matches the `active_nav` arg (kept as English for stable
-    // cross-locale routing — callers don't have to translate it too).
+    // cross-locale routing; callers don't have to translate it too).
     let nav_items: [(&str, &str, &str); 6] = [
         ("Overview", "app-nav-overview", "/admin"),
         ("Approvals", "app-nav-approvals", "/admin/approvals"),

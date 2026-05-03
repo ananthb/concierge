@@ -167,7 +167,7 @@ pub async fn count_tenants(db: &D1Database) -> Result<usize> {
 pub const DEMO_DEFAULT_PERSONA_SLUG: &str = "concierge";
 
 /// List rows from the personas catalog. `only_approved` filters by
-/// `safety_status = 'approved'` — used for the demo picker and the
+/// `safety_status = 'approved'`. Used for the demo picker and the
 /// tenant-onboarding starter set; the management UI passes `false` to
 /// see drafts and rejections too.
 pub async fn list_personas(
@@ -198,7 +198,7 @@ pub async fn get_persona(
 
 /// Create or update a persona row. The caller is responsible for
 /// resetting the safety verdict to Draft and enqueueing a SafetyJob
-/// before calling this — `upsert_persona` itself is dumb.
+/// before calling this. `upsert_persona` itself is dumb.
 pub async fn upsert_persona(db: &D1Database, row: &crate::types::PersonaCatalogRow) -> Result<()> {
     let source_json = serde_json::to_string(&row.source)
         .map_err(|e| Error::from(format!("serialise persona source: {e}")))?;
@@ -641,7 +641,7 @@ pub async fn delete_tenant_data(kv: &kv::KvStore, db: &D1Database, tenant_id: &s
         delete_lead_form(kv, tenant_id, &form.id).await?;
     }
 
-    // Delete D1 data: messages + billing (but preserve payments and audit_log for compliance)
+    // Delete D1 data: messages + billing. Payments and audit_log are kept for dispute and tax records.
     for table in &[
         "whatsapp_messages",
         "lead_form_submissions",
@@ -658,7 +658,7 @@ pub async fn delete_tenant_data(kv: &kv::KvStore, db: &D1Database, tenant_id: &s
         }
     }
 
-    // Nullify tenant_id in payments (preserve records for compliance)
+    // Nullify tenant_id in payments. The row stays for dispute and tax records.
     if let Err(e) = db
         .prepare("UPDATE payments SET tenant_id = NULL WHERE tenant_id = ?")
         .bind(&[tenant_id.into()])?
@@ -1137,13 +1137,13 @@ pub async fn delete_conversation_context(kv: &kv::KvStore, id: &str) -> Result<(
 // twice the gap window is conceptually a closed conversation, even
 // if the customer eventually returns.
 
-const SESSION_TTL: u64 = 24 * 60 * 60; // 24h — comfortably above the 6h idle gap.
+const SESSION_TTL: u64 = 24 * 60 * 60; // 24h, comfortably above the 6h idle gap.
 
 /// Compose the KV key for a thread's conversation-session record.
 /// `sender` is hashed to keep keys ASCII-clean; not a privacy claim
 /// (KV isn't user-facing).
 ///
-/// Note: deliberately *not* under the `session:` prefix — that's
+/// Note: deliberately *not* under the `session:` prefix. That's
 /// owned by auth sessions (see `save_session` above). Use `convsession:`
 /// to keep the two namespaces from colliding.
 fn conversation_session_key(
@@ -1382,7 +1382,7 @@ impl PricingConcept {
     }
 }
 
-/// Operator-controlled pricing snapshot — currency-agnostic config plus a
+/// Operator-controlled pricing snapshot: currency-agnostic config plus a
 /// `(concept, currency_code)` map keyed by ISO 4217 code. Every currency
 /// uses the same unit per concept (see `PricingConcept::is_milli`).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1419,7 +1419,7 @@ impl Pricing {
     }
 
     /// Per-AI-reply rate (milli-minor units) for a currency. Returns 0 if
-    /// the currency hasn't been configured — Razorpay calls will fail
+    /// the currency hasn't been configured. Razorpay calls will fail
     /// loudly on a 0-amount order, which is the right behavior.
     pub fn unit_price_milli(&self, currency_code: &str) -> i64 {
         self.amount(PricingConcept::UnitPriceMilli, currency_code)
@@ -1490,7 +1490,7 @@ pub async fn get_pricing(db: &D1Database) -> Pricing {
 }
 
 /// Persist a single (concept, currency) cell. Used by the management form
-/// for incremental edits — we don't update the whole table at once because
+/// for incremental edits. We don't update the whole table at once because
 /// the operator may have just typed one value.
 pub async fn upsert_pricing_amount(
     db: &D1Database,

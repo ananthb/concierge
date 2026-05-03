@@ -35,7 +35,7 @@ const MAX_LABEL: usize = 80;
 const MAX_KEYWORDS: usize = 20;
 const MAX_KEYWORD_LEN: usize = 80;
 const MAX_DESCRIPTION: usize = 200;
-/// Same limit every other prompt-bearing handler uses — see `crate::prompt`.
+/// Same limit every other prompt-bearing handler uses. See `crate::prompt`.
 const MAX_RESPONSE: usize = crate::prompt::MAX_CUSTOM_PROMPT;
 const MAX_RULES: usize = 50;
 
@@ -245,8 +245,8 @@ pub async fn handle_rules(
         // Update default rule
         (Method::Put, ["default"]) => {
             let form: serde_json::Value = req.json().await?;
-            // The default rule keeps `Default` matcher and id="default" — the
-            // form only edits the response.
+            // The default rule keeps `Default` matcher and id="default".
+            // The form only edits the response.
             let mode = form
                 .get("response_kind")
                 .and_then(|v| v.as_str())

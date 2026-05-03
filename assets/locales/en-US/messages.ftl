@@ -1,6 +1,6 @@
-# Concierge UI strings — en-US (US English).
+# Concierge UI strings, en-US (US English).
 #
-# Overrides en-IN for any phrasing differences (currently none — both
+# Overrides en-IN for any phrasing differences (currently none; both
 # locales share the same English copy and only differ in number/currency
 # grouping, which is handled by `helpers::format_count` / `format_money`).
 #

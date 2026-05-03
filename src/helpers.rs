@@ -255,7 +255,7 @@ mod tests {
     #[test]
     fn test_format_money_inr() {
         let l = Locale::default_inr();
-        // amount in paise — rusty_money renders INR with 2-3-2 lakh
+        // amount in paise; rusty_money renders INR with 2-3-2 lakh
         // grouping and two decimals.
         assert_eq!(format_money(1_00_00_000, &l), "₹1,00,000.00");
         assert_eq!(format_money(20_000_00, &l), "₹20,000.00");

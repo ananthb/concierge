@@ -1,4 +1,4 @@
-//! Application Webhook Events handler — receives `MESSAGE_CREATE` events
+//! Application Webhook Events handler. Receives `MESSAGE_CREATE` events
 //! from Discord and routes them through the standard inbound pipeline.
 //!
 //! The same Ed25519 signature scheme used for interactions applies here.
@@ -88,7 +88,7 @@ pub async fn handle_event(mut req: Request, env: Env) -> Result<Response> {
     };
 
     if event.event_type != "MESSAGE_CREATE" {
-        // Other event types (APPLICATION_AUTHORIZED, ENTITLEMENT_CREATE…) — ack and move on.
+        // Other event types (APPLICATION_AUTHORIZED, ENTITLEMENT_CREATE…). Ack and move on.
         return Response::ok("");
     }
 
@@ -102,7 +102,7 @@ pub async fn handle_event(mut req: Request, env: Env) -> Result<Response> {
         return Response::ok("");
     }
 
-    // DMs unsupported — would need per-tenant attribution.
+    // DMs unsupported. Would need per-tenant attribution.
     let guild_id = match msg.guild_id {
         Some(g) => g,
         None => return Response::ok(""),

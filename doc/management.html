@@ -171,7 +171,7 @@
   <div class="callout__body">
     <strong>Use <code>/manage*</code>, not <code>/manage/*</code> or <code>/manage</code>.</strong>
     <p>The wildcard placement matters. <code>/manage</code> alone matches the dashboard but lets <code>/manage/audit</code>, <code>/manage/tenants/&hellip;</code>, and <code>/manage/billing/&hellip;</code> through unauthenticated. <code>/manage/*</code> protects the subroutes but leaves the bare <code>/manage</code> dashboard exposed. <code>/manage*</code> covers both.</p>
-    <p>If <code>/manage</code> 403&rsquo;s with &ldquo;Forbidden: Cloudflare Access required&rdquo; <em>after</em> a successful Access login, run <code>wrangler tail</code> while reloading the page &mdash; the worker logs the specific reason (missing token, missing <code>CF_ACCESS_AUD</code>/<code>CF_ACCESS_TEAM</code>, JWT verification error) instead of a bare 403.</p>
+    <p>If <code>/manage</code> 403&rsquo;s with &ldquo;Forbidden: Cloudflare Access required&rdquo; <em>after</em> a successful Access login, run <code>wrangler tail</code> while reloading the page. The worker logs the specific reason (missing token, missing <code>CF_ACCESS_AUD</code>/<code>CF_ACCESS_TEAM</code>, JWT verification error) instead of a bare 403.</p>
   </div>
 </div>
 

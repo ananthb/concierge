@@ -33,7 +33,7 @@ pub fn next_run_after(after_iso: &str, cadence: GrantCadence) -> String {
         m = nm;
         d = nd;
     }
-    // Pathological fallback — a year of forward stepping should always
+    // Pathological fallback. A year of forward stepping should always
     // hit Daily/Weekly/MonthlyFirst, so this is unreachable in practice.
     format!("{y:04}-{m:02}-{d:02}T00:00:00Z")
 }
@@ -153,7 +153,7 @@ mod tests {
             next_run_after("2026-05-02T00:00:00Z", GrantCadence::Weekly(1)),
             "2026-05-04T00:00:00Z"
         );
-        // From a Monday to the next Monday — should advance 7 days.
+        // From a Monday to the next Monday should advance 7 days.
         // 2026-05-04 is a Monday.
         assert_eq!(
             next_run_after("2026-05-04T00:00:00Z", GrantCadence::Weekly(1)),
@@ -163,7 +163,7 @@ mod tests {
 
     #[test]
     fn malformed_input_falls_back_to_epoch() {
-        // Non-iso string — should not panic; we accept the epoch fallback
+        // Non-iso string should not panic; we accept the epoch fallback
         // and just return *some* future date.
         let s = next_run_after("not-a-date", GrantCadence::Daily);
         assert_eq!(s, "1970-01-02T00:00:00Z");

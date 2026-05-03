@@ -2,7 +2,7 @@
 //! then sends one combined AI reply. Drops buffered bodies immediately
 //! after the AI call returns.
 //!
-//! Keyed by `(tenant_id, channel, sender)` — one DO instance per
+//! Keyed by `(tenant_id, channel, sender)`: one DO instance per
 //! conversation. Sliding window: each new message resets the alarm.
 
 use std::time::Duration;
@@ -78,7 +78,7 @@ impl DurableObject for ReplyBufferDO {
         });
         self.state.storage().put("pending", &pending).await?;
 
-        // (Re)schedule alarm — sliding window.
+        // (Re)schedule alarm. Sliding window.
         self.state
             .storage()
             .set_alarm(Duration::from_secs(payload.wait_seconds.max(1) as u64))

@@ -141,7 +141,7 @@ pub fn welcome_html(_base_url: &str, locale: &crate::locale::Locale) -> String {
 
     let chat_error = t(locale, "demo-chat-error");
     let chat_rate_limited = t(locale, "demo-chat-rate-limited");
-    // Personas are no longer embedded in the page — the chat factory
+    // Personas are no longer embedded in the page; the chat factory
     // fetches `/demo/personas` on first open. That endpoint reads the
     // D1 catalog and returns only Approved rows.
     let chat_script = HERO_CHAT_JS
@@ -156,7 +156,7 @@ pub fn welcome_html(_base_url: &str, locale: &crate::locale::Locale) -> String {
     let chat_hint = html_escape(&t(locale, "demo-chat-hint"));
     let chat_title = html_escape(&t(locale, "demo-chat-title"));
     // Subtitle has two variants: business-roleplay (default) vs.
-    // Concierge-direct. The Alpine factory picks per persona — we just
+    // Concierge-direct. The Alpine factory picks per persona; we just
     // ship both strings into the chat module so it can swap them.
     // These end up inside Alpine `'…'` JS literals in an HTML attribute,
     // so they need `js_attr_escape` (which renders `'` as `\'`), not
@@ -243,11 +243,12 @@ pub fn welcome_html(_base_url: &str, locale: &crate::locale::Locale) -> String {
         <span class="eyebrow">{chat_persona_label}</span>
         <select class="select chat-persona-select" x-model="personaSlug" :disabled="!personas.length" data-testid="demo-chat-persona">
           <!-- Placeholder while the catalog is loading or empty. `x-if`
-               (vs `x-show`) actually removes the <option> from the DOM —
-               browsers treat `display:none` on <option> inconsistently
-               otherwise, which manifests as a cropped/misaligned arrow. -->
+               (vs `x-show`) actually removes the <option> from the DOM,
+               because browsers treat `display:none` on <option>
+               inconsistently otherwise, which manifests as a
+               cropped/misaligned arrow. -->
           <template x-if="!personas.length">
-            <option :value="personaSlug" x-text="personasLoaded ? '— no personas available —' : 'Loading…'"></option>
+            <option :value="personaSlug" x-text="personasLoaded ? '(no personas available)' : 'Loading…'"></option>
           </template>
           <template x-for="p in personas" :key="p.slug">
             <option :value="p.slug" x-text="p.label"></option>
@@ -259,7 +260,7 @@ pub fn welcome_html(_base_url: &str, locale: &crate::locale::Locale) -> String {
         <span x-show="showPrompt" x-cloak>{chat_hide_prompt}</span>
       </button>
     </div>
-    <p class="muted fs-13 chat-persona-desc" x-text="personas.length ? currentPersona.description : (personasLoaded ? 'The persona catalog isn\'t ready yet — apply the migration on the production D1 to populate it.' : 'Loading personas…')"></p>
+    <p class="muted fs-13 chat-persona-desc" x-text="personas.length ? currentPersona.description : (personasLoaded ? 'The persona catalog isn\'t ready yet. Apply the migration on the production D1 to populate it.' : 'Loading personas…')"></p>
     <!-- Roleplay frame card: shown only when the visitor picked a sample
          business persona (not the Concierge-self row). Tells them
          they're playing one of that business's customers, and lists the
@@ -299,8 +300,8 @@ pub fn welcome_html(_base_url: &str, locale: &crate::locale::Locale) -> String {
       </div>
     </div>
     <!-- Handoff chip: appears once the model has emitted the handoff
-         token on a turn. Pure demo theater — there's no real human to
-         take over — but it signals the same UX a tenant would see in
+         token on a turn. Pure demo theater (there's no real human to
+         take over), but it signals the same UX a tenant would see in
          their tenant-facing dashboard. -->
     <div class="chat-handoff-chip" x-show="handoff" x-cloak>
       <span class="chat-handoff-dot" aria-hidden="true"></span>
@@ -308,7 +309,7 @@ pub fn welcome_html(_base_url: &str, locale: &crate::locale::Locale) -> String {
     </div>
     <!-- Channels hint: visible to everyone, with a slightly different
          emphasis for the Concierge persona vs sample business personas.
-         Reinforces that this chat box is the demo only — real customer
+         Reinforces that this chat box is the demo only; real customer
          messages arrive in WhatsApp / IG / Discord / email. -->
     <p class="chat-channels-note">{chat_channels_note}</p>
     <div class="chat-error" x-show="error" x-text="error"></div>
@@ -449,7 +450,7 @@ const HERO_ROTATOR_JS: &str = r##"<script type="module" nonce="__CSP_NONCE__">
         render(true);
         if (!isTag(tok)) await sleep(28 + Math.random() * 30);
       }
-      // Caret stays visible at idle — never call render(false).
+      // Caret stays visible at idle; never call render(false).
       idx = next;
     }
   };
@@ -551,7 +552,7 @@ const HERO_CHAT_JS: &str = r##"<script nonce="__CSP_NONCE__">
       this.sending = true;
       try {
         // Drop any leading assistant turns: the client-side greeting is for
-        // display only — Llama chat templates expect the first non-system
+        // display only. Llama chat templates expect the first non-system
         // message to be user, so leading with assistant breaks generation.
         const wireMessages = [];
         let started = false;
@@ -998,7 +999,7 @@ fn channel_card(
 }
 
 pub fn channel_icon(key: &str) -> &'static str {
-    // All icons are decorative — they render next to a textual channel name
+    // All icons are decorative; they render next to a textual channel name
     // (e.g. "Instagram DMs"), so AT users get the name from the label, not
     // the icon.
     match key {
@@ -1146,7 +1147,7 @@ pub fn replies_html(
     base_url: &str,
     locale: &crate::locale::Locale,
 ) -> String {
-    // After the archetype refactor, `PersonaSource::Preset` is gone — the
+    // After the archetype refactor, `PersonaSource::Preset` is gone; the
     // wizard's preset cards now stamp an archetype onto a `Builder` source.
     // Highlight the archetype the tenant currently has saved (if any).
     let current_slug = match &persona.source {
@@ -1620,7 +1621,7 @@ mod pricing_tests {
         let cfg = cfg_with(25_000, 19_900, 5);
         let html = pricing_html("INR", &l, &cfg);
         assert!(html.contains("₹0.25"), "headline price missing: {html}");
-        // Address row uses format_money — paise to ₹.
+        // Address row uses format_money: paise to ₹.
         assert!(html.contains("₹199"), "address inr missing");
     }
 

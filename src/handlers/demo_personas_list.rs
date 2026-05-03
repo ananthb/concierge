@@ -1,4 +1,4 @@
-//! `GET /demo/personas` — JSON list of Approved-only personas from the
+//! `GET /demo/personas`: JSON list of Approved-only personas from the
 //! D1 catalog, populated into the welcome page's chat picker on first
 //! open. Stripped down to the four fields the picker needs (slug,
 //! label, description, greeting); the demo-augmented prompt rides
@@ -34,7 +34,7 @@ struct DemoPersonaPayload<'a> {
     /// `/demo/chat`. Rendered in the "View system prompt" panel.
     prompt: String,
     /// Sample business profile, present only for Builder personas. The
-    /// system Concierge row has none — its "business" is Concierge.
+    /// system Concierge row has none. Its "business" is Concierge.
     #[serde(skip_serializing_if = "Option::is_none")]
     business: Option<DemoBusiness<'a>>,
 }
