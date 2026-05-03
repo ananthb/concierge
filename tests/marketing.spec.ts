@@ -208,7 +208,7 @@ test('hero hint informs users the headline is clickable', async ({ page }) => {
   // and on hover.
   const headline = page.locator('#hero-headline');
   await expect(headline).toHaveAttribute('aria-describedby', 'demo-chat-hint-text');
-  await expect(page.locator('#demo-chat-hint-text')).toContainText(/click to chat/i);
+  await expect(page.locator('#demo-chat-hint-text')).toContainText(/click to try the live demo/i);
 });
 
 test('demo-chat surfaces the rate-limit message on 429', async ({ page }) => {

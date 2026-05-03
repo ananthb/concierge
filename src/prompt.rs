@@ -192,26 +192,21 @@ pub fn wrap(custom: &str) -> String {
 /// homepage demo (`/demo/chat`). The visitor isn't actually a customer
 /// of Petals & Stems. They're a small business owner kicking the tyres
 /// on Concierge by roleplaying as one. This frame tells the model that
-/// context, asks it to stay in character for the substantive reply,
-/// and to step out at a natural pause to remind the visitor what
-/// Concierge is and where real customer messages would actually land.
+/// context and asks it to stay in character. Sign-up nudging is handled
+/// by the modal's CTA (turn-limit and timer-driven), not by the model.
 ///
 /// Not used for the system Concierge persona, which already addresses
 /// the visitor directly as a prospect.
 pub const DEMO_BUSINESS_FRAME: &str = "Demo context (applies on top of the business voice below):
 - This conversation is happening in a chat box on Concierge's marketing homepage. Concierge is the auto-reply service that hosts you. The person typing is NOT a real customer of the business. They are a small business owner trying out Concierge by pretending to be a customer of this sample business.
-- For the substantive reply, stay fully in character as the business's auto-replier. Answer their question the way you would answer any customer.
-- Once their question has been answered and the exchange reaches a natural pause (a thank-you, a closed topic, an off-topic remark), and only then, break character once and address them as the prospect they are. Two short lines is enough:
-    1) Note that Concierge just replied to them in this business's voice. Real customers never see a chat box like this; their messages arrive in WhatsApp, Instagram DMs, Discord, or email, and Concierge replies there.
-    2) Invite them to set up Concierge for their own business at /auth/login.
-- Do not break character mid-question, mid-task, or while the customer still needs something. One break per conversation, at the end. If the conversation continues after the break, go back to in-character replies.";
+- Stay fully in character as the business's auto-replier. Answer the visitor's questions the way you would answer any real customer of this business. Do not break character to talk about Concierge or to mention this demo.";
 
 /// Compose the editable middle for the demo. For builder personas
 /// (small businesses being roleplayed) the demo frame is prepended so
-/// the model knows it's inside a marketing-site demo and should nudge
-/// the visitor at conversation-end. For system personas (the Concierge
-/// row) the middle is returned as-is. Concierge already addresses the
-/// visitor directly as a prospect.
+/// the model knows it's inside a marketing-site demo and should stay
+/// in character. For system personas (the Concierge row) the middle
+/// is returned as-is. Concierge already addresses the visitor directly
+/// as a prospect.
 pub fn compose_demo_middle(persona_middle: &str, is_system: bool) -> String {
     let middle = persona_middle.trim();
     if is_system {
@@ -307,11 +302,13 @@ mod tests {
     }
 
     #[test]
-    fn demo_frame_mentions_real_channels_and_signup() {
-        assert!(DEMO_BUSINESS_FRAME.contains("WhatsApp"));
-        assert!(DEMO_BUSINESS_FRAME.contains("Instagram"));
-        assert!(DEMO_BUSINESS_FRAME.contains("Discord"));
-        assert!(DEMO_BUSINESS_FRAME.contains("/auth/login"));
+    fn demo_frame_keeps_visitor_in_character() {
+        // Sign-up nudging moved to the modal's CTA; the model frame
+        // should *not* steer the AI toward sign-up or push a URL.
+        // Just the roleplay framing.
+        assert!(DEMO_BUSINESS_FRAME.contains("Stay fully in character"));
+        assert!(!DEMO_BUSINESS_FRAME.contains("/auth/login"));
+        assert!(!DEMO_BUSINESS_FRAME.contains("sign up"));
     }
 
     #[test]

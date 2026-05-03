@@ -82,7 +82,7 @@ demo-chat-handoff-chip = A teammate has been notified. Concierge is holding the 
 demo-chat-view-prompt = View system prompt
 demo-chat-hide-prompt = Hide system prompt
 demo-chat-prompt-heading = System prompt sent to the model
-demo-chat-envelope-note = The shaded sections are Concierge's safety wrapper, added to every prompt and not editable. The middle section is what the persona supplies, plus (for sample businesses) a one-time demo frame that asks the AI to nudge you to sign up at the end of the conversation.
+demo-chat-envelope-note = The shaded sections are Concierge's safety wrapper, added to every prompt and not editable. The middle section is what the persona supplies, with a one-line demo-context note for sample businesses.
 demo-chat-placeholder = Ask me anything…
 demo-chat-placeholder-customer-prefix = Message
 demo-chat-placeholder-customer-suffix = as a customer…
@@ -91,6 +91,9 @@ demo-chat-close = Close
 demo-chat-thinking = Thinking…
 demo-chat-error = Something went wrong. Try again in a moment.
 demo-chat-rate-limited = You've sent quite a few messages. Give me a minute and try again.
+demo-chat-cta-heading = Like what you see?
+demo-chat-cta-body = Set up Concierge for your own business in five minutes.
+demo-chat-cta-button = Get started →
 
 # Features page (/features).
 features-meta-description = Concierge auto-replies on WhatsApp, Instagram, Discord, and email. AI replies { $inr } / { $usd }, 100 included per month; static replies don't consume credits. 5-minute setup. Open source.

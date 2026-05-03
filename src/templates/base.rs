@@ -405,8 +405,21 @@ code {
   border:1px solid var(--accent); border-radius:8px; }
 .chat-handoff-dot { width:8px; height:8px; border-radius:50%;
   background:var(--accent); flex-shrink:0; box-shadow:0 0 0 4px rgba(241,158,28,.18); }
+/* Sign-up CTA that replaces the input form once the visitor crosses
+   the turn limit or the open-modal timer fires. */
+.chat-cta { display:flex; align-items:center; justify-content:space-between;
+  gap:14px; margin-top:12px; padding:14px 16px; background:var(--cream-2);
+  border:1px solid var(--accent); border-radius:10px; }
+.chat-cta-text { display:flex; flex-direction:column; gap:2px; line-height:1.4; }
+.chat-cta-text strong { color:var(--ink); font-size:14px; }
+.chat-cta-text span { color:var(--ink-2); font-size:13px; }
+.chat-cta .btn { flex:none; }
+@media (max-width:520px) {
+  .chat-cta { flex-direction:column; align-items:stretch; text-align:left; }
+  .chat-cta .btn { align-self:flex-start; }
+}
 .chat-prompt-panel { background:var(--cream-2); border:1px solid var(--hair); border-radius:10px; padding:12px 14px; flex:none; }
-.chat-prompt-body { margin:0; padding:8px 10px; border-radius:6px; font-family:var(--f-mono); font-size:12px; line-height:1.55; color:var(--ink-2); white-space:pre-wrap; word-break:break-word; max-height:24vh; overflow-y:auto; }
+.chat-prompt-body { margin:0; padding:8px 10px; border-radius:6px; font-family:var(--f-mono); font-size:12px; line-height:1.55; color:var(--ink-2); white-space:pre-wrap; word-break:break-word; }
 .chat-prompt-body + .chat-prompt-body { margin-top:6px; }
 .chat-prompt-fixed { background:rgba(27,24,20,.06); border-left:3px solid var(--hair-2); }
 .chat-prompt-middle { background:var(--paper); border-left:3px solid var(--accent); }
