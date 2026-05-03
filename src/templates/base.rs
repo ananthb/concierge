@@ -295,7 +295,17 @@ code {
 .display em { color:var(--accent); font-style:italic; }
 .hero-caret { display:inline-block; width:0.06em; height:0.86em; margin-left:0.04em; vertical-align:-0.08em; background:currentColor; animation:hero-caret-blink 0.85s steps(2,jump-none) infinite; }
 @keyframes hero-caret-blink { 0%,49%{opacity:1} 50%,100%{opacity:0} }
-@media (prefers-reduced-motion: reduce) { .hero-caret { display:none; } }
+.hero-select { background:var(--accent); color:var(--cream); border-radius:2px; -webkit-box-decoration-break:clone; box-decoration-break:clone; padding:0 0.04em; }
+.hero-select em { color:inherit; }
+@media (prefers-reduced-motion: reduce) { .hero-caret, .hero-select { display:none; background:transparent; color:inherit; } }
+
+/* Live-demo chat modal (welcome page). */
+.chat-messages { flex:1 1 auto; min-height:120px; overflow-y:auto; padding:12px 2px; display:flex; flex-direction:column; gap:10px; scroll-behavior:smooth; }
+.chat-msg { padding:10px 14px; border-radius:14px; max-width:85%; line-height:1.45; font-size:14px; white-space:pre-wrap; word-break:break-word; }
+.chat-msg.user { align-self:flex-end; background:var(--ink); color:var(--cream); border-bottom-right-radius:4px; }
+.chat-msg.assistant { align-self:flex-start; background:var(--cream-2); color:var(--ink); border-bottom-left-radius:4px; }
+.chat-thinking { align-self:flex-start; color:var(--muted); font-size:13px; font-style:italic; padding:0 6px; }
+.chat-error { color:var(--accent-2); font-size:13px; padding:4px 2px 0; }
 .fineprint { margin-top:18px; color:var(--muted); font-size:12px; }
 
 /* Postcard */
@@ -513,6 +523,16 @@ mod footer_tests {
                 "welcome-lead",
                 "welcome-cta-primary",
                 "welcome-cta-secondary",
+                "demo-chat-cta",
+                "demo-chat-title",
+                "demo-chat-subtitle",
+                "demo-chat-greeting",
+                "demo-chat-placeholder",
+                "demo-chat-send",
+                "demo-chat-close",
+                "demo-chat-thinking",
+                "demo-chat-error",
+                "demo-chat-rate-limited",
             ],
             "welcome",
         );

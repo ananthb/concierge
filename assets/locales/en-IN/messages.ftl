@@ -64,6 +64,19 @@ welcome-lead = Concierge is an automated customer-messaging service for small bu
 welcome-cta-primary = Get started →
 welcome-cta-secondary = See features
 
+# Live demo chat ("ask me about Concierge"). Triggered from the welcome
+# CTA row; backed by /demo/chat.
+demo-chat-cta = Ask me about Concierge →
+demo-chat-title = Chat with Concierge
+demo-chat-subtitle = Ask me anything about what I do, how I'm priced, or how to set me up.
+demo-chat-greeting = Hi! I'm Concierge. Ask me what I do, which channels I cover, how pricing works, or how to set me up.
+demo-chat-placeholder = Ask me anything…
+demo-chat-send = Send
+demo-chat-close = Close
+demo-chat-thinking = Thinking…
+demo-chat-error = Something went wrong. Try again in a moment.
+demo-chat-rate-limited = You've sent quite a few messages — give me a minute and try again.
+
 # Features page (/features).
 features-meta-description = Concierge auto-replies on WhatsApp, Instagram, Discord, and email. AI replies { $inr } / { $usd }, 100 included per month; static replies don't consume credits. 5-minute setup. Open source.
 features-og-title = Concierge Features
