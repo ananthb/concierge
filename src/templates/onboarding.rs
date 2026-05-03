@@ -147,6 +147,11 @@ pub fn welcome_html(_base_url: &str, locale: &crate::locale::Locale) -> String {
     let personas_json = json_for_html(&personas_value);
     let chat_script = HERO_CHAT_JS
         .replace("__PERSONAS__", &personas_json)
+        .replace("__PREAMBLE__", &js_string_for_html(crate::prompt::PREAMBLE))
+        .replace(
+            "__POSTAMBLE__",
+            &js_string_for_html(crate::prompt::POSTAMBLE),
+        )
         .replace("__ERROR__", &js_string_for_html(&chat_error))
         .replace("__RATE_LIMITED__", &js_string_for_html(&chat_rate_limited));
 
@@ -157,6 +162,7 @@ pub fn welcome_html(_base_url: &str, locale: &crate::locale::Locale) -> String {
     let chat_view_prompt = html_escape(&t(locale, "demo-chat-view-prompt"));
     let chat_hide_prompt = html_escape(&t(locale, "demo-chat-hide-prompt"));
     let chat_prompt_heading = html_escape(&t(locale, "demo-chat-prompt-heading"));
+    let chat_envelope_note = html_escape(&t(locale, "demo-chat-envelope-note"));
     let chat_placeholder = html_escape(&t(locale, "demo-chat-placeholder"));
     let chat_send = html_escape(&t(locale, "demo-chat-send"));
     let chat_close = html_escape(&t(locale, "demo-chat-close"));
@@ -229,7 +235,10 @@ pub fn welcome_html(_base_url: &str, locale: &crate::locale::Locale) -> String {
     <p class="muted fs-13 chat-persona-desc" x-text="currentPersona.description"></p>
     <section id="demo-chat-prompt-panel" class="chat-prompt-panel" x-show="showPrompt" x-cloak aria-live="polite">
       <div class="eyebrow mb-6">{chat_prompt_heading}</div>
-      <pre class="chat-prompt-body" x-text="currentPersona.prompt"></pre>
+      <p class="muted fs-12 mb-6">{chat_envelope_note}</p>
+      <pre class="chat-prompt-body chat-prompt-fixed" x-text="preamble"></pre>
+      <pre class="chat-prompt-body chat-prompt-middle" x-text="currentPersona.prompt"></pre>
+      <pre class="chat-prompt-body chat-prompt-fixed" x-text="postamble"></pre>
     </section>
     <div class="chat-messages" x-ref="msgs">
       <template x-for="(m, i) in messages" :key="i">
@@ -395,6 +404,8 @@ const HERO_ROTATOR_JS: &str = r##"<script type="module" nonce="__CSP_NONCE__">
 const HERO_CHAT_JS: &str = r##"<script nonce="__CSP_NONCE__">
 (() => {
   const personas = __PERSONAS__;
+  const PREAMBLE = __PREAMBLE__;
+  const POSTAMBLE = __POSTAMBLE__;
   const findPersona = (slug) => personas.find((p) => p.slug === slug) || personas[0];
   window.conciergeChat = () => ({
     open: false,
@@ -405,6 +416,8 @@ const HERO_CHAT_JS: &str = r##"<script nonce="__CSP_NONCE__">
     personas: personas,
     personaSlug: personas[0] ? personas[0].slug : 'concierge',
     messages: [],
+    preamble: PREAMBLE,
+    postamble: POSTAMBLE,
     get currentPersona() { return findPersona(this.personaSlug); },
     init() {
       this.resetTranscript();

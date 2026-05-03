@@ -139,7 +139,10 @@ pub async fn handle_lead_form(
                             "phone_number".to_string(),
                             serde_json::Value::String(phone.clone()),
                         );
-                        match ai::generate_response(&env, prompt, &context).await {
+                        // Wrap the form's prompt in the safety/alignment envelope
+                        // (same one persona + rule prompts use).
+                        let wrapped = crate::prompt::wrap(prompt);
+                        match ai::generate_response(&env, &wrapped, &context).await {
                             Ok(r) => r,
                             Err(e) => {
                                 console_log!("AI error for lead form: {:?}", e);

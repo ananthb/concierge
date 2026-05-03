@@ -143,11 +143,12 @@ pub fn persona_admin_html(persona: &PersonaConfig, base_url: &str, locale: &Loca
 
   <div class="card p-14" style="background:var(--ink);color:var(--cream);border-color:var(--ink);border-radius:var(--r-sm)">
     <div class="mono fs-10 mb-6" style="letter-spacing:.18em;color:var(--accent-soft)">{preview_eyebrow}</div>
-    <div id="prompt-preview">
-      <pre class="mono m-0 fs-12" style="white-space:pre-wrap;color:var(--cream);line-height:1.5">{initial_preview}</pre>
-    </div>
+    <p class="fs-12 mb-8" style="color:var(--cream);opacity:.7;margin-top:0">{envelope_note}</p>
+    <pre class="prompt-preview prompt-preview-fixed" aria-label="{preamble_label}">{preamble}</pre>
+    <pre id="prompt-preview" class="prompt-preview prompt-preview-middle">{initial_preview}</pre>
+    <pre class="prompt-preview prompt-preview-fixed" aria-label="{postamble_label}">{postamble}</pre>
     <div class="row gap-8 mt-8" x-show="mode === 'builder'" x-cloak :aria-hidden="mode !== 'builder'">
-      <button type="button" class="btn ghost sm" hx-post="{base_url}/admin/persona/preview" hx-target="#prompt-preview" hx-include="[name='biz_type'],[name='city'],[name='tone'],[name='never'],[name='catch_phrases'],[name='off_topics']">{refresh}</button>
+      <button type="button" class="btn ghost sm" hx-post="{base_url}/admin/persona/preview" hx-target="#prompt-preview" hx-swap="outerHTML" hx-include="[name='biz_type'],[name='city'],[name='tone'],[name='never'],[name='catch_phrases'],[name='off_topics']">{refresh}</button>
     </div>
   </div>
 </div>"##,
@@ -182,6 +183,11 @@ pub fn persona_admin_html(persona: &PersonaConfig, base_url: &str, locale: &Loca
         custom_ph = t(locale, "admin-persona-custom-placeholder"),
         save = t(locale, "admin-persona-save"),
         preview_eyebrow = t(locale, "admin-persona-preview-eyebrow"),
+        envelope_note = html_escape(&t(locale, "admin-persona-envelope-note")),
+        preamble_label = html_escape(&t(locale, "admin-prompt-preamble-label")),
+        postamble_label = html_escape(&t(locale, "admin-prompt-postamble-label")),
+        preamble = html_escape(crate::prompt::PREAMBLE),
+        postamble = html_escape(crate::prompt::POSTAMBLE),
         refresh = t(locale, "admin-persona-preview-refresh"),
     );
 

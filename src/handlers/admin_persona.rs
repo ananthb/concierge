@@ -13,10 +13,10 @@ use crate::types::{
     PersonaBuilder, PersonaConfig, PersonaPreset, PersonaSafety, PersonaSafetyStatus, PersonaSource,
 };
 
-/// Maximum length of the user-provided custom prompt. Mirrors the value
-/// documented in the plan; bounded so the safety classifier and main-model
-/// system prompt stay cheap.
-const MAX_CUSTOM_PROMPT: usize = 2000;
+/// Maximum length of the user-provided custom prompt — re-export of the
+/// canonical limit in `crate::prompt` so this handler caps at the same
+/// number every other prompt-bearing handler does.
+use crate::prompt::MAX_CUSTOM_PROMPT;
 
 pub async fn handle_persona_admin(
     mut req: Request,
@@ -166,8 +166,10 @@ pub async fn handle_persona_admin(
                 never: s("never"),
             };
             let prompt = personas::generate(&builder);
+            // Returned to `#prompt-preview` with `hx-swap="outerHTML"` — the
+            // bookends are static neighbours rendered server-side once.
             Response::from_html(format!(
-                r#"<pre class="mono m-0 fs-12" style="white-space:pre-wrap">{}</pre>"#,
+                r#"<pre id="prompt-preview" class="prompt-preview prompt-preview-middle">{}</pre>"#,
                 crate::helpers::html_escape(&prompt)
             ))
         }

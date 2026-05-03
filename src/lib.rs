@@ -43,6 +43,7 @@ mod locale;
 mod management;
 mod personas;
 mod pipeline;
+mod prompt;
 mod safety;
 mod safety_queue;
 mod scheduled;

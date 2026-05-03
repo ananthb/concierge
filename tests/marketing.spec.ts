@@ -129,8 +129,15 @@ test('demo-chat view-prompt toggle reveals the active persona prompt', async ({ 
     'aria-expanded',
     'true',
   );
-  // The Concierge prompt mentions WhatsApp Business.
-  await expect(dialog.locator('#demo-chat-prompt-panel')).toContainText(/WhatsApp Business/);
+  // Three-section envelope: preamble (fixed, never editable), middle
+  // (current persona's prompt), postamble (fixed safety rules).
+  const panel = dialog.locator('#demo-chat-prompt-panel');
+  await expect(panel).toContainText(/automated reply assistant for a small business/i);
+  await expect(panel).toContainText(/WhatsApp Business/);
+  await expect(panel).toContainText(/House rules/i);
+  // Both fixed bookends are rendered as their own pre blocks.
+  await expect(panel.locator('.chat-prompt-fixed')).toHaveCount(2);
+  await expect(panel.locator('.chat-prompt-middle')).toHaveCount(1);
 });
 
 test('clicking the hero headline also opens the chat modal', async ({ page }) => {

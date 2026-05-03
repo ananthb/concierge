@@ -359,6 +359,7 @@ pub fn rule_form_html(
       <label for="rule-response-text" class="sr-only">{resp_sr}</label>
       <textarea id="rule-response-text" class="textarea" name="response_text" rows="5" maxlength="2000" placeholder="{resp_ph}" required aria-required="true">{response_text}</textarea>
       <p class="muted fs-12 mt-4" x-show="responseKind === 'prompt'" x-cloak :aria-hidden="responseKind !== 'prompt'">{resp_help}</p>
+      <p class="muted fs-12 mt-4" x-show="responseKind === 'prompt'" x-cloak :aria-hidden="responseKind !== 'prompt'">{rule_envelope_note}</p>
     </div>
 
     {approval_block}
@@ -400,6 +401,7 @@ pub fn rule_form_html(
         resp_sr = t(locale, "admin-rules-form-response-text-sr"),
         resp_ph = t(locale, "admin-rules-form-response-placeholder"),
         resp_help = t(locale, "admin-rules-form-response-help"),
+        rule_envelope_note = t(locale, "admin-rules-form-envelope-note"),
         cancel = t(locale, "admin-rules-form-cancel"),
         save = t(locale, "admin-rules-form-save"),
     );
