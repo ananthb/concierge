@@ -2,8 +2,10 @@
 //! visitor picks one of the personas exposed by the D1 catalog
 //! (Concierge talking about itself, plus management-curated archetypes)
 //! and the worker forwards their message history to Cloudflare Workers
-//! AI under that persona's system prompt. Per-IP rate-limited; every
-//! reply also runs through the prompt-injection scanner and the
+//! AI under that persona's system prompt. Two-tier rate limiting: a
+//! per-IP hourly cap, plus a global daily cap (per UTC day, all IPs)
+//! that bounds worst-case Workers AI spend even under IP rotation.
+//! Every reply also runs through the prompt-injection scanner and the
 //! Approved-only persona gate. No bypass.
 //!
 //! Handoff: the demo handler is stateless on the server. The client
@@ -19,11 +21,19 @@ use worker::*;
 use crate::ai;
 use crate::storage;
 
-const MAX_TURNS: usize = 12;
+const MAX_TURNS: usize = 6;
 const MAX_BODY_BYTES: usize = 4096;
-const MAX_CONTENT_CHARS: usize = 600;
-const RATE_LIMIT_PER_HOUR: i64 = 30;
+const MAX_CONTENT_CHARS: usize = 300;
+const RATE_LIMIT_PER_HOUR: i64 = 10;
 const RATE_LIMIT_TTL_SECONDS: u64 = 3600;
+// Global daily ceiling across all IPs. Bounds worst-case Workers AI
+// spend regardless of how many distinct sources hit the demo (per-IP
+// limits don't help against IP rotation). At ~$0.002/request worst
+// case this caps daily exposure around a few dollars.
+const RATE_LIMIT_GLOBAL_PER_DAY: i64 = 2000;
+// Slightly over 24h so a counter that gets created near midnight UTC
+// still expires cleanly the following day.
+const RATE_LIMIT_GLOBAL_TTL_SECONDS: u64 = 90_000;
 
 #[derive(Deserialize)]
 struct ChatRequest {
@@ -96,6 +106,28 @@ pub async fn handle_demo_chat(mut req: Request, env: Env) -> Result<Response> {
         return json_error("Last message must be from the user.", 400);
     }
 
+    let kv = env.kv("KV")?;
+
+    // Global daily cap. Checked first so an exhausted day refuses
+    // immediately, regardless of whether we have a client IP.
+    let now_iso = crate::helpers::now_iso();
+    let date_key = now_iso.get(0..10).unwrap_or("1970-01-01");
+    let global_key = format!("ratelimit:demo:global:{}", date_key);
+    let global_count: i64 = kv
+        .get(&global_key)
+        .text()
+        .await
+        .ok()
+        .flatten()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(0);
+    if global_count >= RATE_LIMIT_GLOBAL_PER_DAY {
+        return json_error(
+            "The demo is at capacity for today. Please try again tomorrow.",
+            429,
+        );
+    }
+
     let client_ip = req
         .headers()
         .get("CF-Connecting-IP")
@@ -103,7 +135,6 @@ pub async fn handle_demo_chat(mut req: Request, env: Env) -> Result<Response> {
         .flatten()
         .unwrap_or_default();
     if !client_ip.is_empty() {
-        let kv = env.kv("KV")?;
         let rl_key = format!("ratelimit:demo:{}", client_ip);
         let count: i64 = kv
             .get(&rl_key)
@@ -125,6 +156,15 @@ pub async fn handle_demo_chat(mut req: Request, env: Env) -> Result<Response> {
             .execute()
             .await;
     }
+
+    // Bump the global counter only after the per-IP check passes, so a
+    // caller already over their personal limit doesn't drain the shared
+    // budget on requests we're going to refuse anyway.
+    let _ = kv
+        .put(&global_key, (global_count + 1).to_string())?
+        .expiration_ttl(RATE_LIMIT_GLOBAL_TTL_SECONDS)
+        .execute()
+        .await;
 
     // Resolve the persona from the D1 catalog. Refuse with 503 if the
     // requested slug isn't there or isn't Approved. No bypass even if a

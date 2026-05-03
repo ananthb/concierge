@@ -318,7 +318,7 @@ pub fn welcome_html(_base_url: &str, locale: &crate::locale::Locale) -> String {
     <div class="chat-error" x-show="error" x-text="error"></div>
     <form x-show="!showCta" @submit.prevent="send()" class="row gap-8 mt-12 chat-form">
       <textarea class="chat-input" x-model="input" :placeholder="currentPersona.is_system ? '{chat_placeholder}' : ('{chat_placeholder_prefix} ' + currentPersona.label + ' {chat_placeholder_suffix}')"
-        :disabled="sending || !personas.length" x-ref="input" maxlength="600" rows="2"
+        :disabled="sending || !personas.length" x-ref="input" maxlength="300" rows="2"
         @keydown.enter="if (!$event.shiftKey) {{ $event.preventDefault(); send(); }}"
         autocomplete="off" autocorrect="off" autocapitalize="off"></textarea>
       <button type="submit" class="btn primary" :disabled="sending || !input.trim() || !personas.length">{chat_send}</button>
@@ -495,7 +495,7 @@ const HERO_CHAT_JS: &str = r##"<script nonce="__CSP_NONCE__">
   // Same CTA fires automatically after this many ms of the modal
   // being open, so visitors who park the modal without typing also
   // see the next step.
-  const CTA_TIMEOUT_MS = 15000;
+  const CTA_TIMEOUT_MS = 30000;
   window.conciergeChat = () => ({
     open: false,
     sending: false,
@@ -519,6 +519,7 @@ const HERO_CHAT_JS: &str = r##"<script nonce="__CSP_NONCE__">
     // up even if they switch personas. Cleared on modal close.
     ctaShown: false,
     _ctaTimer: null,
+    _defaultPersonaSlug: 'concierge',
     get userTurns() {
       let n = 0;
       for (const m of this.messages) if (m.role === 'user') n += 1;
@@ -549,6 +550,7 @@ const HERO_CHAT_JS: &str = r##"<script nonce="__CSP_NONCE__">
         const has = this.personas.some((p) => p.slug === this.personaSlug);
         if (!has) this.personaSlug = this.personas[0].slug;
       }
+      this._defaultPersonaSlug = this.personaSlug;
       this.resetTranscript();
       this.$watch('open', (v) => {
         window.__heroPaused = !!v;
@@ -561,6 +563,8 @@ const HERO_CHAT_JS: &str = r##"<script nonce="__CSP_NONCE__">
         } else {
           if (this._ctaTimer) { clearTimeout(this._ctaTimer); this._ctaTimer = null; }
           this.ctaShown = false;
+          this.personaSlug = this._defaultPersonaSlug;
+          this.resetTranscript();
         }
       });
       this.$watch('personaSlug', () => {
