@@ -150,7 +150,6 @@ pub fn welcome_html(_base_url: &str, locale: &crate::locale::Locale) -> String {
         .replace("__ERROR__", &js_string_for_html(&chat_error))
         .replace("__RATE_LIMITED__", &js_string_for_html(&chat_rate_limited));
 
-    let chat_cta = html_escape(&t(locale, "demo-chat-cta"));
     let chat_hint = html_escape(&t(locale, "demo-chat-hint"));
     let chat_title = html_escape(&t(locale, "demo-chat-title"));
     let chat_subtitle = html_escape(&t(locale, "demo-chat-subtitle"));
@@ -175,13 +174,15 @@ pub fn welcome_html(_base_url: &str, locale: &crate::locale::Locale) -> String {
           @click="open = true"
           @keydown.enter.prevent="open = true"
           @keydown.space.prevent="open = true">{headline}<span class="hero-caret" aria-hidden="true"></span></h1>
-      <div id="demo-chat-hint-text" class="hero-hint" :class="{{ 'is-hint-on': hint }}">{chat_hint}</div>
+      <button type="button" id="demo-chat-hint-text" class="hero-hint" @click="open = true">
+        <span class="hero-hint-arrow" aria-hidden="true">↑</span>
+        <span class="hero-hint-text">{chat_hint}</span>
+      </button>
     </div>
     <p class="lead">{lead}</p>
     <div class="row gap-12 wrap mt-16">
       <a href="/auth/login" class="btn primary lg">{cta_primary}</a>
       <a href="/features" class="btn ghost lg">{cta_secondary}</a>
-      <button type="button" class="btn ghost lg" @click="open = true">{chat_cta}</button>
     </div>
   </div>
   <aside class="postcard" aria-hidden="true">
@@ -253,7 +254,6 @@ pub fn welcome_html(_base_url: &str, locale: &crate::locale::Locale) -> String {
         lead = t(locale, "welcome-lead"),
         cta_primary = t(locale, "welcome-cta-primary"),
         cta_secondary = t(locale, "welcome-cta-secondary"),
-        chat_cta = chat_cta,
         chat_title = chat_title,
         chat_subtitle = chat_subtitle,
         chat_persona_label = chat_persona_label,
@@ -401,7 +401,6 @@ const HERO_CHAT_JS: &str = r##"<script nonce="__CSP_NONCE__">
     sending: false,
     error: '',
     input: '',
-    hint: true,
     showPrompt: false,
     personas: personas,
     personaSlug: personas[0] ? personas[0].slug : 'concierge',
@@ -412,7 +411,6 @@ const HERO_CHAT_JS: &str = r##"<script nonce="__CSP_NONCE__">
       this.$watch('open', (v) => {
         window.__heroPaused = !!v;
         if (v) {
-          this.hint = false;
           this.$nextTick(() => {
             if (this.$refs.input) this.$refs.input.focus();
             this.scrollDown();
@@ -426,7 +424,6 @@ const HERO_CHAT_JS: &str = r##"<script nonce="__CSP_NONCE__">
           this.scrollDown();
         });
       });
-      setTimeout(() => { this.hint = false; }, 5500);
     },
     resetTranscript() {
       const p = this.currentPersona;

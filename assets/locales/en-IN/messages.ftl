@@ -66,8 +66,7 @@ welcome-cta-secondary = See features
 
 # Live demo chat ("ask me about Concierge"). Triggered from the welcome
 # CTA row; backed by /demo/chat.
-demo-chat-cta = Try the live demo →
-demo-chat-hint = ↑ click to chat with me about Concierge
+demo-chat-hint = click to chat with me — try the live demo
 demo-chat-title = Live demo
 demo-chat-subtitle = Pick a persona, then ask anything. The AI replies under that persona's prompt — same path Concierge uses for tenants.
 demo-chat-persona-label = Persona

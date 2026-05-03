@@ -61,7 +61,7 @@ test('demo-chat modal opens, posts to /demo/chat, renders assistant reply', asyn
   });
 
   await page.goto('/');
-  await page.getByRole('button', { name: /try the live demo/i }).click();
+  await page.locator('#demo-chat-hint-text').click();
 
   const dialog = page.getByRole('dialog', { name: /live demo/i });
   await expect(dialog).toBeVisible();
@@ -94,7 +94,7 @@ test('demo-chat persona picker swaps greeting and persona slug on the wire', asy
   });
 
   await page.goto('/');
-  await page.getByRole('button', { name: /try the live demo/i }).click();
+  await page.locator('#demo-chat-hint-text').click();
   const dialog = page.getByRole('dialog', { name: /live demo/i });
   await expect(dialog).toBeVisible();
 
@@ -119,7 +119,7 @@ test('demo-chat persona picker swaps greeting and persona slug on the wire', asy
 
 test('demo-chat view-prompt toggle reveals the active persona prompt', async ({ page }) => {
   await page.goto('/');
-  await page.getByRole('button', { name: /try the live demo/i }).click();
+  await page.locator('#demo-chat-hint-text').click();
   const dialog = page.getByRole('dialog', { name: /live demo/i });
 
   const toggle = dialog.getByRole('button', { name: /view system prompt/i });
@@ -167,7 +167,7 @@ test('demo-chat surfaces the rate-limit message on 429', async ({ page }) => {
   );
 
   await page.goto('/');
-  await page.getByRole('button', { name: /try the live demo/i }).click();
+  await page.locator('#demo-chat-hint-text').click();
   const dialog = page.getByRole('dialog', { name: /live demo/i });
   await dialog.getByRole('textbox').fill('hello?');
   await dialog.getByRole('button', { name: 'Send' }).click();
