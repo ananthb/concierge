@@ -314,7 +314,9 @@ code {
   box-shadow:0 1px 0 rgba(27,24,20,.06);
   transition:transform .2s ease, background .2s ease, border-color .2s ease, box-shadow .2s ease, color .2s ease;
 }
-.hero-hint:hover, .hero-hint:focus-visible {
+.hero-hint:hover, .hero-hint:focus-visible,
+.hero-clickable:hover ~ .hero-hint,
+.hero-clickable:focus-visible ~ .hero-hint {
   transform:translateY(-3px) scale(1.05);
   background:var(--accent); border-color:var(--accent); color:#fff;
   box-shadow:0 10px 22px rgba(232,106,44,.28), 0 2px 0 rgba(200,84,28,.5);
@@ -322,7 +324,9 @@ code {
 .hero-hint:active { transform:translateY(-1px) scale(1.02); }
 .hero-hint-arrow { display:inline-block; line-height:1; transform:translateY(0); transition:transform .2s ease; }
 .hero-hint:hover .hero-hint-arrow,
-.hero-hint:focus-visible .hero-hint-arrow {
+.hero-hint:focus-visible .hero-hint-arrow,
+.hero-clickable:hover ~ .hero-hint .hero-hint-arrow,
+.hero-clickable:focus-visible ~ .hero-hint .hero-hint-arrow {
   animation:hero-hint-bounce .8s ease-in-out infinite;
 }
 @keyframes hero-hint-bounce {
@@ -330,18 +334,42 @@ code {
   50%      { transform:translateY(-4px); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .hero-hint, .hero-hint:hover, .hero-hint:focus-visible { transform:none; }
+  .hero-hint, .hero-hint:hover, .hero-hint:focus-visible,
+  .hero-clickable:hover ~ .hero-hint,
+  .hero-clickable:focus-visible ~ .hero-hint { transform:none; }
   .hero-hint:hover .hero-hint-arrow,
-  .hero-hint:focus-visible .hero-hint-arrow { animation:none; }
+  .hero-hint:focus-visible .hero-hint-arrow,
+  .hero-clickable:hover ~ .hero-hint .hero-hint-arrow,
+  .hero-clickable:focus-visible ~ .hero-hint .hero-hint-arrow { animation:none; }
 }
 
 /* Live-demo chat modal (welcome page). */
 .chat-controls { display:flex; align-items:flex-end; gap:10px; margin:0 0 6px; flex-wrap:wrap; }
 .chat-persona-label { display:flex; flex-direction:column; gap:4px; flex:1 1 220px; min-width:180px; }
 .chat-persona-label .eyebrow { font-size:11px; }
-/* min-width keeps the native dropdown arrow aligned even when the
-   options list is empty (placeholder-only state). */
-.chat-persona-select { padding:8px 10px; font-size:14px; min-width:180px; }
+/* min-width keeps the dropdown arrow aligned even when the options list
+   is empty (placeholder-only state). Native browser caret sits right
+   against the box edge, so we strip appearance and draw our own SVG
+   chevron with breathing room from the right border. */
+.chat-persona-select {
+  padding:8px 36px 8px 12px; font-size:14px; min-width:180px;
+  appearance:none; -webkit-appearance:none; -moz-appearance:none;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8' fill='none'><path d='M1 1.5L6 6.5L11 1.5' stroke='%231B1814' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+  background-repeat:no-repeat;
+  background-position:right 12px center;
+}
+/* Multi-line input for the demo chat — proper textarea sized for a
+   sentence or two, but without the mono font and tall min-height the
+   global .textarea uses for prompt-editing surfaces. */
+.chat-input {
+  flex:1 1 auto; min-height:64px; max-height:160px;
+  padding:10px 12px; resize:vertical; font-family:var(--f-body);
+  background:#fff; border:1px solid var(--hair-2); border-radius:var(--r-sm);
+  font-size:14px; color:var(--ink); outline:none; line-height:1.4;
+  transition:border-color .15s ease, box-shadow .15s ease;
+}
+.chat-input:focus { border-color:var(--accent); box-shadow:0 0 0 4px var(--accent-soft); }
+.chat-form { align-items:flex-end; }
 .chat-persona-desc { margin:0 0 8px; }
 /* Single scroll region holding the prompt panel + the message list.
    `min-height:0` is the flex-shrink unlock — without it the form gets

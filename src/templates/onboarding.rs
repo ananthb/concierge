@@ -312,9 +312,11 @@ pub fn welcome_html(_base_url: &str, locale: &crate::locale::Locale) -> String {
          messages arrive in WhatsApp / IG / Discord / email. -->
     <p class="chat-channels-note">{chat_channels_note}</p>
     <div class="chat-error" x-show="error" x-text="error"></div>
-    <form @submit.prevent="send()" class="row gap-8 mt-12">
-      <input class="input" type="text" x-model="input" :placeholder="currentPersona.is_system ? '{chat_placeholder}' : ('{chat_placeholder_prefix} ' + currentPersona.label + ' {chat_placeholder_suffix}')"
-        :disabled="sending || !personas.length" x-ref="input" maxlength="600" autocomplete="off" autocorrect="off" autocapitalize="off">
+    <form @submit.prevent="send()" class="row gap-8 mt-12 chat-form">
+      <textarea class="chat-input" x-model="input" :placeholder="currentPersona.is_system ? '{chat_placeholder}' : ('{chat_placeholder_prefix} ' + currentPersona.label + ' {chat_placeholder_suffix}')"
+        :disabled="sending || !personas.length" x-ref="input" maxlength="600" rows="2"
+        @keydown.enter="if (!$event.shiftKey) {{ $event.preventDefault(); send(); }}"
+        autocomplete="off" autocorrect="off" autocapitalize="off"></textarea>
       <button type="submit" class="btn primary" :disabled="sending || !input.trim() || !personas.length">{chat_send}</button>
     </form>
   </div>
