@@ -139,11 +139,14 @@ pub fn welcome_html(_base_url: &str, locale: &crate::locale::Locale) -> String {
         .join(",");
     let rotator = HERO_ROTATOR_JS.replace("__VARIANTS__", &format!("[{variants_json}]"));
 
-    let chat_greeting = t(locale, "demo-chat-greeting");
     let chat_error = t(locale, "demo-chat-error");
     let chat_rate_limited = t(locale, "demo-chat-rate-limited");
+    let personas = crate::demo_personas::all();
+    let personas_value =
+        serde_json::to_value(&personas).unwrap_or_else(|_| serde_json::Value::Array(Vec::new()));
+    let personas_json = json_for_html(&personas_value);
     let chat_script = HERO_CHAT_JS
-        .replace("__GREETING__", &js_string_for_html(&chat_greeting))
+        .replace("__PERSONAS__", &personas_json)
         .replace("__ERROR__", &js_string_for_html(&chat_error))
         .replace("__RATE_LIMITED__", &js_string_for_html(&chat_rate_limited));
 
@@ -151,6 +154,10 @@ pub fn welcome_html(_base_url: &str, locale: &crate::locale::Locale) -> String {
     let chat_hint = html_escape(&t(locale, "demo-chat-hint"));
     let chat_title = html_escape(&t(locale, "demo-chat-title"));
     let chat_subtitle = html_escape(&t(locale, "demo-chat-subtitle"));
+    let chat_persona_label = html_escape(&t(locale, "demo-chat-persona-label"));
+    let chat_view_prompt = html_escape(&t(locale, "demo-chat-view-prompt"));
+    let chat_hide_prompt = html_escape(&t(locale, "demo-chat-hide-prompt"));
+    let chat_prompt_heading = html_escape(&t(locale, "demo-chat-prompt-heading"));
     let chat_placeholder = html_escape(&t(locale, "demo-chat-placeholder"));
     let chat_send = html_escape(&t(locale, "demo-chat-send"));
     let chat_close = html_escape(&t(locale, "demo-chat-close"));
@@ -204,6 +211,25 @@ pub fn welcome_html(_base_url: &str, locale: &crate::locale::Locale) -> String {
       </div>
       <button type="button" class="btn icon ghost" @click="open = false" aria-label="{chat_close}" style="padding:4px 10px;font-size:18px;line-height:1">&times;</button>
     </div>
+    <div class="chat-controls">
+      <label class="chat-persona-label">
+        <span class="eyebrow">{chat_persona_label}</span>
+        <select class="select chat-persona-select" x-model="personaSlug" data-testid="demo-chat-persona">
+          <template x-for="p in personas" :key="p.slug">
+            <option :value="p.slug" x-text="p.label"></option>
+          </template>
+        </select>
+      </label>
+      <button type="button" class="btn ghost sm" @click="showPrompt = !showPrompt" :aria-expanded="showPrompt" aria-controls="demo-chat-prompt-panel">
+        <span x-show="!showPrompt">{chat_view_prompt}</span>
+        <span x-show="showPrompt" x-cloak>{chat_hide_prompt}</span>
+      </button>
+    </div>
+    <p class="muted fs-13 chat-persona-desc" x-text="currentPersona.description"></p>
+    <section id="demo-chat-prompt-panel" class="chat-prompt-panel" x-show="showPrompt" x-cloak aria-live="polite">
+      <div class="eyebrow mb-6">{chat_prompt_heading}</div>
+      <pre class="chat-prompt-body" x-text="currentPersona.prompt"></pre>
+    </section>
     <div class="chat-messages" x-ref="msgs">
       <template x-for="(m, i) in messages" :key="i">
         <div :class="'chat-msg ' + m.role" x-text="m.content"></div>
@@ -212,7 +238,7 @@ pub fn welcome_html(_base_url: &str, locale: &crate::locale::Locale) -> String {
     </div>
     <div class="chat-error" x-show="error" x-text="error"></div>
     <form @submit.prevent="send()" class="row gap-8 mt-12">
-      <input class="input" type="text" x-model="input" placeholder="{chat_placeholder}"
+      <input class="input" type="text" x-model="input" :placeholder="currentPersona.slug === 'concierge' ? '{chat_placeholder}' : ('Message ' + currentPersona.label + '…')"
         :disabled="sending" x-ref="input" maxlength="600" autocomplete="off" autocorrect="off" autocapitalize="off">
       <button type="submit" class="btn primary" :disabled="sending || !input.trim()">{chat_send}</button>
     </form>
@@ -230,6 +256,10 @@ pub fn welcome_html(_base_url: &str, locale: &crate::locale::Locale) -> String {
         chat_cta = chat_cta,
         chat_title = chat_title,
         chat_subtitle = chat_subtitle,
+        chat_persona_label = chat_persona_label,
+        chat_view_prompt = chat_view_prompt,
+        chat_hide_prompt = chat_hide_prompt,
+        chat_prompt_heading = chat_prompt_heading,
         chat_placeholder = chat_placeholder,
         chat_send = chat_send,
         chat_close = chat_close,
@@ -249,6 +279,17 @@ pub fn welcome_html(_base_url: &str, locale: &crate::locale::Locale) -> String {
 fn js_string_for_html(s: &str) -> String {
     serde_json::to_string(s)
         .unwrap_or_else(|_| String::from("\"\""))
+        .replace('<', "\\u003c")
+        .replace('>', "\\u003e")
+        .replace('&', "\\u0026")
+}
+
+/// Same idea as `js_string_for_html` but for an arbitrary JSON value
+/// (object, array, etc.). Used to embed the demo personas list in the
+/// chat factory script tag.
+fn json_for_html(value: &serde_json::Value) -> String {
+    serde_json::to_string(value)
+        .unwrap_or_else(|_| String::from("null"))
         .replace('<', "\\u003c")
         .replace('>', "\\u003e")
         .replace('&', "\\u0026")
@@ -352,75 +393,98 @@ const HERO_ROTATOR_JS: &str = r##"<script type="module" nonce="__CSP_NONCE__">
 /// scripts run synchronously during parsing; module scripts are
 /// deferred and would be too late.
 const HERO_CHAT_JS: &str = r##"<script nonce="__CSP_NONCE__">
-window.conciergeChat = () => ({
-  open: false,
-  sending: false,
-  error: '',
-  input: '',
-  hint: true,
-  messages: [{ role: 'assistant', content: __GREETING__ }],
-  init() {
-    this.$watch('open', (v) => {
-      window.__heroPaused = !!v;
-      if (v) {
-        this.hint = false;
+(() => {
+  const personas = __PERSONAS__;
+  const findPersona = (slug) => personas.find((p) => p.slug === slug) || personas[0];
+  window.conciergeChat = () => ({
+    open: false,
+    sending: false,
+    error: '',
+    input: '',
+    hint: true,
+    showPrompt: false,
+    personas: personas,
+    personaSlug: personas[0] ? personas[0].slug : 'concierge',
+    messages: [],
+    get currentPersona() { return findPersona(this.personaSlug); },
+    init() {
+      this.resetTranscript();
+      this.$watch('open', (v) => {
+        window.__heroPaused = !!v;
+        if (v) {
+          this.hint = false;
+          this.$nextTick(() => {
+            if (this.$refs.input) this.$refs.input.focus();
+            this.scrollDown();
+          });
+        }
+      });
+      this.$watch('personaSlug', () => {
+        this.resetTranscript();
         this.$nextTick(() => {
           if (this.$refs.input) this.$refs.input.focus();
           this.scrollDown();
         });
-      }
-    });
-    setTimeout(() => { this.hint = false; }, 5500);
-  },
-  scrollDown() {
-    const el = this.$refs.msgs;
-    if (el) el.scrollTop = el.scrollHeight;
-  },
-  async send() {
-    const text = this.input.trim();
-    if (!text || this.sending) return;
-    this.error = '';
-    this.input = '';
-    this.messages.push({ role: 'user', content: text });
-    this.$nextTick(() => this.scrollDown());
-    this.sending = true;
-    try {
-      // Drop any leading assistant turns: the client-side greeting is for
-      // display only — Llama chat templates expect the first non-system
-      // message to be user, so leading with assistant breaks generation.
-      const wireMessages = [];
-      let started = false;
-      for (const m of this.messages) {
-        if (!started && m.role !== 'user') continue;
-        started = true;
-        wireMessages.push({ role: m.role, content: m.content });
-      }
-      const r = await fetch('/demo/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: wireMessages }),
       });
-      const data = await r.json().catch(() => ({}));
-      if (!r.ok) {
-        this.error = (r.status === 429) ? __RATE_LIMITED__ : (data && data.error) || __ERROR__;
-        if (r.status >= 400 && r.status !== 429) {
-          this.messages.pop();
+      setTimeout(() => { this.hint = false; }, 5500);
+    },
+    resetTranscript() {
+      const p = this.currentPersona;
+      this.messages = [{ role: 'assistant', content: p.greeting }];
+      this.error = '';
+      this.input = '';
+      this.showPrompt = false;
+    },
+    scrollDown() {
+      const el = this.$refs.msgs;
+      if (el) el.scrollTop = el.scrollHeight;
+    },
+    async send() {
+      const text = this.input.trim();
+      if (!text || this.sending) return;
+      this.error = '';
+      this.input = '';
+      this.messages.push({ role: 'user', content: text });
+      this.$nextTick(() => this.scrollDown());
+      this.sending = true;
+      try {
+        // Drop any leading assistant turns: the client-side greeting is for
+        // display only — Llama chat templates expect the first non-system
+        // message to be user, so leading with assistant breaks generation.
+        const wireMessages = [];
+        let started = false;
+        for (const m of this.messages) {
+          if (!started && m.role !== 'user') continue;
+          started = true;
+          wireMessages.push({ role: m.role, content: m.content });
         }
-      } else if (data && typeof data.reply === 'string' && data.reply.length) {
-        this.messages.push({ role: 'assistant', content: data.reply });
-      } else {
+        const r = await fetch('/demo/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ persona: this.personaSlug, messages: wireMessages }),
+        });
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) {
+          this.error = (r.status === 429) ? __RATE_LIMITED__ : (data && data.error) || __ERROR__;
+          if (r.status >= 400 && r.status !== 429) {
+            this.messages.pop();
+          }
+        } else if (data && typeof data.reply === 'string' && data.reply.length) {
+          this.messages.push({ role: 'assistant', content: data.reply });
+        } else {
+          this.error = __ERROR__;
+        }
+      } catch (e) {
         this.error = __ERROR__;
       }
-    } catch (e) {
-      this.error = __ERROR__;
-    }
-    this.sending = false;
-    this.$nextTick(() => {
-      this.scrollDown();
-      if (this.$refs.input) this.$refs.input.focus();
-    });
-  },
-});
+      this.sending = false;
+      this.$nextTick(() => {
+        this.scrollDown();
+        if (this.$refs.input) this.$refs.input.focus();
+      });
+    },
+  });
+})();
 </script>"##;
 
 pub fn basics_html(

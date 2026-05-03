@@ -308,6 +308,13 @@ code {
 .hero-clickable:hover + .hero-hint, .hero-clickable:focus-visible + .hero-hint, .hero-hint.is-hint-on { opacity:1; transform:translateY(0); }
 
 /* Live-demo chat modal (welcome page). */
+.chat-controls { display:flex; align-items:flex-end; gap:10px; margin:0 0 6px; flex-wrap:wrap; }
+.chat-persona-label { display:flex; flex-direction:column; gap:4px; flex:1 1 220px; min-width:180px; }
+.chat-persona-label .eyebrow { font-size:11px; }
+.chat-persona-select { padding:8px 10px; font-size:14px; }
+.chat-persona-desc { margin:0 0 8px; }
+.chat-prompt-panel { background:var(--cream-2); border:1px solid var(--hair); border-radius:10px; padding:12px 14px; margin:6px 0 12px; }
+.chat-prompt-body { margin:0; font-family:var(--f-mono); font-size:12px; line-height:1.55; color:var(--ink-2); white-space:pre-wrap; word-break:break-word; max-height:30vh; overflow-y:auto; }
 .chat-messages { flex:1 1 auto; min-height:120px; overflow-y:auto; padding:12px 2px; display:flex; flex-direction:column; gap:10px; scroll-behavior:smooth; }
 .chat-msg { padding:10px 14px; border-radius:14px; max-width:85%; line-height:1.45; font-size:14px; white-space:pre-wrap; word-break:break-word; }
 .chat-msg.user { align-self:flex-end; background:var(--ink); color:var(--cream); border-bottom-right-radius:4px; }
@@ -535,7 +542,10 @@ mod footer_tests {
                 "demo-chat-hint",
                 "demo-chat-title",
                 "demo-chat-subtitle",
-                "demo-chat-greeting",
+                "demo-chat-persona-label",
+                "demo-chat-view-prompt",
+                "demo-chat-hide-prompt",
+                "demo-chat-prompt-heading",
                 "demo-chat-placeholder",
                 "demo-chat-send",
                 "demo-chat-close",

@@ -61,11 +61,11 @@ test('demo-chat modal opens, posts to /demo/chat, renders assistant reply', asyn
   });
 
   await page.goto('/');
-  await page.getByRole('button', { name: /ask me about concierge/i }).click();
+  await page.getByRole('button', { name: /try the live demo/i }).click();
 
-  const dialog = page.getByRole('dialog', { name: /chat with concierge/i });
+  const dialog = page.getByRole('dialog', { name: /live demo/i });
   await expect(dialog).toBeVisible();
-  // Greeting message shows on open.
+  // Default-persona greeting shows on open.
   await expect(dialog.getByText(/i'm Concierge/i)).toBeVisible();
 
   await dialog.getByRole('textbox').fill('what channels do you cover?');
@@ -73,11 +73,64 @@ test('demo-chat modal opens, posts to /demo/chat, renders assistant reply', asyn
 
   await expect(dialog.getByText(/I cover WhatsApp, Instagram, Discord, and email\./)).toBeVisible();
 
-  // The wire format starts at the first user turn — the client-side
-  // greeting is display-only and gets stripped before POST.
+  // The wire format includes the persona slug and starts the message
+  // history at the first user turn — the client-side greeting is
+  // display-only and gets stripped before POST.
   expect(postedBody).toMatchObject({
+    persona: 'concierge',
     messages: [{ role: 'user', content: 'what channels do you cover?' }],
   });
+});
+
+test('demo-chat persona picker swaps greeting and persona slug on the wire', async ({ page }) => {
+  let lastBody: any = null;
+  await page.route('**/demo/chat', async (route) => {
+    lastBody = route.request().postDataJSON();
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ reply: 'sure thing 🌸' }),
+    });
+  });
+
+  await page.goto('/');
+  await page.getByRole('button', { name: /try the live demo/i }).click();
+  const dialog = page.getByRole('dialog', { name: /live demo/i });
+  await expect(dialog).toBeVisible();
+
+  // Default greeting is the Concierge one.
+  await expect(dialog.getByText(/i'm Concierge/i)).toBeVisible();
+
+  // Switch to the florist preset; greeting changes.
+  const select = dialog.locator('[data-testid="demo-chat-persona"]');
+  await select.selectOption('friendly_florist');
+  await expect(dialog.getByText(/welcome to the shop/i)).toBeVisible();
+  await expect(dialog.getByText(/i'm Concierge/i)).toHaveCount(0);
+
+  await dialog.getByRole('textbox').fill('do you ship next-day?');
+  await dialog.getByRole('button', { name: 'Send' }).click();
+  await expect(dialog.getByText(/sure thing/i)).toBeVisible();
+
+  expect(lastBody).toMatchObject({
+    persona: 'friendly_florist',
+    messages: [{ role: 'user', content: 'do you ship next-day?' }],
+  });
+});
+
+test('demo-chat view-prompt toggle reveals the active persona prompt', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: /try the live demo/i }).click();
+  const dialog = page.getByRole('dialog', { name: /live demo/i });
+
+  const toggle = dialog.getByRole('button', { name: /view system prompt/i });
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  await toggle.click();
+  await expect(dialog.getByRole('button', { name: /hide system prompt/i })).toHaveAttribute(
+    'aria-expanded',
+    'true',
+  );
+  // The Concierge prompt mentions WhatsApp Business.
+  await expect(dialog.locator('#demo-chat-prompt-panel')).toContainText(/WhatsApp Business/);
 });
 
 test('clicking the hero headline also opens the chat modal', async ({ page }) => {
@@ -90,7 +143,7 @@ test('clicking the hero headline also opens the chat modal', async ({ page }) =>
   );
   await page.goto('/');
   await page.locator('#hero-headline').click();
-  const dialog = page.getByRole('dialog', { name: /chat with concierge/i });
+  const dialog = page.getByRole('dialog', { name: /live demo/i });
   await expect(dialog).toBeVisible();
 });
 
@@ -114,8 +167,8 @@ test('demo-chat surfaces the rate-limit message on 429', async ({ page }) => {
   );
 
   await page.goto('/');
-  await page.getByRole('button', { name: /ask me about concierge/i }).click();
-  const dialog = page.getByRole('dialog', { name: /chat with concierge/i });
+  await page.getByRole('button', { name: /try the live demo/i }).click();
+  const dialog = page.getByRole('dialog', { name: /live demo/i });
   await dialog.getByRole('textbox').fill('hello?');
   await dialog.getByRole('button', { name: 'Send' }).click();
   await expect(dialog.getByText(/quite a few messages/i)).toBeVisible();
