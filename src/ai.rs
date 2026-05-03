@@ -144,22 +144,13 @@ pub async fn is_prompt_injection(env: &Env, text: &str) -> bool {
         ],
     };
 
-    let request_json = match serde_json::to_string(&request) {
-        Ok(j) => j,
-        Err(_) => return true, // fail closed
-    };
-
     let ai = match env.ai("AI") {
         Ok(a) => a,
         Err(_) => return true, // fail closed
     };
 
-    let input: serde_json::Value = match serde_json::from_str(&request_json) {
-        Ok(v) => v,
-        Err(_) => return true,
-    };
-
-    let result: std::result::Result<serde_json::Value, _> = ai.run(&model, input).await;
+    // Pass the struct directly — see `run_ai_model` for the JS Map vs Object trap.
+    let result: std::result::Result<serde_json::Value, _> = ai.run(&model, &request).await;
     match result {
         Ok(response) => {
             let answer = response
@@ -188,10 +179,14 @@ pub async fn is_prompt_injection(env: &Env, text: &str) -> bool {
 /// and by the persona admin handler (embed each Prompt rule's description
 /// on save).
 pub async fn embed(env: &Env, text: &str) -> Result<Vec<f32>> {
+    #[derive(Serialize)]
+    struct EmbedRequest<'a> {
+        text: [&'a str; 1],
+    }
     let ai = env.ai("AI")?;
-    let input = serde_json::json!({ "text": [text] });
+    // Pass the struct directly — see `run_ai_model` for the JS Map vs Object trap.
     let response: serde_json::Value = ai
-        .run(EMBEDDING_MODEL, input)
+        .run(EMBEDDING_MODEL, &EmbedRequest { text: [text] })
         .await
         .map_err(|e| Error::from(format!("Embedding model error: {:?}", e)))?;
 
@@ -242,16 +237,19 @@ pub fn cosine(a: &[f32], b: &[f32]) -> f32 {
 // ============================================================================
 
 async fn run_ai_model(env: &Env, model: &str, request: &AiRequest) -> Result<String> {
-    let request_json = serde_json::to_string(request)
-        .map_err(|e| Error::from(format!("Failed to serialize AI request: {}", e)))?;
-
     let ai = env.ai("AI")?;
 
-    let input: serde_json::Value = serde_json::from_str(&request_json)
-        .map_err(|e| Error::from(format!("Failed to parse request: {}", e)))?;
-
+    // CRITICAL: pass the `AiRequest` struct directly to `ai.run`. Round-tripping
+    // through `serde_json::Value` and then handing the resulting Value to the
+    // worker-rs binding makes `serde_wasm_bindgen` serialize the inner
+    // `Map<String, Value>` as a JavaScript `Map` (the ES6 `new Map(...)` type)
+    // rather than a plain Object. Workers AI's input schema validates against a
+    // plain Object, sees no own properties on the Map, and returns:
+    //   AiError 5006: oneOf at '/' not met, 0 matches: required properties at
+    //   '/' are 'prompt', 'messages', 'requests'.
+    // Serializing the struct directly emits a real Object via `serialize_struct`.
     let response: serde_json::Value = ai
-        .run(model, input)
+        .run(model, request)
         .await
         .map_err(|e| Error::from(format!("AI model error: {:?}", e)))?;
 
