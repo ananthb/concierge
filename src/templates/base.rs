@@ -299,9 +299,10 @@ code {
 .hero-select em { color:inherit; }
 @media (prefers-reduced-motion: reduce) { .hero-caret, .hero-select { display:none; background:transparent; color:inherit; } }
 
-/* Hero headline as a click target for the chat demo. */
-.hero-clickable { cursor:pointer; transition:color .2s ease; outline:none; border-radius:6px; }
-.hero-clickable:hover, .hero-clickable:focus-visible { color:var(--accent-2); }
+/* Hero headline as a click target for the chat demo. The headline itself
+   doesn't change color on hover — hovering it just triggers the demo
+   button below it to animate. */
+.hero-clickable { cursor:pointer; outline:none; border-radius:6px; }
 .hero-clickable:focus-visible { outline:2px solid var(--accent); outline-offset:6px; }
 .hero-hint-anchor { position:relative; }
 .hero-hint {
@@ -314,7 +315,8 @@ code {
   box-shadow:0 1px 0 rgba(27,24,20,.06);
   transition:transform .2s ease, background .2s ease, border-color .2s ease, box-shadow .2s ease, color .2s ease;
 }
-.hero-hint:hover, .hero-hint:focus-visible {
+.hero-hint:hover, .hero-hint:focus-visible,
+.hero-clickable:hover + .hero-hint, .hero-clickable:focus-visible + .hero-hint {
   transform:translateY(-3px) scale(1.05);
   background:var(--accent); border-color:var(--accent); color:#fff;
   box-shadow:0 10px 22px rgba(232,106,44,.28), 0 2px 0 rgba(200,84,28,.5);
@@ -322,7 +324,9 @@ code {
 .hero-hint:active { transform:translateY(-1px) scale(1.02); }
 .hero-hint-arrow { display:inline-block; line-height:1; transform:translateY(0); transition:transform .2s ease; }
 .hero-hint:hover .hero-hint-arrow,
-.hero-hint:focus-visible .hero-hint-arrow {
+.hero-hint:focus-visible .hero-hint-arrow,
+.hero-clickable:hover + .hero-hint .hero-hint-arrow,
+.hero-clickable:focus-visible + .hero-hint .hero-hint-arrow {
   animation:hero-hint-bounce .8s ease-in-out infinite;
 }
 @keyframes hero-hint-bounce {
@@ -330,9 +334,12 @@ code {
   50%      { transform:translateY(-4px); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .hero-hint, .hero-hint:hover, .hero-hint:focus-visible { transform:none; }
+  .hero-hint, .hero-hint:hover, .hero-hint:focus-visible,
+  .hero-clickable:hover + .hero-hint, .hero-clickable:focus-visible + .hero-hint { transform:none; }
   .hero-hint:hover .hero-hint-arrow,
-  .hero-hint:focus-visible .hero-hint-arrow { animation:none; }
+  .hero-hint:focus-visible .hero-hint-arrow,
+  .hero-clickable:hover + .hero-hint .hero-hint-arrow,
+  .hero-clickable:focus-visible + .hero-hint .hero-hint-arrow { animation:none; }
 }
 
 /* Live-demo chat modal (welcome page). */
