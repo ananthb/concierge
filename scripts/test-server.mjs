@@ -29,6 +29,7 @@ writeFileSync(
     'GOOGLE_OAUTH_CLIENT_ID=screenshot-stub.apps.googleusercontent.com',
     'GOOGLE_OAUTH_CLIENT_SECRET=screenshot-stub',
     'META_APP_ID=000000000000000',
+    `PUBLIC_BASE_URL=http://localhost:${PORT}`,
     '',
   ].join('\n'),
 );
