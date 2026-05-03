@@ -976,6 +976,10 @@ use crate::types::{
 };
 
 /// Save a unified message to D1. No message content stored: metadata only.
+///
+/// `conversation_id` ties this row to a `Session.conversation_id`. AI
+/// flows always pass `Some(...)`; canned-only or pre-AI inbound flows
+/// pass `None` because no conversation exists yet.
 pub async fn save_message(
     db: &D1Database,
     id: &str,
@@ -986,10 +990,11 @@ pub async fn save_message(
     tenant_id: &str,
     channel_account_id: &str,
     action_taken: Option<MessageAction>,
+    conversation_id: Option<&str>,
 ) -> Result<()> {
     let stmt = db.prepare(
-        "INSERT INTO messages (id, channel, direction, sender, recipient, tenant_id, channel_account_id, action_taken)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO messages (id, channel, direction, sender, recipient, tenant_id, channel_account_id, action_taken, conversation_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
     );
     stmt.bind(&[
         id.into(),
@@ -1001,6 +1006,9 @@ pub async fn save_message(
         channel_account_id.into(),
         action_taken
             .map(|a| JsValue::from(a.as_str()))
+            .unwrap_or(JsValue::null()),
+        conversation_id
+            .map(JsValue::from)
             .unwrap_or(JsValue::null()),
     ])?
     .run()
@@ -1024,8 +1032,30 @@ pub async fn save_inbound_message(
         &msg.tenant_id,
         &msg.channel_account_id,
         action_taken,
+        None,
     )
     .await
+}
+
+/// Stamp an existing message row with its `conversation_id`. Called
+/// from `handle_auto_reply` after we resolve the active conversation:
+/// the inbound row was logged at pipeline entry (before we knew the
+/// id), so we write it back here. Idempotent: re-running with the
+/// same id is harmless.
+///
+/// Note: in the buffered-DO path, only the *last* inbound's row in a
+/// batch gets stamped (it's the one carried as the synthetic
+/// `msg.id`). Earlier rows in the same batch stay NULL.
+pub async fn update_message_conversation_id(
+    db: &D1Database,
+    message_id: &str,
+    conversation_id: &str,
+) -> Result<()> {
+    let stmt = db.prepare("UPDATE messages SET conversation_id = ? WHERE id = ?");
+    stmt.bind(&[conversation_id.into(), message_id.into()])?
+        .run()
+        .await?;
+    Ok(())
 }
 
 /// Get recent unified messages for a tenant.

@@ -188,6 +188,99 @@ btn?.addEventListener('click', async () => {{
     base_html(&t(locale, "admin-login-title"), &content, locale)
 }
 
+/// Render the "Conversation Timing" card on /admin/settings.
+///
+/// Three optional integer inputs map directly to `ConversationConfig`'s
+/// `Option<u32>` fields. Empty value = `None` = use the prompt default,
+/// shown in placeholder + an explicit "Default: N" hint so the tenant
+/// can see what they'll fall back to without saving. Submits as JSON
+/// (HTMX json-enc) PUT to `/admin/settings/conversation`; the
+/// response is an inline fragment (success/error toast) swapped into
+/// the per-card toast div.
+fn conversation_settings_card(base_url: &str, cfg: &ConversationConfig, locale: &Locale) -> String {
+    let h2 = t(locale, "admin-settings-conversation-h2");
+    let lead = t(locale, "admin-settings-conversation-lead");
+    let idle_label = t(locale, "admin-settings-conversation-idle-label");
+    let idle_help = t(locale, "admin-settings-conversation-idle-help");
+    let cooldown_label = t(locale, "admin-settings-conversation-cooldown-label");
+    let cooldown_help = t(locale, "admin-settings-conversation-cooldown-help");
+    let history_label = t(locale, "admin-settings-conversation-history-label");
+    let history_help = t(locale, "admin-settings-conversation-history-help");
+    let unit_mins = t(locale, "admin-settings-conversation-unit-mins");
+    let unit_turns = t(locale, "admin-settings-conversation-unit-turns");
+    let default_prefix = t(locale, "admin-settings-conversation-default-prefix");
+    let save = t(locale, "admin-save");
+
+    // Defaults shown both as input placeholder and inline hint —
+    // tenants who haven't set a value see what number actually gets
+    // used at runtime.
+    let default_idle = crate::prompt::DEFAULT_CONVERSATION_IDLE_GAP_MINS;
+    let default_cooldown = crate::prompt::DEFAULT_HANDOFF_COOLDOWN_MINS;
+    let default_history = crate::prompt::DEFAULT_CONVERSATION_MAX_MESSAGES;
+
+    let idle_value = cfg.idle_gap_mins.map(|v| v.to_string()).unwrap_or_default();
+    let cooldown_value = cfg
+        .handoff_cooldown_mins
+        .map(|v| v.to_string())
+        .unwrap_or_default();
+    let history_value = cfg
+        .max_history_messages
+        .map(|v| v.to_string())
+        .unwrap_or_default();
+
+    format!(
+        r#"<div class="card p-22" hx-ext="json-enc">
+            <h2>{h2}</h2>
+            <p class="muted mb-16">{lead}</p>
+            <form hx-put="{base_url}/admin/settings/conversation" hx-target="{hash}conversation-toast" hx-swap="innerHTML">
+                <div class="stack gap-16">
+                    <label class="stack gap-4">
+                        <span><strong>{idle_label}</strong></span>
+                        <div class="row gap-8" style="align-items:center">
+                            <input class="input" type="number" name="idle_gap_mins"
+                                   inputmode="numeric" min="5" max="1440"
+                                   value="{idle_value}" placeholder="{default_idle}"
+                                   style="width:8rem">
+                            <span class="muted">{unit_mins}</span>
+                            <span class="muted fs-13">{default_prefix} {default_idle}</span>
+                        </div>
+                        <span class="muted fs-13">{idle_help}</span>
+                    </label>
+                    <label class="stack gap-4">
+                        <span><strong>{cooldown_label}</strong></span>
+                        <div class="row gap-8" style="align-items:center">
+                            <input class="input" type="number" name="handoff_cooldown_mins"
+                                   inputmode="numeric" min="5" max="1440"
+                                   value="{cooldown_value}" placeholder="{default_cooldown}"
+                                   style="width:8rem">
+                            <span class="muted">{unit_mins}</span>
+                            <span class="muted fs-13">{default_prefix} {default_cooldown}</span>
+                        </div>
+                        <span class="muted fs-13">{cooldown_help}</span>
+                    </label>
+                    <label class="stack gap-4">
+                        <span><strong>{history_label}</strong></span>
+                        <div class="row gap-8" style="align-items:center">
+                            <input class="input" type="number" name="max_history_messages"
+                                   inputmode="numeric" min="1" max="200"
+                                   value="{history_value}" placeholder="{default_history}"
+                                   style="width:8rem">
+                            <span class="muted">{unit_turns}</span>
+                            <span class="muted fs-13">{default_prefix} {default_history}</span>
+                        </div>
+                        <span class="muted fs-13">{history_help}</span>
+                    </label>
+                    <div>
+                        <button type="submit" class="btn sm">{save}</button>
+                    </div>
+                </div>
+            </form>
+            <div id="conversation-toast" class="mt-8" role="status" aria-live="polite" aria-atomic="true"></div>
+        </div>"#,
+        hash = HASH,
+    )
+}
+
 pub fn admin_settings_html(
     tenant: &Tenant,
     base_url: &str,
@@ -196,6 +289,7 @@ pub fn admin_settings_html(
     wa: &[WhatsAppAccount],
     ig: &[InstagramAccount],
     discord: Option<&DiscordConfig>,
+    conversation: &ConversationConfig,
     tenant_id: &str,
     locale: &Locale,
 ) -> String {
@@ -364,6 +458,8 @@ pub fn admin_settings_html(
         }
     };
 
+    let conversation_section = conversation_settings_card(base_url, conversation, locale);
+
     let content = format!(
         "<div class=\"page-pad\">
         <h1 class=\"display-sm m-0 mb-16\">{h1}</h1>
@@ -392,6 +488,7 @@ pub fn admin_settings_html(
             </form>
             <div id=\"currency-toast\" class=\"mt-8\" role=\"status\" aria-live=\"polite\" aria-atomic=\"true\"></div>
         </div>
+        {conversation_section}
         <div class=\"card p-22\">
             <h2>{session_h2}</h2>
             <a href=\"{base_url}/auth/logout\" class=\"btn ghost\">{signout}</a>
@@ -410,6 +507,7 @@ pub fn admin_settings_html(
         google_row = google_row,
         facebook_row = facebook_row,
         integrations_section = integrations_section,
+        conversation_section = conversation_section,
         inr_sel = if tenant.currency == crate::locale::Currency::Inr { " selected" } else { "" },
         usd_sel = if tenant.currency == crate::locale::Currency::Usd { " selected" } else { "" },
         h1 = t(locale, "admin-settings-h1"),
@@ -1388,4 +1486,81 @@ pub fn admin_error_html(message: &str) -> String {
         "<div class=\"error\" role=\"alert\">{}</div>",
         html_escape(message)
     )
+}
+
+#[cfg(test)]
+mod conversation_card_tests {
+    use super::*;
+
+    #[test]
+    fn empty_config_shows_default_placeholders_and_blank_values() {
+        let cfg = ConversationConfig::default();
+        let html = conversation_settings_card("https://example.test", &cfg, &Locale::default_inr());
+
+        // Form posts to the right endpoint with the right swap target.
+        assert!(
+            html.contains(r#"hx-put="https://example.test/admin/settings/conversation""#),
+            "form action missing"
+        );
+        assert!(html.contains(r##"hx-target="#conversation-toast""##));
+
+        // Each field is present with its `name=` matching ConversationConfig.
+        assert!(html.contains(r#"name="idle_gap_mins""#));
+        assert!(html.contains(r#"name="handoff_cooldown_mins""#));
+        assert!(html.contains(r#"name="max_history_messages""#));
+
+        // No values pre-filled when the config is empty.
+        assert!(html.contains(r#"value="""#));
+
+        // Defaults appear as placeholders so tenants see what they'll
+        // fall back to without saving.
+        assert!(html.contains(&format!(
+            "placeholder=\"{}\"",
+            crate::prompt::DEFAULT_CONVERSATION_IDLE_GAP_MINS
+        )));
+        assert!(html.contains(&format!(
+            "placeholder=\"{}\"",
+            crate::prompt::DEFAULT_HANDOFF_COOLDOWN_MINS
+        )));
+        assert!(html.contains(&format!(
+            "placeholder=\"{}\"",
+            crate::prompt::DEFAULT_CONVERSATION_MAX_MESSAGES
+        )));
+
+        // Bounds are wired into the inputs so the browser catches
+        // out-of-range values before submit.
+        assert!(html.contains(r#"min="5""#));
+        assert!(html.contains(r#"max="1440""#));
+        assert!(html.contains(r#"min="1""#));
+        assert!(html.contains(r#"max="200""#));
+    }
+
+    #[test]
+    fn populated_config_renders_existing_values() {
+        let cfg = ConversationConfig {
+            idle_gap_mins: Some(120),
+            handoff_cooldown_mins: Some(45),
+            max_history_messages: Some(12),
+        };
+        let html = conversation_settings_card("https://example.test", &cfg, &Locale::default_inr());
+
+        assert!(html.contains(r#"name="idle_gap_mins""#) && html.contains(r#"value="120""#));
+        assert!(html.contains(r#"name="handoff_cooldown_mins""#) && html.contains(r#"value="45""#));
+        assert!(html.contains(r#"name="max_history_messages""#) && html.contains(r#"value="12""#));
+    }
+
+    #[test]
+    fn aria_live_toast_div_is_present_for_inline_save_feedback() {
+        // The PUT handler returns a fragment that HTMX swaps into
+        // this div. Without it, success/error messages would land on
+        // a fresh page load instead of inline.
+        let html = conversation_settings_card(
+            "https://example.test",
+            &ConversationConfig::default(),
+            &Locale::default_inr(),
+        );
+        assert!(
+            html.contains(r#"id="conversation-toast""#) && html.contains(r#"aria-live="polite""#)
+        );
+    }
 }
