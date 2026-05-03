@@ -187,6 +187,9 @@ pub fn welcome_html(_base_url: &str, locale: &crate::locale::Locale) -> String {
     let chat_send = html_escape(&t(locale, "demo-chat-send"));
     let chat_close = html_escape(&t(locale, "demo-chat-close"));
     let chat_thinking = html_escape(&t(locale, "demo-chat-thinking"));
+    let chat_cta_heading = html_escape(&t(locale, "demo-chat-cta-heading"));
+    let chat_cta_body = html_escape(&t(locale, "demo-chat-cta-body"));
+    let chat_cta_button = html_escape(&t(locale, "demo-chat-cta-button"));
 
     let content = format!(
         r#"{header}
@@ -313,13 +316,20 @@ pub fn welcome_html(_base_url: &str, locale: &crate::locale::Locale) -> String {
          messages arrive in WhatsApp / IG / Discord / email. -->
     <p class="chat-channels-note">{chat_channels_note}</p>
     <div class="chat-error" x-show="error" x-text="error"></div>
-    <form @submit.prevent="send()" class="row gap-8 mt-12 chat-form">
+    <form x-show="!showCta" @submit.prevent="send()" class="row gap-8 mt-12 chat-form">
       <textarea class="chat-input" x-model="input" :placeholder="currentPersona.is_system ? '{chat_placeholder}' : ('{chat_placeholder_prefix} ' + currentPersona.label + ' {chat_placeholder_suffix}')"
         :disabled="sending || !personas.length" x-ref="input" maxlength="600" rows="2"
         @keydown.enter="if (!$event.shiftKey) {{ $event.preventDefault(); send(); }}"
         autocomplete="off" autocorrect="off" autocapitalize="off"></textarea>
       <button type="submit" class="btn primary" :disabled="sending || !input.trim() || !personas.length">{chat_send}</button>
     </form>
+    <div class="chat-cta" x-show="showCta" x-cloak>
+      <div class="chat-cta-text">
+        <strong>{chat_cta_heading}</strong>
+        <span>{chat_cta_body}</span>
+      </div>
+      <a href="/auth/login" class="btn primary">{chat_cta_button}</a>
+    </div>
   </div>
 </div>
 </div>
@@ -352,6 +362,9 @@ pub fn welcome_html(_base_url: &str, locale: &crate::locale::Locale) -> String {
         chat_send = chat_send,
         chat_close = chat_close,
         chat_thinking = chat_thinking,
+        chat_cta_heading = chat_cta_heading,
+        chat_cta_body = chat_cta_body,
+        chat_cta_button = chat_cta_button,
         hash = HASH,
         rotator = rotator,
         chat_script = chat_script,
@@ -475,6 +488,14 @@ const HERO_CHAT_JS: &str = r##"<script nonce="__CSP_NONCE__">
   const POSTAMBLE = __POSTAMBLE__;
   const findPersona = (slug, personas) =>
     personas.find((p) => p.slug === slug) || personas[0] || null;
+  // Demo session is intentionally short. After this many user turns
+  // the input form is replaced with the sign-up CTA; the visitor has
+  // either gotten the gist by then or they haven't.
+  const TURN_LIMIT = 3;
+  // Same CTA fires automatically after this many ms of the modal
+  // being open, so visitors who park the modal without typing also
+  // see the next step.
+  const CTA_TIMEOUT_MS = 15000;
   window.conciergeChat = () => ({
     open: false,
     sending: false,
@@ -493,6 +514,22 @@ const HERO_CHAT_JS: &str = r##"<script nonce="__CSP_NONCE__">
     messages: [],
     preamble: PREAMBLE,
     postamble: POSTAMBLE,
+    // Sticky for the duration of the modal session: once the timer
+    // fires (or the visitor crosses the turn limit) we keep the CTA
+    // up even if they switch personas. Cleared on modal close.
+    ctaShown: false,
+    _ctaTimer: null,
+    get userTurns() {
+      let n = 0;
+      for (const m of this.messages) if (m.role === 'user') n += 1;
+      return n;
+    },
+    get atTurnLimit() {
+      return this.userTurns >= TURN_LIMIT;
+    },
+    get showCta() {
+      return this.ctaShown || this.atTurnLimit;
+    },
     get currentPersona() {
       return findPersona(this.personaSlug, this.personas) || {
         slug: 'concierge', label: 'Concierge', description: '',
@@ -516,10 +553,14 @@ const HERO_CHAT_JS: &str = r##"<script nonce="__CSP_NONCE__">
       this.$watch('open', (v) => {
         window.__heroPaused = !!v;
         if (v) {
+          this._ctaTimer = setTimeout(() => { this.ctaShown = true; }, CTA_TIMEOUT_MS);
           this.$nextTick(() => {
             if (this.$refs.input) this.$refs.input.focus();
             this.scrollDown();
           });
+        } else {
+          if (this._ctaTimer) { clearTimeout(this._ctaTimer); this._ctaTimer = null; }
+          this.ctaShown = false;
         }
       });
       this.$watch('personaSlug', () => {
@@ -543,6 +584,7 @@ const HERO_CHAT_JS: &str = r##"<script nonce="__CSP_NONCE__">
       if (el) el.scrollTop = el.scrollHeight;
     },
     async send() {
+      if (this.showCta) return;
       const text = this.input.trim();
       if (!text || this.sending) return;
       this.error = '';

@@ -163,10 +163,10 @@ pub async fn handle_demo_chat(mut req: Request, env: Env) -> Result<Response> {
 
     // Same envelope every tenant prompt gets. On top of that, the
     // demo prepends a one-off "you're inside Concierge's marketing-site
-    // demo, the visitor is a prospect roleplaying as a customer, nudge
-    // them at conversation-end" frame for builder personas. The system
-    // Concierge row is exempt: it already speaks to the visitor as a
-    // prospect directly.
+    // demo, the visitor is roleplaying as a customer, stay in
+    // character" frame for builder personas. Sign-up nudging is the
+    // modal CTA's job, not the model's. The system Concierge row is
+    // exempt: it already speaks to the visitor as a prospect directly.
     //
     // Once the client signals `handoff: true`, the persona middle is
     // replaced wholesale by [`crate::prompt::HOLDING_PATTERN_MIDDLE`]
