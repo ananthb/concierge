@@ -68,9 +68,20 @@ pub async fn handle_persona_admin(
                         biz_name: s("biz_name"),
                         biz_type: s("biz_type"),
                         city: s("city"),
+                        hours: s("hours"),
+                        goal: s("goal").chars().take(120).collect(),
+                        goal_url: crate::personas::sanitize_goal_url(&s("goal_url"))
+                            .chars()
+                            .take(200)
+                            .collect(),
                         catch_phrases: parse_chips("catch_phrases").into_iter().take(5).collect(),
                         off_topics: parse_chips("off_topics"),
                         never: s("never"),
+                        handoff_conditions: parse_chips("handoff_conditions")
+                            .into_iter()
+                            .map(|c| c.chars().take(120).collect::<String>())
+                            .take(5)
+                            .collect(),
                     })
                 }
                 "custom" => {
@@ -161,9 +172,20 @@ pub async fn handle_persona_admin(
                 biz_name: s("biz_name"),
                 biz_type: s("biz_type"),
                 city: s("city"),
+                hours: s("hours"),
+                goal: s("goal").chars().take(120).collect(),
+                goal_url: crate::personas::sanitize_goal_url(&s("goal_url"))
+                    .chars()
+                    .take(200)
+                    .collect(),
                 catch_phrases: chips("catch_phrases").into_iter().take(5).collect(),
                 off_topics: chips("off_topics").into_iter().take(10).collect(),
                 never: s("never"),
+                handoff_conditions: chips("handoff_conditions")
+                    .into_iter()
+                    .map(|c| c.chars().take(120).collect::<String>())
+                    .take(5)
+                    .collect(),
             };
             let prompt = personas::generate(&builder);
             // Returned to `#prompt-preview` with `hx-swap="outerHTML"` — the

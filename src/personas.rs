@@ -145,6 +145,17 @@ pub fn generate(b: &PersonaBuilder) -> String {
 
     parts.push(b.archetype.voice().to_string());
 
+    // Goal is policy-adjacent to voice and is *always* emitted — when
+    // blank, we substitute a sensible default so the rendered middle is
+    // deterministic (and the safety classifier sees the same prompt the
+    // model will). Order matters: keep Goal next to Voice so the model
+    // reads "what tone, what outcome" together.
+    parts.push(goal_line(&b.goal, &b.goal_url));
+
+    if !b.hours.trim().is_empty() {
+        parts.push(format!("Hours: {}.", b.hours.trim().trim_end_matches('.')));
+    }
+
     let phrases: Vec<String> = b
         .catch_phrases
         .iter()
@@ -175,7 +186,60 @@ pub fn generate(b: &PersonaBuilder) -> String {
         parts.push(format!("Never {}.", b.never.trim()));
     }
 
+    let handoff: Vec<String> = b
+        .handoff_conditions
+        .iter()
+        .filter(|c| !c.trim().is_empty())
+        .map(|c| c.trim().to_string())
+        .collect();
+    if !handoff.is_empty() {
+        parts.push(format!(
+            "Hand off to a human if any of these come up: {}.",
+            handoff.join("; ")
+        ));
+    }
+
     parts.join("\n\n")
+}
+
+/// Render the always-emitted Goal line. When `goal` is non-empty, it
+/// reads `Goal: guide the customer to {goal}{ at {url}}.`. When blank,
+/// it falls back to the tenant-friendly default — every prompt must
+/// have a concrete endpoint, even before the owner has decided what
+/// they want.
+fn goal_line(goal: &str, goal_url: &str) -> String {
+    let g = goal.trim().trim_end_matches('.');
+    let u = goal_url.trim();
+    if g.is_empty() {
+        "Goal: answer the customer's question and let them know a human will follow up.".to_string()
+    } else if u.is_empty() {
+        format!("Goal: guide the customer to {g}.")
+    } else {
+        format!("Goal: guide the customer to {g} at {u}.")
+    }
+}
+
+/// Sanitise a goal URL submitted from a form. Returns an empty string
+/// for anything that isn't a relative path beginning with `/` or an
+/// absolute `https://` URL. Refuses `javascript:`, `data:`, bare
+/// domains, and `http://` (insecure). Trims whitespace.
+///
+/// The string lands inside the rendered prompt verbatim, so the
+/// validation also doubles as a small XSS-equivalent guard against
+/// suspicious-looking URLs being fed to the model.
+pub fn sanitize_goal_url(raw: &str) -> String {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return String::new();
+    }
+    if trimmed.starts_with('/') {
+        return trimmed.to_string();
+    }
+    let lower = trimmed.to_ascii_lowercase();
+    if lower.starts_with("https://") && trimmed.len() > "https://".len() {
+        return trimmed.to_string();
+    }
+    String::new()
 }
 
 #[cfg(test)]
@@ -206,14 +270,93 @@ mod tests {
     fn generate_full_builder() {
         let mut b = minimal();
         b.city = "Bandra".to_string();
+        b.hours = "Tue–Sun 9am–7pm".to_string();
+        b.goal = "book a delivery slot".to_string();
+        b.goal_url = "/book".to_string();
         b.catch_phrases = vec!["bloom your day".to_string(), "thanks petal!".to_string()];
         b.off_topics = vec!["politics".to_string(), "relationships".to_string()];
         b.never = "quote firm prices".to_string();
+        b.handoff_conditions = vec!["weddings".to_string(), "complaints".to_string()];
         let p = generate(&b);
         assert!(p.contains("Business: Petals & Stems, a florist in Bandra."));
+        assert!(p.contains("Hours: Tue–Sun 9am–7pm."));
+        assert!(p.contains("Goal: guide the customer to book a delivery slot at /book."));
         assert!(p.contains(r#""bloom your day", "thanks petal!""#));
         assert!(p.contains("politics; relationships"));
         assert!(p.contains("Never quote firm prices."));
+        assert!(p.contains("Hand off to a human if any of these come up: weddings; complaints."));
+    }
+
+    #[test]
+    fn generate_omits_hours_when_blank() {
+        let p = generate(&minimal());
+        assert!(!p.contains("Hours:"));
+    }
+
+    #[test]
+    fn generate_includes_goal_when_set() {
+        let mut b = minimal();
+        b.goal = "book a delivery slot".to_string();
+        let p = generate(&b);
+        assert!(p.contains("Goal: guide the customer to book a delivery slot."));
+    }
+
+    #[test]
+    fn generate_includes_goal_url_when_both_set() {
+        let mut b = minimal();
+        b.goal = "book an appointment".to_string();
+        b.goal_url = "/book".to_string();
+        let p = generate(&b);
+        assert!(p.contains("Goal: guide the customer to book an appointment at /book."));
+    }
+
+    #[test]
+    fn generate_uses_default_goal_when_empty() {
+        let p = generate(&minimal());
+        assert!(p.contains(
+            "Goal: answer the customer's question and let them know a human will follow up."
+        ));
+    }
+
+    #[test]
+    fn generate_includes_handoff_conditions() {
+        let mut b = minimal();
+        b.handoff_conditions = vec![
+            "the customer is upset".to_string(),
+            "  ".to_string(), // dropped
+            "any refund or complaint".to_string(),
+        ];
+        let p = generate(&b);
+        assert!(p.contains(
+            "Hand off to a human if any of these come up: the customer is upset; any refund or complaint."
+        ));
+    }
+
+    #[test]
+    fn generate_omits_handoff_block_when_empty() {
+        let p = generate(&minimal());
+        assert!(!p.contains("Hand off to a human"));
+    }
+
+    #[test]
+    fn sanitize_goal_url_accepts_relative_and_https() {
+        assert_eq!(sanitize_goal_url("/book"), "/book");
+        assert_eq!(sanitize_goal_url("  /book  "), "/book");
+        assert_eq!(
+            sanitize_goal_url("https://example.com/book"),
+            "https://example.com/book"
+        );
+    }
+
+    #[test]
+    fn sanitize_goal_url_rejects_dangerous_or_bare() {
+        assert_eq!(sanitize_goal_url(""), "");
+        assert_eq!(sanitize_goal_url("   "), "");
+        assert_eq!(sanitize_goal_url("javascript:alert(1)"), "");
+        assert_eq!(sanitize_goal_url("data:text/html,foo"), "");
+        assert_eq!(sanitize_goal_url("http://insecure.example"), "");
+        assert_eq!(sanitize_goal_url("example.com/book"), "");
+        assert_eq!(sanitize_goal_url("https://"), ""); // empty after scheme
     }
 
     #[test]

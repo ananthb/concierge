@@ -97,6 +97,17 @@ pub fn persona_admin_html(persona: &PersonaConfig, base_url: &str, locale: &Loca
             <input id="persona-never" class="input" name="never" x-model="builder.never" placeholder="{ph_never}">
           </div>
         </div>
+        <div class="mt-12" style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div>
+            <label for="persona-goal" class="eyebrow lbl">{lbl_goal}</label>
+            <input id="persona-goal" class="input" name="goal" x-model="builder.goal" maxlength="120" placeholder="{ph_goal}">
+            <p class="muted fs-12 mt-4 m-0">{hint_goal}</p>
+          </div>
+          <div>
+            <label for="persona-goal-url" class="eyebrow lbl">{lbl_goal_url}</label>
+            <input id="persona-goal-url" class="input" name="goal_url" x-model="builder.goal_url" maxlength="200" placeholder="{ph_goal_url}">
+          </div>
+        </div>
         <div class="mt-12">
           <label for="persona-catch-phrases" class="eyebrow lbl">{lbl_catch}</label>
           <textarea id="persona-catch-phrases" class="textarea" name="catch_phrases" x-model="builder.catch_phrases" rows="3" placeholder="{ph_catch}"></textarea>
@@ -104,6 +115,11 @@ pub fn persona_admin_html(persona: &PersonaConfig, base_url: &str, locale: &Loca
         <div class="mt-12">
           <label for="persona-off-topics" class="eyebrow lbl">{lbl_off}</label>
           <textarea id="persona-off-topics" class="textarea" name="off_topics" x-model="builder.off_topics" rows="3" placeholder="{ph_off}"></textarea>
+        </div>
+        <div class="mt-12">
+          <label for="persona-handoff" class="eyebrow lbl">{lbl_handoff}</label>
+          <textarea id="persona-handoff" class="textarea" name="handoff_conditions" x-model="builder.handoff_conditions" rows="3" placeholder="{ph_handoff}"></textarea>
+          <p class="muted fs-12 mt-4 m-0">{hint_handoff}</p>
         </div>
       </div>
 
@@ -128,7 +144,7 @@ pub fn persona_admin_html(persona: &PersonaConfig, base_url: &str, locale: &Loca
     <pre id="prompt-preview" class="prompt-preview prompt-preview-middle">{initial_preview}</pre>
     <pre class="prompt-preview prompt-preview-fixed" aria-label="{postamble_label}">{postamble}</pre>
     <div class="row gap-8 mt-8" x-show="mode === 'builder'" x-cloak :aria-hidden="mode !== 'builder'">
-      <button type="button" class="btn ghost sm" hx-post="{base_url}/admin/persona/preview" hx-target="#prompt-preview" hx-swap="outerHTML" hx-include="[name='archetype'],[name='biz_name'],[name='biz_type'],[name='city'],[name='never'],[name='catch_phrases'],[name='off_topics']">{refresh}</button>
+      <button type="button" class="btn ghost sm" hx-post="{base_url}/admin/persona/preview" hx-target="#prompt-preview" hx-swap="outerHTML" hx-include="[name='archetype'],[name='biz_name'],[name='biz_type'],[name='city'],[name='goal'],[name='goal_url'],[name='never'],[name='catch_phrases'],[name='off_topics'],[name='handoff_conditions']">{refresh}</button>
     </div>
   </div>
 </div>"##,
@@ -151,12 +167,20 @@ pub fn persona_admin_html(persona: &PersonaConfig, base_url: &str, locale: &Loca
         lbl_never = t(locale, "admin-persona-label-never"),
         lbl_catch = t(locale, "admin-persona-label-catch-phrases"),
         lbl_off = t(locale, "admin-persona-label-off-topics"),
+        lbl_goal = t(locale, "admin-persona-label-goal"),
+        lbl_goal_url = t(locale, "admin-persona-label-goal-url"),
+        lbl_handoff = t(locale, "admin-persona-label-handoff"),
         ph_biz_name = t(locale, "admin-persona-placeholder-biz-name"),
         ph_biz_type = t(locale, "admin-persona-placeholder-biz-type"),
         ph_city = t(locale, "admin-persona-placeholder-city"),
         ph_never = t(locale, "admin-persona-placeholder-never"),
         ph_catch = t(locale, "admin-persona-placeholder-catch-phrases"),
         ph_off = t(locale, "admin-persona-placeholder-off-topics"),
+        ph_goal = html_escape(&t(locale, "admin-persona-placeholder-goal")),
+        ph_goal_url = html_escape(&t(locale, "admin-persona-placeholder-goal-url")),
+        ph_handoff = html_escape(&t(locale, "admin-persona-placeholder-handoff")),
+        hint_goal = t(locale, "admin-persona-hint-goal"),
+        hint_handoff = t(locale, "admin-persona-hint-handoff"),
         custom_lead = t(locale, "admin-persona-custom-lead"),
         custom_sr = t(locale, "admin-persona-custom-sr-only"),
         custom_ph = t(locale, "admin-persona-custom-placeholder"),
@@ -236,15 +260,18 @@ fn build_x_data(mode: &str, builder: &crate::types::PersonaBuilder, custom_promp
             .replace('\r', "\\r")
     }
     format!(
-        "{{ mode: '{mode}', customPrompt: '{custom}', builder: {{ archetype: '{archetype}', biz_name: '{biz_name}', biz_type: '{biz_type}', city: '{city}', never: '{never}', catch_phrases: '{cp}', off_topics: '{ot}' }} }}",
+        "{{ mode: '{mode}', customPrompt: '{custom}', builder: {{ archetype: '{archetype}', biz_name: '{biz_name}', biz_type: '{biz_type}', city: '{city}', goal: '{goal}', goal_url: '{goal_url}', never: '{never}', catch_phrases: '{cp}', off_topics: '{ot}', handoff_conditions: '{handoff}' }} }}",
         mode = esc(mode),
         custom = esc(custom_prompt),
         archetype = esc(builder.archetype.slug()),
         biz_name = esc(&builder.biz_name),
         biz_type = esc(&builder.biz_type),
         city = esc(&builder.city),
+        goal = esc(&builder.goal),
+        goal_url = esc(&builder.goal_url),
         never = esc(&builder.never),
         cp = esc(&builder.catch_phrases.join("\n")),
         ot = esc(&builder.off_topics.join("\n")),
+        handoff = esc(&builder.handoff_conditions.join("\n")),
     )
 }

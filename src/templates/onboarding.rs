@@ -155,13 +155,35 @@ pub fn welcome_html(_base_url: &str, locale: &crate::locale::Locale) -> String {
 
     let chat_hint = html_escape(&t(locale, "demo-chat-hint"));
     let chat_title = html_escape(&t(locale, "demo-chat-title"));
-    let chat_subtitle = html_escape(&t(locale, "demo-chat-subtitle"));
+    // Subtitle has two variants: business-roleplay (default) vs.
+    // Concierge-direct. The Alpine factory picks per persona — we just
+    // ship both strings into the chat module so it can swap them.
+    // These end up inside Alpine `'…'` JS literals in an HTML attribute,
+    // so they need `js_attr_escape` (which renders `'` as `\'`), not
+    // `html_escape` (which would only entity-encode for HTML and leave
+    // a bare apostrophe to terminate the JS string).
+    let chat_subtitle = js_attr_escape(&t(locale, "demo-chat-subtitle"));
+    let chat_subtitle_concierge = js_attr_escape(&t(locale, "demo-chat-subtitle-concierge"));
     let chat_persona_label = html_escape(&t(locale, "demo-chat-persona-label"));
+    let chat_roleplay_prefix = html_escape(&t(locale, "demo-chat-roleplay-prefix"));
+    let chat_roleplay_suffix = html_escape(&t(locale, "demo-chat-roleplay-suffix"));
+    let chat_channels_note = html_escape(&t(locale, "demo-chat-channels-note"));
+    let chat_lbl_hours = html_escape(&t(locale, "demo-chat-business-hours"));
+    let chat_lbl_city = html_escape(&t(locale, "demo-chat-business-city"));
+    let chat_lbl_type = html_escape(&t(locale, "demo-chat-business-type"));
+    let chat_lbl_goal = html_escape(&t(locale, "demo-chat-business-goal"));
+    let chat_handoff_chip = html_escape(&t(locale, "demo-chat-handoff-chip"));
     let chat_view_prompt = html_escape(&t(locale, "demo-chat-view-prompt"));
     let chat_hide_prompt = html_escape(&t(locale, "demo-chat-hide-prompt"));
     let chat_prompt_heading = html_escape(&t(locale, "demo-chat-prompt-heading"));
     let chat_envelope_note = html_escape(&t(locale, "demo-chat-envelope-note"));
-    let chat_placeholder = html_escape(&t(locale, "demo-chat-placeholder"));
+    // Same as the subtitles: these go inside an Alpine `'…'` literal in
+    // a `:placeholder` attribute, so escape for JS-in-attr.
+    let chat_placeholder = js_attr_escape(&t(locale, "demo-chat-placeholder"));
+    let chat_placeholder_prefix =
+        js_attr_escape(&t(locale, "demo-chat-placeholder-customer-prefix"));
+    let chat_placeholder_suffix =
+        js_attr_escape(&t(locale, "demo-chat-placeholder-customer-suffix"));
     let chat_send = html_escape(&t(locale, "demo-chat-send"));
     let chat_close = html_escape(&t(locale, "demo-chat-close"));
     let chat_thinking = html_escape(&t(locale, "demo-chat-thinking"));
@@ -212,7 +234,7 @@ pub fn welcome_html(_base_url: &str, locale: &crate::locale::Locale) -> String {
     <div class="between mb-8">
       <div>
         <h2 id="demo-chat-modal-title" class="display-sm" style="margin:0">{chat_title}</h2>
-        <p class="muted fs-13" style="margin:2px 0 0">{chat_subtitle}</p>
+        <p class="muted fs-13" style="margin:2px 0 0" x-text="currentPersona.is_system ? '{chat_subtitle_concierge}' : '{chat_subtitle}'"></p>
       </div>
       <button type="button" class="btn icon ghost" @click="open = false" aria-label="{chat_close}" style="padding:4px 10px;font-size:18px;line-height:1">&times;</button>
     </div>
@@ -238,6 +260,26 @@ pub fn welcome_html(_base_url: &str, locale: &crate::locale::Locale) -> String {
       </button>
     </div>
     <p class="muted fs-13 chat-persona-desc" x-text="personas.length ? currentPersona.description : (personasLoaded ? 'The persona catalog isn\'t ready yet — apply the migration on the production D1 to populate it.' : 'Loading personas…')"></p>
+    <!-- Roleplay frame card: shown only when the visitor picked a sample
+         business persona (not the Concierge-self row). Tells them
+         they're playing one of that business's customers, and lists the
+         business's profile so they have something concrete to ask
+         about. -->
+    <div class="chat-business-card" x-show="!currentPersona.is_system && currentPersona.business" x-cloak>
+      <p class="roleplay">{chat_roleplay_prefix} <strong x-text="currentPersona.business && currentPersona.business.name"></strong>{chat_roleplay_suffix}</p>
+      <p class="biz-meta">
+        <span x-show="currentPersona.business && currentPersona.business.business_type"><b>{chat_lbl_type}</b><span x-text="currentPersona.business && currentPersona.business.business_type"></span></span>
+        <span x-show="currentPersona.business && currentPersona.business.city"><b>{chat_lbl_city}</b><span x-text="currentPersona.business && currentPersona.business.city"></span></span>
+        <span x-show="currentPersona.business && currentPersona.business.hours"><b>{chat_lbl_hours}</b><span x-text="currentPersona.business && currentPersona.business.hours"></span></span>
+        <span x-show="currentPersona.business && currentPersona.business.goal">
+          <b>{chat_lbl_goal}</b>
+          <span x-text="currentPersona.business && currentPersona.business.goal"></span>
+          <template x-if="currentPersona.business && currentPersona.business.goal_url">
+            <a class="biz-goal-link" :href="currentPersona.business.goal_url" x-text="currentPersona.business.goal_url" target="_blank" rel="noopener"></a>
+          </template>
+        </span>
+      </p>
+    </div>
     <!-- Single scroll region for the conversation + the toggleable prompt
          panel. Form stays pinned at the bottom even when the prompt panel
          is open and pushes the messages region's content overflow. -->
@@ -256,9 +298,22 @@ pub fn welcome_html(_base_url: &str, locale: &crate::locale::Locale) -> String {
         <div class="chat-thinking" x-show="sending">{chat_thinking}</div>
       </div>
     </div>
+    <!-- Handoff chip: appears once the model has emitted the handoff
+         token on a turn. Pure demo theater — there's no real human to
+         take over — but it signals the same UX a tenant would see in
+         their tenant-facing dashboard. -->
+    <div class="chat-handoff-chip" x-show="handoff" x-cloak>
+      <span class="chat-handoff-dot" aria-hidden="true"></span>
+      {chat_handoff_chip}
+    </div>
+    <!-- Channels hint: visible to everyone, with a slightly different
+         emphasis for the Concierge persona vs sample business personas.
+         Reinforces that this chat box is the demo only — real customer
+         messages arrive in WhatsApp / IG / Discord / email. -->
+    <p class="chat-channels-note">{chat_channels_note}</p>
     <div class="chat-error" x-show="error" x-text="error"></div>
     <form @submit.prevent="send()" class="row gap-8 mt-12">
-      <input class="input" type="text" x-model="input" :placeholder="currentPersona.slug === 'concierge' ? '{chat_placeholder}' : ('Message ' + currentPersona.label + '…')"
+      <input class="input" type="text" x-model="input" :placeholder="currentPersona.is_system ? '{chat_placeholder}' : ('{chat_placeholder_prefix} ' + currentPersona.label + ' {chat_placeholder_suffix}')"
         :disabled="sending || !personas.length" x-ref="input" maxlength="600" autocomplete="off" autocorrect="off" autocapitalize="off">
       <button type="submit" class="btn primary" :disabled="sending || !input.trim() || !personas.length">{chat_send}</button>
     </form>
@@ -275,11 +330,22 @@ pub fn welcome_html(_base_url: &str, locale: &crate::locale::Locale) -> String {
         cta_secondary = t(locale, "welcome-cta-secondary"),
         chat_title = chat_title,
         chat_subtitle = chat_subtitle,
+        chat_subtitle_concierge = chat_subtitle_concierge,
         chat_persona_label = chat_persona_label,
+        chat_roleplay_prefix = chat_roleplay_prefix,
+        chat_roleplay_suffix = chat_roleplay_suffix,
+        chat_channels_note = chat_channels_note,
+        chat_lbl_hours = chat_lbl_hours,
+        chat_lbl_city = chat_lbl_city,
+        chat_lbl_type = chat_lbl_type,
+        chat_lbl_goal = chat_lbl_goal,
+        chat_handoff_chip = chat_handoff_chip,
         chat_view_prompt = chat_view_prompt,
         chat_hide_prompt = chat_hide_prompt,
         chat_prompt_heading = chat_prompt_heading,
         chat_placeholder = chat_placeholder,
+        chat_placeholder_prefix = chat_placeholder_prefix,
+        chat_placeholder_suffix = chat_placeholder_suffix,
         chat_send = chat_send,
         chat_close = chat_close,
         chat_thinking = chat_thinking,
@@ -412,6 +478,10 @@ const HERO_CHAT_JS: &str = r##"<script nonce="__CSP_NONCE__">
     error: '',
     input: '',
     showPrompt: false,
+    // Set true once /demo/chat returns handoff:true on a turn. Echoed
+    // back on every subsequent send so the server replies under the
+    // holding-pattern middle. Resets on persona switch and modal close.
+    handoff: false,
     // Personas come from /demo/personas (Approved-only D1 catalog).
     // Empty until init() fetches; dropdown shows a loading row.
     personas: [],
@@ -423,7 +493,7 @@ const HERO_CHAT_JS: &str = r##"<script nonce="__CSP_NONCE__">
     get currentPersona() {
       return findPersona(this.personaSlug, this.personas) || {
         slug: 'concierge', label: 'Concierge', description: '',
-        greeting: 'Loading…', prompt: '',
+        greeting: 'Loading…', prompt: '', is_system: true, business: null,
       };
     },
     async init() {
@@ -463,6 +533,7 @@ const HERO_CHAT_JS: &str = r##"<script nonce="__CSP_NONCE__">
       this.error = '';
       this.input = '';
       this.showPrompt = false;
+      this.handoff = false;
     },
     scrollDown() {
       const el = this.$refs.msgs;
@@ -490,7 +561,11 @@ const HERO_CHAT_JS: &str = r##"<script nonce="__CSP_NONCE__">
         const r = await fetch('/demo/chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ persona: this.personaSlug, messages: wireMessages }),
+          body: JSON.stringify({
+            persona: this.personaSlug,
+            messages: wireMessages,
+            handoff: this.handoff,
+          }),
         });
         const data = await r.json().catch(() => ({}));
         if (!r.ok) {
@@ -500,6 +575,10 @@ const HERO_CHAT_JS: &str = r##"<script nonce="__CSP_NONCE__">
           }
         } else if (data && typeof data.reply === 'string' && data.reply.length) {
           this.messages.push({ role: 'assistant', content: data.reply });
+          // Once the model emits [[HANDOFF]] (server strips the token
+          // before sending us the reply but flags it here), flip into
+          // holding-pattern mode for any further sends.
+          if (data.handoff === true) this.handoff = true;
         } else {
           this.error = __ERROR__;
         }
@@ -1072,6 +1151,16 @@ pub fn replies_html(
         PersonaSource::Builder(b) => b.archetype.slug(),
         _ => "",
     };
+    // Pre-fill goal + handoff fields if the tenant has already filled
+    // them once (the wizard can be re-entered before launch).
+    let (current_goal, current_goal_url, current_handoff) = match &persona.source {
+        PersonaSource::Builder(b) => (
+            b.goal.clone(),
+            b.goal_url.clone(),
+            b.handoff_conditions.join("\n"),
+        ),
+        _ => (String::new(), String::new(), String::new()),
+    };
 
     let preset_cards: String = PersonaPreset::ALL
         .iter()
@@ -1111,6 +1200,29 @@ pub fn replies_html(
     </div>
 
     <div class="card p-22 mb-16">
+      <div class="eyebrow mb-8" id="wiz-goal-label">{goal_eyebrow}</div>
+      <p class="muted fs-13 m-0 mb-12">{goal_lead}</p>
+      <input id="wiz-goal" class="input" type="text" name="goal" maxlength="120"
+             value="{goal_value}"
+             placeholder="{goal_placeholder}"
+             aria-labelledby="wiz-goal-label"
+             autocomplete="off">
+      <label for="wiz-goal-url" class="eyebrow lbl mt-12">{goal_url_label}</label>
+      <input id="wiz-goal-url" class="input" type="text" name="goal_url" maxlength="200"
+             value="{goal_url_value}"
+             placeholder="{goal_url_placeholder}"
+             autocomplete="off">
+    </div>
+
+    <div class="card p-22 mb-16">
+      <div class="eyebrow mb-8" id="wiz-handoff-label">{handoff_eyebrow}</div>
+      <p class="muted fs-13 m-0 mb-12">{handoff_lead}</p>
+      <textarea id="wiz-handoff" class="textarea" name="handoff_conditions" rows="3"
+                placeholder="{handoff_placeholder}"
+                aria-labelledby="wiz-handoff-label">{handoff_value}</textarea>
+    </div>
+
+    <div class="card p-22 mb-16">
       <div class="eyebrow mb-8" id="wiz-wait-label">{wait_eyebrow}</div>
       <p class="muted fs-13 m-0 mb-12">{wait_lead}</p>
       <div class="row gap-12">
@@ -1138,6 +1250,17 @@ pub fn replies_html(
         lead_prefix = t(locale, "wizard-replies-lead-prefix"),
         lead_link = t(locale, "wizard-replies-lead-link"),
         lead_suffix = t(locale, "wizard-replies-lead-suffix"),
+        goal_eyebrow = t(locale, "wizard-replies-goal-eyebrow"),
+        goal_lead = t(locale, "wizard-replies-goal-lead"),
+        goal_placeholder = html_escape(&t(locale, "wizard-replies-goal-placeholder")),
+        goal_url_label = t(locale, "wizard-replies-goal-url-label"),
+        goal_url_placeholder = html_escape(&t(locale, "wizard-replies-goal-url-placeholder")),
+        goal_value = html_escape(&current_goal),
+        goal_url_value = html_escape(&current_goal_url),
+        handoff_eyebrow = t(locale, "wizard-replies-handoff-eyebrow"),
+        handoff_lead = t(locale, "wizard-replies-handoff-lead"),
+        handoff_placeholder = html_escape(&t(locale, "wizard-replies-handoff-placeholder")),
+        handoff_value = html_escape(&current_handoff),
         wait_eyebrow = t(locale, "wizard-replies-wait-eyebrow"),
         wait_lead = t(locale, "wizard-replies-wait-lead"),
         instant = t(locale, "wizard-replies-wait-instant"),

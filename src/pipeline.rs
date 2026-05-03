@@ -194,6 +194,93 @@ async fn handle_auto_reply(
         }
     }
 
+    // Resolve the conversation session for this customer thread before
+    // we burn an AI credit. Two boundaries shape the behavior:
+    //
+    //   1. Conversation idle gap (CONVERSATION_IDLE_GAP_MINS): if the
+    //      customer has been silent for at least this long, the
+    //      previous conversation is over — we wipe any in-progress
+    //      handoff and treat this inbound as a fresh question.
+    //
+    //   2. Handoff cooldown (HANDOFF_COOLDOWN_MINS): once the AI has
+    //      signaled handoff on this conversation, the next
+    //      cooldown-window of replies are holding-pattern, then we go
+    //      silent until the conversation ends (idle gap or the human
+    //      taking over via the channel).
+    //
+    // Three handoff branches:
+    //   - None:           reply under the persona normally.
+    //   - HoldingPattern: swap to HOLDING_PATTERN_MIDDLE.
+    //   - Silent:         return early — the human owns the thread.
+    enum HandoffMode {
+        None,
+        HoldingPattern,
+        Silent,
+    }
+    let existing_session = if is_ai {
+        crate::storage::get_conversation_session(
+            kv,
+            &msg.tenant_id,
+            &msg.channel,
+            &msg.channel_account_id,
+            &msg.sender,
+        )
+        .await
+        .unwrap_or(None)
+    } else {
+        None
+    };
+    let conversation_ended = match existing_session.as_ref() {
+        Some(s) => match age_minutes(&s.last_inbound_at) {
+            // Idle gap exceeded: conversation is over.
+            Some(mins) => mins >= crate::prompt::CONVERSATION_IDLE_GAP_MINS,
+            // Unparseable timestamp: treat as fresh.
+            None => true,
+        },
+        None => false,
+    };
+    let active_handoff = if conversation_ended {
+        None
+    } else {
+        existing_session.as_ref().and_then(|s| s.handoff.clone())
+    };
+    let handoff_mode = match active_handoff.as_ref() {
+        Some(h) => match age_minutes(&h.signaled_at) {
+            Some(mins) if mins < crate::prompt::HANDOFF_COOLDOWN_MINS => {
+                HandoffMode::HoldingPattern
+            }
+            Some(_) => HandoffMode::Silent,
+            None => HandoffMode::None,
+        },
+        None => HandoffMode::None,
+    };
+
+    if matches!(handoff_mode, HandoffMode::Silent) {
+        console_log!(
+            "Handoff cooldown expired for tenant={} sender={}, going silent",
+            msg.tenant_id,
+            msg.sender
+        );
+        // Still update last_inbound_at so the idle gap is measured
+        // from this ping — that way the customer eventually escapes
+        // the silent window once they actually go quiet.
+        let now = crate::helpers::now_iso();
+        let new_session = crate::types::Session {
+            last_inbound_at: now,
+            handoff: active_handoff.clone(),
+        };
+        let _ = crate::storage::save_conversation_session(
+            kv,
+            &msg.tenant_id,
+            &msg.channel,
+            &msg.channel_account_id,
+            &msg.sender,
+            &new_session,
+        )
+        .await;
+        return Ok(());
+    }
+
     if is_ai && !billing::try_deduct(db, &msg.tenant_id).await? {
         console_log!("Tenant {} out of AI-reply credits, skipping", msg.tenant_id);
         return Ok(());
@@ -202,21 +289,32 @@ async fn handle_auto_reply(
     let reply = match &matched.response {
         ReplyResponse::Canned { text } => text.clone(),
         ReplyResponse::Prompt { text: rule_prompt } => {
-            let persona_prompt = persona
-                .as_ref()
-                .map(|p| p.active_prompt())
-                .unwrap_or_default();
-            let combined = if persona_prompt.is_empty() {
-                rule_prompt.clone()
-            } else {
-                format!("{persona_prompt}\n\n{rule_prompt}")
+            let wrapped = match handoff_mode {
+                // Silent was handled with an early return above; if we
+                // reached here in Silent something is very wrong.
+                HandoffMode::Silent => unreachable!("Silent handoff returned earlier"),
+                HandoffMode::HoldingPattern => {
+                    crate::prompt::wrap(crate::prompt::HOLDING_PATTERN_MIDDLE)
+                }
+                HandoffMode::None => {
+                    let persona_prompt = persona
+                        .as_ref()
+                        .map(|p| p.active_prompt())
+                        .unwrap_or_default();
+                    let combined = if persona_prompt.is_empty() {
+                        rule_prompt.clone()
+                    } else {
+                        format!("{persona_prompt}\n\n{rule_prompt}")
+                    };
+                    // Wrap the tenant's persona+rule text in the
+                    // safety/alignment envelope. The envelope is
+                    // non-editable and ships globally; the bookends
+                    // are visible everywhere the user views a prompt
+                    // so there's no surprise about what's actually
+                    // sent to the model.
+                    crate::prompt::wrap(&combined)
+                }
             };
-            // Wrap the tenant's persona+rule text in the safety/alignment
-            // envelope. The envelope is non-editable and ships globally;
-            // the bookends are visible everywhere the user views a prompt
-            // so there's no surprise about what's actually sent to the
-            // model.
-            let wrapped = crate::prompt::wrap(&combined);
 
             let mut context = serde_json::Map::new();
             if let Some(ref name) = msg.sender_name {
@@ -241,6 +339,13 @@ async fn handle_auto_reply(
         }
     };
 
+    // Strip the handoff sentinel before anything else looks at the
+    // reply. If we're already in the holding pattern, the model was
+    // told not to re-emit; this is a defence-in-depth strip.
+    let stripped = crate::prompt::detect_and_strip_handoff(&reply);
+    let reply = stripped.reply;
+    let new_handoff = stripped.handoff && matches!(handoff_mode, HandoffMode::None);
+
     if reply.is_empty() {
         if is_ai {
             if let Err(e) = billing::restore_credit(db, &msg.tenant_id).await {
@@ -253,7 +358,15 @@ async fn handle_auto_reply(
     // For AI drafts, run the approval gate. The risk gate is the always-on
     // safety net for `Auto`; `Always` always queues; `NoGate` skips the
     // gate, but only when the operator's env var is on.
-    if is_ai {
+    //
+    // Skip the gate entirely for the handoff path:
+    //   - holding-pattern replies are pre-approved by construction
+    //     (the model is just saying "a human is on the way"), and
+    //   - the turn that *signals* a handoff also bypasses the queue —
+    //     it's a polite holding sentence, and we want it on the
+    //     customer's screen immediately while we page the tenant.
+    let in_handoff_mode = matches!(handoff_mode, HandoffMode::HoldingPattern);
+    if is_ai && !in_handoff_mode && !new_handoff {
         let allow_no_gate = approval::allow_no_gate(env);
         let persona_ref = persona.as_ref().expect("AI rule must have loaded persona");
         let decision = approval::decide(matched, &reply, persona_ref, allow_no_gate);
@@ -319,7 +432,83 @@ async fn handle_auto_reply(
         console_log!("Failed to log outbound message: {:?}", e);
     }
 
+    // Persist the conversation session. Three things happen here:
+    //   - `last_inbound_at` is bumped to now so the idle-gap clock
+    //     restarts from this ping.
+    //   - If the model just signaled handoff on this turn, stamp a
+    //     fresh `HandoffState` in.
+    //   - Otherwise carry over whatever handoff sub-state we were
+    //     already running with (still in holding-pattern, or none).
+    //
+    // For a brand-new handoff we then page the tenant exactly once.
+    // The notify call is best-effort — failing to fan out shouldn't
+    // tear down the inbound flow.
+    let now = crate::helpers::now_iso();
+    let mut session_handoff = if new_handoff {
+        Some(crate::types::HandoffState {
+            signaled_at: now.clone(),
+            notified: false,
+        })
+    } else {
+        active_handoff.clone()
+    };
+
+    if new_handoff {
+        if let Err(e) = crate::escalations::notify_human_requested(
+            env,
+            db,
+            &msg.tenant_id,
+            &msg.channel,
+            &msg.sender,
+            &safe_body,
+        )
+        .await
+        {
+            console_log!("Handoff notify failed: {:?}", e);
+        }
+        // Flip notified=true after the dispatch attempt — even if it
+        // partially failed we don't want to re-page on the next turn.
+        if let Some(ref mut h) = session_handoff {
+            h.notified = true;
+        }
+    }
+
+    let new_session = crate::types::Session {
+        last_inbound_at: now,
+        handoff: session_handoff,
+    };
+    if let Err(e) = crate::storage::save_conversation_session(
+        kv,
+        &msg.tenant_id,
+        &msg.channel,
+        &msg.channel_account_id,
+        &msg.sender,
+        &new_session,
+    )
+    .await
+    {
+        console_log!("Failed to persist conversation session: {:?}", e);
+    }
+
     Ok(())
+}
+
+/// Minutes between an ISO/RFC3339 timestamp and now. Uses the
+/// platform `Date.parse` (no `chrono` dep), which accepts both
+/// `Date.toISOString()` output (what `helpers::now_iso` writes) and
+/// other RFC3339-shaped strings.
+///
+/// Returns `None` for unparseable input so callers can fall through
+/// to "treat as fresh" rather than trapping a customer in silence on
+/// a bad record.
+fn age_minutes(timestamp: &str) -> Option<i64> {
+    let then_ms = js_sys::Date::parse(timestamp);
+    if then_ms.is_nan() {
+        return None;
+    }
+    let now_ms = js_sys::Date::now();
+    let delta_min = ((now_ms - then_ms) / 60_000.0) as i64;
+    Some(delta_min)
 }
 
 /// Decide whether a single rule's matcher fires on the inbound text.

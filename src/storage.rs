@@ -1093,6 +1093,77 @@ pub async fn delete_conversation_context(kv: &kv::KvStore, id: &str) -> Result<(
 }
 
 // ============================================================================
+// Conversation Sessions (KV)
+// ============================================================================
+//
+// Stable-keyed per (tenant, channel, channel_account, sender). One
+// record per customer-thread, holding the most recent inbound
+// timestamp (for the idle-gap conversation boundary) and any
+// in-progress handoff sub-state. Distinct from `ConversationContext`
+// (which is per AI-draft-approval and short-lived).
+//
+// TTL is set generously above the idle gap so stale records don't
+// outlive their purpose: a session that hasn't seen an inbound in
+// twice the gap window is conceptually a closed conversation, even
+// if the customer eventually returns.
+
+const SESSION_TTL: u64 = 24 * 60 * 60; // 24h — comfortably above the 6h idle gap.
+
+/// Compose the KV key for a thread's conversation-session record.
+/// `sender` is hashed to keep keys ASCII-clean; not a privacy claim
+/// (KV isn't user-facing).
+///
+/// Note: deliberately *not* under the `session:` prefix — that's
+/// owned by auth sessions (see `save_session` above). Use `convsession:`
+/// to keep the two namespaces from colliding.
+fn conversation_session_key(
+    tenant_id: &str,
+    channel: &crate::types::Channel,
+    channel_account_id: &str,
+    sender: &str,
+) -> String {
+    let channel_str = match channel {
+        crate::types::Channel::WhatsApp => "whatsapp",
+        crate::types::Channel::Instagram => "instagram",
+        crate::types::Channel::Email => "email",
+        crate::types::Channel::Discord => "discord",
+    };
+    let sender_hash = crate::helpers::sha256_hex(sender);
+    format!("convsession:{tenant_id}:{channel_str}:{channel_account_id}:{sender_hash}")
+}
+
+pub async fn get_conversation_session(
+    kv: &kv::KvStore,
+    tenant_id: &str,
+    channel: &crate::types::Channel,
+    channel_account_id: &str,
+    sender: &str,
+) -> Result<Option<crate::types::Session>> {
+    let key = conversation_session_key(tenant_id, channel, channel_account_id, sender);
+    kv.get(&key)
+        .json::<crate::types::Session>()
+        .await
+        .map_err(|e| Error::from(e.to_string()))
+}
+
+pub async fn save_conversation_session(
+    kv: &kv::KvStore,
+    tenant_id: &str,
+    channel: &crate::types::Channel,
+    channel_account_id: &str,
+    sender: &str,
+    state: &crate::types::Session,
+) -> Result<()> {
+    let key = conversation_session_key(tenant_id, channel, channel_account_id, sender);
+    let json = serde_json::to_string(state).map_err(|e| Error::from(format!("JSON error: {e}")))?;
+    kv.put(&key, json)?
+        .expiration_ttl(SESSION_TTL)
+        .execute()
+        .await?;
+    Ok(())
+}
+
+// ============================================================================
 // Discord Config (KV)
 // ============================================================================
 

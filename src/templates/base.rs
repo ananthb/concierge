@@ -347,6 +347,36 @@ code {
    `min-height:0` is the flex-shrink unlock — without it the form gets
    pushed off the card when the prompt panel is open. */
 .chat-scroll { flex:1 1 auto; min-height:0; overflow-y:auto; padding:0; display:flex; flex-direction:column; gap:10px; scroll-behavior:smooth; }
+/* "You're chatting as a customer of …" framing card + channel hint shown
+   below the persona picker. The card explains the roleplay frame and
+   lists the sample business's profile (type, city, hours, goal); the
+   hint below reminds the visitor that real customer messages would
+   arrive on WhatsApp / IG / Discord / email — never in this chat box. */
+.chat-business-card { background:var(--paper); border:1px solid var(--hair);
+  border-left:3px solid var(--accent); border-radius:8px;
+  padding:10px 14px; margin:6px 0 8px; font-size:13px; line-height:1.45; }
+.chat-business-card .roleplay { color:var(--ink); margin:0 0 6px; }
+.chat-business-card .roleplay strong { color:var(--ink); }
+.chat-business-card .biz-meta { display:flex; flex-wrap:wrap; gap:4px 14px;
+  color:var(--muted); font-size:12px; margin:0; }
+.chat-business-card .biz-meta span { white-space:nowrap; }
+.chat-business-card .biz-meta b { color:var(--ink-2); font-weight:600;
+  letter-spacing:.04em; text-transform:uppercase; font-size:10px; margin-right:4px; }
+.chat-business-card .biz-goal-link { color:var(--ink); text-decoration:underline;
+  text-decoration-style:dotted; margin-left:6px; }
+.chat-channels-note { color:var(--muted); font-size:12px; line-height:1.45;
+  margin:8px 0 0; padding:8px 10px; background:var(--cream-2);
+  border:1px dashed var(--hair); border-radius:8px; }
+/* Handoff chip — sits above the channels-note once the demo flips into
+   holding-pattern mode. Pure UX theater in the demo (no real human
+   gets paged); same shape we'll surface in the tenant dashboard once
+   the real-channel side ships. */
+.chat-handoff-chip { display:flex; align-items:center; gap:8px;
+  margin:6px 0 0; padding:8px 10px; font-size:12px; line-height:1.45;
+  color:var(--ink-2); background:rgba(241,158,28,.08);
+  border:1px solid var(--accent); border-radius:8px; }
+.chat-handoff-dot { width:8px; height:8px; border-radius:50%;
+  background:var(--accent); flex-shrink:0; box-shadow:0 0 0 4px rgba(241,158,28,.18); }
 .chat-prompt-panel { background:var(--cream-2); border:1px solid var(--hair); border-radius:10px; padding:12px 14px; flex:none; }
 .chat-prompt-body { margin:0; padding:8px 10px; border-radius:6px; font-family:var(--f-mono); font-size:12px; line-height:1.55; color:var(--ink-2); white-space:pre-wrap; word-break:break-word; max-height:24vh; overflow-y:auto; }
 .chat-prompt-body + .chat-prompt-body { margin-top:6px; }
@@ -587,12 +617,23 @@ mod footer_tests {
                 "demo-chat-hint",
                 "demo-chat-title",
                 "demo-chat-subtitle",
+                "demo-chat-subtitle-concierge",
                 "demo-chat-persona-label",
+                "demo-chat-roleplay-prefix",
+                "demo-chat-roleplay-suffix",
+                "demo-chat-channels-note",
+                "demo-chat-business-hours",
+                "demo-chat-business-city",
+                "demo-chat-business-type",
+                "demo-chat-business-goal",
+                "demo-chat-handoff-chip",
                 "demo-chat-view-prompt",
                 "demo-chat-hide-prompt",
                 "demo-chat-prompt-heading",
                 "demo-chat-envelope-note",
                 "demo-chat-placeholder",
+                "demo-chat-placeholder-customer-prefix",
+                "demo-chat-placeholder-customer-suffix",
                 "demo-chat-send",
                 "demo-chat-close",
                 "demo-chat-thinking",

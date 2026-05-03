@@ -48,6 +48,8 @@ pub async fn enqueue(
         reply_metadata: msg.raw_metadata.clone(),
         ai_draft: Some(draft.to_string()),
         created_at: now_iso(),
+        handoff_signaled_at: None,
+        handoff_notified: false,
     };
 
     save_conversation_context(&kv, &ctx).await?;

@@ -33,6 +33,7 @@ mod crypto;
 mod discord;
 mod durable_objects;
 mod email;
+mod escalations;
 mod handlers;
 mod helpers;
 mod i18n;

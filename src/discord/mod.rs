@@ -55,6 +55,8 @@ pub async fn post_forwarded_message(
         reply_metadata: msg.raw_metadata.clone(),
         ai_draft: None,
         created_at: crate::helpers::now_iso(),
+        handoff_signaled_at: None,
+        handoff_notified: false,
     };
 
     let (color, channel_label) = match msg.channel {
