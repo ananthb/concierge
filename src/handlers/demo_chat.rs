@@ -14,7 +14,6 @@ const MAX_BODY_BYTES: usize = 4096;
 const MAX_CONTENT_CHARS: usize = 600;
 const RATE_LIMIT_PER_HOUR: i64 = 30;
 const RATE_LIMIT_TTL_SECONDS: u64 = 3600;
-const MAX_TOKENS: u32 = 256;
 
 #[derive(Deserialize)]
 struct ChatRequest {
@@ -71,7 +70,7 @@ pub async fn handle_demo_chat(mut req: Request, env: Env) -> Result<Response> {
         return json_error("Message too long.", 413);
     }
 
-    let parsed: ChatRequest = match serde_json::from_slice(&body) {
+    let mut parsed: ChatRequest = match serde_json::from_slice(&body) {
         Ok(r) => r,
         Err(_) => return json_error("Bad request body.", 400),
     };
@@ -89,6 +88,15 @@ pub async fn handle_demo_chat(mut req: Request, env: Env) -> Result<Response> {
         if m.content.chars().count() > MAX_CONTENT_CHARS {
             return json_error("Message too long.", 400);
         }
+    }
+    // Llama chat templates expect the first non-system message to be a user
+    // turn — leading with assistant content (e.g. a client-side greeting)
+    // confuses generation. Strip any leading assistant messages here.
+    while parsed.messages.first().map(|m| m.role.as_str()) == Some("assistant") {
+        parsed.messages.remove(0);
+    }
+    if parsed.messages.is_empty() {
+        return json_error("No user messages.", 400);
     }
     if parsed.messages.last().map(|m| m.role.as_str()) != Some("user") {
         return json_error("Last message must be from the user.", 400);
@@ -130,7 +138,7 @@ pub async fn handle_demo_chat(mut req: Request, env: Env) -> Result<Response> {
         .map(|m| (m.role, m.content))
         .collect();
 
-    let reply = match ai::generate_chat_reply(&env, SYSTEM_PROMPT, &history, MAX_TOKENS).await {
+    let reply = match ai::generate_chat_reply(&env, SYSTEM_PROMPT, &history).await {
         Ok(r) => r.trim().to_string(),
         Err(e) => {
             console_log!("Demo chat AI error: {:?}", e);

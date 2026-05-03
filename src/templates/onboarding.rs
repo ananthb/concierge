@@ -385,10 +385,20 @@ window.conciergeChat = () => ({
     this.$nextTick(() => this.scrollDown());
     this.sending = true;
     try {
+      // Drop any leading assistant turns: the client-side greeting is for
+      // display only — Llama chat templates expect the first non-system
+      // message to be user, so leading with assistant breaks generation.
+      const wireMessages = [];
+      let started = false;
+      for (const m of this.messages) {
+        if (!started && m.role !== 'user') continue;
+        started = true;
+        wireMessages.push({ role: m.role, content: m.content });
+      }
       const r = await fetch('/demo/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: this.messages.map((m) => ({ role: m.role, content: m.content })) }),
+        body: JSON.stringify({ messages: wireMessages }),
       });
       const data = await r.json().catch(() => ({}));
       if (!r.ok) {

@@ -73,12 +73,10 @@ test('demo-chat modal opens, posts to /demo/chat, renders assistant reply', asyn
 
   await expect(dialog.getByText(/I cover WhatsApp, Instagram, Discord, and email\./)).toBeVisible();
 
-  // The request shape: greeting + user turn, in that order.
+  // The wire format starts at the first user turn — the client-side
+  // greeting is display-only and gets stripped before POST.
   expect(postedBody).toMatchObject({
-    messages: [
-      { role: 'assistant' },
-      { role: 'user', content: 'what channels do you cover?' },
-    ],
+    messages: [{ role: 'user', content: 'what channels do you cover?' }],
   });
 });
 
