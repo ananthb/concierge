@@ -304,8 +304,36 @@ code {
 .hero-clickable:hover, .hero-clickable:focus-visible { color:var(--accent-2); }
 .hero-clickable:focus-visible { outline:2px solid var(--accent); outline-offset:6px; }
 .hero-hint-anchor { position:relative; }
-.hero-hint { display:inline-block; background:var(--ink); color:var(--cream); padding:5px 12px; border-radius:999px; font-family:var(--f-body); font-size:13px; font-weight:500; letter-spacing:0; margin:-4px 0 14px; opacity:0; transform:translateY(-4px); transition:opacity .25s ease, transform .25s ease; pointer-events:none; }
-.hero-clickable:hover + .hero-hint, .hero-clickable:focus-visible + .hero-hint, .hero-hint.is-hint-on { opacity:1; transform:translateY(0); }
+.hero-hint {
+  display:inline-flex; align-items:center; gap:6px;
+  background:var(--ink); color:var(--cream);
+  border:1px solid var(--ink); border-radius:999px;
+  padding:6px 14px; margin:-2px 0 16px;
+  font-family:var(--f-body); font-size:13px; font-weight:500;
+  letter-spacing:0; cursor:pointer; outline:none;
+  box-shadow:0 1px 0 rgba(27,24,20,.06);
+  transition:transform .2s ease, background .2s ease, border-color .2s ease, box-shadow .2s ease, color .2s ease;
+}
+.hero-hint:hover, .hero-hint:focus-visible {
+  transform:translateY(-3px) scale(1.05);
+  background:var(--accent); border-color:var(--accent); color:#fff;
+  box-shadow:0 10px 22px rgba(232,106,44,.28), 0 2px 0 rgba(200,84,28,.5);
+}
+.hero-hint:active { transform:translateY(-1px) scale(1.02); }
+.hero-hint-arrow { display:inline-block; line-height:1; transform:translateY(0); transition:transform .2s ease; }
+.hero-hint:hover .hero-hint-arrow,
+.hero-hint:focus-visible .hero-hint-arrow {
+  animation:hero-hint-bounce .8s ease-in-out infinite;
+}
+@keyframes hero-hint-bounce {
+  0%, 100% { transform:translateY(0); }
+  50%      { transform:translateY(-4px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hero-hint, .hero-hint:hover, .hero-hint:focus-visible { transform:none; }
+  .hero-hint:hover .hero-hint-arrow,
+  .hero-hint:focus-visible .hero-hint-arrow { animation:none; }
+}
 
 /* Live-demo chat modal (welcome page). */
 .chat-controls { display:flex; align-items:flex-end; gap:10px; margin:0 0 6px; flex-wrap:wrap; }
@@ -538,7 +566,6 @@ mod footer_tests {
                 "welcome-lead",
                 "welcome-cta-primary",
                 "welcome-cta-secondary",
-                "demo-chat-cta",
                 "demo-chat-hint",
                 "demo-chat-title",
                 "demo-chat-subtitle",
