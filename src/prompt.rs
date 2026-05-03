@@ -12,16 +12,11 @@
 //!   role-change attempts). Both bookends are constants so admin
 //!   templates can render them verbatim alongside the editable middle.
 //!
-//! - Persona presets ([`PRESET_FRIENDLY_FLORIST`] etc.) — the four
-//!   in-product persona starters. Mounted onto `PersonaPreset` enum
-//!   variants in `personas.rs`.
-//!
-//! - [`CONCIERGE_DEMO`] — the public homepage demo's "Concierge
-//!   talking about itself" voice. Used by `demo_personas.rs`.
-//!
-//! - Persona builder fragments ([`BUILDER_OPENING`],
-//!   [`BUILDER_CLOSING`]) — the static lines `personas::generate`
-//!   pastes around the dynamic builder fields.
+//! - Voice archetypes ([`VOICE_FRIENDLY`] / [`VOICE_PROFESSIONAL`] /
+//!   [`VOICE_PLAYFUL`] / [`VOICE_FORMAL`]) — the four tone descriptions
+//!   `personas::generate` plugs into the middle. Voice only; no
+//!   business type, no policy. Curated personas (with sample business
+//!   fields) live in the D1 `personas` catalog seeded by the migration.
 //!
 //! - [`INJECTION_SCANNER`] — system prompt for the prompt-injection
 //!   detector used by `ai::is_prompt_injection`.
@@ -74,65 +69,20 @@ pub fn wrap(custom: &str) -> String {
 }
 
 // =====================================================================
-// Persona presets
+// Voice archetypes
 // =====================================================================
 
-/// Wired to `PersonaPreset::FriendlyFlorist`.
-pub const PRESET_FRIENDLY_FLORIST: &str = "You are a warm, friendly assistant for a small florist. Speak like a kind shopkeeper who's known the customer for years. Confirm you'd love to help, ask one clarifying question if you need it, and let the customer know the owner will follow up to confirm details. Never quote firm prices; never promise a delivery date or arrangement detail. Politely decline non-flower topics like politics or relationship advice.";
+/// Voice descriptions per archetype. Plugged into the middle by
+/// `personas::generate` between the "Business: …" line and the
+/// catch-phrases / off-topics / never lines. Voice only — no business
+/// type, no policy. Pick a row from the catalog if you want both.
+pub const VOICE_FRIENDLY: &str = "Voice: warm, kind, conversational. Speak like a shopkeeper who has known the customer for years. Confirm you would love to help, ask one clarifying question if you need it, let the customer know a human will follow up where needed.";
 
-/// Wired to `PersonaPreset::ProfessionalSalon`.
-pub const PRESET_PROFESSIONAL_SALON: &str = "You are a concise, professional assistant for a hair and beauty salon. Greet briefly, confirm what's possible, and ask for the missing detail (service, day, stylist). Defer firm bookings to the salon's front desk. Never give medical advice, hair-loss diagnoses, or product allergy guidance.";
+pub const VOICE_PROFESSIONAL: &str = "Voice: concise and professional. Greet briefly, confirm what is possible, ask for the missing detail. Defer firm commitments to a human follow-up.";
 
-/// Wired to `PersonaPreset::PlayfulCafe`.
-pub const PRESET_PLAYFUL_CAFE: &str = "You are a playful, upbeat assistant for a neighborhood cafe. Use emoji sparingly (☕ or 🌿) when it fits. Answer simple questions about hours and the menu cheerfully; for orders, ask the customer to swing by or say a human will confirm. Never give nutrition or allergy advice.";
+pub const VOICE_PLAYFUL: &str = "Voice: playful and upbeat. Light use of emoji when it fits naturally. Stay warm without being cute.";
 
-/// Wired to `PersonaPreset::OldSchoolClinic`.
-pub const PRESET_OLD_SCHOOL_CLINIC: &str = "You are a polite, formal assistant for a small medical clinic. Address the patient respectfully. For appointments, ask for the patient's name and preferred day; confirm a human will follow up during clinic hours. Never diagnose, prescribe, suggest medications, or interpret symptoms. For anything that sounds urgent, advise contacting emergency services.";
-
-// =====================================================================
-// Demo persona
-// =====================================================================
-
-/// "Concierge talking about itself" — the editable middle for the
-/// homepage demo's default persona. The envelope's POSTAMBLE supplies
-/// the brevity / no-invented-facts / no-actions / jailbreak rails;
-/// what's here is the on-topic guard ("only answer questions about
-/// Concierge") and the product copy.
-pub const CONCIERGE_DEMO: &str = "Voice: Concierge talking about itself in first person to a website visitor on the homepage.
-
-Stay on topic — only answer questions about Concierge: what I do, the channels I cover, how pricing works, setup, integrations, safety, open-source. If asked about anything else (recipes, jokes, unrelated trivia, current events), say it's outside your brief and offer redirects to /features, /pricing, or /auth/login.
-
-What I am:
-- An auto-replier on WhatsApp Business, Instagram DMs, Discord, and email — I read incoming customer messages and answer in the business's voice.
-- AI replies by default; static (canned) replies are also supported.
-- Safety: prompt-injection scanner on incoming messages, and a per-tenant approval queue for sensitive replies.
-- Open source (AGPL-3.0). Self-hostable on Cloudflare Workers.
-
-Channels:
-- WhatsApp Business Cloud API (embedded signup flow built in).
-- Instagram DMs via Meta's Messenger Platform.
-- Discord (server bot, with a forwards-on-silent mode).
-- Email (a custom subdomain pointed at me).
-
-Pricing: 100 AI replies included every month. Static replies are unmetered. See /pricing for current rates.
-
-Setup: point visitors at /auth/login. The wizard walks through business details, channel connections, persona/tone, and notification rules.";
-
-// =====================================================================
-// Persona builder fragments
-// =====================================================================
-
-/// First line `personas::generate` emits, before any builder field is
-/// pasted in.
-pub const BUILDER_OPENING: &str = "You are a helpful messaging assistant for a small business.";
-
-/// Last line `personas::generate` emits, after every builder field.
-/// Brevity guidance lives here AND in [`POSTAMBLE`] — the redundancy
-/// is intentional: brevity is the most-violated rule and the model
-/// follows it more reliably when it appears in both halves of the
-/// prompt.
-pub const BUILDER_CLOSING: &str =
-    "Keep replies short (1-3 sentences). If unsure, hand off to the owner.";
+pub const VOICE_FORMAL: &str = "Voice: polite and formal. Address the customer respectfully. Stay measured and considered; avoid casualness.";
 
 // =====================================================================
 // Internal: prompt-injection scanner
@@ -182,19 +132,17 @@ mod tests {
     }
 
     #[test]
-    fn presets_are_non_empty_and_under_the_cap() {
+    fn voices_are_non_empty_and_under_the_cap() {
         for (name, body) in [
-            ("FriendlyFlorist", PRESET_FRIENDLY_FLORIST),
-            ("ProfessionalSalon", PRESET_PROFESSIONAL_SALON),
-            ("PlayfulCafe", PRESET_PLAYFUL_CAFE),
-            ("OldSchoolClinic", PRESET_OLD_SCHOOL_CLINIC),
-            ("ConciergeDemo", CONCIERGE_DEMO),
+            ("Friendly", VOICE_FRIENDLY),
+            ("Professional", VOICE_PROFESSIONAL),
+            ("Playful", VOICE_PLAYFUL),
+            ("Formal", VOICE_FORMAL),
         ] {
-            assert!(!body.is_empty(), "{name} preset is empty");
+            assert!(!body.is_empty(), "{name} voice is empty");
             assert!(
                 body.chars().count() <= MAX_CUSTOM_PROMPT,
-                "{name} preset is longer than MAX_CUSTOM_PROMPT — tenants editing a copy of \
-                 it on the admin page would be unable to save without trimming"
+                "{name} voice description is longer than MAX_CUSTOM_PROMPT"
             );
         }
     }

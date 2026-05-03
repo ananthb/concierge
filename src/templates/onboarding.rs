@@ -141,12 +141,10 @@ pub fn welcome_html(_base_url: &str, locale: &crate::locale::Locale) -> String {
 
     let chat_error = t(locale, "demo-chat-error");
     let chat_rate_limited = t(locale, "demo-chat-rate-limited");
-    let personas = crate::demo_personas::all();
-    let personas_value =
-        serde_json::to_value(&personas).unwrap_or_else(|_| serde_json::Value::Array(Vec::new()));
-    let personas_json = json_for_html(&personas_value);
+    // Personas are no longer embedded in the page — the chat factory
+    // fetches `/demo/personas` on first open. That endpoint reads the
+    // D1 catalog and returns only Approved rows.
     let chat_script = HERO_CHAT_JS
-        .replace("__PERSONAS__", &personas_json)
         .replace("__PREAMBLE__", &js_string_for_html(crate::prompt::PREAMBLE))
         .replace(
             "__POSTAMBLE__",
@@ -293,17 +291,6 @@ fn js_string_for_html(s: &str) -> String {
         .replace('&', "\\u0026")
 }
 
-/// Same idea as `js_string_for_html` but for an arbitrary JSON value
-/// (object, array, etc.). Used to embed the demo personas list in the
-/// chat factory script tag.
-fn json_for_html(value: &serde_json::Value) -> String {
-    serde_json::to_string(value)
-        .unwrap_or_else(|_| String::from("null"))
-        .replace('<', "\\u003c")
-        .replace('>', "\\u003e")
-        .replace('&', "\\u0026")
-}
-
 /// Typewriter rotator for the welcome page hero. The static headline is
 /// rendered server-side; this script settles for ~10s, then mimics the
 /// "type a few backspaces, give up, hit Ctrl+A, delete" pattern before
@@ -403,23 +390,43 @@ const HERO_ROTATOR_JS: &str = r##"<script type="module" nonce="__CSP_NONCE__">
 /// deferred and would be too late.
 const HERO_CHAT_JS: &str = r##"<script nonce="__CSP_NONCE__">
 (() => {
-  const personas = __PERSONAS__;
   const PREAMBLE = __PREAMBLE__;
   const POSTAMBLE = __POSTAMBLE__;
-  const findPersona = (slug) => personas.find((p) => p.slug === slug) || personas[0];
+  const findPersona = (slug, personas) =>
+    personas.find((p) => p.slug === slug) || personas[0] || null;
   window.conciergeChat = () => ({
     open: false,
     sending: false,
     error: '',
     input: '',
     showPrompt: false,
-    personas: personas,
-    personaSlug: personas[0] ? personas[0].slug : 'concierge',
+    // Personas come from /demo/personas (Approved-only D1 catalog).
+    // Empty until init() fetches; dropdown shows a loading row.
+    personas: [],
+    personasLoaded: false,
+    personaSlug: 'concierge',
     messages: [],
     preamble: PREAMBLE,
     postamble: POSTAMBLE,
-    get currentPersona() { return findPersona(this.personaSlug); },
-    init() {
+    get currentPersona() {
+      return findPersona(this.personaSlug, this.personas) || {
+        slug: 'concierge', label: 'Concierge', description: '',
+        greeting: 'Loading…', prompt: '',
+      };
+    },
+    async init() {
+      try {
+        const r = await fetch('/demo/personas');
+        const data = r.ok ? await r.json() : { personas: [] };
+        this.personas = (data && Array.isArray(data.personas)) ? data.personas : [];
+      } catch (_) {
+        this.personas = [];
+      }
+      this.personasLoaded = true;
+      if (this.personas.length) {
+        const has = this.personas.some((p) => p.slug === this.personaSlug);
+        if (!has) this.personaSlug = this.personas[0].slug;
+      }
       this.resetTranscript();
       this.$watch('open', (v) => {
         window.__heroPaused = !!v;
@@ -1046,8 +1053,11 @@ pub fn replies_html(
     base_url: &str,
     locale: &crate::locale::Locale,
 ) -> String {
+    // After the archetype refactor, `PersonaSource::Preset` is gone — the
+    // wizard's preset cards now stamp an archetype onto a `Builder` source.
+    // Highlight the archetype the tenant currently has saved (if any).
     let current_slug = match &persona.source {
-        PersonaSource::Preset(p) => p.slug(),
+        PersonaSource::Builder(b) => b.archetype.slug(),
         _ => "",
     };
 

@@ -217,11 +217,17 @@ pub async fn handle_wizard(
             let form: serde_json::Value = req.json().await?;
 
             let preset_slug = form.get("preset_id").and_then(|v| v.as_str()).unwrap_or("");
-            let preset =
-                PersonaPreset::from_slug(preset_slug).unwrap_or(PersonaPreset::FriendlyFlorist);
-
+            // Wizard preset cards now select an archetype only. Carry over
+            // the business name from the basics step so the generated
+            // prompt mentions the actual business; biz_type is a
+            // description ("florist", "cafe") and lives on /admin/persona.
+            let archetype = PersonaPreset::from_slug(preset_slug).unwrap_or_default();
             state.persona = PersonaConfig {
-                source: PersonaSource::Preset(preset),
+                source: PersonaSource::Builder(crate::types::PersonaBuilder {
+                    archetype,
+                    biz_name: state.business.name.clone(),
+                    ..Default::default()
+                }),
                 safety: PersonaSafety::default(),
             };
 
@@ -232,14 +238,16 @@ pub async fn handle_wizard(
                 state.default_wait_seconds = (n as u32).min(30);
             }
 
-            // Apply the preset's bundled default rules to every channel
+            // Apply the archetype's bundled default rules to every channel
             // account this tenant has already connected. (New connections
             // pick up the same defaults via channel handler creation paths.)
-            apply_preset_to_channels(&kv, tenant_id, preset, state.default_wait_seconds).await?;
+            apply_preset_to_channels(&kv, tenant_id, archetype, state.default_wait_seconds).await?;
 
             // Enqueue safety check for the preset's prompt.
             let job = crate::safety_queue::SafetyJob {
-                tenant_id: tenant_id.to_string(),
+                target: crate::safety_queue::SafetyJobTarget::Tenant {
+                    tenant_id: tenant_id.to_string(),
+                },
                 prompt_hash: state.persona.active_prompt_hash(),
             };
             state.persona.safety.status = PersonaSafetyStatus::Pending;

@@ -1027,7 +1027,7 @@ pub struct PersonaConfig {
 impl Default for PersonaConfig {
     fn default() -> Self {
         Self {
-            source: PersonaSource::Preset(PersonaPreset::FriendlyFlorist),
+            source: PersonaSource::Builder(PersonaBuilder::default()),
             safety: PersonaSafety::default(),
         }
     }
@@ -1036,11 +1036,7 @@ impl Default for PersonaConfig {
 impl PersonaConfig {
     /// The actual prompt sent to the LLM. Computed from the source on demand.
     pub fn active_prompt(&self) -> String {
-        match &self.source {
-            PersonaSource::Preset(p) => p.prompt().to_string(),
-            PersonaSource::Builder(b) => crate::personas::generate(b),
-            PersonaSource::Custom(s) => s.clone(),
-        }
+        self.source.active_prompt()
     }
 
     /// SHA-256 of the active prompt, used to detect when a re-run of the
@@ -1058,42 +1054,101 @@ impl PersonaConfig {
     }
 }
 
+/// How a persona's editable middle is sourced. Tenants pick exactly one.
+/// `Preset` was a third variant in older revisions; tenants picking a
+/// catalog persona at onboarding now copy that row's `Builder` snapshot
+/// here directly, so a tenant's KV record is always one of these two
+/// pure-function shapes.
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum PersonaSource {
-    /// Wizard default: a curated preset's bundled prompt is used verbatim.
-    Preset(PersonaPreset),
-    /// User-filled inputs the system uses to compose a prompt on demand.
+    /// User-filled inputs the system composes through `personas::generate`.
     Builder(PersonaBuilder),
-    /// Power-user override: raw prompt text. Replaces builder/preset entirely.
+    /// Power-user override: raw prompt text. Used by the homepage Concierge
+    /// demo (whose middle is bespoke product copy) and by tenants who want
+    /// to bypass the formula. Still envelope-wrapped at AI-call time.
     Custom(String),
 }
 
-/// Curated persona presets shipped in the app. Add a variant here AND in
-/// `personas.rs` (label/description/prompt/default_rules) to ship a new one.
+impl PersonaSource {
+    /// Pure: render the editable middle. The envelope (`crate::prompt::wrap`)
+    /// is added separately at the AI-call boundary.
+    pub fn active_prompt(&self) -> String {
+        match self {
+            PersonaSource::Builder(b) => crate::personas::generate(b),
+            PersonaSource::Custom(s) => s.clone(),
+        }
+    }
+}
+
+/// Voice archetype — the *tone* a persona speaks in. Decoupled from
+/// business type: a "Friendly" archetype works for a florist, a clinic,
+/// or a tech-support helpdesk. Catalog rows in D1 carry one of these.
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum PersonaPreset {
-    FriendlyFlorist,
-    ProfessionalSalon,
-    PlayfulCafe,
-    OldSchoolClinic,
+    Friendly,
+    Professional,
+    Playful,
+    Formal,
+}
+
+impl Default for PersonaPreset {
+    fn default() -> Self {
+        Self::Friendly
+    }
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct PersonaBuilder {
+    /// The voice archetype (Friendly / Professional / Playful / Formal).
+    #[serde(default)]
+    pub archetype: PersonaPreset,
+    /// Required: the business's name (used in the generated prompt as
+    /// "Business: {biz_name}, a {biz_type}…").
+    #[serde(default)]
+    pub biz_name: String,
     #[serde(default)]
     pub biz_type: String,
     #[serde(default)]
     pub city: String,
-    #[serde(default)]
-    pub tone: String,
     #[serde(default)]
     pub catch_phrases: Vec<String>,
     #[serde(default)]
     pub off_topics: Vec<String>,
     #[serde(default)]
     pub never: String,
+}
+
+/// One row in the `personas` D1 catalog. Curated by management, listed
+/// in the demo persona picker, copied (snapshotted) into a tenant's
+/// KV blob at preset-pick time.
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct PersonaCatalogRow {
+    pub slug: String,
+    pub label: String,
+    pub description: String,
+    pub source: PersonaSource,
+    pub greeting: String,
+    #[serde(default)]
+    pub is_system: bool,
+    #[serde(default)]
+    pub safety: PersonaSafety,
+    #[serde(default)]
+    pub created_at: Option<String>,
+    #[serde(default)]
+    pub updated_at: Option<String>,
+}
+
+impl PersonaCatalogRow {
+    /// True iff the catalog row's safety verdict is Approved. Catalog
+    /// rows differ from tenant `PersonaConfig` here: every approval
+    /// path for a catalog row goes through the classifier (the upsert
+    /// handler always resets to Draft and enqueues a `SafetyJob`), so
+    /// hash-drift detection isn't needed — Approved is Approved.
+    pub fn is_safe_to_use(&self) -> bool {
+        matches!(self.safety.status, PersonaSafetyStatus::Approved)
+    }
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]

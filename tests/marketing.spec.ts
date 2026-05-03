@@ -47,7 +47,41 @@ test('brand link returns home', async ({ page }) => {
   await expect(brand).toHaveAttribute('href', '/');
 });
 
+// Stub catalog payload reused by every demo-chat spec — `/demo/personas`
+// reads from D1, but the dev test server doesn't run migrations, so we
+// fulfill the route with a fixed list. The Concierge prompt body is
+// what the View-prompt panel asserts against.
+const CONCIERGE_DEMO_PROMPT =
+  'Voice: Concierge talking about itself. WhatsApp Business, Instagram, Discord, email.';
+async function stubDemoPersonas(page: any) {
+  await page.route('**/demo/personas', (route: any) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        personas: [
+          {
+            slug: 'concierge',
+            label: 'Concierge',
+            description: 'Talks about Concierge.',
+            greeting: "Hi! I'm Concierge.",
+            prompt: CONCIERGE_DEMO_PROMPT,
+          },
+          {
+            slug: 'friendly_florist',
+            label: 'Friendly Florist',
+            description: 'Florist voice.',
+            greeting: 'Hi there! Welcome to the shop.',
+            prompt: 'Business: Petals & Stems, a florist.',
+          },
+        ],
+      }),
+    }),
+  );
+}
+
 test('demo-chat modal opens, posts to /demo/chat, renders assistant reply', async ({ page }) => {
+  await stubDemoPersonas(page);
   // Stub the AI call so the test doesn't need a Workers AI binding to work
   // and so the assertion is on a deterministic string.
   let postedBody: unknown = null;
@@ -83,6 +117,7 @@ test('demo-chat modal opens, posts to /demo/chat, renders assistant reply', asyn
 });
 
 test('demo-chat persona picker swaps greeting and persona slug on the wire', async ({ page }) => {
+  await stubDemoPersonas(page);
   let lastBody: any = null;
   await page.route('**/demo/chat', async (route) => {
     lastBody = route.request().postDataJSON();
@@ -118,6 +153,7 @@ test('demo-chat persona picker swaps greeting and persona slug on the wire', asy
 });
 
 test('demo-chat view-prompt toggle reveals the active persona prompt', async ({ page }) => {
+  await stubDemoPersonas(page);
   await page.goto('/');
   await page.locator('#demo-chat-hint-text').click();
   const dialog = page.getByRole('dialog', { name: /live demo/i });
@@ -141,6 +177,7 @@ test('demo-chat view-prompt toggle reveals the active persona prompt', async ({ 
 });
 
 test('clicking the hero headline also opens the chat modal', async ({ page }) => {
+  await stubDemoPersonas(page);
   await page.route('**/demo/chat', (route) =>
     route.fulfill({
       status: 200,
@@ -165,6 +202,7 @@ test('hero hint informs users the headline is clickable', async ({ page }) => {
 });
 
 test('demo-chat surfaces the rate-limit message on 429', async ({ page }) => {
+  await stubDemoPersonas(page);
   await page.route('**/demo/chat', (route) =>
     route.fulfill({
       status: 429,

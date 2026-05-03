@@ -1,15 +1,16 @@
 //! Public live-demo chat. Reachable from the welcome page CTA; the
-//! visitor picks one of the personas exposed by `crate::demo_personas`
-//! (Concierge talking about itself, or one of the four tenant presets)
+//! visitor picks one of the personas exposed by the D1 catalog
+//! (Concierge talking about itself, plus management-curated archetypes)
 //! and the worker forwards their message history to Cloudflare Workers
-//! AI under that persona's system prompt. Per-IP rate-limited so an
-//! unauth public endpoint can't be abused.
+//! AI under that persona's system prompt. Per-IP rate-limited; every
+//! reply also runs through the prompt-injection scanner and the
+//! Approved-only persona gate. No bypass.
 
 use serde::{Deserialize, Serialize};
 use worker::*;
 
 use crate::ai;
-use crate::demo_personas;
+use crate::storage;
 
 const MAX_TURNS: usize = 12;
 const MAX_BODY_BYTES: usize = 4096;
@@ -108,10 +109,45 @@ pub async fn handle_demo_chat(mut req: Request, env: Env) -> Result<Response> {
             .await;
     }
 
-    let persona = demo_personas::lookup(&parsed.persona);
+    // Resolve the persona from the D1 catalog. Refuse with 503 if the
+    // requested slug isn't there or isn't Approved — no bypass even if a
+    // management user is testing.
+    let db = env.d1("DB")?;
+    let slug = if parsed.persona.is_empty() {
+        crate::storage::DEMO_DEFAULT_PERSONA_SLUG.to_string()
+    } else {
+        parsed.persona.clone()
+    };
+    let row = match storage::get_persona(&db, &slug).await? {
+        Some(r) if r.is_safe_to_use() => r,
+        _ => {
+            return json_error(
+                "That persona isn't available right now. Please pick another.",
+                503,
+            );
+        }
+    };
+
+    // Run the prompt-injection scanner on the visitor's last user turn
+    // before we spend any tokens or KV credit.
+    let last_user = parsed
+        .messages
+        .iter()
+        .rev()
+        .find(|m| m.role == "user")
+        .map(|m| m.content.as_str())
+        .unwrap_or("");
+    if ai::is_prompt_injection(&env, last_user).await {
+        return json_error(
+            "We can't process that message. Please rephrase your question.",
+            400,
+        );
+    }
+
     // Same envelope every tenant prompt gets — the demo is just another
     // small business in the wrapper's eyes.
-    let wrapped_prompt = crate::prompt::wrap(persona.prompt);
+    let middle = row.source.active_prompt();
+    let wrapped_prompt = crate::prompt::wrap(&middle);
     let history: Vec<(String, String)> = parsed
         .messages
         .into_iter()
@@ -121,7 +157,7 @@ pub async fn handle_demo_chat(mut req: Request, env: Env) -> Result<Response> {
     let reply = match ai::generate_chat_reply(&env, &wrapped_prompt, &history).await {
         Ok(r) => r.trim().to_string(),
         Err(e) => {
-            console_log!("Demo chat AI error (persona={}): {:?}", persona.slug, e);
+            console_log!("Demo chat AI error (persona={}): {:?}", row.slug, e);
             return json_error("Couldn't generate a reply right now.", 502);
         }
     };
