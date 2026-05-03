@@ -75,13 +75,17 @@ pub async fn generate_response(
 /// Generate a multi-turn chat reply. Distinct from `generate_response`,
 /// which packs a context map into a single user message — here, the
 /// caller passes the actual `(role, content)` history and we forward
-/// it verbatim. Used by the public `/demo/chat` endpoint, which needs
-/// real turn-taking and a token cap.
+/// it verbatim. Used by the public `/demo/chat` endpoint.
+///
+/// Shape mirrors `generate_response` exactly (no extra request fields)
+/// so it goes through the same Workers AI code path the lead form
+/// already exercises in production. Caller is expected to keep replies
+/// short via the system prompt; we don't pass `max_tokens` because
+/// some Workers AI model bindings reject unrecognized request keys.
 pub async fn generate_chat_reply(
     env: &Env,
     system_prompt: &str,
     history: &[(String, String)],
-    max_tokens: u32,
 ) -> Result<String> {
     let mut messages = Vec::with_capacity(history.len() + 1);
     messages.push(Message {
@@ -95,38 +99,13 @@ pub async fn generate_chat_reply(
         });
     }
     let request = AiRequest { messages };
-    let request_json = serde_json::to_string(&request)
-        .map_err(|e| Error::from(format!("Failed to serialize chat request: {}", e)))?;
-    let mut input: serde_json::Value = serde_json::from_str(&request_json)
-        .map_err(|e| Error::from(format!("Failed to parse chat request: {}", e)))?;
-    if let Some(obj) = input.as_object_mut() {
-        obj.insert(
-            "max_tokens".to_string(),
-            serde_json::Value::from(max_tokens),
-        );
-    }
-
     let model = get_model(env);
-    let ai = env.ai("AI")?;
-    let response: serde_json::Value = ai
-        .run(&model, input)
-        .await
-        .map_err(|e| Error::from(format!("AI chat model error: {:?}", e)))?;
-
-    let response_str = response
-        .as_str()
-        .map(|s| s.to_string())
-        .or_else(|| {
-            response
-                .get("response")
-                .and_then(|r| r.as_str())
-                .map(|s| s.to_string())
-        })
-        .unwrap_or_default();
-    if response_str.is_empty() {
+    let reply = run_ai_model(env, &model, &request).await?;
+    let trimmed = reply.trim();
+    if trimmed.is_empty() {
         Err(Error::from("AI returned empty chat response"))
     } else {
-        Ok(response_str)
+        Ok(trimmed.to_string())
     }
 }
 

@@ -299,6 +299,14 @@ code {
 .hero-select em { color:inherit; }
 @media (prefers-reduced-motion: reduce) { .hero-caret, .hero-select { display:none; background:transparent; color:inherit; } }
 
+/* Hero headline as a click target for the chat demo. */
+.hero-clickable { cursor:pointer; transition:color .2s ease; outline:none; border-radius:6px; }
+.hero-clickable:hover, .hero-clickable:focus-visible { color:var(--accent-2); }
+.hero-clickable:focus-visible { outline:2px solid var(--accent); outline-offset:6px; }
+.hero-hint-anchor { position:relative; }
+.hero-hint { display:inline-block; background:var(--ink); color:var(--cream); padding:5px 12px; border-radius:999px; font-family:var(--f-body); font-size:13px; font-weight:500; letter-spacing:0; margin:-4px 0 14px; opacity:0; transform:translateY(-4px); transition:opacity .25s ease, transform .25s ease; pointer-events:none; }
+.hero-clickable:hover + .hero-hint, .hero-clickable:focus-visible + .hero-hint, .hero-hint.is-hint-on { opacity:1; transform:translateY(0); }
+
 /* Live-demo chat modal (welcome page). */
 .chat-messages { flex:1 1 auto; min-height:120px; overflow-y:auto; padding:12px 2px; display:flex; flex-direction:column; gap:10px; scroll-behavior:smooth; }
 .chat-msg { padding:10px 14px; border-radius:14px; max-width:85%; line-height:1.45; font-size:14px; white-space:pre-wrap; word-break:break-word; }
@@ -524,6 +532,7 @@ mod footer_tests {
                 "welcome-cta-primary",
                 "welcome-cta-secondary",
                 "demo-chat-cta",
+                "demo-chat-hint",
                 "demo-chat-title",
                 "demo-chat-subtitle",
                 "demo-chat-greeting",
