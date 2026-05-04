@@ -20,6 +20,15 @@ fn get_fast_model(env: &Env) -> String {
 #[derive(Serialize)]
 struct AiRequest {
     messages: Vec<Message>,
+    /// Optional output cap. Only set for callers that need a long
+    /// structured reply (e.g. the demo persona generator that returns
+    /// a JSON array of N businesses). Skipped from the wire when None
+    /// so existing chat callers continue to send the exact request
+    /// shape they always have, dodging the "Workers AI rejects
+    /// unrecognized request keys" footgun for model bindings that
+    /// don't accept `max_tokens`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    max_tokens: Option<u32>,
 }
 
 #[derive(Serialize)]
@@ -66,6 +75,7 @@ pub async fn generate_response(
                 content: user_message,
             },
         ],
+        max_tokens: None,
     };
 
     let model = get_model(env);
@@ -105,7 +115,45 @@ pub async fn generate_chat_reply(
             content: content.clone(),
         });
     }
-    let request = AiRequest { messages };
+    let request = AiRequest {
+        messages,
+        max_tokens: None,
+    };
+    let model = get_model(env);
+    let reply = run_ai_model(env, &model, &request).await?;
+    let trimmed = reply.trim();
+    if trimmed.is_empty() {
+        Err(Error::from("AI returned empty chat response"))
+    } else {
+        Ok(trimmed.to_string())
+    }
+}
+
+/// Like `generate_chat_reply` but with an explicit output cap. Used by
+/// callers that need a long structured reply — the demo persona
+/// generator returns a JSON array of N businesses and overflows the
+/// model's default ~256-token cap once N > 3.
+pub async fn generate_long_chat_reply(
+    env: &Env,
+    system_prompt: &str,
+    history: &[(String, String)],
+    max_tokens: u32,
+) -> Result<String> {
+    let mut messages = Vec::with_capacity(history.len() + 1);
+    messages.push(Message {
+        role: "system".to_string(),
+        content: system_prompt.to_string(),
+    });
+    for (role, content) in history {
+        messages.push(Message {
+            role: role.clone(),
+            content: content.clone(),
+        });
+    }
+    let request = AiRequest {
+        messages,
+        max_tokens: Some(max_tokens),
+    };
     let model = get_model(env);
     let reply = run_ai_model(env, &model, &request).await?;
     let trimmed = reply.trim();
@@ -140,6 +188,7 @@ pub async fn is_prompt_injection(env: &Env, text: &str) -> bool {
                 content: text.to_string(),
             },
         ],
+        max_tokens: None,
     };
 
     let ai = match env.ai("AI") {

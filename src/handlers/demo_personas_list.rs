@@ -152,10 +152,15 @@ pub(crate) async fn generate_demo_businesses(
         .collect::<Vec<_>>()
         .join("\n");
 
-    let reply = crate::ai::generate_chat_reply(
+    // Generous cap: ~512 tokens per archetype × default 4 ≈ 2048,
+    // doubled for headroom on richer prompts and longer business
+    // descriptions. Without this the model truncates mid-string after
+    // the third entry.
+    let reply = crate::ai::generate_long_chat_reply(
         env,
         system_prompt,
         &vec![("user".to_string(), user_prompt)],
+        4096,
     )
     .await
     .map_err(|e| format!("AI call failed: {e:?}"))?;
