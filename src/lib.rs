@@ -431,10 +431,24 @@ async fn handle_request(req: Request, env: Env) -> Result<Response> {
             .await
             .unwrap_or_default()
             .enabled;
+        // Preload: when the personas cache is warm, embed the JSON blob
+        // directly in the welcome page so the chat factory's `init()`
+        // skips the round-trip to /demo/personas. Cold cache falls back
+        // to the existing client-side fetch.
+        let prefetched_personas = if demo_enabled {
+            kv.get(storage::DEMO_PERSONAS_CACHE_KEY)
+                .text()
+                .await
+                .ok()
+                .flatten()
+        } else {
+            None
+        };
         return Response::from_html(templates::onboarding::welcome_html(
             "",
             &locale,
             demo_enabled,
+            prefetched_personas.as_deref(),
         ));
     }
 

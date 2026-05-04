@@ -118,7 +118,12 @@ fn wizard_shell(
     base_html(&t(locale, "wizard-title"), &inner, locale)
 }
 
-pub fn welcome_html(_base_url: &str, locale: &crate::locale::Locale, demo_enabled: bool) -> String {
+pub fn welcome_html(
+    _base_url: &str,
+    locale: &crate::locale::Locale,
+    demo_enabled: bool,
+    prefetched_personas_json: Option<&str>,
+) -> String {
     use crate::i18n::t;
     let header = super::base::public_nav_html("", locale);
 
@@ -222,6 +227,21 @@ pub fn welcome_html(_base_url: &str, locale: &crate::locale::Locale, demo_enable
             ),
             String::new(),
         )
+    };
+
+    // Preload: when the demo is enabled and the personas cache is warm,
+    // embed the cached JSON blob in a non-executing `<script
+    // type="application/json">` block. The chat factory's `init()` reads
+    // it instead of calling /demo/personas, eliminating the round-trip
+    // wait between clicking the demo button and seeing personas.
+    let preloaded_personas_block = match prefetched_personas_json {
+        Some(json) if demo_enabled => format!(
+            r#"<script id="demo-personas-data" type="application/json">{}</script>"#,
+            // Defang any literal `</script` so a stray sequence in the
+            // JSON can't break out of the script tag.
+            json.replace("</", "<\\/")
+        ),
+        _ => String::new(),
     };
 
     let content = format!(
@@ -359,12 +379,14 @@ pub fn welcome_html(_base_url: &str, locale: &crate::locale::Locale, demo_enable
   </div>
 </div>
 </div>
+{preloaded_personas_block}
 {rotator}
 {chat_script}"#,
         header = header,
         eyebrow = t(locale, "welcome-eyebrow"),
         hero_headline = hero_headline,
         hero_hint = hero_hint,
+        preloaded_personas_block = preloaded_personas_block,
         lead = t(locale, "welcome-lead"),
         cta_primary = t(locale, "welcome-cta-primary"),
         cta_secondary = t(locale, "welcome-cta-secondary"),
@@ -515,6 +537,30 @@ const HERO_CHAT_JS: &str = r##"<script nonce="__CSP_NONCE__">
   const POSTAMBLE = __POSTAMBLE__;
   const findPersona = (slug, personas) =>
     personas.find((p) => p.slug === slug) || personas[0] || null;
+
+  // Personas preload. Three-tier strategy:
+  //   1. Server-embedded blob (#demo-personas-data) — zero round-trip,
+  //      used when the welcome handler found a warm cache.
+  //   2. Eager fetch kicked off here at script-evaluation time so the
+  //      request is in flight before Alpine even boots, and certainly
+  //      before the user can click into the modal. init() awaits it.
+  //   3. Fallback empty list if both the embedded blob and the eager
+  //      fetch fail.
+  const personasReady = (() => {
+    const inline = document.getElementById('demo-personas-data');
+    if (inline && inline.textContent) {
+      try {
+        const parsed = JSON.parse(inline.textContent);
+        if (parsed && Array.isArray(parsed.personas)) {
+          return Promise.resolve(parsed.personas);
+        }
+      } catch (_) { /* fall through to fetch */ }
+    }
+    return fetch('/demo/personas')
+      .then((r) => (r.ok ? r.json() : { personas: [] }))
+      .then((d) => (d && Array.isArray(d.personas) ? d.personas : []))
+      .catch(() => []);
+  })();
   // Demo session is intentionally short. After this many user turns
   // the input form is replaced with the sign-up CTA; the visitor has
   // either gotten the gist by then or they haven't.
@@ -566,9 +612,7 @@ const HERO_CHAT_JS: &str = r##"<script nonce="__CSP_NONCE__">
     },
     async init() {
       try {
-        const r = await fetch('/demo/personas');
-        const data = r.ok ? await r.json() : { personas: [] };
-        this.personas = (data && Array.isArray(data.personas)) ? data.personas : [];
+        this.personas = await personasReady;
       } catch (_) {
         this.personas = [];
       }
