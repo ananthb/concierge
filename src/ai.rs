@@ -143,22 +143,24 @@ pub async fn generate_chat_reply(
 /// is set high because the reply is a JSON array with one entry per
 /// archetype; the chat model's default ~256-token cap truncates it
 /// mid-string after three entries.
+///
+/// Sends the instructions and the archetype list as a single user
+/// message rather than a system + user pair. Some Workers AI model
+/// bindings (Kimi K2.6 in particular) ignore system messages and
+/// fall through to a generic conversational reply (`"Thank you for
+/// your message."`). Inlining keeps the contract robust across model
+/// swaps.
 pub async fn generate_persona_businesses(
     env: &Env,
     system_prompt: &str,
     user_prompt: &str,
     max_tokens: u32,
 ) -> Result<String> {
-    let messages = vec![
-        Message {
-            role: "system".to_string(),
-            content: system_prompt.to_string(),
-        },
-        Message {
-            role: "user".to_string(),
-            content: user_prompt.to_string(),
-        },
-    ];
+    let combined = format!("{system_prompt}\n\n{user_prompt}");
+    let messages = vec![Message {
+        role: "user".to_string(),
+        content: combined,
+    }];
     let request = AiRequest {
         messages,
         max_tokens: Some(max_tokens),

@@ -289,7 +289,7 @@ pub fn welcome_html(_base_url: &str, locale: &crate::locale::Locale, demo_enable
         <span x-show="showPrompt" x-cloak>{chat_hide_prompt}</span>
       </button>
     </div>
-    <p class="muted fs-13 chat-persona-desc" x-text="personas.length ? currentPersona.description : (personasLoaded ? 'The persona catalog isn\'t ready yet. Apply the migration on the production D1 to populate it.' : 'Loading personas…')"></p>
+    <p class="muted fs-13 chat-persona-desc" x-text="personas.length ? currentPersona.description : (personasLoaded ? 'The demo isn\'t available right now. Please try again in a few minutes.' : 'Loading personas…')"></p>
     <!-- Roleplay frame card: shown only when the visitor picked a sample
          business persona (not the Concierge-self row). Tells them
          they're playing one of that business's customers, and lists the
