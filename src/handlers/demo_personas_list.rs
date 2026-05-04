@@ -7,84 +7,139 @@
 //! (name, type, city, hours) so the UI can render a "you're chatting
 //! as a customer of …" card under the picker.
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use worker::*;
 
 use crate::storage;
-use crate::types::PersonaSource;
 
-#[derive(Serialize)]
-struct DemoBusiness<'a> {
-    name: &'a str,
-    business_type: &'a str,
-    city: &'a str,
-    hours: &'a str,
-    goal: &'a str,
-    goal_url: &'a str,
+const CACHE_KEY_DEMO_PERSONAS: &str = "cache:demo:personas:v1";
+const CACHE_TTL_SECONDS: u64 = 300;
+
+#[derive(Serialize, Deserialize, Clone)]
+struct DemoBusiness {
+    name: String,
+    business_type: String,
+    city: String,
+    hours: String,
+    goal: String,
+    goal_url: String,
 }
 
-#[derive(Serialize)]
-struct DemoPersonaPayload<'a> {
-    slug: &'a str,
-    label: &'a str,
-    description: &'a str,
-    greeting: &'a str,
-    is_system: bool,
+#[derive(Serialize, Deserialize, Clone)]
+struct DemoPersonaPayload {
+    slug: String,
+    label: String,
+    description: String,
+    greeting: String,
     /// The exact middle (frame + persona prompt) sent to the model on
     /// `/demo/chat`. Rendered in the "View system prompt" panel.
     prompt: String,
     /// Sample business profile, present only for Builder personas. The
     /// system Concierge row has none. Its "business" is Concierge.
     #[serde(skip_serializing_if = "Option::is_none")]
-    business: Option<DemoBusiness<'a>>,
+    business: Option<DemoBusiness>,
 }
 
-#[derive(Serialize)]
-struct DemoPersonasResponse<'a> {
-    personas: Vec<DemoPersonaPayload<'a>>,
+#[derive(Serialize, Deserialize, Clone)]
+struct DemoPersonasResponse {
+    personas: Vec<DemoPersonaPayload>,
 }
 
 pub async fn handle_demo_personas(_req: Request, env: Env) -> Result<Response> {
-    // Failure modes are tolerated quietly: dev environments without the
-    // migration applied (or with a transient D1 hiccup) return an empty
-    // list so the welcome page's chat picker shows "no personas yet"
-    // instead of a network error in the console.
-    let rows = match env.d1("DB") {
-        Ok(db) => storage::list_personas(&db, true).await.unwrap_or_default(),
-        Err(_) => Vec::new(),
-    };
+    let kv = env.kv("KV")?;
+    let db = env.d1("DB")?;
 
-    let payload: Vec<DemoPersonaPayload> = rows
-        .iter()
-        .map(|r| {
-            let persona_middle = r.source.active_prompt();
-            let prompt = crate::prompt::compose_demo_middle(&persona_middle, r.is_system);
-            let business = match &r.source {
-                PersonaSource::Builder(b) => Some(DemoBusiness {
-                    name: &b.biz_name,
-                    business_type: &b.biz_type,
-                    city: &b.city,
-                    hours: &b.hours,
-                    goal: &b.goal,
-                    goal_url: &b.goal_url,
-                }),
-                PersonaSource::Custom(_) => None,
-            };
-            DemoPersonaPayload {
-                slug: &r.slug,
-                label: &r.label,
-                description: &r.description,
-                greeting: &r.greeting,
-                is_system: r.is_system,
-                prompt,
-                business,
+    // 1. Check KV cache
+    if let Ok(Some(cached)) = kv
+        .get(CACHE_KEY_DEMO_PERSONAS)
+        .json::<DemoPersonasResponse>()
+        .await
+    {
+        return json_response(cached);
+    }
+
+    // 2. Fetch approved archetypes
+    let archetypes = storage::list_archetypes(&db, true)
+        .await
+        .unwrap_or_default();
+
+    // 3. Generate fictional business details using LLM for each archetype
+    // We do this in one batch prompt to save time and tokens.
+    let mut personas = Vec::with_capacity(archetypes.len() + 1);
+
+    // Add hardcoded Concierge first
+    personas.push(DemoPersonaPayload {
+        slug: "concierge".to_string(),
+        label: "Concierge".to_string(),
+        description: "Concierge talking about itself — what I am, channels, pricing, setup.".to_string(),
+        greeting: "Hi! I'm Concierge. Ask me what I do, which channels I cover, how pricing works, or how to set me up.".to_string(),
+        prompt: crate::prompt::compose_demo_middle(crate::prompt::CONCIERGE_PROMPT, "concierge"),
+        business: None,
+    });
+
+    if !archetypes.is_empty() {
+        let mut prompt_parts = Vec::new();
+        for a in &archetypes {
+            prompt_parts.push(format!("- {} ({})", a.label, a.description));
+        }
+        let system_prompt = "You are a creative business consultant. Generate fictional but realistic business details for each of the following persona archetypes. For each, provide: name, business_type, city, hours, and goal. Return ONLY a JSON array of objects, one for each archetype, in the exact same order. Do not include any other text.";
+        let user_prompt = prompt_parts.join("\n");
+
+        if let Ok(reply) = crate::ai::generate_chat_reply(
+            &env,
+            system_prompt,
+            &vec![("user".to_string(), user_prompt)],
+        )
+        .await
+        {
+            // Try to parse the JSON array from the reply. The model might wrap it in ```json blocks.
+            let clean_json = reply
+                .trim_start_matches("```json")
+                .trim_end_matches("```")
+                .trim();
+            if let Ok(businesses) = serde_json::from_str::<Vec<DemoBusiness>>(clean_json) {
+                for (i, biz) in businesses.into_iter().enumerate() {
+                    if let Some(a) = archetypes.get(i) {
+                        let builder = crate::types::PersonaBuilder {
+                            archetype_slug: a.slug.clone(),
+                            biz_name: biz.name.clone(),
+                            biz_type: biz.business_type.clone(),
+                            city: biz.city.clone(),
+                            hours: biz.hours.clone(),
+                            goal: biz.goal.clone(),
+                            goal_url: biz.goal_url.clone(),
+                            ..Default::default()
+                        };
+                        let persona_middle = crate::personas::generate(&builder, &a.voice_prompt);
+                        personas.push(DemoPersonaPayload {
+                            slug: a.slug.clone(),
+                            label: a.label.clone(),
+                            description: a.description.clone(),
+                            greeting: a.greeting.clone(),
+                            prompt: crate::prompt::compose_demo_middle(&persona_middle, &a.slug),
+                            business: Some(biz),
+                        });
+                    }
+                }
             }
-        })
-        .collect();
+        }
+    }
 
-    let body = serde_json::to_string(&DemoPersonasResponse { personas: payload })
-        .map_err(|e| Error::from(format!("serialise demo personas: {e}")))?;
-    let headers = Headers::new();
+    let response = DemoPersonasResponse { personas };
+
+    // 4. Cache in KV
+    let _ = kv
+        .put(CACHE_KEY_DEMO_PERSONAS, serde_json::to_string(&response)?)?
+        .expiration_ttl(CACHE_TTL_SECONDS)
+        .execute()
+        .await;
+
+    json_response(response)
+}
+
+fn json_response(data: DemoPersonasResponse) -> Result<Response> {
+    let body = serde_json::to_string(&data)?;
+    let mut headers = Headers::new();
     headers.set("Content-Type", "application/json")?;
     headers.set("Cache-Control", "no-store")?;
     Ok(Response::ok(body)?.with_headers(headers))

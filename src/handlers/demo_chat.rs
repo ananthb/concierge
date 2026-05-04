@@ -175,13 +175,17 @@ pub async fn handle_demo_chat(mut req: Request, env: Env) -> Result<Response> {
     } else {
         parsed.persona.clone()
     };
-    let row = match storage::get_persona(&db, &slug).await? {
-        Some(r) if r.is_safe_to_use() => r,
-        _ => {
-            return json_error(
-                "That persona isn't available right now. Please pick another.",
-                503,
-            );
+    let row = if slug == crate::storage::DEMO_DEFAULT_PERSONA_SLUG {
+        None
+    } else {
+        match storage::get_archetype_cached(&kv, &db, &slug).await? {
+            Some(r) if r.is_safe_to_use() => Some(r),
+            _ => {
+                return json_error(
+                    "That persona isn't available right now. Please pick another.",
+                    503,
+                );
+            }
         }
     };
 
@@ -201,23 +205,27 @@ pub async fn handle_demo_chat(mut req: Request, env: Env) -> Result<Response> {
         );
     }
 
-    // Same envelope every tenant prompt gets. On top of that, the
-    // demo prepends a one-off "you're inside Concierge's marketing-site
-    // demo, the visitor is roleplaying as a customer, stay in
-    // character" frame for builder personas. Sign-up nudging is the
-    // modal CTA's job, not the model's. The system Concierge row is
-    // exempt: it already speaks to the visitor as a prospect directly.
-    //
-    // Once the client signals `handoff: true`, the persona middle is
+    // Resolve the persona's prompt. In handoff mode the persona is
     // replaced wholesale by [`crate::prompt::HOLDING_PATTERN_MIDDLE`]
     // (no demo frame, no goal-driving) until the modal session ends.
     let wrapped_prompt = if parsed.handoff {
         crate::prompt::wrap(crate::prompt::HOLDING_PATTERN_MIDDLE)
     } else {
-        let persona_middle = row.source.active_prompt();
-        let demo_middle = crate::prompt::compose_demo_middle(&persona_middle, row.is_system);
+        let persona_middle = if slug == crate::storage::DEMO_DEFAULT_PERSONA_SLUG {
+            crate::prompt::CONCIERGE_PROMPT.to_string()
+        } else if let Some(r) = row {
+            // For demo purposes, we need a PersonaBuilder with fictional details.
+            // The /demo/personas endpoint provides these (cached).
+            // If they hit /demo/chat directly with a slug, we just use empty defaults
+            // for the builder and the archetype's voice.
+            crate::personas::generate(&crate::types::PersonaBuilder::default(), &r.voice_prompt)
+        } else {
+            String::new()
+        };
+        let demo_middle = crate::prompt::compose_demo_middle(&persona_middle, &slug);
         crate::prompt::wrap(&demo_middle)
     };
+
     let history: Vec<(String, String)> = parsed
         .messages
         .into_iter()
@@ -227,7 +235,7 @@ pub async fn handle_demo_chat(mut req: Request, env: Env) -> Result<Response> {
     let raw_reply = match ai::generate_chat_reply(&env, &wrapped_prompt, &history).await {
         Ok(r) => r,
         Err(e) => {
-            console_log!("Demo chat AI error (persona={}): {:?}", row.slug, e);
+            console_log!("Demo chat AI error (persona={}): {:?}", slug, e);
             return json_error("Couldn't generate a reply right now.", 502);
         }
     };

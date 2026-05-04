@@ -216,8 +216,7 @@ pub async fn handle_wizard(
         "replies/save" => {
             let form: serde_json::Value = req.json().await?;
 
-            let preset_slug = form.get("preset_id").and_then(|v| v.as_str()).unwrap_or("");
-            // Wizard preset cards now select an archetype only. Carry over
+            // Wizard preset cards select an archetype only. Carry over
             // the business name from the basics step so the generated
             // prompt mentions the actual business; biz_type is a
             // description ("florist", "cafe") and lives on /admin/persona.
@@ -227,7 +226,18 @@ pub async fn handle_wizard(
             // sanitised and capped here. The rest of the builder fields
             // (catch_phrases, off_topics, etc.) still get filled in at
             // /admin/persona later.
-            let archetype = PersonaPreset::from_slug(preset_slug).unwrap_or_default();
+            let archetype_slug = form.get("preset_id").and_then(|v| v.as_str()).unwrap_or("");
+            let archetype = match crate::storage::get_archetype(&db, archetype_slug).await? {
+                Some(a) => a,
+                None => {
+                    // Fallback to the first available archetype if the slug is invalid
+                    crate::storage::list_archetypes(&db, true)
+                        .await?
+                        .first()
+                        .cloned()
+                        .ok_or_else(|| worker::Error::from("No archetypes available"))?
+                }
+            };
             let goal_raw = form
                 .get("goal")
                 .and_then(|v| v.as_str())
@@ -250,7 +260,7 @@ pub async fn handle_wizard(
                 .collect();
             state.persona = PersonaConfig {
                 source: PersonaSource::Builder(crate::types::PersonaBuilder {
-                    archetype,
+                    archetype_slug: archetype.slug.clone(),
                     biz_name: state.business.name.clone(),
                     goal,
                     goal_url,
@@ -270,15 +280,17 @@ pub async fn handle_wizard(
             // Apply the archetype's bundled default rules to every channel
             // account this tenant has already connected. (New connections
             // pick up the same defaults via channel handler creation paths.)
-            apply_preset_to_channels(&kv, tenant_id, archetype, state.default_wait_seconds).await?;
+            apply_preset_to_channels(&kv, tenant_id, &archetype, state.default_wait_seconds)
+                .await?;
 
             // Enqueue safety check for the preset's prompt.
             let job = crate::safety_queue::SafetyJob {
                 target: crate::safety_queue::SafetyJobTarget::Tenant {
                     tenant_id: tenant_id.to_string(),
                 },
-                prompt_hash: state.persona.active_prompt_hash(),
+                prompt_hash: state.persona.active_prompt_hash(&archetype.voice_prompt),
             };
+
             state.persona.safety.status = PersonaSafetyStatus::Pending;
             state.step = OnboardingStep::Launch;
             save_onboarding(&kv, tenant_id, &state).await?;
@@ -374,12 +386,18 @@ async fn render_step(
                 locale,
             ))
         }
-        OnboardingStep::Replies => Response::from_html(replies_html(
-            &state.persona,
-            state.default_wait_seconds,
-            base_url,
-            locale,
-        )),
+        OnboardingStep::Replies => {
+            let db = env.d1("DB")?;
+            let archetypes = crate::storage::list_archetypes(&db, true).await?;
+            Response::from_html(replies_html(
+                &state.persona,
+                &archetypes,
+                state.default_wait_seconds,
+                base_url,
+                locale,
+            ))
+        }
+
         OnboardingStep::Launch => {
             let email_addrs = get_email_addresses(kv, tenant_id).await?;
             let base_domain = env
@@ -419,11 +437,11 @@ async fn render_step(
 async fn apply_preset_to_channels(
     kv: &kv::KvStore,
     tenant_id: &str,
-    preset: PersonaPreset,
+    archetype: &Archetype,
     wait_seconds: u32,
 ) -> Result<()> {
     let now = crate::helpers::now_iso();
-    let rules = preset.default_rules();
+    let rules = archetype.default_rules();
 
     let wa = list_whatsapp_accounts(kv, tenant_id).await?;
     for mut acct in wa {

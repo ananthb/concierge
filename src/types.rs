@@ -1204,22 +1204,23 @@ impl Default for PersonaConfig {
 
 impl PersonaConfig {
     /// The actual prompt sent to the LLM. Computed from the source on demand.
-    pub fn active_prompt(&self) -> String {
-        self.source.active_prompt()
+    /// Archetype-based personas require the voice prompt fetched from D1.
+    pub fn active_prompt(&self, voice_prompt: &str) -> String {
+        self.source.active_prompt(voice_prompt)
     }
 
     /// SHA-256 of the active prompt, used to detect when a re-run of the
     /// safety classifier is needed.
-    pub fn active_prompt_hash(&self) -> String {
-        crate::helpers::sha256_hex(&self.active_prompt())
+    pub fn active_prompt_hash(&self, voice_prompt: &str) -> String {
+        crate::helpers::sha256_hex(&self.active_prompt(voice_prompt))
     }
 
     /// True if AI replies are allowed: the safety check has approved the
     /// current prompt (no hash drift since approval).
-    pub fn is_safe_to_use(&self) -> bool {
+    pub fn is_safe_to_use(&self, voice_prompt: &str) -> bool {
         matches!(self.safety.status, PersonaSafetyStatus::Approved)
             && self.safety.checked_prompt_hash.as_deref()
-                == Some(self.active_prompt_hash().as_str())
+                == Some(self.active_prompt_hash(voice_prompt).as_str())
     }
 }
 
@@ -1233,46 +1234,26 @@ impl PersonaConfig {
 pub enum PersonaSource {
     /// User-filled inputs the system composes through `personas::generate`.
     Builder(PersonaBuilder),
-    /// Power-user override: raw prompt text. Used by the homepage Concierge
-    /// demo (whose middle is bespoke product copy) and by tenants who want
-    /// to bypass the formula. Still envelope-wrapped at AI-call time.
+    /// Power-user override: raw prompt text.
     Custom(String),
 }
 
 impl PersonaSource {
     /// Pure: render the editable middle. The envelope (`crate::prompt::wrap`)
     /// is added separately at the AI-call boundary.
-    pub fn active_prompt(&self) -> String {
+    pub fn active_prompt(&self, voice_prompt: &str) -> String {
         match self {
-            PersonaSource::Builder(b) => crate::personas::generate(b),
+            PersonaSource::Builder(b) => crate::personas::generate(b, voice_prompt),
             PersonaSource::Custom(s) => s.clone(),
         }
     }
 }
 
-/// Voice archetype: the *tone* a persona speaks in. Decoupled from
-/// business type: a "Friendly" archetype works for a florist, a clinic,
-/// or a tech-support helpdesk. Catalog rows in D1 carry one of these.
-#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum PersonaPreset {
-    Friendly,
-    Professional,
-    Playful,
-    Formal,
-}
-
-impl Default for PersonaPreset {
-    fn default() -> Self {
-        Self::Friendly
-    }
-}
-
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct PersonaBuilder {
-    /// The voice archetype (Friendly / Professional / Playful / Formal).
+    /// Reference to an entry in the `archetypes` D1 table.
     #[serde(default)]
-    pub archetype: PersonaPreset,
+    pub archetype_slug: String,
     /// Required: the business's name (used in the generated prompt as
     /// "Business: {biz_name}, a {biz_type}…").
     #[serde(default)]
@@ -1315,18 +1296,21 @@ pub struct PersonaBuilder {
     pub handoff_conditions: Vec<String>,
 }
 
-/// One row in the `personas` D1 catalog. Curated by management, listed
-/// in the demo persona picker, copied (snapshotted) into a tenant's
-/// KV blob at preset-pick time.
+/// One row in the `archetypes` D1 catalog. Curated by management, listed
+/// in the demo persona picker, and referenced by a tenant's persona
+/// config.
 #[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct PersonaCatalogRow {
+pub struct Archetype {
     pub slug: String,
     pub label: String,
     pub description: String,
-    pub source: PersonaSource,
+    pub voice_prompt: String,
     pub greeting: String,
-    #[serde(default)]
-    pub is_system: bool,
+    pub default_rules_json: String,
+    pub catch_phrases: Vec<String>,
+    pub off_topics: Vec<String>,
+    pub never: String,
+    pub handoff_conditions: Vec<String>,
     #[serde(default)]
     pub safety: PersonaSafety,
     #[serde(default)]
@@ -1335,14 +1319,15 @@ pub struct PersonaCatalogRow {
     pub updated_at: Option<String>,
 }
 
-impl PersonaCatalogRow {
-    /// True iff the catalog row's safety verdict is Approved. Catalog
-    /// rows differ from tenant `PersonaConfig` here: every approval
-    /// path for a catalog row goes through the classifier (the upsert
-    /// handler always resets to Draft and enqueues a `SafetyJob`), so
-    /// hash-drift detection isn't needed. Approved is Approved.
+impl Archetype {
+    /// True iff the archetype's safety verdict is Approved.
     pub fn is_safe_to_use(&self) -> bool {
         matches!(self.safety.status, PersonaSafetyStatus::Approved)
+    }
+
+    /// Deserialize the default rules from JSON.
+    pub fn default_rules(&self) -> Vec<ReplyRule> {
+        serde_json::from_str(&self.default_rules_json).unwrap_or_default()
     }
 }
 

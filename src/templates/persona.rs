@@ -9,30 +9,40 @@ use crate::helpers::html_escape;
 use crate::i18n::t;
 use crate::locale::Locale;
 use crate::personas;
-use crate::types::{PersonaConfig, PersonaPreset, PersonaSafetyStatus, PersonaSource};
+use crate::types::{PersonaConfig, PersonaSafetyStatus, PersonaSource};
 
 use super::base::{app_shell, base_html};
 
-pub fn persona_admin_html(persona: &PersonaConfig, base_url: &str, locale: &Locale) -> String {
-    // After the archetype refactor, `PersonaSource::Preset` is gone; picking
-    // an archetype card just stamps it onto a `Builder` source. We pre-fill
-    // the form depending on which source variant the tenant has saved.
+pub fn persona_admin_html(
+    persona: &PersonaConfig,
+    archetypes: &[crate::types::Archetype],
+    base_url: &str,
+    locale: &Locale,
+) -> String {
+    // Picking an archetype card stamps it onto a `Builder` source. We
+    // pre-fill the form depending on which source variant the tenant has saved.
     let (active_mode, builder, custom_prompt) = match &persona.source {
         PersonaSource::Builder(b) => ("builder", b.clone(), String::new()),
         PersonaSource::Custom(s) => ("custom", crate::types::PersonaBuilder::default(), s.clone()),
     };
-    let active_archetype_slug = builder.archetype.slug();
 
-    let archetype_options: String = PersonaPreset::ALL
+    let active_archetype_slug = &builder.archetype_slug;
+    let voice_prompt = archetypes
         .iter()
-        .map(|p| {
-            let slug = p.slug();
-            let label = p.label();
-            let desc = p.description();
+        .find(|a| &a.slug == active_archetype_slug)
+        .map(|a| a.voice_prompt.as_str())
+        .unwrap_or("");
+
+    let archetype_options: String = archetypes
+        .iter()
+        .map(|a| {
+            let slug = &a.slug;
+            let label = &a.label;
+            let desc = &a.description;
             format!(
                 r#"<label class="card p-14" style="cursor:pointer;display:block">
   <div class="row gap-10" style="align-items:flex-start">
-    <input type="radio" name="archetype" value="{slug}" x-model="builder.archetype" style="margin-top:4px">
+    <input type="radio" name="archetype_slug" value="{slug}" x-model="builder.archetype_slug" style="margin-top:4px">
     <div class="flex-1">
       <div class="eyebrow mb-2">{label}</div>
       <p class="m-0 fs-13 muted">{desc}</p>
@@ -47,12 +57,13 @@ pub fn persona_admin_html(persona: &PersonaConfig, base_url: &str, locale: &Loca
         .collect();
 
     let initial_preview = match &persona.source {
-        PersonaSource::Builder(b) => personas::generate(b),
+        PersonaSource::Builder(b) => personas::generate(b, voice_prompt),
         PersonaSource::Custom(s) => s.clone(),
     };
+
     let _ = active_archetype_slug;
 
-    let safety_badge = render_safety_badge(persona, locale);
+    let safety_badge = render_safety_badge(persona, voice_prompt, locale);
 
     let body = format!(
         r##"<div class="page-pad" x-data="{x_data}" hx-ext="json-enc">
@@ -144,7 +155,7 @@ pub fn persona_admin_html(persona: &PersonaConfig, base_url: &str, locale: &Loca
     <pre id="prompt-preview" class="prompt-preview prompt-preview-middle">{initial_preview}</pre>
     <pre class="prompt-preview prompt-preview-fixed" aria-label="{postamble_label}">{postamble}</pre>
     <div class="row gap-8 mt-8" x-show="mode === 'builder'" x-cloak :aria-hidden="mode !== 'builder'">
-      <button type="button" class="btn ghost sm" hx-post="{base_url}/admin/persona/preview" hx-target="#prompt-preview" hx-swap="outerHTML" hx-include="[name='archetype'],[name='biz_name'],[name='biz_type'],[name='city'],[name='goal'],[name='goal_url'],[name='never'],[name='catch_phrases'],[name='off_topics'],[name='handoff_conditions']">{refresh}</button>
+      <button type="button" class="btn ghost sm" hx-post="{base_url}/admin/persona/preview" hx-target="#prompt-preview" hx-swap="outerHTML" hx-include="[name='archetype_slug'],[name='biz_name'],[name='biz_type'],[name='city'],[name='goal'],[name='goal_url'],[name='never'],[name='catch_phrases'],[name='off_topics'],[name='handoff_conditions']">{refresh}</button>
     </div>
   </div>
 </div>"##,
@@ -198,9 +209,9 @@ pub fn persona_admin_html(persona: &PersonaConfig, base_url: &str, locale: &Loca
     base_html(&t(locale, "admin-persona-title"), &page, locale)
 }
 
-fn render_safety_badge(persona: &PersonaConfig, locale: &Locale) -> String {
+fn render_safety_badge(persona: &PersonaConfig, voice_prompt: &str, locale: &Locale) -> String {
     let prompt_drift_locked = persona.safety.checked_prompt_hash.as_deref()
-        != Some(persona.active_prompt_hash().as_str())
+        != Some(persona.active_prompt_hash(voice_prompt).as_str())
         && matches!(persona.safety.status, PersonaSafetyStatus::Approved);
 
     let (chip_class, label, detail) = if prompt_drift_locked {
@@ -260,10 +271,10 @@ fn build_x_data(mode: &str, builder: &crate::types::PersonaBuilder, custom_promp
             .replace('\r', "\\r")
     }
     format!(
-        "{{ mode: '{mode}', customPrompt: '{custom}', builder: {{ archetype: '{archetype}', biz_name: '{biz_name}', biz_type: '{biz_type}', city: '{city}', goal: '{goal}', goal_url: '{goal_url}', never: '{never}', catch_phrases: '{cp}', off_topics: '{ot}', handoff_conditions: '{handoff}' }} }}",
+        "{{ mode: '{mode}', customPrompt: '{custom}', builder: {{ archetype_slug: '{archetype_slug}', biz_name: '{biz_name}', biz_type: '{biz_type}', city: '{city}', goal: '{goal}', goal_url: '{goal_url}', never: '{never}', catch_phrases: '{cp}', off_topics: '{ot}', handoff_conditions: '{handoff}' }} }}",
         mode = esc(mode),
         custom = esc(custom_prompt),
-        archetype = esc(builder.archetype.slug()),
+        archetype_slug = esc(&builder.archetype_slug),
         biz_name = esc(&builder.biz_name),
         biz_type = esc(&builder.biz_type),
         city = esc(&builder.city),

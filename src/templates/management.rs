@@ -17,7 +17,7 @@ fn manage_shell(
     let nav_items = [
         ("Dashboard", "/manage"),
         ("Tenants", "/manage/tenants"),
-        ("Personas", "/manage/personas"),
+        ("Archetypes", "/manage/archetypes"),
         ("Billing", "/manage/billing"),
         ("Audit Log", "/manage/audit"),
     ];
@@ -733,11 +733,11 @@ struct CurrencyDisplay {
 }
 
 // =====================================================================
-// Persona catalog
+// Archetype catalog
 // =====================================================================
 
-pub fn personas_list_html(
-    rows: &[crate::types::PersonaCatalogRow],
+pub fn archetypes_list_html(
+    rows: &[crate::types::Archetype],
     base_url: &str,
     locale: &Locale,
 ) -> String {
@@ -745,53 +745,63 @@ pub fn personas_list_html(
         .iter()
         .map(|r| {
             let status_chip = persona_status_chip(&r.safety.status);
-            let archetype_label = match &r.source {
-                crate::types::PersonaSource::Builder(b) => b.archetype.label(),
-                crate::types::PersonaSource::Custom(_) => "Custom",
-            };
-            let system_badge = if r.is_system {
-                r#"<span class="chip" style="margin-left:6px">system</span>"#
-            } else {
-                ""
-            };
+            let updated = r
+                .updated_at
+                .as_deref()
+                .map(|s| s.get(..10).unwrap_or(s).to_string())
+                .unwrap_or_default();
             format!(
-                r##"<tr>
-  <td><a href="{base_url}/manage/personas/{slug}">{slug}</a>{system_badge}</td>
-  <td>{label}</td>
-  <td>{archetype}</td>
-  <td>{status}</td>
-</tr>"##,
+                r##"<div class="rt-row" style="grid-template-columns:0.7fr 0.7fr 1.4fr 0.6fr 0.5fr 80px">
+  <div><a href="{base_url}/manage/archetypes/{slug}"><strong>{slug}</strong></a></div>
+  <div>{label}</div>
+  <div class="muted fs-13">{description}</div>
+  <div>{status}</div>
+  <div class="mono muted fs-11">{updated}</div>
+  <div><a class="btn ghost sm" href="{base_url}/manage/archetypes/{slug}">Edit</a></div>
+</div>"##,
                 base_url = base_url,
                 slug = html_escape(&r.slug),
-                system_badge = system_badge,
                 label = html_escape(&r.label),
-                archetype = html_escape(archetype_label),
+                description = html_escape(&r.description),
                 status = status_chip,
+                updated = html_escape(&updated),
             )
         })
         .collect();
 
+    let empty = if rows.is_empty() {
+        r##"<div class="muted p-20 ta-center">No archetypes yet. Add the first one to seed the demo and onboarding picker.</div>"##.to_string()
+    } else {
+        String::new()
+    };
+
     let content = format!(
         r##"<div class="page-pad">
-  <div class="row between mb-16">
-    <h1 class="display-sm m-0">Persona catalog</h1>
-    <a class="btn primary" href="{base_url}/manage/personas/new">+ New persona</a>
+  <div class="between mb-16">
+    <div>
+      <div class="eyebrow">Archetype catalog</div>
+      <h2 class="display-sm m-0 mt-4">{count} archetype{s}</h2>
+    </div>
+    <a class="btn primary" href="{base_url}/manage/archetypes/new">+ New archetype</a>
   </div>
-  <p class="muted mb-16">Catalog rows surface in the public demo and to tenants picking a starter persona at onboarding. Every save runs through the safety classifier; only Approved rows are visible outside this page.</p>
-  <table class="rt">
-    <thead><tr>
-      <th>Slug</th><th>Label</th><th>Archetype</th><th>Safety</th>
-    </tr></thead>
-    <tbody>{rows}</tbody>
-  </table>
+  <p class="muted mb-16">Archetypes define the AI's tone and initial rules. Every save runs through the safety classifier; only Approved rows are visible in the demo and onboarding.</p>
+  <div class="card" style="padding:0;overflow:hidden">
+    <div class="rt-head" style="grid-template-columns:0.7fr 0.7fr 1.4fr 0.6fr 0.5fr 80px">
+      <div>Slug</div><div>Label</div><div>Description</div><div>Safety</div><div>Updated</div><div></div>
+    </div>
+    {rows}{empty}
+  </div>
 </div>"##,
         base_url = base_url,
+        count = rows.len(),
+        s = if rows.len() == 1 { "" } else { "s" },
         rows = row_html,
+        empty = empty,
     );
     manage_shell(
-        "Personas · Concierge",
+        "Archetypes · Concierge",
         &content,
-        "Personas",
+        "Archetypes",
         base_url,
         locale,
     )
@@ -807,24 +817,27 @@ fn persona_status_chip(status: &PersonaSafetyStatus) -> String {
     }
 }
 
-pub fn persona_edit_html(
-    row: Option<&crate::types::PersonaCatalogRow>,
+pub fn archetype_edit_html(
+    row: Option<&crate::types::Archetype>,
     base_url: &str,
     locale: &Locale,
 ) -> String {
     let is_new = row.is_none();
-    let blank_builder = crate::types::PersonaBuilder::default();
     let blank_row;
     let row_ref = match row {
         Some(r) => r,
         None => {
-            blank_row = crate::types::PersonaCatalogRow {
+            blank_row = crate::types::Archetype {
                 slug: String::new(),
                 label: String::new(),
                 description: String::new(),
-                source: crate::types::PersonaSource::Builder(blank_builder.clone()),
+                voice_prompt: String::new(),
                 greeting: String::new(),
-                is_system: false,
+                default_rules_json: "[]".to_string(),
+                catch_phrases: vec![],
+                off_topics: vec![],
+                never: String::new(),
+                handoff_conditions: vec![],
                 safety: crate::types::PersonaSafety::default(),
                 created_at: None,
                 updated_at: None,
@@ -833,28 +846,10 @@ pub fn persona_edit_html(
         }
     };
 
-    let (mode, builder, custom_text) = match &row_ref.source {
-        crate::types::PersonaSource::Builder(b) => ("builder", b.clone(), String::new()),
-        crate::types::PersonaSource::Custom(s) => {
-            ("custom", crate::types::PersonaBuilder::default(), s.clone())
-        }
-    };
-
-    let archetype_options: String = PersonaPreset::ALL
-        .iter()
-        .map(|a| {
-            format!(
-                r#"<label class="row gap-6"><input type="radio" name="archetype" value="{slug}" x-model="builder.archetype"> {label}</label>"#,
-                slug = html_escape(a.slug()),
-                label = html_escape(a.label()),
-            )
-        })
-        .collect();
-
     let action = if is_new {
-        format!("{base_url}/manage/personas/new")
+        format!("{base_url}/manage/archetypes/new")
     } else {
-        format!("{base_url}/manage/personas/{}", row_ref.slug)
+        format!("{base_url}/manage/archetypes/{}", row_ref.slug)
     };
 
     let safety_chip = persona_status_chip(&row_ref.safety.status);
@@ -871,12 +866,12 @@ pub fn persona_edit_html(
         _ => "Awaiting classifier".to_string(),
     };
 
-    let delete_button = if is_new || row_ref.is_system {
+    let delete_button = if is_new {
         String::new()
     } else {
         format!(
             r##"<form hx-post="{action}/delete" hx-target="body" hx-swap="innerHTML" style="display:inline">
-              <button type="submit" class="btn ghost sm" style="color:var(--warn)" onclick="return confirm('Delete this persona? This cannot be undone.')">Delete</button>
+              <button type="submit" class="btn ghost sm" style="color:var(--warn)" onclick="return confirm('Delete this archetype? This cannot be undone.')">Delete</button>
             </form>"##,
             action = action,
         )
@@ -885,8 +880,8 @@ pub fn persona_edit_html(
     let slug_field = if is_new {
         format!(
             r#"<div class="mt-12">
-              <label for="persona-slug" class="eyebrow lbl">Slug (lowercase, _ or -)</label>
-              <input id="persona-slug" class="input" name="slug" required pattern="[a-z0-9_-]+">
+              <label for="archetype-slug" class="eyebrow lbl">Slug (lowercase, _ or -)</label>
+              <input id="archetype-slug" class="input" name="slug" required pattern="[a-z0-9_-]+">
             </div>"#
         )
     } else {
@@ -896,214 +891,95 @@ pub fn persona_edit_html(
         )
     };
 
-    fn esc_js(s: &str) -> String {
-        s.replace('\\', "\\\\")
-            .replace('\'', "\\'")
-            .replace('\n', "\\n")
-            .replace('\r', "\\r")
-    }
-
-    let x_data = format!(
-        "{{ mode: '{mode}', customText: '{custom}', builder: {{ archetype: '{archetype}', biz_name: '{biz_name}', biz_type: '{biz_type}', city: '{city}', hours: '{hours}', goal: '{goal}', goal_url: '{goal_url}', catch_phrases: '{cp}', off_topics: '{ot}', never: '{never}', handoff_conditions: '{handoff}' }} }}",
-        mode = esc_js(mode),
-        custom = esc_js(&custom_text),
-        archetype = esc_js(builder.archetype.slug()),
-        biz_name = esc_js(&builder.biz_name),
-        biz_type = esc_js(&builder.biz_type),
-        city = esc_js(&builder.city),
-        hours = esc_js(&builder.hours),
-        goal = esc_js(&builder.goal),
-        goal_url = esc_js(&builder.goal_url),
-        cp = esc_js(&builder.catch_phrases.join("\n")),
-        ot = esc_js(&builder.off_topics.join("\n")),
-        never = esc_js(&builder.never),
-        handoff = esc_js(&builder.handoff_conditions.join("\n")),
-    );
-
-    let h1 = if is_new {
-        "New persona".to_string()
-    } else {
-        format!("Edit persona · {}", html_escape(&row_ref.label))
-    };
-
     let content = format!(
-        r##"<div class="page-pad" x-data="{x_data}" hx-ext="json-enc">
-  <p><a href="{base_url}/manage/personas" class="btn ghost sm">← Back</a></p>
-  <h1 class="display-sm m-0 mb-4">{h1}</h1>
-  <p class="muted fs-13 mb-16">Catalog row. Saves reset the safety verdict to Draft and re-run the classifier. Tenants and the demo only see Approved rows.</p>
-
-  <div class="card p-14 mb-16 row gap-10" style="align-items:center">
-    {safety_chip}
-    <span class="muted fs-13">{safety_detail}</span>
+        r##"<div class="page-pad">
+  <div class="row between mb-16">
+    <h1 class="display-sm m-0">{} archetype</h1>
   </div>
 
-  <form hx-post="{action}" hx-target="body" hx-swap="innerHTML">
-    <input type="hidden" name="mode" :value="mode">
+  <div class="card p-18 mb-16 row gap-12" style="align-items:center">
+    {safety_chip}
+    <div class="fs-13 muted">{safety_detail}</div>
+  </div>
 
-    <div class="card p-22 mb-16">
+  <div class="card p-22">
+    <form hx-post="{action}" hx-ext="json-enc" hx-target="body" hx-swap="innerHTML">
+      <div class="row gap-16" style="align-items:flex-end">
+        <div class="flex-1">
+          <label for="archetype-label" class="eyebrow lbl">Label</label>
+          <input id="archetype-label" class="input" name="label" value="{label}" required>
+        </div>
+      </div>
       {slug_field}
+
       <div class="mt-12">
-        <label for="persona-label" class="eyebrow lbl">Label</label>
-        <input id="persona-label" class="input" name="label" value="{label}" required>
+        <label for="archetype-desc" class="eyebrow lbl">Description</label>
+        <input id="archetype-desc" class="input" name="description" value="{description}">
       </div>
+
       <div class="mt-12">
-        <label for="persona-description" class="eyebrow lbl">Description</label>
-        <input id="persona-description" class="input" name="description" value="{description}" required>
+        <label for="archetype-greeting" class="eyebrow lbl">Greeting</label>
+        <input id="archetype-greeting" class="input" name="greeting" value="{greeting}" required>
       </div>
+
       <div class="mt-12">
-        <label for="persona-greeting" class="eyebrow lbl">Greeting (first assistant turn in the demo)</label>
-        <input id="persona-greeting" class="input" name="greeting" value="{greeting}" required>
+        <label for="archetype-voice" class="eyebrow lbl">Voice Prompt</label>
+        <textarea id="archetype-voice" class="textarea mono" name="voice_prompt" rows="8" required>{voice_prompt}</textarea>
       </div>
 
-      <div class="mt-16 eyebrow lbl">Source mode</div>
-      <div class="row gap-8 mb-12" style="flex-wrap:wrap">
-        <label class="row gap-6"><input type="radio" name="mode" value="builder" x-model="mode"> Builder</label>
-        <label class="row gap-6"><input type="radio" name="mode" value="custom" x-model="mode"> Custom (raw middle)</label>
+      <div class="mt-12">
+        <label for="archetype-never" class="eyebrow lbl">Never (Policy constraints)</label>
+        <input id="archetype-never" class="input" name="never" value="{never}">
       </div>
 
-      <!-- BUILDER -->
-      <div x-show="mode === 'builder'" x-cloak :aria-hidden="mode !== 'builder'">
-        <div class="eyebrow lbl mb-6">Archetype (voice)</div>
-        <div class="row gap-12 mb-12" style="flex-wrap:wrap">{archetype_options}</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-          <div>
-            <label for="persona-biz-name" class="eyebrow lbl">Business name</label>
-            <input id="persona-biz-name" class="input" name="biz_name" x-model="builder.biz_name">
-          </div>
-          <div>
-            <label for="persona-biz-type" class="eyebrow lbl">Business type (e.g. florist)</label>
-            <input id="persona-biz-type" class="input" name="biz_type" x-model="builder.biz_type">
-          </div>
-          <div>
-            <label for="persona-city" class="eyebrow lbl">City (optional)</label>
-            <input id="persona-city" class="input" name="city" x-model="builder.city">
-          </div>
-          <div>
-            <label for="persona-hours" class="eyebrow lbl">Hours (optional)</label>
-            <input id="persona-hours" class="input" name="hours" x-model="builder.hours" placeholder="Tue–Sun 9am–7pm">
-          </div>
-          <div>
-            <label for="persona-never" class="eyebrow lbl">Never (one short rule)</label>
-            <input id="persona-never" class="input" name="never" x-model="builder.never">
-          </div>
-          <div>
-            <label for="persona-goal" class="eyebrow lbl">Goal (drives the conversation)</label>
-            <input id="persona-goal" class="input" name="goal" x-model="builder.goal" maxlength="120" placeholder="book a delivery slot">
-          </div>
-          <div>
-            <label for="persona-goal-url" class="eyebrow lbl">Goal URL (optional)</label>
-            <input id="persona-goal-url" class="input" name="goal_url" x-model="builder.goal_url" maxlength="200" placeholder="/book">
-          </div>
-        </div>
-        <div class="mt-12">
-          <label for="persona-catch" class="eyebrow lbl">Catch phrases (one per line)</label>
-          <textarea id="persona-catch" class="textarea" name="catch_phrases" x-model="builder.catch_phrases" rows="3"></textarea>
-        </div>
-        <div class="mt-12">
-          <label for="persona-off" class="eyebrow lbl">Off-topic subjects (one per line)</label>
-          <textarea id="persona-off" class="textarea" name="off_topics" x-model="builder.off_topics" rows="3"></textarea>
-        </div>
-        <div class="mt-12">
-          <label for="persona-handoff" class="eyebrow lbl">Hand off to a human if (one per line, max 5)</label>
-          <textarea id="persona-handoff" class="textarea" name="handoff_conditions" x-model="builder.handoff_conditions" rows="3" placeholder="refund or complaint&#10;the customer is upset"></textarea>
-        </div>
+      <div class="mt-12">
+        <label for="archetype-phrases" class="eyebrow lbl">Catch-phrases (One per line)</label>
+        <textarea id="archetype-phrases" class="textarea" name="catch_phrases" rows="4">{catch_phrases}</textarea>
       </div>
 
-      <!-- CUSTOM -->
-      <div x-show="mode === 'custom'" x-cloak :aria-hidden="mode !== 'custom'">
-        <label for="persona-custom" class="eyebrow lbl">Custom prompt middle (still envelope-wrapped at AI-call time)</label>
-        <textarea id="persona-custom" class="textarea mono" name="custom_text" x-model="customText" rows="14" maxlength="2000"></textarea>
-        <p class="muted fs-12 mt-4"><span x-text="customText.length"></span> / 2000</p>
+      <div class="mt-12">
+        <label for="archetype-off" class="eyebrow lbl">Off-topics (One per line)</label>
+        <textarea id="archetype-off" class="textarea" name="off_topics" rows="4">{off_topics}</textarea>
       </div>
-    </div>
 
-    <div class="row gap-8" style="justify-content:space-between">
-      <div>{delete_button}</div>
-      <button type="submit" class="btn primary">Save</button>
-    </div>
-  </form>
+      <div class="mt-12">
+        <label for="archetype-handoff" class="eyebrow lbl">Handoff conditions (One per line)</label>
+        <textarea id="archetype-handoff" class="textarea" name="handoff_conditions" rows="4">{handoff_conditions}</textarea>
+      </div>
+
+      <div class="mt-12">
+        <label for="archetype-rules" class="eyebrow lbl">Default Rules (JSON)</label>
+        <textarea id="archetype-rules" class="textarea mono" name="default_rules_json" rows="10" required>{rules_json}</textarea>
+      </div>
+
+
+      <div class="between pt-16 mt-16" style="border-top:1px solid var(--border-soft)">
+        <div>{delete_button}</div>
+        <button type="submit" class="btn primary">Save archetype</button>
+      </div>
+    </form>
+  </div>
 </div>"##,
-        x_data = x_data,
-        base_url = base_url,
-        h1 = h1,
-        safety_chip = safety_chip,
-        safety_detail = safety_detail,
+        if is_new { "New" } else { "Edit" },
+        delete_button = delete_button,
         action = action,
-        slug_field = slug_field,
         label = html_escape(&row_ref.label),
+        slug_field = slug_field,
         description = html_escape(&row_ref.description),
         greeting = html_escape(&row_ref.greeting),
-        archetype_options = archetype_options,
-        delete_button = delete_button,
+        voice_prompt = html_escape(&row_ref.voice_prompt),
+        never = html_escape(&row_ref.never),
+        catch_phrases = html_escape(&row_ref.catch_phrases.join("\n")),
+        off_topics = html_escape(&row_ref.off_topics.join("\n")),
+        handoff_conditions = html_escape(&row_ref.handoff_conditions.join("\n")),
+        rules_json = html_escape(&row_ref.default_rules_json),
     );
+
     manage_shell(
-        "Persona · Concierge",
+        "Archetype · Concierge",
         &content,
-        "Personas",
+        "Archetypes",
         base_url,
         locale,
     )
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn billing_overview_renders_per_currency_inputs() {
-        use crate::storage::PricingConcept::*;
-        let l = Locale::default_inr();
-        let mut cfg = crate::storage::Pricing {
-            email_pack_size: 7,
-            amounts: std::collections::BTreeMap::new(),
-        };
-        cfg.amounts.insert((UnitPriceMilli, "INR".into()), 12_345);
-        cfg.amounts.insert((UnitPriceMilli, "USD".into()), 234);
-        cfg.amounts.insert((AddressPrice, "INR".into()), 5_555);
-        cfg.amounts.insert((AddressPrice, "USD".into()), 77);
-        cfg.amounts.insert((VerificationAmount, "INR".into()), 199);
-        cfg.amounts.insert((VerificationAmount, "USD".into()), 33);
-
-        let html = billing_overview_html("https://example.test", &l, &cfg, &[], None);
-
-        // Form posts to the management settings endpoint.
-        assert!(
-            html.contains(r#"hx-post="https://example.test/manage/billing/settings""#),
-            "settings form missing"
-        );
-
-        // Per-(concept, currency) cell names.
-        assert!(html.contains(r#"name="unit_price_milli__INR""#));
-        assert!(html.contains(r#"value="12345""#));
-        assert!(html.contains(r#"name="unit_price_milli__USD""#));
-        assert!(html.contains(r#"value="234""#));
-        assert!(html.contains(r#"name="address_price__INR""#));
-        assert!(html.contains(r#"value="5555""#));
-        assert!(html.contains(r#"name="address_price__USD""#));
-        assert!(html.contains(r#"value="77""#));
-        assert!(html.contains(r#"name="verification_amount__INR""#));
-        assert!(html.contains(r#"value="199""#));
-        assert!(html.contains(r#"name="verification_amount__USD""#));
-        assert!(html.contains(r#"value="33""#));
-        assert!(html.contains(r#"name="email_pack_size""#));
-        assert!(html.contains(r#"value="7""#));
-
-        // Currency column headers carry the rusty_money symbol + name.
-        assert!(html.contains("INR"));
-        assert!(html.contains("USD"));
-        assert!(html.contains("Indian Rupee"));
-        assert!(html.contains("United States Dollar"));
-
-        // No conversion text; currencies render side-by-side, not derived.
-        assert!(!html.contains("paise_per_usd"));
-        assert!(!html.contains("USD exchange rate"));
-
-        // Add-currency picker offers an unused currency (EUR).
-        assert!(html.contains(r#"name="__currencies""#));
-        assert!(html.contains(r#"value="EUR""#));
-
-        // Recurring-grants section still rendered.
-        assert!(html.contains("Recurring credit grants"));
-        assert!(html.contains("No scheduled grants yet."));
-    }
 }

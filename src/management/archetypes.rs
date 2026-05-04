@@ -1,5 +1,5 @@
-//! Persona catalog management: list, view, create, edit, delete.
-//! Routes are dispatched from `management::mod` under `/manage/personas`.
+//! Archetype catalog management: list, view, create, edit, delete.
+//! Routes are dispatched from `management::mod` under `/manage/archetypes`.
 //!
 //! Every save resets the row's `safety_status` to Draft and enqueues a
 //! `SafetyJob` keyed on the slug. Until the queue consumer flips the
@@ -11,12 +11,9 @@ use worker::*;
 use crate::management::audit;
 use crate::storage;
 use crate::templates::management as tmpl;
-use crate::types::{
-    PersonaBuilder, PersonaCatalogRow, PersonaPreset, PersonaSafety, PersonaSafetyStatus,
-    PersonaSource,
-};
+use crate::types::{Archetype, PersonaSafety, PersonaSafetyStatus};
 
-pub async fn handle_personas(
+pub async fn handle_archetypes(
     mut req: Request,
     env: &Env,
     db: &D1Database,
@@ -26,7 +23,7 @@ pub async fn handle_personas(
     base_url: &str,
 ) -> Result<Response> {
     let parts: Vec<&str> = sub
-        .strip_prefix("personas")
+        .strip_prefix("archetypes")
         .unwrap_or("")
         .trim_start_matches('/')
         .split('/')
@@ -34,23 +31,24 @@ pub async fn handle_personas(
         .collect();
 
     let locale = crate::locale::Locale::from_request(&req);
+    let kv = env.kv("KV")?;
 
     match (method, parts.as_slice()) {
-        // List all personas (drafts + approved + rejected; operators see everything)
+        // List all archetypes (drafts + approved + rejected; operators see everything)
         (Method::Get, []) => {
-            let rows = storage::list_personas(db, false).await?;
-            Response::from_html(tmpl::personas_list_html(&rows, base_url, &locale))
+            let rows = storage::list_archetypes(db, false).await?;
+            Response::from_html(tmpl::archetypes_list_html(&rows, base_url, &locale))
         }
 
-        // New persona form
+        // New archetype form
         (Method::Get, ["new"]) => {
-            Response::from_html(tmpl::persona_edit_html(None, base_url, &locale))
+            Response::from_html(tmpl::archetype_edit_html(None, base_url, &locale))
         }
 
         // Create
         (Method::Post, ["new"]) => {
             let form: serde_json::Value = req.json().await?;
-            let row = match build_row_from_form(&form, false) {
+            let row = match build_row_from_form(&form) {
                 Ok(r) => r,
                 Err(msg) => {
                     return Response::from_html(format!(
@@ -60,23 +58,23 @@ pub async fn handle_personas(
                 }
             };
 
-            // Slug uniqueness. If it already exists, refuse so the operator
-            // doesn't accidentally overwrite an unrelated row.
-            if storage::get_persona(db, &row.slug).await?.is_some() {
+            // Slug uniqueness.
+            if storage::get_archetype(db, &row.slug).await?.is_some() {
                 return Response::from_html(
-                    r#"<div class="error">A persona with that slug already exists. Pick a different one.</div>"#
+                    r#"<div class="error">An archetype with that slug already exists.</div>"#
                         .to_string(),
                 );
             }
 
-            storage::upsert_persona(db, &row).await?;
+            storage::upsert_archetype(db, &row).await?;
+            let _ = storage::invalidate_archetype_cache(&kv, &row.slug).await;
             enqueue_catalog_safety(env, &row).await;
 
             audit::log_action(
                 db,
                 actor_email,
-                "create_persona",
-                "persona",
+                "create_archetype",
+                "archetype",
                 Some(&row.slug),
                 Some(&serde_json::json!({ "label": row.label })),
             )
@@ -85,28 +83,28 @@ pub async fn handle_personas(
             let headers = Headers::new();
             headers.set(
                 "HX-Redirect",
-                &format!("{base_url}/manage/personas/{}", row.slug),
+                &format!("{base_url}/manage/archetypes/{}", row.slug),
             )?;
             Ok(Response::empty()?.with_status(200).with_headers(headers))
         }
 
         // Edit form
         (Method::Get, [slug]) => {
-            let row = match storage::get_persona(db, slug).await? {
+            let row = match storage::get_archetype(db, slug).await? {
                 Some(r) => r,
-                None => return Response::error("Persona not found", 404),
+                None => return Response::error("Archetype not found", 404),
             };
-            Response::from_html(tmpl::persona_edit_html(Some(&row), base_url, &locale))
+            Response::from_html(tmpl::archetype_edit_html(Some(&row), base_url, &locale))
         }
 
-        // Save edits
+        // Update
         (Method::Post, [slug]) => {
-            let existing = match storage::get_persona(db, slug).await? {
+            let _existing = match storage::get_archetype(db, slug).await? {
                 Some(r) => r,
-                None => return Response::error("Persona not found", 404),
+                None => return Response::error("Archetype not found", 404),
             };
             let form: serde_json::Value = req.json().await?;
-            let mut row = match build_row_from_form(&form, existing.is_system) {
+            let mut row = match build_row_from_form(&form) {
                 Ok(r) => r,
                 Err(msg) => {
                     return Response::from_html(format!(
@@ -115,18 +113,18 @@ pub async fn handle_personas(
                     ));
                 }
             };
-            // Force-keep the slug + system flag from the row on disk.
-            row.slug = existing.slug.clone();
-            row.is_system = existing.is_system;
+            // Force-keep the slug from the row on disk.
+            row.slug = slug.to_string();
 
-            storage::upsert_persona(db, &row).await?;
+            storage::upsert_archetype(db, &row).await?;
+            let _ = storage::invalidate_archetype_cache(&kv, &row.slug).await;
             enqueue_catalog_safety(env, &row).await;
 
             audit::log_action(
                 db,
                 actor_email,
-                "edit_persona",
-                "persona",
+                "edit_archetype",
+                "archetype",
                 Some(&row.slug),
                 Some(&serde_json::json!({ "label": row.label })),
             )
@@ -135,25 +133,26 @@ pub async fn handle_personas(
             let headers = Headers::new();
             headers.set(
                 "HX-Redirect",
-                &format!("{base_url}/manage/personas/{}", row.slug),
+                &format!("{base_url}/manage/archetypes/{}", row.slug),
             )?;
             Ok(Response::empty()?.with_status(200).with_headers(headers))
         }
 
-        // Delete (refuses on system rows)
-        (Method::Post, [slug, "delete"]) => match storage::delete_persona(db, slug).await {
+        // Delete
+        (Method::Post, [slug, "delete"]) => match storage::delete_archetype(db, slug).await {
             Ok(()) => {
+                let _ = storage::invalidate_archetype_cache(&kv, slug).await;
                 audit::log_action(
                     db,
                     actor_email,
-                    "delete_persona",
-                    "persona",
+                    "delete_archetype",
+                    "archetype",
                     Some(slug),
                     None,
                 )
                 .await?;
                 let headers = Headers::new();
-                headers.set("HX-Redirect", &format!("{base_url}/manage/personas"))?;
+                headers.set("HX-Redirect", &format!("{base_url}/manage/archetypes"))?;
                 Ok(Response::empty()?.with_status(200).with_headers(headers))
             }
             Err(e) => Response::from_html(format!(
@@ -166,14 +165,8 @@ pub async fn handle_personas(
     }
 }
 
-/// Construct a `PersonaCatalogRow` from the JSON-encoded form. Validates
-/// required fields (`slug`, `label`, `description`, `greeting`) and the
-/// archetype slug. Returns `Err(message)` with a tenant-facing string
-/// when the input doesn't pass.
-fn build_row_from_form(
-    form: &serde_json::Value,
-    keep_system: bool,
-) -> std::result::Result<PersonaCatalogRow, String> {
+/// Construct an `Archetype` from the JSON-encoded form.
+fn build_row_from_form(form: &serde_json::Value) -> std::result::Result<Archetype, String> {
     let s = |k: &str| {
         form.get(k)
             .and_then(|v| v.as_str())
@@ -186,8 +179,8 @@ fn build_row_from_form(
             .and_then(|v| v.as_str())
             .unwrap_or("")
             .split('\n')
-            .map(|l| l.trim().to_string())
-            .filter(|l| !l.is_empty())
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
             .collect()
     };
 
@@ -207,64 +200,33 @@ fn build_row_from_form(
     if description.is_empty() {
         return Err("Description is required.".into());
     }
+    let voice_prompt = s("voice_prompt");
+    if voice_prompt.is_empty() {
+        return Err("Voice prompt is required.".into());
+    }
     let greeting = s("greeting");
     if greeting.is_empty() {
         return Err("Greeting is required.".into());
     }
+    let default_rules_json = s("default_rules_json");
+    if default_rules_json.is_empty() {
+        return Err("Default rules JSON is required.".into());
+    }
+    if let Err(e) = serde_json::from_str::<serde_json::Value>(&default_rules_json) {
+        return Err(format!("Invalid JSON in default rules: {}", e));
+    }
 
-    let mode = s("mode");
-    let source = if mode == "custom" {
-        let middle = s("custom_text");
-        if middle.is_empty() {
-            return Err("Custom prompt text is required.".into());
-        }
-        PersonaSource::Custom(
-            middle
-                .chars()
-                .take(crate::prompt::MAX_CUSTOM_PROMPT)
-                .collect(),
-        )
-    } else {
-        let archetype = PersonaPreset::from_slug(&s("archetype")).unwrap_or_default();
-        let biz_name = s("biz_name");
-        let biz_type = s("biz_type");
-        if biz_name.is_empty() {
-            return Err("Business name is required for the builder mode.".into());
-        }
-        if biz_type.is_empty() {
-            return Err("Business type is required for the builder mode.".into());
-        }
-        PersonaSource::Builder(PersonaBuilder {
-            archetype,
-            biz_name,
-            biz_type,
-            city: s("city"),
-            hours: s("hours"),
-            goal: s("goal").chars().take(120).collect(),
-            goal_url: crate::personas::sanitize_goal_url(&s("goal_url"))
-                .chars()
-                .take(200)
-                .collect(),
-            catch_phrases: chips("catch_phrases").into_iter().take(5).collect(),
-            off_topics: chips("off_topics").into_iter().take(10).collect(),
-            never: s("never"),
-            handoff_conditions: chips("handoff_conditions")
-                .into_iter()
-                .map(|c| c.chars().take(120).collect::<String>())
-                .take(5)
-                .collect(),
-        })
-    };
-
-    Ok(PersonaCatalogRow {
+    Ok(Archetype {
         slug,
         label,
         description,
-        source,
+        voice_prompt,
         greeting,
-        is_system: keep_system,
-        // Always reset to Pending (= Draft on disk) on save; the
-        // classifier flips it back to Approved/Rejected.
+        default_rules_json,
+        catch_phrases: chips("catch_phrases"),
+        off_topics: chips("off_topics"),
+        never: s("never"),
+        handoff_conditions: chips("handoff_conditions"),
         safety: PersonaSafety {
             status: PersonaSafetyStatus::Pending,
             checked_prompt_hash: None,
@@ -276,12 +238,12 @@ fn build_row_from_form(
     })
 }
 
-async fn enqueue_catalog_safety(env: &Env, row: &PersonaCatalogRow) {
+async fn enqueue_catalog_safety(env: &Env, row: &Archetype) {
     let job = crate::safety_queue::SafetyJob {
         target: crate::safety_queue::SafetyJobTarget::Catalog {
             slug: row.slug.clone(),
         },
-        prompt_hash: crate::helpers::sha256_hex(&row.source.active_prompt()),
+        prompt_hash: crate::helpers::sha256_hex(&row.voice_prompt),
     };
     let _ = crate::safety_queue::enqueue(env, job).await;
 }

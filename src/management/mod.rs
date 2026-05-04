@@ -1,9 +1,9 @@
 //! Management panel: super-admin routes gated by Cloudflare Access.
 //! Verifies the Cf-Access-Jwt-Assertion JWT against the team's JWKS.
 
+pub mod archetypes;
 pub mod audit;
 pub mod billing;
-pub mod personas;
 pub mod tenants;
 
 use wasm_bindgen::JsCast;
@@ -42,8 +42,8 @@ pub async fn handle_management(
         return billing::handle_billing(req, &kv, &db, sub, method, &email, &base_url).await;
     }
 
-    if sub.starts_with("personas") {
-        return personas::handle_personas(req, &env, &db, sub, method, &email, &base_url).await;
+    if sub.starts_with("archetypes") {
+        return archetypes::handle_archetypes(req, &env, &db, sub, method, &email, &base_url).await;
     }
 
     match (method, sub) {

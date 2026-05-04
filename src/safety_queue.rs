@@ -16,7 +16,7 @@ use worker::*;
 use worker::MessageExt;
 
 use crate::safety::{classify_persona, SafetyVerdict};
-use crate::storage::{get_onboarding, get_persona, save_onboarding, set_persona_safety};
+use crate::storage::{get_onboarding, save_onboarding};
 use crate::types::{PersonaSafety, PersonaSafetyStatus};
 
 /// Queue binding name in `wrangler.toml`.
@@ -104,6 +104,9 @@ async fn process_tenant_job(
     let kv = env.kv("KV").map_err(|e| {
         console_log!("Safety queue: KV binding missing: {e:?}");
     })?;
+    let db = env.d1("DB").map_err(|e| {
+        console_log!("Safety queue: D1 binding missing: {e:?}");
+    })?;
 
     let mut state = match get_onboarding(&kv, tenant_id).await {
         Ok(s) => s,
@@ -113,15 +116,31 @@ async fn process_tenant_job(
         }
     };
 
+    let voice_prompt = match &state.persona.source {
+        crate::types::PersonaSource::Builder(b) => {
+            match crate::storage::get_archetype(&db, &b.archetype_slug).await {
+                Ok(Some(a)) => a.voice_prompt,
+                _ => {
+                    console_log!(
+                        "Safety queue: archetype {} not found for tenant {tenant_id}",
+                        b.archetype_slug
+                    );
+                    String::new()
+                }
+            }
+        }
+        crate::types::PersonaSource::Custom(_) => String::new(),
+    };
+
     // Stale-check: if the active prompt has changed since enqueue, a
     // newer save has already re-enqueued. Drop this one.
-    let current_hash = state.persona.active_prompt_hash();
+    let current_hash = state.persona.active_prompt_hash(&voice_prompt);
     if current_hash != expected_hash {
         console_log!("Safety queue: stale tenant job for {tenant_id} (hash drifted), skipping");
         return Ok(());
     }
 
-    let verdict = classify_persona(env, &state.persona.active_prompt()).await;
+    let verdict = classify_persona(env, &state.persona.active_prompt(&voice_prompt)).await;
     let now = crate::helpers::now_iso();
     state.persona.safety = match verdict {
         SafetyVerdict::Approved => PersonaSafety {
@@ -129,12 +148,14 @@ async fn process_tenant_job(
             checked_prompt_hash: Some(current_hash),
             checked_at: Some(now),
             vague_reason: None,
+            ..Default::default()
         },
         SafetyVerdict::Rejected { vague_reason } => PersonaSafety {
             status: PersonaSafetyStatus::Rejected,
             checked_prompt_hash: Some(current_hash),
             checked_at: Some(now),
             vague_reason: Some(vague_reason),
+            ..Default::default()
         },
     };
 
@@ -152,24 +173,29 @@ async fn process_catalog_job(env: &Env, slug: &str) -> std::result::Result<(), (
         console_log!("Safety queue: D1 binding missing: {e:?}");
     })?;
 
-    let row = match get_persona(&db, slug).await {
+    let row = match crate::storage::get_archetype(&db, slug).await {
         Ok(Some(r)) => r,
         Ok(None) => {
-            console_log!("Safety queue: catalog persona {slug} no longer exists, skipping");
+            console_log!("Safety queue: archetype {slug} no longer exists, skipping");
             return Ok(());
         }
         Err(e) => {
-            console_log!("Safety queue: load persona {slug} failed: {e:?}");
+            console_log!("Safety queue: load archetype {slug} failed: {e:?}");
             return Err(());
         }
     };
 
-    let verdict = classify_persona(env, &row.source.active_prompt()).await;
+    let verdict = classify_persona(env, &row.voice_prompt).await;
 
-    match set_persona_safety(&db, slug, &verdict).await {
-        Ok(()) => Ok(()),
+    match crate::storage::set_archetype_safety(&db, slug, &verdict).await {
+        Ok(()) => {
+            if let Ok(kv) = env.kv("KV") {
+                let _ = crate::storage::invalidate_archetype_cache(&kv, slug).await;
+            }
+            Ok(())
+        }
         Err(e) => {
-            console_log!("Safety queue: write-back for catalog {slug} failed: {e:?}");
+            console_log!("Safety queue: write-back for archetype {slug} failed: {e:?}");
             Err(())
         }
     }

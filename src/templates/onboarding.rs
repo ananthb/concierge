@@ -237,7 +237,7 @@ pub fn welcome_html(_base_url: &str, locale: &crate::locale::Locale) -> String {
     <div class="between mb-8">
       <div>
         <h2 id="demo-chat-modal-title" class="display-sm" style="margin:0">{chat_title}</h2>
-        <p class="muted fs-13" style="margin:2px 0 0" x-text="currentPersona.is_system ? '{chat_subtitle_concierge}' : '{chat_subtitle}'"></p>
+        <p class="muted fs-13" style="margin:2px 0 0" x-text="currentPersona.slug === 'concierge' ? '{chat_subtitle_concierge}' : '{chat_subtitle}'"></p>
       </div>
       <button type="button" class="btn icon ghost" @click="open = false" aria-label="{chat_close}" style="padding:4px 10px;font-size:18px;line-height:1">&times;</button>
     </div>
@@ -269,8 +269,8 @@ pub fn welcome_html(_base_url: &str, locale: &crate::locale::Locale) -> String {
          they're playing one of that business's customers, and lists the
          business's profile so they have something concrete to ask
          about. -->
-    <div class="chat-business-card" x-show="!currentPersona.is_system && currentPersona.business" x-cloak>
-      <p class="roleplay">{chat_roleplay_prefix} <strong x-text="currentPersona.business && currentPersona.business.name"></strong>{chat_roleplay_suffix}</p>
+    <div class="chat-business-card" x-show="currentPersona.slug !== 'concierge' && currentPersona.business" x-cloak>
+ ministerial     <p class="roleplay">{chat_roleplay_prefix} <strong x-text="currentPersona.business && currentPersona.business.name"></strong>{chat_roleplay_suffix}</p>
       <p class="biz-meta">
         <span x-show="currentPersona.business && currentPersona.business.business_type"><b>{chat_lbl_type}</b><span x-text="currentPersona.business && currentPersona.business.business_type"></span></span>
         <span x-show="currentPersona.business && currentPersona.business.city"><b>{chat_lbl_city}</b><span x-text="currentPersona.business && currentPersona.business.city"></span></span>
@@ -317,7 +317,7 @@ pub fn welcome_html(_base_url: &str, locale: &crate::locale::Locale) -> String {
     <p class="chat-channels-note">{chat_channels_note}</p>
     <div class="chat-error" x-show="error" x-text="error"></div>
     <form x-show="!showCta" @submit.prevent="send()" class="row gap-8 mt-12 chat-form">
-      <textarea class="chat-input" x-model="input" :placeholder="currentPersona.is_system ? '{chat_placeholder}' : ('{chat_placeholder_prefix} ' + currentPersona.label + ' {chat_placeholder_suffix}')"
+      <textarea class="chat-input" x-model="input" :placeholder="currentPersona.slug === 'concierge' ? '{chat_placeholder}' : ('{chat_placeholder_prefix} ' + currentPersona.label + ' {chat_placeholder_suffix}')"
         :disabled="sending || !personas.length" x-ref="input" maxlength="300" rows="2"
         @keydown.enter="if (!$event.shiftKey) {{ $event.preventDefault(); send(); }}"
         autocomplete="off" autocorrect="off" autocapitalize="off"></textarea>
@@ -534,7 +534,7 @@ const HERO_CHAT_JS: &str = r##"<script nonce="__CSP_NONCE__">
     get currentPersona() {
       return findPersona(this.personaSlug, this.personas) || {
         slug: 'concierge', label: 'Concierge', description: '',
-        greeting: 'Loading…', prompt: '', is_system: true, business: null,
+        greeting: 'Loading…', prompt: '', slug: '', business: null,
       };
     },
     async init() {
@@ -1189,15 +1189,14 @@ pub fn notifications_html(
 
 pub fn replies_html(
     persona: &PersonaConfig,
+    archetypes: &[crate::types::Archetype],
     default_wait_seconds: u32,
     base_url: &str,
     locale: &crate::locale::Locale,
 ) -> String {
-    // After the archetype refactor, `PersonaSource::Preset` is gone; the
-    // wizard's preset cards now stamp an archetype onto a `Builder` source.
     // Highlight the archetype the tenant currently has saved (if any).
     let current_slug = match &persona.source {
-        PersonaSource::Builder(b) => b.archetype.slug(),
+        PersonaSource::Builder(b) => b.archetype_slug.as_str(),
         _ => "",
     };
     // Pre-fill goal + handoff fields if the tenant has already filled
@@ -1211,12 +1210,12 @@ pub fn replies_html(
         _ => (String::new(), String::new(), String::new()),
     };
 
-    let preset_cards: String = PersonaPreset::ALL
+    let preset_cards: String = archetypes
         .iter()
-        .map(|p| {
-            let slug = p.slug();
-            let label = p.label();
-            let desc = p.description();
+        .map(|a| {
+            let slug = &a.slug;
+            let label = &a.label;
+            let desc = &a.description;
             let checked = if slug == current_slug { " checked" } else { "" };
             format!(
                 r#"<label class="card p-18 preset-card" style="cursor:pointer;display:block">

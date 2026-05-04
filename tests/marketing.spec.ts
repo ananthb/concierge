@@ -65,7 +65,6 @@ async function stubDemoPersonas(page: any) {
             label: 'Concierge',
             description: 'Talks about Concierge.',
             greeting: "Hi! I'm Concierge.",
-            is_system: true,
             prompt: CONCIERGE_DEMO_PROMPT,
           },
           {
@@ -73,7 +72,6 @@ async function stubDemoPersonas(page: any) {
             label: 'Friendly Florist',
             description: 'Florist voice.',
             greeting: 'Hi there! Welcome to the shop.',
-            is_system: false,
             business: {
               name: 'Petals & Stems',
               business_type: 'florist',

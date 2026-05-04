@@ -188,9 +188,23 @@ async fn handle_auto_reply(
     // Block AI replies unless the persona has been approved AND the prompt
     // hasn't drifted since approval.
     if is_ai {
+        let voice_prompt = if let Some(p) = persona.as_ref() {
+            match &p.source {
+                crate::types::PersonaSource::Builder(b) => {
+                    match crate::storage::get_archetype_cached(kv, db, &b.archetype_slug).await {
+                        Ok(Some(a)) => a.voice_prompt,
+                        _ => String::new(),
+                    }
+                }
+                crate::types::PersonaSource::Custom(_) => String::new(),
+            }
+        } else {
+            String::new()
+        };
+
         let safe = persona
             .as_ref()
-            .map(|p| p.is_safe_to_use())
+            .map(|p| p.is_safe_to_use(&voice_prompt))
             .unwrap_or(false);
         if !safe {
             console_log!(
@@ -351,15 +365,36 @@ async fn handle_auto_reply(
                     crate::prompt::wrap(crate::prompt::HOLDING_PATTERN_MIDDLE)
                 }
                 HandoffMode::None => {
+                    let voice_prompt = if let Some(p) = persona.as_ref() {
+                        match &p.source {
+                            crate::types::PersonaSource::Builder(b) => {
+                                match crate::storage::get_archetype_cached(
+                                    kv,
+                                    db,
+                                    &b.archetype_slug,
+                                )
+                                .await
+                                {
+                                    Ok(Some(a)) => a.voice_prompt,
+                                    _ => String::new(),
+                                }
+                            }
+                            crate::types::PersonaSource::Custom(_) => String::new(),
+                        }
+                    } else {
+                        String::new()
+                    };
+
                     let persona_prompt = persona
                         .as_ref()
-                        .map(|p| p.active_prompt())
+                        .map(|p| p.active_prompt(&voice_prompt))
                         .unwrap_or_default();
                     let combined = if persona_prompt.is_empty() {
                         rule_prompt.clone()
                     } else {
                         format!("{persona_prompt}\n\n{rule_prompt}")
                     };
+
                     // Wrap the tenant's persona+rule text in the
                     // safety/alignment envelope. The envelope is
                     // non-editable and ships globally; the bookends

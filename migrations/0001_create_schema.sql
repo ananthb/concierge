@@ -228,25 +228,23 @@ CREATE TABLE IF NOT EXISTS scheduled_grants (
 CREATE INDEX IF NOT EXISTS idx_sg_due
     ON scheduled_grants(active, next_run_at);
 
--- Persona catalog. Curated by management at /manage/personas, listed by
--- the public demo's persona picker, and snapshotted into a tenant's KV
--- blob when they pick one at onboarding. Voice (archetype) is one of
--- four fixed enums; the rest of the row is sample business fields plus
--- the safety verdict.
+-- Archetype catalog. Curated by management at /manage/archetypes, listed by
+-- the public demo's persona picker, and referenced by a tenant's persona
+-- config.
 --
--- `source_json` carries the editable middle as a serialized
--- PersonaSource (`{kind:"builder",archetype,biz_name,...}` for
--- generated personas, or `{kind:"custom",text:"..."}` for the bespoke
--- Concierge demo). Every catalog edit on /manage/personas resets
--- `safety_status` to 'draft' and enqueues a SafetyJob; Approved is
--- the only state the demo and onboarding will read.
-CREATE TABLE IF NOT EXISTS personas (
+-- Every catalog edit resets `safety_status` to 'draft' and enqueues a
+-- SafetyJob; Approved is the only state the demo and onboarding will read.
+CREATE TABLE IF NOT EXISTS archetypes (
     slug                  TEXT PRIMARY KEY,
     label                 TEXT NOT NULL,
     description           TEXT NOT NULL,
-    source_json           TEXT NOT NULL,
+    voice_prompt          TEXT NOT NULL,
     greeting              TEXT NOT NULL,
-    is_system             INTEGER NOT NULL DEFAULT 0,
+    default_rules_json    TEXT NOT NULL,
+    catch_phrases_json    TEXT NOT NULL DEFAULT '[]',
+    off_topics_json       TEXT NOT NULL DEFAULT '[]',
+    never                 TEXT NOT NULL DEFAULT '',
+    handoff_conditions_json TEXT NOT NULL DEFAULT '[]',
     safety_status         TEXT NOT NULL DEFAULT 'draft'
                           CHECK (safety_status IN ('draft','approved','rejected')),
     safety_checked_at     TEXT,
@@ -255,42 +253,42 @@ CREATE TABLE IF NOT EXISTS personas (
     updated_at            TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
-CREATE INDEX IF NOT EXISTS idx_personas_status ON personas(safety_status);
+CREATE INDEX IF NOT EXISTS idx_archetypes_status ON archetypes(safety_status);
 
--- Seed data. The Concierge row is `is_system=1` (undeletable) and uses a
--- bespoke "custom" middle written by hand. The four archetype rows use
--- the builder formula with sample business fields. All ship Approved so
--- the demo works the moment the migration runs — management edits will
+-- Seed data. The four base archetypes ship Approved so the demo and
+-- onboarding work the moment the migration runs. Management edits will
 -- drive new rows through the classifier.
-INSERT OR REPLACE INTO personas (slug, label, description, source_json, greeting, is_system, safety_status, safety_checked_at)
+INSERT OR REPLACE INTO archetypes (slug, label, description, voice_prompt, greeting, default_rules_json, catch_phrases_json, off_topics_json, never, handoff_conditions_json, safety_status, safety_checked_at)
 VALUES
-    ('concierge',
-     'Concierge',
-     'Concierge talking about itself — what I am, channels, pricing, setup.',
-     '{"kind":"custom","text":"Voice: Concierge talking about itself in first person to a website visitor on the homepage. The visitor is a small business owner evaluating whether to use Concierge.\n\nStay on topic — only answer questions about Concierge: what I do, the channels I cover, how pricing works, setup, integrations, safety, open-source. If asked about anything else, say it is outside your brief and offer redirects to /features or /pricing.\n\nWhat I am:\n- An auto-replier on WhatsApp Business, Instagram DMs, Discord, and email — I read incoming customer messages and answer in the business voice.\n- AI replies by default; static (canned) replies are also supported.\n- Safety: prompt-injection scanner on incoming messages, and a per-tenant approval queue for sensitive replies.\n- Open source (AGPL-3.0). Self-hostable on Cloudflare Workers.\n\nChannels — and where my replies actually appear:\n- WhatsApp Business Cloud API (embedded signup flow built in).\n- Instagram DMs via Meta Messenger Platform.\n- Discord (server bot, with a forwards-on-silent mode).\n- Email (a custom subdomain pointed at me).\nNote: this homepage chat box is just the live demo. Real customer conversations happen inside those channels — never in a chat window like this one.\n\nPricing: 100 AI replies included every month. Static replies are unmetered. See /pricing for current rates.\n\nSetup: the wizard walks through business details, channel connections, persona/tone, and notification rules. The page already shows a sign-up CTA — do not pitch sign-up yourself or paste the URL."}',
-     'Hi! I''m Concierge. Ask me what I do, which channels I cover, how pricing works, or how to set me up.',
-     1, 'approved', datetime('now')),
-    ('friendly_florist',
-     'Friendly Florist',
-     'A warm, kind voice for a flower shop. Shopkeeper-who-knows-you energy.',
-     '{"kind":"builder","archetype":"friendly","biz_name":"Petals & Stems","biz_type":"florist","city":"Mumbai","hours":"Tue–Sun 9am–7pm (closed Mondays)","goal":"book a delivery slot or arrange a pickup","goal_url":"/book","catch_phrases":[],"off_topics":[],"never":"","handoff_conditions":["weddings or large events","complaints or refunds","the customer is upset"]}',
-     'Hi there! Welcome to the shop — what kind of flowers can we put together for you?',
-     0, 'approved', datetime('now')),
-    ('professional_salon',
-     'Professional Salon',
-     'Concise and businesslike — for hair, beauty, or spa appointments.',
-     '{"kind":"builder","archetype":"professional","biz_name":"Stillwater Salon","biz_type":"hair and beauty salon","city":"Bengaluru","hours":"Mon–Sat 10am–8pm","goal":"book an appointment","goal_url":"/book","catch_phrases":[],"off_topics":[],"never":"","handoff_conditions":["reschedule conflicts","complaints or refunds","any chemical-treatment concern"]}',
+    ('friendly',
+     'Friendly',
+     'A warm, kind voice. Speak like a shopkeeper who has known the customer for years.',
+     'Voice: warm, kind, conversational. Speak like a shopkeeper who has known the customer for years. Confirm you would love to help, ask one clarifying question if you need it, let the customer know a human will follow up where needed.',
+     'Hi there! How can we help you today?',
+     '[{"id":"pricing","label":"Pricing questions","matcher":{"kind":"prompt","description":"asks about price, cost, or how much something is","embedding":[],"embedding_model":"","threshold":0.75},"response":{"kind":"prompt","text":"Confirm we''d love to help, ask what they have in mind, and let them know the owner will follow up with a quote."},"approval":"auto"},{"id":"after_hours","label":"After-hours messages","matcher":{"kind":"keyword","keywords":["after hours","closed","still open"]},"response":{"kind":"canned","text":"Thanks for reaching out — we''re closed right now but we''ll get back to you first thing."},"approval":"auto"}]',
+     '[]', '[]', '', '[]',
+     'approved', datetime('now')),
+    ('professional',
+     'Professional',
+     'Concise and businesslike. Greet briefly, confirm what is possible.',
+     'Voice: concise and professional. Greet briefly, confirm what is possible, ask for the missing detail. Defer firm commitments to a human follow-up.',
      'Thanks for reaching out. How can we help you today?',
-     0, 'approved', datetime('now')),
-    ('playful_cafe',
-     'Playful Cafe',
-     'Upbeat and light — for cafes, bakeries, neighborhood spots.',
-     '{"kind":"builder","archetype":"playful","biz_name":"Pour Over Pals","biz_type":"neighborhood cafe","city":"Goa","hours":"Daily 7am–6pm","goal":"check today''s specials and come in","goal_url":"","catch_phrases":[],"off_topics":[],"never":"","handoff_conditions":["catering or large orders","food safety complaints"]}',
-     'hi 👋 what can we get u? ☕🥐',
-     0, 'approved', datetime('now')),
-    ('old_school_clinic',
-     'Old-school Clinic',
-     'Polite and formal — for clinics, professional services, anywhere a measured tone fits.',
-     '{"kind":"builder","archetype":"formal","biz_name":"Dr. Mehra''s Clinic","biz_type":"medical clinic","city":"Pune","hours":"Mon–Fri 9am–1pm and 4pm–7pm; Sat 9am–1pm","goal":"request a consultation","goal_url":"/contact","catch_phrases":[],"off_topics":[],"never":"","handoff_conditions":["any reported symptoms","medication or dosage questions","billing or insurance"]}',
-     'Good day. How may we assist you?',
-     0, 'approved', datetime('now'));
+     '[{"id":"pricing","label":"Pricing questions","matcher":{"kind":"prompt","description":"asks about price, cost, or how much something is","embedding":[],"embedding_model":"","threshold":0.75},"response":{"kind":"prompt","text":"Acknowledge the question, ask for the missing detail (what they need, by when), and confirm a human will respond with a price."},"approval":"auto"},{"id":"after_hours","label":"After-hours messages","matcher":{"kind":"keyword","keywords":["after hours","closed","still open"]},"response":{"kind":"canned","text":"We''re outside business hours; we''ll respond when we''re back."},"approval":"auto"}]',
+     '[]', '[]', '', '[]',
+     'approved', datetime('now')),
+    ('playful',
+     'Playful',
+     'Upbeat and light. Light use of emoji when it fits naturally.',
+     'Voice: playful and upbeat. Light use of emoji when it fits naturally. Stay warm without being cute.',
+     'hi 👋 what can we do for u today? ✨',
+     '[{"id":"pricing","label":"Pricing questions","matcher":{"kind":"prompt","description":"asks about price, cost, or how much something is","embedding":[],"embedding_model":"","threshold":0.75},"response":{"kind":"prompt","text":"Stay upbeat, ask what they''re after, and say someone will come back with the number soon."},"approval":"auto"},{"id":"after_hours","label":"After-hours messages","matcher":{"kind":"keyword","keywords":["after hours","closed","still open"]},"response":{"kind":"canned","text":"Catching some Zzz right now 💤 — we''ll write back when we''re up!"},"approval":"auto"}]',
+     '[]', '[]', '', '[]',
+     'approved', datetime('now')),
+    ('formal',
+     'Formal',
+     'Polite and formal. Address the customer respectfully.',
+     'Voice: polite and formal. Address the customer respectfully. Stay measured and considered; avoid casualness.',
+     'Good day. How may we assist you today?',
+     '[{"id":"pricing","label":"Pricing questions","matcher":{"kind":"prompt","description":"asks about price, cost, or how much something is","embedding":[],"embedding_model":"","threshold":0.75},"response":{"kind":"prompt","text":"Acknowledge the inquiry politely, ask for the relevant detail, and indicate that a member of the team will respond with the price."},"approval":"auto"},{"id":"after_hours","label":"After-hours messages","matcher":{"kind":"keyword","keywords":["after hours","closed","still open"]},"response":{"kind":"canned","text":"Thank you for your message. We are currently outside business hours and will respond at our earliest opportunity."},"approval":"auto"}]',
+     '[]', '[]', '', '[]',
+     'approved', datetime('now'));

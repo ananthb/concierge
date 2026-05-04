@@ -7,10 +7,10 @@
 use worker::*;
 
 use crate::personas;
-use crate::storage::{get_onboarding, save_onboarding};
+use crate::storage::{get_archetype, get_onboarding, save_onboarding};
 use crate::templates::persona::persona_admin_html;
 use crate::types::{
-    PersonaBuilder, PersonaConfig, PersonaPreset, PersonaSafety, PersonaSafetyStatus, PersonaSource,
+    PersonaBuilder, PersonaConfig, PersonaSafety, PersonaSafetyStatus, PersonaSource,
 };
 
 /// Maximum length of the user-provided custom prompt. Re-export of the
@@ -26,14 +26,19 @@ pub async fn handle_persona_admin(
     tenant_id: &str,
 ) -> Result<Response> {
     let kv = env.kv("KV")?;
+    let db = env.d1("DB")?;
     let method = req.method();
     let locale = crate::locale::Locale::from_request(&req);
     let mut state = get_onboarding(&kv, tenant_id).await?;
+    let archetypes = crate::storage::list_archetypes(&db, true).await?;
 
     match (method, path) {
-        (Method::Get, "/admin/persona") => {
-            Response::from_html(persona_admin_html(&state.persona, base_url, &locale))
-        }
+        (Method::Get, "/admin/persona") => Response::from_html(persona_admin_html(
+            &state.persona,
+            &archetypes,
+            base_url,
+            &locale,
+        )),
 
         (Method::Post, "/admin/persona") => {
             let form: serde_json::Value = req.json().await?;
@@ -62,10 +67,11 @@ pub async fn handle_persona_admin(
                             .take(10)
                             .collect()
                     };
-                    let archetype = PersonaPreset::from_slug(&s("archetype")).unwrap_or_default();
+                    let archetype_slug = s("archetype_slug");
                     PersonaSource::Builder(PersonaBuilder {
-                        archetype,
+                        archetype_slug,
                         biz_name: s("biz_name"),
+
                         biz_type: s("biz_type"),
                         city: s("city"),
                         hours: s("hours"),
@@ -106,6 +112,15 @@ pub async fn handle_persona_admin(
                 }
             };
 
+            let db = env.d1("DB")?;
+            let voice_prompt = match &new_source {
+                PersonaSource::Builder(b) => match get_archetype(&db, &b.archetype_slug).await? {
+                    Some(a) => a.voice_prompt,
+                    None => String::new(),
+                },
+                PersonaSource::Custom(_) => String::new(),
+            };
+
             // Build a candidate persona and check if its prompt actually
             // differs from what we already vetted. If yes: status -> Pending
             // and enqueue. If no (e.g. user re-selected the same preset):
@@ -114,7 +129,7 @@ pub async fn handle_persona_admin(
                 source: new_source,
                 safety: state.persona.safety.clone(),
             };
-            let new_hash = new_persona.active_prompt_hash();
+            let new_hash = new_persona.active_prompt_hash(&voice_prompt);
             let prompt_changed =
                 state.persona.safety.checked_prompt_hash.as_deref() != Some(new_hash.as_str());
 
@@ -166,9 +181,14 @@ pub async fn handle_persona_admin(
                     .filter(|s| !s.is_empty())
                     .collect()
             };
-            let archetype = PersonaPreset::from_slug(&s("archetype")).unwrap_or_default();
+            let archetype_slug = s("archetype_slug");
+            let db = env.d1("DB")?;
+            let voice_prompt = match get_archetype(&db, &archetype_slug).await? {
+                Some(a) => a.voice_prompt,
+                None => String::new(),
+            };
             let builder = PersonaBuilder {
-                archetype,
+                archetype_slug,
                 biz_name: s("biz_name"),
                 biz_type: s("biz_type"),
                 city: s("city"),
@@ -187,7 +207,8 @@ pub async fn handle_persona_admin(
                     .take(5)
                     .collect(),
             };
-            let prompt = personas::generate(&builder);
+            let prompt = personas::generate(&builder, &voice_prompt);
+
             // Returned to `#prompt-preview` with `hx-swap="outerHTML"`. The
             // bookends are static neighbours rendered server-side once.
             Response::from_html(format!(

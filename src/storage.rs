@@ -166,42 +166,81 @@ pub async fn count_tenants(db: &D1Database) -> Result<usize> {
 /// Default persona slug surfaced when the demo doesn't carry one.
 pub const DEMO_DEFAULT_PERSONA_SLUG: &str = "concierge";
 
-/// List rows from the personas catalog. `only_approved` filters by
+/// List rows from the archetypes catalog. `only_approved` filters by
 /// `safety_status = 'approved'`. Used for the demo picker and the
 /// tenant-onboarding starter set; the management UI passes `false` to
 /// see drafts and rejections too.
-pub async fn list_personas(
+pub async fn list_archetypes(
     db: &D1Database,
     only_approved: bool,
-) -> Result<Vec<crate::types::PersonaCatalogRow>> {
+) -> Result<Vec<crate::types::Archetype>> {
     let stmt = if only_approved {
-        "SELECT * FROM personas WHERE safety_status = 'approved' ORDER BY is_system DESC, label ASC"
+        "SELECT * FROM archetypes WHERE safety_status = 'approved' ORDER BY label ASC"
     } else {
-        "SELECT * FROM personas ORDER BY is_system DESC, label ASC"
+        "SELECT * FROM archetypes ORDER BY label ASC"
     };
     let results = db.prepare(stmt).all().await?;
     let rows: Vec<serde_json::Value> = results.results()?;
-    Ok(rows.iter().filter_map(row_to_persona).collect())
+    Ok(rows.iter().filter_map(row_to_archetype).collect())
 }
 
-pub async fn get_persona(
-    db: &D1Database,
-    slug: &str,
-) -> Result<Option<crate::types::PersonaCatalogRow>> {
+pub async fn get_archetype(db: &D1Database, slug: &str) -> Result<Option<crate::types::Archetype>> {
     let row = db
-        .prepare("SELECT * FROM personas WHERE slug = ?")
+        .prepare("SELECT * FROM archetypes WHERE slug = ?")
         .bind(&[slug.into()])?
         .first::<serde_json::Value>(None)
         .await?;
-    Ok(row.as_ref().and_then(row_to_persona))
+    Ok(row.as_ref().and_then(row_to_archetype))
 }
 
-/// Create or update a persona row. The caller is responsible for
+/// Backstop TTL for the per-slug KV cache. Writers (`upsert_archetype`,
+/// `delete_archetype`, `set_archetype_safety` callers) invalidate
+/// explicitly; the TTL just bounds drift if an invalidation is ever
+/// missed.
+const ARCHETYPE_CACHE_TTL_SECS: u64 = 300;
+
+fn archetype_cache_key(slug: &str) -> String {
+    format!("archetype:{slug}")
+}
+
+/// Hot-path archetype lookup. Reads from KV first; on miss, falls back
+/// to D1 and writes the result back to KV with a short TTL. Writers
+/// invalidate via [`invalidate_archetype_cache`] so the latest row
+/// (including a since-Rejected safety verdict) propagates immediately.
+pub async fn get_archetype_cached(
+    kv: &kv::KvStore,
+    db: &D1Database,
+    slug: &str,
+) -> Result<Option<crate::types::Archetype>> {
+    let key = archetype_cache_key(slug);
+    if let Ok(Some(s)) = kv.get(&key).text().await {
+        if let Ok(a) = serde_json::from_str::<crate::types::Archetype>(&s) {
+            return Ok(Some(a));
+        }
+    }
+    let row = get_archetype(db, slug).await?;
+    if let Some(ref a) = row {
+        if let Ok(serialized) = serde_json::to_string(a) {
+            if let Ok(put) = kv.put(&key, serialized) {
+                let _ = put.expiration_ttl(ARCHETYPE_CACHE_TTL_SECS).execute().await;
+            }
+        }
+    }
+    Ok(row)
+}
+
+/// Drop the cached archetype row for `slug`. Call after every write
+/// (`upsert_archetype`, `delete_archetype`, `set_archetype_safety`) so
+/// the next reader gets fresh data.
+pub async fn invalidate_archetype_cache(kv: &kv::KvStore, slug: &str) -> Result<()> {
+    kv.delete(&archetype_cache_key(slug)).await?;
+    Ok(())
+}
+
+/// Create or update an archetype row. The caller is responsible for
 /// resetting the safety verdict to Draft and enqueueing a SafetyJob
-/// before calling this. `upsert_persona` itself is dumb.
-pub async fn upsert_persona(db: &D1Database, row: &crate::types::PersonaCatalogRow) -> Result<()> {
-    let source_json = serde_json::to_string(&row.source)
-        .map_err(|e| Error::from(format!("serialise persona source: {e}")))?;
+/// before calling this. `upsert_archetype` itself is dumb.
+pub async fn upsert_archetype(db: &D1Database, row: &crate::types::Archetype) -> Result<()> {
     let safety_status = match row.safety.status {
         crate::types::PersonaSafetyStatus::Approved => "approved",
         crate::types::PersonaSafetyStatus::Rejected => "rejected",
@@ -215,16 +254,26 @@ pub async fn upsert_persona(db: &D1Database, row: &crate::types::PersonaCatalogR
         Some(s) => s.as_str().into(),
         None => JsValue::NULL,
     };
+    let catch_phrases_json = serde_json::to_string(&row.catch_phrases)?;
+    let off_topics_json = serde_json::to_string(&row.off_topics)?;
+    let handoff_conditions_json = serde_json::to_string(&row.handoff_conditions)?;
+
     db.prepare(
-        "INSERT INTO personas (slug, label, description, source_json, greeting, is_system,
+        "INSERT INTO archetypes (slug, label, description, voice_prompt, greeting, default_rules_json,
+                                catch_phrases_json, off_topics_json, never, handoff_conditions_json,
                                 safety_status, safety_checked_at, safety_vague_reason,
                                 created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
          ON CONFLICT(slug) DO UPDATE SET
            label = excluded.label,
            description = excluded.description,
-           source_json = excluded.source_json,
+           voice_prompt = excluded.voice_prompt,
            greeting = excluded.greeting,
+           default_rules_json = excluded.default_rules_json,
+           catch_phrases_json = excluded.catch_phrases_json,
+           off_topics_json = excluded.off_topics_json,
+           never = excluded.never,
+           handoff_conditions_json = excluded.handoff_conditions_json,
            safety_status = excluded.safety_status,
            safety_checked_at = excluded.safety_checked_at,
            safety_vague_reason = excluded.safety_vague_reason,
@@ -234,9 +283,13 @@ pub async fn upsert_persona(db: &D1Database, row: &crate::types::PersonaCatalogR
         row.slug.as_str().into(),
         row.label.as_str().into(),
         row.description.as_str().into(),
-        source_json.as_str().into(),
+        row.voice_prompt.as_str().into(),
         row.greeting.as_str().into(),
-        JsValue::from(if row.is_system { 1.0 } else { 0.0 }),
+        row.default_rules_json.as_str().into(),
+        catch_phrases_json.into(),
+        off_topics_json.into(),
+        row.never.as_str().into(),
+        handoff_conditions_json.into(),
         safety_status.into(),
         checked_at,
         vague_reason,
@@ -246,27 +299,18 @@ pub async fn upsert_persona(db: &D1Database, row: &crate::types::PersonaCatalogR
     Ok(())
 }
 
-/// Hard-delete a persona row. Refuses with an error when the row's
-/// `is_system` flag is set (the homepage Concierge demo can't be
-/// removed).
-pub async fn delete_persona(db: &D1Database, slug: &str) -> Result<()> {
-    if let Some(row) = get_persona(db, slug).await? {
-        if row.is_system {
-            return Err(Error::from("Cannot delete a system persona"));
-        }
-    } else {
-        return Ok(()); // already gone, nothing to do
-    }
-    db.prepare("DELETE FROM personas WHERE slug = ?")
+/// Hard-delete an archetype row.
+pub async fn delete_archetype(db: &D1Database, slug: &str) -> Result<()> {
+    db.prepare("DELETE FROM archetypes WHERE slug = ?")
         .bind(&[slug.into()])?
         .run()
         .await?;
     Ok(())
 }
 
-/// Record the safety classifier's verdict for a persona row. Called by
+/// Record the safety classifier's verdict for an archetype row. Called by
 /// the queue consumer after the classifier returns.
-pub async fn set_persona_safety(
+pub async fn set_archetype_safety(
     db: &D1Database,
     slug: &str,
     verdict: &crate::safety::SafetyVerdict,
@@ -278,7 +322,7 @@ pub async fn set_persona_safety(
         }
     };
     db.prepare(
-        "UPDATE personas
+        "UPDATE archetypes
             SET safety_status = ?, safety_checked_at = datetime('now'),
                 safety_vague_reason = ?, updated_at = datetime('now')
             WHERE slug = ?",
@@ -289,14 +333,34 @@ pub async fn set_persona_safety(
     Ok(())
 }
 
-fn row_to_persona(row: &serde_json::Value) -> Option<crate::types::PersonaCatalogRow> {
+fn row_to_archetype(row: &serde_json::Value) -> Option<crate::types::Archetype> {
     let slug = row.get("slug")?.as_str()?.to_string();
     let label = row.get("label")?.as_str()?.to_string();
     let description = row.get("description")?.as_str()?.to_string();
-    let source_json = row.get("source_json")?.as_str()?;
-    let source: crate::types::PersonaSource = serde_json::from_str(source_json).ok()?;
+    let voice_prompt = row.get("voice_prompt")?.as_str()?.to_string();
     let greeting = row.get("greeting")?.as_str()?.to_string();
-    let is_system = row.get("is_system").and_then(|v| v.as_i64()).unwrap_or(0) != 0;
+    let default_rules_json = row.get("default_rules_json")?.as_str()?.to_string();
+    let catch_phrases = row
+        .get("catch_phrases_json")
+        .and_then(|v| v.as_str())
+        .and_then(|s| serde_json::from_str(s).ok())
+        .unwrap_or_default();
+    let off_topics = row
+        .get("off_topics_json")
+        .and_then(|v| v.as_str())
+        .and_then(|s| serde_json::from_str(s).ok())
+        .unwrap_or_default();
+    let never = row
+        .get("never")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let handoff_conditions = row
+        .get("handoff_conditions_json")
+        .and_then(|v| v.as_str())
+        .and_then(|s| serde_json::from_str(s).ok())
+        .unwrap_or_default();
+
     let safety_status = match row
         .get("safety_status")
         .and_then(|v| v.as_str())
@@ -318,13 +382,17 @@ fn row_to_persona(row: &serde_json::Value) -> Option<crate::types::PersonaCatalo
             .and_then(|v| v.as_str())
             .map(|s| s.to_string()),
     };
-    Some(crate::types::PersonaCatalogRow {
+    Some(crate::types::Archetype {
         slug,
         label,
         description,
-        source,
+        voice_prompt,
         greeting,
-        is_system,
+        default_rules_json,
+        catch_phrases,
+        off_topics,
+        never,
+        handoff_conditions,
         safety,
         created_at: row
             .get("created_at")
