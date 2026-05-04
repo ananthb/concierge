@@ -174,7 +174,7 @@ pub(crate) async fn generate_demo_businesses(
 
 fn json_response(data: DemoPersonasResponse) -> Result<Response> {
     let body = serde_json::to_string(&data)?;
-    let mut headers = Headers::new();
+    let headers = Headers::new();
     headers.set("Content-Type", "application/json")?;
     headers.set("Cache-Control", "no-store")?;
     Ok(Response::ok(body)?.with_headers(headers))

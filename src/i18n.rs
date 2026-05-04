@@ -22,9 +22,6 @@ use crate::locale::Locale;
 const EN_IN_FTL: &str = include_str!("../assets/locales/en-IN/messages.ftl");
 const EN_US_FTL: &str = include_str!("../assets/locales/en-US/messages.ftl");
 
-/// Canonical bundle: every key MUST exist here; other bundles can override.
-const CANONICAL_TAG: &str = "en-IN";
-
 pub struct Translator {
     en_in: FluentBundle<FluentResource>,
     en_us: FluentBundle<FluentResource>,

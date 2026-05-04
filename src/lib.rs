@@ -212,7 +212,7 @@ async fn fetch(req: Request, env: Env, _ctx: Context) -> Result<Response> {
     // and `<style>` tag they produce; nonced tags then satisfy a strict
     // `script-src 'nonce-…'` (no `'unsafe-inline'`).
     let status = resp.status_code();
-    let mut headers = resp.headers().clone();
+    let headers = resp.headers().clone();
     let body = resp.text().await?;
     let nonce = helpers::generate_token()?;
     let body = body.replace(CSP_NONCE_PLACEHOLDER, &nonce);

@@ -41,23 +41,6 @@ pub async fn create_order_with_notes(
     razorpay_post(key_id, key_secret, "/orders", &payload).await
 }
 
-/// Create a Razorpay customer (for repeat purchases).
-pub async fn create_customer(
-    key_id: &str,
-    key_secret: &str,
-    email: &str,
-    name: Option<&str>,
-) -> Result<serde_json::Value> {
-    let mut payload = serde_json::json!({
-        "email": email,
-    });
-    if let Some(n) = name {
-        payload["name"] = serde_json::Value::String(n.to_string());
-    }
-
-    razorpay_post(key_id, key_secret, "/customers", &payload).await
-}
-
 /// Refund a captured Razorpay payment in full. Used by the webhook to
 /// auto-refund the sign-up verification charge once we've recorded the
 /// capture. Returns the API response so callers can log the refund id.

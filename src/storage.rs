@@ -823,36 +823,6 @@ pub async fn delete_tenant_data(kv: &kv::KvStore, db: &D1Database, tenant_id: &s
 }
 
 // ============================================================================
-// D1 Operations (WhatsApp Messages)
-// ============================================================================
-
-pub async fn save_whatsapp_message(
-    db: &D1Database,
-    id: &str,
-    whatsapp_account_id: &str,
-    direction: &str,
-    from_number: &str,
-    to_number: &str,
-    tenant_id: &str,
-) -> Result<()> {
-    let stmt = db.prepare(
-        "INSERT INTO whatsapp_messages (id, whatsapp_account_id, direction, from_number, to_number, tenant_id, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, datetime('now'))",
-    );
-    stmt.bind(&[
-        id.into(),
-        whatsapp_account_id.into(),
-        direction.into(),
-        from_number.into(),
-        to_number.into(),
-        tenant_id.into(),
-    ])?
-    .run()
-    .await?;
-    Ok(())
-}
-
-// ============================================================================
 // D1 Operations (Lead Form Submissions)
 // ============================================================================
 
@@ -878,36 +848,6 @@ pub async fn save_lead_form_submission(
         whatsapp_account_id.into(),
         message_sent.into(),
         reply_mode.into(),
-        tenant_id.into(),
-    ])?
-    .run()
-    .await?;
-    Ok(())
-}
-
-// ============================================================================
-// D1 Operations (Instagram Messages)
-// ============================================================================
-
-pub async fn save_instagram_message(
-    db: &D1Database,
-    id: &str,
-    instagram_account_id: &str,
-    direction: &str,
-    sender_id: &str,
-    recipient_id: &str,
-    tenant_id: &str,
-) -> Result<()> {
-    let stmt = db.prepare(
-        "INSERT INTO instagram_messages (id, instagram_account_id, direction, sender_id, recipient_id, tenant_id, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, datetime('now'))",
-    );
-    stmt.bind(&[
-        id.into(),
-        instagram_account_id.into(),
-        direction.into(),
-        sender_id.into(),
-        recipient_id.into(),
         tenant_id.into(),
     ])?
     .run()
@@ -1075,20 +1015,6 @@ pub async fn get_email_reverse_alias(
         .map_err(|e| Error::from(e.to_string()))
 }
 
-/// Save a reverse alias mapping (30-day TTL).
-pub async fn save_email_reverse_alias(
-    kv: &kv::KvStore,
-    reverse_address: &str,
-    alias: &EmailReverseAlias,
-) -> Result<()> {
-    let key = format!("email_reverse:{reverse_address}");
-    kv.put(&key, serde_json::to_string(alias)?)?
-        .expiration_ttl(30 * 24 * 60 * 60)
-        .execute()
-        .await?;
-    Ok(())
-}
-
 // ============================================================================
 // Unified Message Storage
 // ============================================================================
@@ -1179,37 +1105,6 @@ pub async fn update_message_conversation_id(
         .run()
         .await?;
     Ok(())
-}
-
-/// Get recent unified messages for a tenant.
-pub async fn get_messages(
-    db: &D1Database,
-    tenant_id: &str,
-    channel: Option<&Channel>,
-    limit: u32,
-) -> Result<Vec<serde_json::Value>> {
-    if let Some(ch) = channel {
-        let stmt = db.prepare(
-            "SELECT * FROM messages WHERE tenant_id = ? AND channel = ? ORDER BY created_at DESC LIMIT ?",
-        );
-        let result = stmt
-            .bind(&[
-                tenant_id.into(),
-                ch.as_str().into(),
-                JsValue::from(limit as f64),
-            ])?
-            .all()
-            .await?;
-        result.results::<serde_json::Value>()
-    } else {
-        let stmt = db
-            .prepare("SELECT * FROM messages WHERE tenant_id = ? ORDER BY created_at DESC LIMIT ?");
-        let result = stmt
-            .bind(&[tenant_id.into(), JsValue::from(limit as f64)])?
-            .all()
-            .await?;
-        result.results::<serde_json::Value>()
-    }
 }
 
 // ============================================================================

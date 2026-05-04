@@ -12,8 +12,6 @@ use botrelay::discord::{
 };
 use worker::*;
 
-use crate::helpers::generate_id;
-use crate::storage;
 use crate::types::*;
 
 /// Inbound preview line cap shown on a Discord draft embed.
@@ -29,106 +27,6 @@ fn bot_from_env(env: &Env) -> Option<DiscordBot> {
         return None;
     }
     Some(DiscordBot::new(token, app_id, public_key))
-}
-
-/// Post a forwarded inbound message to Discord with Reply/Drop buttons.
-/// Stores a `ConversationContext` in KV keyed by the generated id so the
-/// subsequent button click can look up the origin channel. Returns the posted
-/// Discord message id.
-pub async fn post_forwarded_message(
-    env: &Env,
-    msg: &InboundMessage,
-    discord_channel_id: &str,
-    rule_name: Option<&str>,
-) -> Result<String> {
-    let bot = bot_from_env(env).ok_or_else(|| Error::from("Discord not configured"))?;
-    let kv = env.kv("KV")?;
-
-    let ctx = ConversationContext {
-        id: generate_id(),
-        discord_channel_id: discord_channel_id.to_string(),
-        origin_channel: msg.channel.clone(),
-        origin_sender: msg.sender.clone(),
-        origin_recipient: msg.recipient.clone(),
-        tenant_id: msg.tenant_id.clone(),
-        channel_account_id: msg.channel_account_id.clone(),
-        reply_metadata: msg.raw_metadata.clone(),
-        ai_draft: None,
-        created_at: crate::helpers::now_iso(),
-        handoff_signaled_at: None,
-        handoff_notified: false,
-        // Relay path (no AI): no active conversation. The downstream
-        // outbound row is logged with NULL conversation_id.
-        conversation_id: String::new(),
-    };
-
-    let (color, channel_label) = match msg.channel {
-        Channel::WhatsApp => (0x25D366u32, "WhatsApp"),
-        Channel::Instagram => (0xE4405F, "Instagram"),
-        Channel::Email => (0xF38020, "Email"),
-        Channel::Discord => (0x5865F2, "Discord"),
-    };
-
-    let body_preview = if msg.body.len() > 1000 {
-        format!("{}...", &msg.body[..997])
-    } else {
-        msg.body.clone()
-    };
-
-    let mut fields = vec![
-        EmbedField {
-            name: "From".into(),
-            value: format!(
-                "{}{}",
-                msg.sender,
-                msg.sender_name
-                    .as_ref()
-                    .map(|n| format!(" ({n})"))
-                    .unwrap_or_default()
-            ),
-            inline: true,
-        },
-        EmbedField {
-            name: "Channel".into(),
-            value: channel_label.to_string(),
-            inline: true,
-        },
-    ];
-    if let Some(ref subj) = msg.subject {
-        fields.push(EmbedField {
-            name: "Subject".into(),
-            value: subj.clone(),
-            inline: false,
-        });
-    }
-
-    let footer = rule_name.map(|n| EmbedFooter {
-        text: format!("Rule: {n}"),
-    });
-    let title = msg
-        .subject
-        .clone()
-        .unwrap_or_else(|| format!("New message from {}", msg.sender));
-
-    let params = CreateMessage {
-        embeds: vec![Embed {
-            title: Some(title),
-            description: Some(body_preview),
-            color: Some(color),
-            fields,
-            footer,
-        }],
-        components: vec![ActionRow::new(vec![
-            Component::primary_button(format!("reply:{}", ctx.id), "Reply"),
-            Component::danger_button(format!("drop:{}", ctx.id), "Drop"),
-        ])],
-        ..Default::default()
-    };
-
-    let message = bot.create_message(discord_channel_id, params).await?;
-    storage::save_conversation_context(&kv, &ctx).await?;
-
-    Ok(message.id)
 }
 
 /// Post an AI-generated draft reply with Approve/Reject buttons. Caller owns
