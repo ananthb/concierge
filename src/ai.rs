@@ -5,6 +5,14 @@ const DEFAULT_MODEL: &str = "@cf/meta/llama-4-scout-17b-16e-instruct";
 const DEFAULT_FAST_MODEL: &str = "@cf/meta/llama-3.1-8b-instruct-fast";
 pub const EMBEDDING_MODEL: &str = "@cf/baai/bge-base-en-v1.5";
 
+/// Hardcoded model for the demo persona business-detail generator.
+/// Kimi K2.6's strength is structured JSON output, which is exactly
+/// what that endpoint asks for. Not env-overrideable: the demo and
+/// pipeline chat paths share the configurable `AI_MODEL` so the demo
+/// faithfully represents production behavior; the persona generator is
+/// the one place where a different model is justified.
+const PERSONA_GEN_MODEL: &str = "@cf/moonshotai/kimi-k2.6";
+
 fn get_model(env: &Env) -> String {
     env.var("AI_MODEL")
         .map(|v| v.to_string())
@@ -129,33 +137,33 @@ pub async fn generate_chat_reply(
     }
 }
 
-/// Like `generate_chat_reply` but with an explicit output cap. Used by
-/// callers that need a long structured reply — the demo persona
-/// generator returns a JSON array of N businesses and overflows the
-/// model's default ~256-token cap once N > 3.
-pub async fn generate_long_chat_reply(
+/// Generate the demo persona JSON array via Kimi K2.6. Hardcoded
+/// model: this is the one call where structured-output quality is
+/// load-bearing and the cost (cache-absorbed) is small. `max_tokens`
+/// is set high because the reply is a JSON array with one entry per
+/// archetype; the chat model's default ~256-token cap truncates it
+/// mid-string after three entries.
+pub async fn generate_persona_businesses(
     env: &Env,
     system_prompt: &str,
-    history: &[(String, String)],
+    user_prompt: &str,
     max_tokens: u32,
 ) -> Result<String> {
-    let mut messages = Vec::with_capacity(history.len() + 1);
-    messages.push(Message {
-        role: "system".to_string(),
-        content: system_prompt.to_string(),
-    });
-    for (role, content) in history {
-        messages.push(Message {
-            role: role.clone(),
-            content: content.clone(),
-        });
-    }
+    let messages = vec![
+        Message {
+            role: "system".to_string(),
+            content: system_prompt.to_string(),
+        },
+        Message {
+            role: "user".to_string(),
+            content: user_prompt.to_string(),
+        },
+    ];
     let request = AiRequest {
         messages,
         max_tokens: Some(max_tokens),
     };
-    let model = get_model(env);
-    let reply = run_ai_model(env, &model, &request).await?;
+    let reply = run_ai_model(env, PERSONA_GEN_MODEL, &request).await?;
     let trimmed = reply.trim();
     if trimmed.is_empty() {
         Err(Error::from("AI returned empty chat response"))

@@ -156,14 +156,9 @@ pub(crate) async fn generate_demo_businesses(
     // doubled for headroom on richer prompts and longer business
     // descriptions. Without this the model truncates mid-string after
     // the third entry.
-    let reply = crate::ai::generate_long_chat_reply(
-        env,
-        system_prompt,
-        &vec![("user".to_string(), user_prompt)],
-        4096,
-    )
-    .await
-    .map_err(|e| format!("AI call failed: {e:?}"))?;
+    let reply = crate::ai::generate_persona_businesses(env, system_prompt, &user_prompt, 4096)
+        .await
+        .map_err(|e| format!("AI call failed: {e:?}"))?;
 
     // Strip an optional ```json fence the model sometimes adds.
     let clean = reply
