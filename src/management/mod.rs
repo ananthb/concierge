@@ -4,6 +4,7 @@
 pub mod archetypes;
 pub mod audit;
 pub mod billing;
+pub mod demo;
 pub mod tenants;
 
 use wasm_bindgen::JsCast;
@@ -44,6 +45,10 @@ pub async fn handle_management(
 
     if sub.starts_with("archetypes") {
         return archetypes::handle_archetypes(req, &env, &db, sub, method, &email, &base_url).await;
+    }
+
+    if sub.starts_with("demo") {
+        return demo::handle_demo(req, &env, &db, sub, method, &email, &base_url).await;
     }
 
     match (method, sub) {

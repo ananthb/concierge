@@ -163,9 +163,6 @@ pub async fn count_tenants(db: &D1Database) -> Result<usize> {
 // Persona catalog (D1)
 // ============================================================================
 
-/// Default persona slug surfaced when the demo doesn't carry one.
-pub const DEMO_DEFAULT_PERSONA_SLUG: &str = "concierge";
-
 /// List rows from the archetypes catalog. `only_approved` filters by
 /// `safety_status = 'approved'`. Used for the demo picker and the
 /// tenant-onboarding starter set; the management UI passes `false` to
@@ -234,6 +231,64 @@ pub async fn get_archetype_cached(
 /// the next reader gets fresh data.
 pub async fn invalidate_archetype_cache(kv: &kv::KvStore, slug: &str) -> Result<()> {
     kv.delete(&archetype_cache_key(slug)).await?;
+    Ok(())
+}
+
+/// KV key for the public demo-personas list (the welcome-page picker).
+/// Populated lazily by `handlers::demo_personas_list` and dropped here
+/// whenever a catalog write could change which archetypes appear or
+/// what their voice/greeting/business sample looks like.
+pub const DEMO_PERSONAS_CACHE_KEY: &str = "cache:demo:personas:v1";
+
+/// Drop the cached demo-personas list. Call after any archetype write
+/// (`upsert_archetype`, `delete_archetype`, `set_archetype_safety`) so
+/// the next demo visitor sees the change without waiting on the TTL.
+pub async fn invalidate_demo_personas_cache(kv: &kv::KvStore) -> Result<()> {
+    kv.delete(DEMO_PERSONAS_CACHE_KEY).await?;
+    Ok(())
+}
+
+// ============================================================================
+// Demo Config (KV singleton)
+// ============================================================================
+
+/// Default system prompt used when generating fictional sample
+/// businesses for the demo personas list. Editable from
+/// `/manage/demo`. Kept here so a fresh deploy works before any
+/// management user has touched the page.
+pub const DEFAULT_DEMO_GENERATION_PROMPT: &str = "You are a creative business consultant. Generate fictional but realistic business details for each of the following persona archetypes. For each, provide: name, business_type, city, hours, goal, and goal_url. Return ONLY a JSON array of objects, one for each archetype, in the exact same order. Do not include any other text.";
+
+/// Operator-controlled demo settings. Stored as a singleton KV row
+/// under `DEMO_CONFIG_KEY`. `enabled=false` hides the homepage entry
+/// point and turns `/demo/personas` + `/demo/chat` into noops.
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
+pub struct DemoConfig {
+    pub enabled: bool,
+    pub persona_generation_prompt: String,
+}
+
+impl Default for DemoConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            persona_generation_prompt: DEFAULT_DEMO_GENERATION_PROMPT.to_string(),
+        }
+    }
+}
+
+const DEMO_CONFIG_KEY: &str = "management:demo_config";
+
+pub async fn get_demo_config(kv: &kv::KvStore) -> Result<DemoConfig> {
+    kv.get(DEMO_CONFIG_KEY)
+        .json::<DemoConfig>()
+        .await
+        .map_err(|e| Error::from(e.to_string()))
+        .map(|opt| opt.unwrap_or_default())
+}
+
+pub async fn save_demo_config(kv: &kv::KvStore, cfg: &DemoConfig) -> Result<()> {
+    let json = serde_json::to_string(cfg).map_err(|e| Error::from(format!("JSON error: {e}")))?;
+    kv.put(DEMO_CONFIG_KEY, json)?.execute().await?;
     Ok(())
 }
 

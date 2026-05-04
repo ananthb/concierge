@@ -12,7 +12,7 @@ mod admin_whatsapp;
 pub mod auth;
 mod data_deletion;
 mod demo_chat;
-mod demo_personas_list;
+pub mod demo_personas_list;
 pub mod discord_oauth;
 pub mod health;
 mod instagram_oauth;

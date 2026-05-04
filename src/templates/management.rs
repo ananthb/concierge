@@ -18,6 +18,7 @@ fn manage_shell(
         ("Dashboard", "/manage"),
         ("Tenants", "/manage/tenants"),
         ("Archetypes", "/manage/archetypes"),
+        ("Demo", "/manage/demo"),
         ("Billing", "/manage/billing"),
         ("Audit Log", "/manage/audit"),
     ];
@@ -981,5 +982,157 @@ pub fn archetype_edit_html(
         "Archetypes",
         base_url,
         locale,
+    )
+}
+
+// =====================================================================
+// Demo controls (/manage/demo)
+// =====================================================================
+
+pub fn demo_config_html(
+    cfg: &crate::storage::DemoConfig,
+    base_url: &str,
+    locale: &Locale,
+) -> String {
+    let enabled_checked = if cfg.enabled { " checked" } else { "" };
+    let prompt_value = html_escape(&cfg.persona_generation_prompt);
+    let default_prompt = html_escape(crate::storage::DEFAULT_DEMO_GENERATION_PROMPT);
+
+    let content = format!(
+        r##"<div class="page-pad">
+  <div class="between mb-16">
+    <div>
+      <div class="eyebrow">Demo controls</div>
+      <h2 class="display-sm m-0 mt-4">Live homepage demo</h2>
+    </div>
+  </div>
+  <p class="muted mb-16">Toggles the public homepage chat box and controls the system prompt used to generate fictional sample businesses for each Approved archetype. Saving busts the demo personas cache so changes appear on the next visitor.</p>
+
+  <div class="card p-22 mb-16">
+    <form hx-post="{base_url}/manage/demo" hx-ext="json-enc" hx-target="body" hx-swap="innerHTML">
+      <div class="row gap-12 mb-16" style="align-items:center">
+        <input id="demo-enabled" type="checkbox" name="enabled" value="true"{enabled_checked}>
+        <label for="demo-enabled" class="fw-600">Demo enabled</label>
+        <span class="muted fs-13">When off: homepage hides the chat hint, /demo/personas returns empty, /demo/chat returns 503.</span>
+      </div>
+
+      <div class="mt-12">
+        <label for="demo-prompt" class="eyebrow lbl">Persona generation system prompt</label>
+        <p class="muted fs-12 m-0 mb-8">Sent as the system message to the LLM with each archetype's label + description as the user message. The model must reply with a JSON array of objects, one per archetype in the same order. Each object: <code>name</code>, <code>business_type</code>, <code>city</code>, <code>hours</code>, <code>goal</code>, <code>goal_url</code>. Leave blank to restore the default.</p>
+        <textarea id="demo-prompt" class="textarea mono" name="persona_generation_prompt" rows="8" placeholder="{default_prompt}">{prompt_value}</textarea>
+      </div>
+
+      <div class="between pt-16 mt-16" style="border-top:1px solid var(--border-soft)">
+        <button type="button" class="btn ghost"
+                hx-post="{base_url}/manage/demo/preview"
+                hx-include="[name='persona_generation_prompt']"
+                hx-target="{hash}demo-preview"
+                hx-swap="innerHTML"
+                hx-ext="json-enc">Preview generation</button>
+        <button type="submit" class="btn primary">Save</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="card p-22">
+    <div class="eyebrow mb-8">Preview</div>
+    <p class="muted fs-13 m-0 mb-12">Runs the prompt above against the current Approved archetypes and shows the parsed result. Doesn't save the prompt.</p>
+    <div id="demo-preview"><div class="muted fs-13">No preview yet. Click "Preview generation" above.</div></div>
+  </div>
+</div>"##,
+        base_url = base_url,
+        hash = HASH,
+        enabled_checked = enabled_checked,
+        prompt_value = prompt_value,
+        default_prompt = default_prompt,
+    );
+
+    manage_shell("Demo · Concierge", &content, "Demo", base_url, locale)
+}
+
+pub fn demo_preview_success_html(
+    archetypes: &[crate::types::Archetype],
+    businesses: &[crate::handlers::demo_personas_list::DemoBusiness],
+) -> String {
+    let rows: String = archetypes
+        .iter()
+        .enumerate()
+        .map(|(i, a)| {
+            let biz = businesses.get(i);
+            let (name, biz_type, city, hours, goal, goal_url) = match biz {
+                Some(b) => (
+                    html_escape(&b.name),
+                    html_escape(&b.business_type),
+                    html_escape(&b.city),
+                    html_escape(&b.hours),
+                    html_escape(&b.goal),
+                    html_escape(&b.goal_url),
+                ),
+                None => (
+                    "—".to_string(),
+                    String::new(),
+                    String::new(),
+                    String::new(),
+                    String::new(),
+                    String::new(),
+                ),
+            };
+            format!(
+                r##"<div class="card p-14 mb-8">
+  <div class="row gap-8 mb-6" style="align-items:baseline">
+    <span class="chip">{slug}</span>
+    <strong>{name}</strong>
+    <span class="muted fs-13">{biz_type}{biz_type_sep}{city}</span>
+  </div>
+  <div class="muted fs-13"><b>Hours:</b> {hours}</div>
+  <div class="muted fs-13"><b>Goal:</b> {goal}{goal_url_block}</div>
+</div>"##,
+                slug = html_escape(&a.slug),
+                name = name,
+                biz_type = biz_type,
+                biz_type_sep = if biz.is_some() { " · " } else { "" },
+                city = city,
+                hours = if hours.is_empty() {
+                    "—".to_string()
+                } else {
+                    hours
+                },
+                goal = if goal.is_empty() {
+                    "—".to_string()
+                } else {
+                    goal
+                },
+                goal_url_block = if goal_url.is_empty() {
+                    String::new()
+                } else {
+                    format!(r#" <span class="mono fs-12">({goal_url})</span>"#)
+                },
+            )
+        })
+        .collect();
+
+    let mismatch = if businesses.len() != archetypes.len() {
+        format!(
+            r#"<div class="chip warn mb-12">Model returned {got} entries for {expected} archetypes — order may not match.</div>"#,
+            got = businesses.len(),
+            expected = archetypes.len(),
+        )
+    } else {
+        String::new()
+    };
+
+    format!(
+        r#"<span class="chip ok mb-12" style="display:inline-block">Parsed OK · {n} entries</span>{mismatch}{rows}"#,
+        n = businesses.len(),
+        mismatch = mismatch,
+        rows = rows,
+    )
+}
+
+pub fn demo_preview_error_html(message: &str) -> String {
+    format!(
+        r#"<div class="error mb-8">Preview failed.</div>
+<pre class="prompt-preview" style="white-space:pre-wrap">{}</pre>"#,
+        html_escape(message),
     )
 }

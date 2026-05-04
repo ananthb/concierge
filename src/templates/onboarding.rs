@@ -118,7 +118,7 @@ fn wizard_shell(
     base_html(&t(locale, "wizard-title"), &inner, locale)
 }
 
-pub fn welcome_html(_base_url: &str, locale: &crate::locale::Locale) -> String {
+pub fn welcome_html(_base_url: &str, locale: &crate::locale::Locale, demo_enabled: bool) -> String {
     use crate::i18n::t;
     let header = super::base::public_nav_html("", locale);
 
@@ -191,6 +191,39 @@ pub fn welcome_html(_base_url: &str, locale: &crate::locale::Locale) -> String {
     let chat_cta_body = html_escape(&t(locale, "demo-chat-cta-body"));
     let chat_cta_button = html_escape(&t(locale, "demo-chat-cta-button"));
 
+    // The hero headline is a click target into the demo modal when the
+    // demo is enabled. When the operator has disabled the demo, drop
+    // the click handlers, the `hero-clickable` class (which carries the
+    // hover effect), and the floating chat hint.
+    let initial_headline = &variants[0];
+    let (hero_headline, hero_hint) = if demo_enabled {
+        (
+            format!(
+                r#"<h1 class="display hero-clickable" id="hero-headline"
+          tabindex="0" aria-describedby="demo-chat-hint-text"
+          @click="open = true"
+          @keydown.enter.prevent="open = true"
+          @keydown.space.prevent="open = true">{headline}<span class="hero-caret" aria-hidden="true"></span></h1>"#,
+                headline = initial_headline,
+            ),
+            format!(
+                r#"<button type="button" id="demo-chat-hint-text" class="hero-hint" @click="open = true">
+        <span class="hero-hint-arrow" aria-hidden="true">↑</span>
+        <span class="hero-hint-text">{chat_hint}</span>
+      </button>"#,
+                chat_hint = chat_hint,
+            ),
+        )
+    } else {
+        (
+            format!(
+                r#"<h1 class="display" id="hero-headline">{headline}<span class="hero-caret" aria-hidden="true"></span></h1>"#,
+                headline = initial_headline,
+            ),
+            String::new(),
+        )
+    };
+
     let content = format!(
         r#"{header}
 <div x-data="conciergeChat()" x-effect="window.__heroPaused = open">
@@ -198,15 +231,8 @@ pub fn welcome_html(_base_url: &str, locale: &crate::locale::Locale) -> String {
   <div class="welcome-left">
     <div class="eyebrow">{eyebrow}</div>
     <div class="hero-hint-anchor">
-      <h1 class="display hero-clickable" id="hero-headline"
-          tabindex="0" aria-describedby="demo-chat-hint-text"
-          @click="open = true"
-          @keydown.enter.prevent="open = true"
-          @keydown.space.prevent="open = true">{headline}<span class="hero-caret" aria-hidden="true"></span></h1>
-      <button type="button" id="demo-chat-hint-text" class="hero-hint" @click="open = true">
-        <span class="hero-hint-arrow" aria-hidden="true">↑</span>
-        <span class="hero-hint-text">{chat_hint}</span>
-      </button>
+      {hero_headline}
+      {hero_hint}
     </div>
     <p class="lead">{lead}</p>
     <div class="row gap-12 wrap mt-16">
@@ -270,7 +296,7 @@ pub fn welcome_html(_base_url: &str, locale: &crate::locale::Locale) -> String {
          business's profile so they have something concrete to ask
          about. -->
     <div class="chat-business-card" x-show="currentPersona.slug !== 'concierge' && currentPersona.business" x-cloak>
- ministerial     <p class="roleplay">{chat_roleplay_prefix} <strong x-text="currentPersona.business && currentPersona.business.name"></strong>{chat_roleplay_suffix}</p>
+      <p class="roleplay">{chat_roleplay_prefix} <strong x-text="currentPersona.business && currentPersona.business.name"></strong>{chat_roleplay_suffix}</p>
       <p class="biz-meta">
         <span x-show="currentPersona.business && currentPersona.business.business_type"><b>{chat_lbl_type}</b><span x-text="currentPersona.business && currentPersona.business.business_type"></span></span>
         <span x-show="currentPersona.business && currentPersona.business.city"><b>{chat_lbl_city}</b><span x-text="currentPersona.business && currentPersona.business.city"></span></span>
@@ -337,7 +363,8 @@ pub fn welcome_html(_base_url: &str, locale: &crate::locale::Locale) -> String {
 {chat_script}"#,
         header = header,
         eyebrow = t(locale, "welcome-eyebrow"),
-        headline = variants[0],
+        hero_headline = hero_headline,
+        hero_hint = hero_hint,
         lead = t(locale, "welcome-lead"),
         cta_primary = t(locale, "welcome-cta-primary"),
         cta_secondary = t(locale, "welcome-cta-secondary"),

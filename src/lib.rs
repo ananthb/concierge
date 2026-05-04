@@ -427,7 +427,15 @@ async fn handle_request(req: Request, env: Env) -> Result<Response> {
             return Ok(Response::empty()?.with_status(302).with_headers(headers));
         }
         let locale = locale::Locale::from_request(&req);
-        return Response::from_html(templates::onboarding::welcome_html("", &locale));
+        let demo_enabled = storage::get_demo_config(&kv)
+            .await
+            .unwrap_or_default()
+            .enabled;
+        return Response::from_html(templates::onboarding::welcome_html(
+            "",
+            &locale,
+            demo_enabled,
+        ));
     }
 
     Response::error("Not Found", 404)

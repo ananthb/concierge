@@ -108,6 +108,16 @@ pub async fn handle_demo_chat(mut req: Request, env: Env) -> Result<Response> {
 
     let kv = env.kv("KV")?;
 
+    // Demo gate. Operator-controlled flag from /manage/demo. When off,
+    // refuse before doing any work or burning rate-limit budget.
+    if !storage::get_demo_config(&kv)
+        .await
+        .unwrap_or_default()
+        .enabled
+    {
+        return json_error("The demo is currently unavailable.", 503);
+    }
+
     // Global daily cap. Checked first so an exhausted day refuses
     // immediately, regardless of whether we have a client IP.
     let now_iso = crate::helpers::now_iso();
@@ -170,22 +180,17 @@ pub async fn handle_demo_chat(mut req: Request, env: Env) -> Result<Response> {
     // requested slug isn't there or isn't Approved. No bypass even if a
     // management user is testing.
     let db = env.d1("DB")?;
-    let slug = if parsed.persona.is_empty() {
-        crate::storage::DEMO_DEFAULT_PERSONA_SLUG.to_string()
-    } else {
-        parsed.persona.clone()
-    };
-    let row = if slug == crate::storage::DEMO_DEFAULT_PERSONA_SLUG {
-        None
-    } else {
-        match storage::get_archetype_cached(&kv, &db, &slug).await? {
-            Some(r) if r.is_safe_to_use() => Some(r),
-            _ => {
-                return json_error(
-                    "That persona isn't available right now. Please pick another.",
-                    503,
-                );
-            }
+    if parsed.persona.is_empty() {
+        return json_error("Pick a persona to start chatting.", 400);
+    }
+    let slug = parsed.persona.clone();
+    let row = match storage::get_archetype_cached(&kv, &db, &slug).await? {
+        Some(r) if r.is_safe_to_use() => r,
+        _ => {
+            return json_error(
+                "That persona isn't available right now. Please pick another.",
+                503,
+            );
         }
     };
 
@@ -211,18 +216,13 @@ pub async fn handle_demo_chat(mut req: Request, env: Env) -> Result<Response> {
     let wrapped_prompt = if parsed.handoff {
         crate::prompt::wrap(crate::prompt::HOLDING_PATTERN_MIDDLE)
     } else {
-        let persona_middle = if slug == crate::storage::DEMO_DEFAULT_PERSONA_SLUG {
-            crate::prompt::CONCIERGE_PROMPT.to_string()
-        } else if let Some(r) = row {
-            // For demo purposes, we need a PersonaBuilder with fictional details.
-            // The /demo/personas endpoint provides these (cached).
-            // If they hit /demo/chat directly with a slug, we just use empty defaults
-            // for the builder and the archetype's voice.
-            crate::personas::generate(&crate::types::PersonaBuilder::default(), &r.voice_prompt)
-        } else {
-            String::new()
-        };
-        let demo_middle = crate::prompt::compose_demo_middle(&persona_middle, &slug);
+        // For demo purposes, we need a PersonaBuilder with fictional details.
+        // The /demo/personas endpoint provides these (cached). If they hit
+        // /demo/chat directly with a slug, we just use empty defaults for
+        // the builder and the archetype's voice.
+        let persona_middle =
+            crate::personas::generate(&crate::types::PersonaBuilder::default(), &row.voice_prompt);
+        let demo_middle = crate::prompt::compose_demo_middle(&persona_middle);
         crate::prompt::wrap(&demo_middle)
     };
 

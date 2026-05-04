@@ -620,7 +620,7 @@ mod footer_tests {
     #[test]
     fn welcome_has_one_footer() {
         let l = crate::locale::Locale::default_inr();
-        let s = crate::templates::onboarding::welcome_html("", &l);
+        let s = crate::templates::onboarding::welcome_html("", &l, true);
         assert_eq!(count(&s, r#"<footer class="site-footer">"#), 1, "welcome");
     }
 
@@ -642,7 +642,7 @@ mod footer_tests {
     #[test]
     fn welcome_resolves_all_keys() {
         let l = crate::locale::Locale::default_inr();
-        let s = crate::templates::onboarding::welcome_html("", &l);
+        let s = crate::templates::onboarding::welcome_html("", &l, true);
         assert_keys_resolved(
             &s,
             &[
