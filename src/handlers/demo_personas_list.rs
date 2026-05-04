@@ -80,46 +80,59 @@ pub async fn handle_demo_personas(_req: Request, env: Env) -> Result<Response> {
     let mut personas = Vec::with_capacity(archetypes.len());
 
     if !archetypes.is_empty() {
-        if let Ok(businesses) =
-            generate_demo_businesses(&env, &demo_cfg.persona_generation_prompt, &archetypes).await
+        match generate_demo_businesses(&env, &demo_cfg.persona_generation_prompt, &archetypes).await
         {
-            for (i, biz) in businesses.into_iter().enumerate() {
-                if let Some(a) = archetypes.get(i) {
-                    let builder = crate::types::PersonaBuilder {
-                        archetype_slug: a.slug.clone(),
-                        biz_name: biz.name.clone(),
-                        biz_type: biz.business_type.clone(),
-                        city: biz.city.clone(),
-                        hours: biz.hours.clone(),
-                        goal: biz.goal.clone(),
-                        goal_url: biz.goal_url.clone(),
-                        ..Default::default()
-                    };
-                    let persona_middle = crate::personas::generate(&builder, &a.voice_prompt);
-                    personas.push(DemoPersonaPayload {
-                        slug: a.slug.clone(),
-                        label: a.label.clone(),
-                        description: a.description.clone(),
-                        greeting: a.greeting.clone(),
-                        prompt: crate::prompt::compose_demo_middle(&persona_middle),
-                        business: biz,
-                    });
+            Ok(businesses) => {
+                console_log!(
+                    "demo personas: generated {} businesses for {} archetypes",
+                    businesses.len(),
+                    archetypes.len()
+                );
+                for (i, biz) in businesses.into_iter().enumerate() {
+                    if let Some(a) = archetypes.get(i) {
+                        let builder = crate::types::PersonaBuilder {
+                            archetype_slug: a.slug.clone(),
+                            biz_name: biz.name.clone(),
+                            biz_type: biz.business_type.clone(),
+                            city: biz.city.clone(),
+                            hours: biz.hours.clone(),
+                            goal: biz.goal.clone(),
+                            goal_url: biz.goal_url.clone(),
+                            ..Default::default()
+                        };
+                        let persona_middle = crate::personas::generate(&builder, &a.voice_prompt);
+                        personas.push(DemoPersonaPayload {
+                            slug: a.slug.clone(),
+                            label: a.label.clone(),
+                            description: a.description.clone(),
+                            greeting: a.greeting.clone(),
+                            prompt: crate::prompt::compose_demo_middle(&persona_middle),
+                            business: biz,
+                        });
+                    }
                 }
+            }
+            Err(msg) => {
+                console_log!("demo personas: generation failed: {msg}");
             }
         }
     }
 
     let response = DemoPersonasResponse { personas };
 
-    // 4. Cache in KV
-    let _ = kv
-        .put(
-            storage::DEMO_PERSONAS_CACHE_KEY,
-            serde_json::to_string(&response)?,
-        )?
-        .expiration_ttl(CACHE_TTL_SECONDS)
-        .execute()
-        .await;
+    // 4. Cache in KV. Skip when the list is empty so a transient LLM
+    // hiccup doesn't keep the demo broken for the full TTL — the next
+    // visitor just retries.
+    if !response.personas.is_empty() {
+        let _ = kv
+            .put(
+                storage::DEMO_PERSONAS_CACHE_KEY,
+                serde_json::to_string(&response)?,
+            )?
+            .expiration_ttl(CACHE_TTL_SECONDS)
+            .execute()
+            .await;
+    }
 
     json_response(response)
 }
