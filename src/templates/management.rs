@@ -560,10 +560,69 @@ pub fn tenant_detail_html(
 
 pub fn audit_html(
     log: &[serde_json::Value],
+    actor_q: &str,
+    action_q: &str,
+    resource_q: &str,
     actor_email: &str,
     base_url: &str,
     locale: &Locale,
 ) -> String {
+    let table = audit_table_html(log, base_url);
+    let header = manage_header("Audit log", "Management actions", None, None, "");
+
+    // Two selects + a free-text input. All three trigger the same
+    // hx-get on input/change with `delay:200ms` for the text field.
+    // hx-include grabs all three so the params stack additively.
+    let action_options = audit_action_options(action_q);
+    let resource_options = audit_resource_options(resource_q);
+
+    let content = format!(
+        r##"<div class="page-pad">
+  {header}
+  <div class="row gap-12 mb-12 wrap" style="align-items:flex-end"
+       hx-get="{base_url}/manage/audit"
+       hx-trigger="input changed delay:200ms from:input[name='actor'], change from:select"
+       hx-target="{hash}audit-table" hx-swap="outerHTML"
+       hx-push-url="true"
+       hx-include="this">
+    <label class="stack">
+      <span class="eyebrow lbl">Actor</span>
+      <input class="input w-input-md" type="search" name="actor" value="{actor}" placeholder="email contains…" autocomplete="off">
+    </label>
+    <label class="stack">
+      <span class="eyebrow lbl">Action</span>
+      <select class="select w-input-md" name="action">{action_options}</select>
+    </label>
+    <label class="stack">
+      <span class="eyebrow lbl">Resource</span>
+      <select class="select w-input-sm" name="resource_type">{resource_options}</select>
+    </label>
+    <a class="btn ghost sm" href="{base_url}/manage/audit">Reset</a>
+  </div>
+  {table}
+</div>"##,
+        header = header,
+        base_url = base_url,
+        hash = HASH,
+        actor = html_escape(actor_q),
+        action_options = action_options,
+        resource_options = resource_options,
+        table = table,
+    );
+
+    manage_shell(
+        "Audit Log · Concierge",
+        &content,
+        "Audit Log",
+        actor_email,
+        base_url,
+        locale,
+    )
+}
+
+/// Render just the `<div id="audit-table">` portion. Used both for
+/// the full page render and the HTMX filter swap.
+pub fn audit_table_html(log: &[serde_json::Value], base_url: &str) -> String {
     let rows: String = log
         .iter()
         .map(|entry| {
@@ -603,41 +662,95 @@ pub fn audit_html(
         })
         .collect();
 
-    let empty = if log.is_empty() {
+    let body = if log.is_empty() {
         empty_state(
-            "No audit entries yet",
-            "Every management action (plan change, credit grant, archetype edit, …) is recorded here. Take an action and it will appear at the top.",
+            "No audit entries match",
+            "Loosen the filters or hit Reset to see every action again.",
             None,
         )
     } else {
-        String::new()
+        format!(
+            r##"<div class="rt-head" style="grid-template-columns:0.8fr 1fr 0.7fr 1.4fr">
+  <div>Time</div><div>Actor</div><div>Action</div><div>Resource</div>
+</div>{rows}"##,
+            rows = rows,
+        )
     };
 
-    let header = manage_header("Audit log", "Management actions", None, None, "");
-
-    let content = format!(
-        r##"<div class="page-pad">
-  {header}
-  <div class="card" style="padding:0;overflow:hidden">
-    <div class="rt-head" style="grid-template-columns:0.8fr 1fr 0.7fr 1.4fr">
-      <div>Time</div><div>Actor</div><div>Action</div><div>Resource</div>
-    </div>
-    {rows}{empty}
-  </div>
-</div>"##,
-        header = header,
-        rows = rows,
-        empty = empty,
+    let count_line = format!(
+        r#"<div class="muted fs-12 mb-8">{n} {label}{cap}</div>"#,
+        n = log.len(),
+        label = if log.len() == 1 { "entry" } else { "entries" },
+        cap = if log.len() == 100 {
+            " (cap reached — narrow filters to see older)"
+        } else {
+            ""
+        },
     );
 
-    manage_shell(
-        "Audit Log · Concierge",
-        &content,
-        "Audit Log",
-        actor_email,
-        base_url,
-        locale,
+    format!(
+        r##"<div id="audit-table">
+  {count_line}
+  <div class="card" style="padding:0;overflow:hidden">{body}</div>
+</div>"##,
+        count_line = count_line,
+        body = body,
     )
+}
+
+/// Build the <option> list for the action filter. The labels mirror
+/// `audit_action_chip()` (snake → human) so the operator sees the
+/// same vocabulary in the dropdown as in the rendered chip column.
+fn audit_action_options(selected: &str) -> String {
+    const OPTIONS: &[(&str, &str)] = &[
+        ("", "Any action"),
+        ("create_archetype", "Created archetype"),
+        ("edit_archetype", "Edited archetype"),
+        ("delete_archetype", "Deleted archetype"),
+        ("grant_replies", "Granted replies"),
+        ("grant_addresses", "Granted addresses"),
+        ("update_tenant", "Updated tenant"),
+        ("delete_tenant", "Deleted tenant"),
+        ("update_pricing", "Updated pricing"),
+        ("delete_pricing_currency", "Removed currency"),
+        ("schedule_grant", "Scheduled grant"),
+        ("schedule_grant_remove", "Removed scheduled grant"),
+        ("edit_demo_config", "Edited demo config"),
+    ];
+    OPTIONS
+        .iter()
+        .map(|(val, label)| {
+            let sel = if *val == selected { " selected" } else { "" };
+            format!(
+                r#"<option value="{val}"{sel}>{label}</option>"#,
+                val = val,
+                sel = sel,
+                label = label
+            )
+        })
+        .collect()
+}
+
+fn audit_resource_options(selected: &str) -> String {
+    const OPTIONS: &[(&str, &str)] = &[
+        ("", "Any"),
+        ("tenant", "Tenant"),
+        ("archetype", "Archetype"),
+        ("billing", "Billing"),
+        ("demo_config", "Demo config"),
+    ];
+    OPTIONS
+        .iter()
+        .map(|(val, label)| {
+            let sel = if *val == selected { " selected" } else { "" };
+            format!(
+                r#"<option value="{val}"{sel}>{label}</option>"#,
+                val = val,
+                sel = sel,
+                label = label
+            )
+        })
+        .collect()
 }
 
 /// Render a single audit row's action column. Maps the wire-name

@@ -65,8 +65,36 @@ pub async fn handle_management(
         }
 
         (Method::Get, "audit") => {
-            let log = audit::get_audit_log(&db, 100).await?;
-            Response::from_html(tmpl::audit_html(&log, &email, &base_url, &locale))
+            // Parse filter query params once. The HX-Request header
+            // distinguishes the in-place fragment swap from the
+            // initial full-page render.
+            let url = req.url()?;
+            let mut actor = String::new();
+            let mut action = String::new();
+            let mut resource_type = String::new();
+            for (k, v) in url.query_pairs() {
+                match k.as_ref() {
+                    "actor" => actor = v.into_owned(),
+                    "action" => action = v.into_owned(),
+                    "resource_type" => resource_type = v.into_owned(),
+                    _ => {}
+                }
+            }
+            let log = audit::search_audit_log(&db, &actor, &action, &resource_type, 100).await?;
+            let is_htmx = req.headers().get("HX-Request").ok().flatten().is_some();
+            if is_htmx {
+                Response::from_html(tmpl::audit_table_html(&log, &base_url))
+            } else {
+                Response::from_html(tmpl::audit_html(
+                    &log,
+                    &actor,
+                    &action,
+                    &resource_type,
+                    &email,
+                    &base_url,
+                    &locale,
+                ))
+            }
         }
 
         _ => Response::error("Not Found", 404),

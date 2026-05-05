@@ -36,9 +36,54 @@ pub async fn log_action(
     Ok(())
 }
 
-/// Get recent audit log entries.
-pub async fn get_audit_log(db: &D1Database, limit: u32) -> Result<Vec<serde_json::Value>> {
-    let stmt = db.prepare("SELECT * FROM audit_log ORDER BY created_at DESC LIMIT ?");
-    let result = stmt.bind(&[JsValue::from(limit as f64)])?.all().await?;
+/// Filtered audit log query. All three filter args are optional —
+/// pass `""` to skip a filter. `actor` is a case-insensitive LIKE
+/// (matches partial emails); `action` and `resource_type` are exact
+/// matches against the wire vocab.
+pub async fn search_audit_log(
+    db: &D1Database,
+    actor: &str,
+    action: &str,
+    resource_type: &str,
+    limit: u32,
+) -> Result<Vec<serde_json::Value>> {
+    let actor = actor.trim();
+    let action = action.trim();
+    let resource_type = resource_type.trim();
+
+    let mut where_clauses: Vec<&str> = Vec::new();
+    let mut binds: Vec<JsValue> = Vec::new();
+
+    let actor_pattern;
+    if !actor.is_empty() {
+        actor_pattern = format!(
+            "%{}%",
+            actor
+                .replace('\\', r"\\")
+                .replace('%', r"\%")
+                .replace('_', r"\_")
+        );
+        where_clauses.push("actor_email LIKE ? ESCAPE '\\' COLLATE NOCASE");
+        binds.push(actor_pattern.as_str().into());
+    }
+    if !action.is_empty() {
+        where_clauses.push("action = ?");
+        binds.push(action.into());
+    }
+    if !resource_type.is_empty() {
+        where_clauses.push("resource_type = ?");
+        binds.push(resource_type.into());
+    }
+
+    let where_sql = if where_clauses.is_empty() {
+        String::new()
+    } else {
+        format!(" WHERE {}", where_clauses.join(" AND "))
+    };
+    let sql = format!("SELECT * FROM audit_log{where_sql} ORDER BY created_at DESC LIMIT ?");
+    binds.push(JsValue::from(limit as f64));
+
+    let stmt = db.prepare(&sql);
+    let result = stmt.bind(&binds)?.all().await?;
     result.results::<serde_json::Value>()
 }
