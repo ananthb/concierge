@@ -264,6 +264,20 @@ code {
   .toast-region { top:auto; bottom:16px; left:16px; right:16px; max-width:none; }
 }
 
+/* Segmented tab control. Used to flip between modes inside a single
+   card (e.g. tenant grant Replies/Addresses, billing schedule
+   frequency/day). The "active" segment gets paper background; the
+   rest stay flush with the card's outer surface. */
+.seg-tabs { display:inline-flex; gap:0; padding:3px; background:var(--cream-2);
+  border:1px solid var(--hair); border-radius:999px; }
+.seg-tabs button { background:transparent; border:none; cursor:pointer;
+  padding:6px 14px; font:500 13px var(--f-body); color:var(--muted);
+  border-radius:999px; transition:background .15s ease, color .15s ease; }
+.seg-tabs button:hover { color:var(--ink); }
+.seg-tabs button.active { background:var(--paper); color:var(--ink);
+  box-shadow:0 1px 0 rgba(27,24,20,.06); }
+.seg-tabs button:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+
 /* Form section grouping (used by the archetype editor and any other
    long form). Section eyebrow + thin top divider; first section has no
    divider. */

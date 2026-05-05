@@ -455,10 +455,24 @@ pub fn tenant_detail_html(
     </div>
   </div>
 
-  <div class="card p-18 mt-16">
-    <h3 class="mb-8">Grant free replies</h3>
-    <p class="muted mb-12">Add reply credits to this tenant's balance. Current balance: <strong>{balance}</strong>.</p>
-    <form hx-post="{base_url}/manage/tenants/{id}/grant-replies" hx-target="{hash}toast-region" hx-swap="afterbegin" hx-ext="json-enc">
+  <!-- Two grant flows hit different endpoints (/grant-replies and
+       /grant-addresses) but the operator picks between them based on
+       intent, not visual layout. Combined into one card with a
+       segmented toggle so the switch is immediate and the
+       balance/quota line tracks the active mode. -->
+  <div class="card p-18 mt-16" x-data="{{ kind: 'replies' }}">
+    <div class="between mb-12 wrap" style="gap:12px">
+      <h3 class="m-0">Grant credits</h3>
+      <div class="seg-tabs" role="tablist" aria-label="Grant type">
+        <button type="button" role="tab" :aria-selected="kind === 'replies'" :class="kind === 'replies' ? 'active' : ''" @click="kind = 'replies'">Replies</button>
+        <button type="button" role="tab" :aria-selected="kind === 'addresses'" :class="kind === 'addresses' ? 'active' : ''" @click="kind = 'addresses'">Addresses</button>
+      </div>
+    </div>
+
+    <p class="muted mb-12" x-show="kind === 'replies'">Add reply credits to this tenant's balance. Current balance: <strong>{balance}</strong>.</p>
+    <p class="muted mb-12" x-show="kind === 'addresses'" x-cloak>Add to this tenant's reply-email quota. Current quota: <strong>{quota}</strong> address(es).</p>
+
+    <form x-show="kind === 'replies'" hx-post="{base_url}/manage/tenants/{id}/grant-replies" hx-target="{hash}toast-region" hx-swap="afterbegin" hx-ext="json-enc">
       <div class="row gap-12 wrap" style="align-items:flex-end">
         <label class="stack">
           <span class="eyebrow lbl">Replies</span>
@@ -471,12 +485,8 @@ pub fn tenant_detail_html(
         <button class="btn sm" type="submit">Grant replies</button>
       </div>
     </form>
-  </div>
 
-  <div class="card p-18 mt-16">
-    <h3 class="mb-8">Grant reply-email addresses</h3>
-    <p class="muted mb-12">Add to this tenant's reply-email quota. Current quota: <strong>{quota}</strong> address(es).</p>
-    <form hx-post="{base_url}/manage/tenants/{id}/grant-addresses" hx-target="{hash}toast-region" hx-swap="afterbegin" hx-ext="json-enc">
+    <form x-show="kind === 'addresses'" x-cloak hx-post="{base_url}/manage/tenants/{id}/grant-addresses" hx-target="{hash}toast-region" hx-swap="afterbegin" hx-ext="json-enc">
       <div class="row gap-12 wrap" style="align-items:flex-end">
         <label class="stack">
           <span class="eyebrow lbl">Address slots</span>
