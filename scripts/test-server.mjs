@@ -15,9 +15,30 @@
  * every page renders correctly for tests.
  */
 import { spawn, spawnSync } from 'node:child_process';
-import { writeFileSync, unlinkSync, readdirSync, rmSync } from 'node:fs';
+import { writeFileSync, unlinkSync, readdirSync, existsSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+
+// Resolve paths in two distinct ways:
+//   * Read-only project files (migrations, wrangler.toml) come from
+//     `import.meta.url` — this works when the script is in the
+//     project tree (`npm test`) AND when it's been copied into the
+//     Nix store (`nix run .#dev`). In the latter case the migrations
+//     are read out of the store, which is fine.
+//   * Writable paths (`.wrangler/state`) anchor at `process.cwd()`
+//     so wrangler creates its local D1 + KV inside the user's
+//     checkout, never inside the read-only Nix store.
+const PROJECT_DIR_FOR_READING = new URL('..', import.meta.url).pathname;
+const CWD = process.cwd();
+
+if (!existsSync(join(CWD, 'wrangler.toml'))) {
+  console.error(
+    'test-server.mjs: refusing to run from a directory without wrangler.toml.\n' +
+      `  cwd: ${CWD}\n` +
+      "  cd into the project root and re-run (or invoke `nix run .#dev` from there).",
+  );
+  process.exit(2);
+}
 
 const PORT = process.env.PLAYWRIGHT_DEV_PORT ?? '8787';
 const ENV_FILE = join(tmpdir(), `concierge-playwright-${process.pid}.env`);
@@ -40,13 +61,13 @@ writeFileSync(
   ].join('\n'),
 );
 
-// Wipe `.wrangler/state` so each test run starts from a clean local
-// D1 + KV. Without this, leftover schema from a previous wrangler
-// dev session (created by an older migration) trips IF NOT EXISTS
-// checks on subsequent runs (e.g. a CREATE INDEX referencing a
-// column the existing table doesn't have).
+// Wipe `.wrangler/state` so each run starts from a clean local D1 +
+// KV. Without this, leftover schema from a previous wrangler dev
+// session (created by an older migration) trips IF NOT EXISTS checks
+// on subsequent runs. Anchored at CWD because the read-only Nix
+// store copy doesn't have a `.wrangler/` directory anyway.
 try {
-  rmSync(new URL('../.wrangler/state', import.meta.url).pathname, {
+  rmSync(join(CWD, '.wrangler', 'state'), {
     recursive: true,
     force: true,
   });
@@ -59,7 +80,7 @@ try {
 // audit, scheduled-grants, and archetypes pages 500 with "no such
 // table". The --local flag points wrangler at the same SQLite file
 // that `wrangler dev --local` will use when it boots.
-const migrationsDir = new URL('../migrations/', import.meta.url).pathname;
+const migrationsDir = join(PROJECT_DIR_FOR_READING, 'migrations');
 const migrationFiles = readdirSync(migrationsDir)
   .filter((f) => f.endsWith('.sql'))
   .sort();
@@ -67,7 +88,7 @@ for (const file of migrationFiles) {
   const r = spawnSync(
     'wrangler',
     ['d1', 'execute', 'concierge', '--local', '--file', join(migrationsDir, file)],
-    { stdio: 'inherit' },
+    { stdio: 'inherit', cwd: CWD },
   );
   if (r.status !== 0) {
     console.error(`migration ${file} failed (exit ${r.status}); aborting`);
@@ -83,7 +104,7 @@ for (const file of migrationFiles) {
 const wrangler = spawn(
   'wrangler',
   ['dev', '--local', '--port', PORT, '--env-file', ENV_FILE],
-  { stdio: 'inherit', env: { ...process.env, FORCE_COLOR: '0' } },
+  { stdio: 'inherit', cwd: CWD, env: { ...process.env, FORCE_COLOR: '0' } },
 );
 
 const cleanup = () => {

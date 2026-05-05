@@ -95,8 +95,12 @@
           type = "app";
           program = toString (pkgs.writeShellScript "concierge-dev" ''
             export PATH=${pkgs.lib.makeBinPath [ pkgs.wrangler pkgs.nodejs_22 ]}:$PATH
-            cd ${toString ./.}
-            exec ${pkgs.nodejs_22}/bin/node scripts/test-server.mjs "$@"
+            # Run from the user's CWD so wrangler creates `.wrangler/`
+            # in the project, not the read-only Nix store. The script
+            # itself reads migrations via `import.meta.url` (Nix store
+            # is fine for reads) and gates on `wrangler.toml` being
+            # present in CWD as a sanity check.
+            exec ${pkgs.nodejs_22}/bin/node ${toString ./scripts/test-server.mjs} "$@"
           '');
         };
 
