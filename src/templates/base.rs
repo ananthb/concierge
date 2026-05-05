@@ -264,6 +264,53 @@ code {
   .toast-region { top:auto; bottom:16px; left:16px; right:16px; max-width:none; }
 }
 
+/* Form section grouping (used by the archetype editor and any other
+   long form). Section eyebrow + thin top divider; first section has no
+   divider. */
+.form-section { margin-top:24px; padding-top:20px;
+  border-top:1px solid var(--hair); }
+.form-section:first-of-type { margin-top:0; padding-top:0; border-top:none; }
+.form-section .section-eyebrow { font-family:var(--f-mono);
+  font-size:11px; letter-spacing:.18em; text-transform:uppercase;
+  color:var(--accent-2); margin:0 0 4px; }
+.form-section .section-help { color:var(--muted); font-size:13px;
+  margin:0 0 14px; max-width:560px; line-height:1.5; }
+
+/* Chip-input — Alpine component used to edit list-of-strings fields
+   (catch-phrases, off-topics, handoff conditions). The visible UI is a
+   row of removable chips plus an inline text input; a hidden textarea
+   carries the newline-joined value so the existing form handler keeps
+   working. */
+.chip-input { background:#fff; border:1px solid var(--hair-2);
+  border-radius:var(--r-sm); padding:8px; transition:border-color .15s ease, box-shadow .15s ease; }
+.chip-input:focus-within { border-color:var(--accent);
+  box-shadow:0 0 0 4px var(--accent-soft); }
+.chip-input .chips { display:flex; flex-wrap:wrap; gap:6px; }
+.chip-input .chips:not(:empty) { margin-bottom:6px; }
+.chip-input .chips .pill { display:inline-flex; align-items:center; gap:6px;
+  padding:4px 6px 4px 10px; background:var(--cream-2);
+  border:1px solid var(--hair); border-radius:999px;
+  font-size:13px; color:var(--ink-2); }
+.chip-input .chips .pill button { background:none; border:none;
+  color:var(--muted); cursor:pointer; padding:0 4px;
+  font-size:14px; line-height:1; border-radius:50%; }
+.chip-input .chips .pill button:hover { background:rgba(27,24,20,.08); color:var(--ink); }
+.chip-input .draft { width:100%; border:none; outline:none;
+  padding:6px 4px; font-family:var(--f-body); font-size:14px;
+  color:var(--ink); background:transparent; }
+.chip-input .draft::placeholder { color:var(--muted); }
+.chip-input .hint { color:var(--muted); font-size:11px;
+  margin-top:6px; padding-left:4px; }
+
+/* JSON-validation surface for textareas. The error chip lives below
+   the textarea and shows the parser message inline. */
+.json-field { position:relative; }
+.json-field .json-error { color:var(--danger-2); font-size:12px;
+  margin-top:6px; font-family:var(--f-mono); white-space:pre-wrap;
+  word-break:break-word; }
+.json-field textarea.invalid { border-color:var(--danger);
+  box-shadow:0 0 0 4px var(--danger-soft); }
+
 /* Themed confirmation dialog — replaces the browser-native confirm()
    that hx-confirm uses by default. Listener in manage_shell intercepts
    `htmx:confirm`, populates this dialog, and calls

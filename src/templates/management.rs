@@ -1057,6 +1057,9 @@ pub fn archetype_edit_html(
         format!("{base_url}/manage/archetypes/{}", row_ref.slug)
     };
 
+    // Header: safety chip + classifier detail go in the right slot so
+    // they're always visible in the sticky page header instead of in a
+    // standalone card the user has to scroll past.
     let safety_chip = persona_status_chip(&row_ref.safety.status);
     let safety_detail = match (
         &row_ref.safety.status,
@@ -1070,6 +1073,11 @@ pub fn archetype_edit_html(
         (PersonaSafetyStatus::Rejected, _, None) => "Rejected".to_string(),
         _ => "Awaiting classifier".to_string(),
     };
+    let header_right = format!(
+        r#"<div class="row gap-8" style="align-items:center">{chip}<span class="fs-12 muted">{detail}</span></div>"#,
+        chip = safety_chip,
+        detail = safety_detail,
+    );
 
     let delete_button = if is_new {
         String::new()
@@ -1083,12 +1091,11 @@ pub fn archetype_edit_html(
     };
 
     let slug_field = if is_new {
-        format!(
-            r#"<div class="mt-12">
+        r#"<div class="mt-12">
               <label for="archetype-slug" class="eyebrow lbl">Slug (lowercase, _ or -)</label>
-              <input id="archetype-slug" class="input w-input-md" name="slug" required pattern="[a-z0-9_-]+">
+              <input id="archetype-slug" class="input w-input-md mono" name="slug" required pattern="[a-z0-9_-]+">
             </div>"#
-        )
+            .to_string()
     } else {
         format!(
             r#"<input type="hidden" name="slug" value="{}">"#,
@@ -1118,70 +1125,100 @@ pub fn archetype_edit_html(
             "Back to archetypes",
         )),
         subtitle.as_deref(),
-        "",
+        &header_right,
+    );
+
+    // Three list-of-string fields become Alpine chip inputs. The
+    // existing handler still parses newline-joined strings, so we keep
+    // that contract via the hidden textarea inside each component.
+    let phrases_input = chip_input(
+        "catch_phrases",
+        "archetype-phrases",
+        &row_ref.catch_phrases,
+        "Type a phrase and press Enter",
+    );
+    let off_input = chip_input(
+        "off_topics",
+        "archetype-off",
+        &row_ref.off_topics,
+        "Type a topic and press Enter",
+    );
+    let handoff_input = chip_input(
+        "handoff_conditions",
+        "archetype-handoff",
+        &row_ref.handoff_conditions,
+        "Type a condition and press Enter",
     );
 
     let content = format!(
         r##"<div class="page-pad">
   {header}
 
-  <div class="card p-18 mb-16 row gap-12" style="align-items:center">
-    {safety_chip}
-    <div class="fs-13 muted">{safety_detail}</div>
-  </div>
-
   <div class="card p-22">
     <form hx-post="{action}" hx-ext="json-enc" hx-target="body" hx-swap="innerHTML">
-      <div class="row gap-16" style="align-items:flex-end">
-        <div class="flex-1">
+
+      <section class="form-section">
+        <p class="section-eyebrow">Identity</p>
+        <p class="section-help">How operators and tenants pick this persona out of the catalog.</p>
+        <div>
           <label for="archetype-label" class="eyebrow lbl">Label</label>
           <input id="archetype-label" class="input" name="label" value="{label}" required>
         </div>
-      </div>
-      {slug_field}
+        {slug_field}
+        <div class="mt-12">
+          <label for="archetype-desc" class="eyebrow lbl">Description</label>
+          <input id="archetype-desc" class="input" name="description" value="{description}">
+        </div>
+      </section>
 
-      <div class="mt-12">
-        <label for="archetype-desc" class="eyebrow lbl">Description</label>
-        <input id="archetype-desc" class="input" name="description" value="{description}">
-      </div>
+      <section class="form-section">
+        <p class="section-eyebrow">Voice</p>
+        <p class="section-help">The opening line and the tone the model should adopt. Catch-phrases bias the model toward in-persona language; the safety classifier reads the voice prompt to decide approval.</p>
+        <div>
+          <label for="archetype-greeting" class="eyebrow lbl">Greeting</label>
+          <input id="archetype-greeting" class="input" name="greeting" value="{greeting}" required>
+        </div>
+        <div class="mt-12">
+          <label for="archetype-voice" class="eyebrow lbl">Voice prompt</label>
+          <textarea id="archetype-voice" class="textarea mono" name="voice_prompt" rows="8" required>{voice_prompt}</textarea>
+        </div>
+        <div class="mt-12">
+          <label for="archetype-phrases" class="eyebrow lbl">Catch-phrases</label>
+          {phrases_input}
+        </div>
+      </section>
 
-      <div class="mt-12">
-        <label for="archetype-greeting" class="eyebrow lbl">Greeting</label>
-        <input id="archetype-greeting" class="input" name="greeting" value="{greeting}" required>
-      </div>
+      <section class="form-section">
+        <p class="section-eyebrow">Constraints</p>
+        <p class="section-help">Hard guardrails the persona must respect, plus the topics and signals that should trigger handoff to a human.</p>
+        <div>
+          <label for="archetype-never" class="eyebrow lbl">Never (policy constraints)</label>
+          <input id="archetype-never" class="input" name="never" value="{never}">
+        </div>
+        <div class="mt-12">
+          <label for="archetype-off" class="eyebrow lbl">Off-topics</label>
+          {off_input}
+        </div>
+        <div class="mt-12">
+          <label for="archetype-handoff" class="eyebrow lbl">Handoff conditions</label>
+          {handoff_input}
+        </div>
+      </section>
 
-      <div class="mt-12">
-        <label for="archetype-voice" class="eyebrow lbl">Voice prompt</label>
-        <textarea id="archetype-voice" class="textarea mono" name="voice_prompt" rows="8" required>{voice_prompt}</textarea>
-      </div>
+      <section class="form-section" x-data="{{ jsonErr: '', validate(v) {{ if (!v) {{ this.jsonErr = ''; return; }} try {{ JSON.parse(v); this.jsonErr = ''; }} catch (e) {{ this.jsonErr = e.message; }} }} }}" x-init="validate($refs.rulesTa.value)">
+        <p class="section-eyebrow">Engine</p>
+        <p class="section-help">Default conversation rules applied to every tenant who picks this archetype. JSON is validated as you type.</p>
+        <div class="json-field">
+          <label for="archetype-rules" class="eyebrow lbl">Default rules (JSON)</label>
+          <textarea id="archetype-rules" x-ref="rulesTa" class="textarea mono"
+                    :class="jsonErr ? 'invalid' : ''"
+                    name="default_rules_json" rows="10" required
+                    @input="validate($event.target.value)">{rules_json}</textarea>
+          <p class="json-error" x-show="jsonErr" x-text="jsonErr" x-cloak></p>
+        </div>
+      </section>
 
-      <div class="mt-12">
-        <label for="archetype-never" class="eyebrow lbl">Never (policy constraints)</label>
-        <input id="archetype-never" class="input" name="never" value="{never}">
-      </div>
-
-      <div class="mt-12">
-        <label for="archetype-phrases" class="eyebrow lbl">Catch-phrases (one per line)</label>
-        <textarea id="archetype-phrases" class="textarea" name="catch_phrases" rows="4">{catch_phrases}</textarea>
-      </div>
-
-      <div class="mt-12">
-        <label for="archetype-off" class="eyebrow lbl">Off-topics (one per line)</label>
-        <textarea id="archetype-off" class="textarea" name="off_topics" rows="4">{off_topics}</textarea>
-      </div>
-
-      <div class="mt-12">
-        <label for="archetype-handoff" class="eyebrow lbl">Handoff conditions (one per line)</label>
-        <textarea id="archetype-handoff" class="textarea" name="handoff_conditions" rows="4">{handoff_conditions}</textarea>
-      </div>
-
-      <div class="mt-12">
-        <label for="archetype-rules" class="eyebrow lbl">Default rules (JSON)</label>
-        <textarea id="archetype-rules" class="textarea mono" name="default_rules_json" rows="10" required>{rules_json}</textarea>
-      </div>
-
-
-      <div class="between pt-16 mt-16" style="border-top:1px solid var(--hair)">
+      <div class="between pt-16 mt-24" style="border-top:1px solid var(--hair)">
         <div>{delete_button}</div>
         <button type="submit" class="btn primary">Save archetype</button>
       </div>
@@ -1197,9 +1234,9 @@ pub fn archetype_edit_html(
         greeting = html_escape(&row_ref.greeting),
         voice_prompt = html_escape(&row_ref.voice_prompt),
         never = html_escape(&row_ref.never),
-        catch_phrases = html_escape(&row_ref.catch_phrases.join("\n")),
-        off_topics = html_escape(&row_ref.off_topics.join("\n")),
-        handoff_conditions = html_escape(&row_ref.handoff_conditions.join("\n")),
+        phrases_input = phrases_input,
+        off_input = off_input,
+        handoff_input = handoff_input,
         rules_json = html_escape(&row_ref.default_rules_json),
     );
 
@@ -1210,6 +1247,45 @@ pub fn archetype_edit_html(
         actor_email,
         base_url,
         locale,
+    )
+}
+
+/// Chip-input widget for editing list-of-string fields. Keeps the
+/// existing form contract (newline-joined string) via a hidden input
+/// so the server-side parser doesn't need to change.
+///
+/// The Alpine state lives on the wrapper. Initial values are
+/// JSON-encoded into the `x-data` expression. The server-side caller
+/// is responsible for placing a `<label for="{id}">` adjacent to the
+/// returned markup; the `id` attaches to the visible draft input so
+/// screen readers announce the right field name on focus.
+fn chip_input(name: &str, id: &str, items: &[String], placeholder: &str) -> String {
+    let initial_json = serde_json::to_string(items).unwrap_or_else(|_| "[]".to_string());
+    // JSON inside a single-quoted HTML attribute: `&` and `'` are the
+    // only chars that break that delimiter. html_escape handles both.
+    let initial_attr = html_escape(&initial_json);
+    format!(
+        r##"<div class="chip-input" x-data='{{ items: {initial_attr}, draft: "" }}'>
+  <div class="chips">
+    <template x-for="(it, idx) in items" :key="idx">
+      <span class="pill">
+        <span x-text="it"></span>
+        <button type="button" aria-label="Remove" @click="items.splice(idx, 1)">×</button>
+      </span>
+    </template>
+  </div>
+  <input id="{id}" type="text" class="draft" x-model="draft"
+         placeholder="{placeholder}"
+         @keydown.enter.prevent="if (draft.trim()) {{ items.push(draft.trim()); draft = ''; }}"
+         @keydown.backspace="if (!draft && items.length) items.pop()"
+         @blur="if (draft.trim()) {{ items.push(draft.trim()); draft = ''; }}">
+  <input type="hidden" name="{name}" :value="items.join('\n')">
+  <p class="hint">Press Enter to add. Backspace on empty input removes the last chip.</p>
+</div>"##,
+        initial_attr = initial_attr,
+        id = id,
+        name = name,
+        placeholder = html_escape(placeholder),
     )
 }
 
