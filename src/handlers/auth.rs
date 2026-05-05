@@ -64,6 +64,7 @@ pub async fn handle_auth(req: Request, env: Env, path: &str, method: Method) -> 
                 .await?;
 
             let last_provider = get_cookie(&req, "last_provider");
+            let dev_login_enabled = crate::dev_bypass::active(&env);
             let html = auth_login_html(
                 &base_url,
                 &google_client_id,
@@ -71,6 +72,7 @@ pub async fn handle_auth(req: Request, env: Env, path: &str, method: Method) -> 
                 &wa_config_id,
                 &wa_state,
                 last_provider.as_deref(),
+                dev_login_enabled,
                 &locale,
             );
 
@@ -354,6 +356,72 @@ pub async fn handle_auth(req: Request, env: Env, path: &str, method: Method) -> 
         // Discord bot install callback
         (Method::Get, "/auth/discord/callback") => {
             super::discord_oauth::handle_discord_callback(req, env).await
+        }
+
+        // Dev-only login shortcut. Mints a session for an arbitrary
+        // tenant email without going through Google / Facebook / WA
+        // OAuth — useful for clicking through `/admin` against
+        // `wrangler dev` (where real OAuth callbacks won't reach
+        // localhost). Gated on the same `crate::dev_bypass::active`
+        // flag the management panel uses; production deploys set
+        // CF_ACCESS_AUD so this route returns 404 there.
+        (Method::Post, "/auth/dev-login") => {
+            if !crate::dev_bypass::active(&env) {
+                return Response::error("Not Found", 404);
+            }
+            let mut req = req;
+            // Accept either form-encoded (HTML form) or JSON.
+            let email_raw = match req.headers().get("Content-Type").ok().flatten().as_deref() {
+                Some(ct) if ct.contains("application/json") => req
+                    .json::<serde_json::Value>()
+                    .await
+                    .ok()
+                    .and_then(|v| v.get("email").and_then(|e| e.as_str()).map(str::to_string))
+                    .unwrap_or_default(),
+                _ => {
+                    let body = req.text().await.unwrap_or_default();
+                    body.split('&')
+                        .find_map(|kv| kv.strip_prefix("email="))
+                        .map(|v| {
+                            urlencoding::decode(v)
+                                .map(|c| c.into_owned())
+                                .unwrap_or_else(|_| v.to_string())
+                        })
+                        .unwrap_or_default()
+                }
+            };
+            let email = if email_raw.trim().is_empty() {
+                "dev@local.test".to_string()
+            } else {
+                email_raw.trim().to_lowercase()
+            };
+
+            let kv = env.kv("KV")?;
+            let db = env.d1("DB")?;
+            let tenant = match get_tenant_by_email(&db, &email).await? {
+                Some(t) => t,
+                None => {
+                    let signup_locale = crate::locale::Locale::from_request(&req);
+                    let now = now_iso();
+                    let t = Tenant {
+                        id: generate_id(),
+                        email: email.clone(),
+                        name: Some(email.split('@').next().unwrap_or("Dev").to_string()),
+                        facebook_id: None,
+                        plan: crate::types::Plan::Free,
+                        locale: signup_locale.langid.to_string(),
+                        currency: signup_locale.currency,
+                        email_address_extras_purchased: 0,
+                        verified_at: Some(now.clone()),
+                        created_at: now.clone(),
+                        updated_at: now,
+                    };
+                    save_tenant(&db, &t).await?;
+                    t
+                }
+            };
+
+            create_session_and_redirect(&req, &kv, &tenant.id, "dev").await
         }
 
         (Method::Get, "/auth/logout") => {

@@ -58,11 +58,17 @@ test.describe('billing save-on-blur', () => {
     // stable on a fresh DB (INR is in the seeded defaults).
     const cell = page.locator("input[name='unit_price_milli__INR']");
     await expect(cell).toBeVisible();
-    await expect(cell).toHaveAttribute('hx-trigger', 'change');
+    // The trigger filter (`change[target.checkValidity()]`) is what
+    // gates blanks / 0 / negatives / overflows from reaching the
+    // wire — see the validation tests below.
+    await expect(cell).toHaveAttribute('hx-trigger', /^change\[/);
     await expect(cell).toHaveAttribute('hx-post', /\/manage\/billing\/settings$/);
     await expect(cell).toHaveAttribute('hx-target', '#toast-region');
     await expect(cell).toHaveAttribute('hx-swap', 'afterbegin');
     await expect(cell).toHaveAttribute('hx-include', 'this');
+    await expect(cell).toHaveAttribute('min', '1');
+    await expect(cell).toHaveAttribute('max', /^\d+$/);
+    await expect(cell).toHaveAttribute('step', '1');
 
     // And confirm the wiring isn't a one-off — every pricing cell
     // gets the same shape (a single happy-path cell could be a
@@ -175,6 +181,81 @@ test.describe('audit log', () => {
     await expect(page.locator("input[name='actor']")).toBeVisible();
     await expect(page.locator("select[name='action']")).toBeVisible();
     await expect(page.locator("select[name='resource_type']")).toBeVisible();
+  });
+});
+
+test.describe('billing pricing input validation', () => {
+  test('invalid values (0, negative, blank, fractional) refuse to save', async ({ page, request }) => {
+    await page.goto('/manage/billing');
+    const cell = page.locator("input[name='unit_price_milli__INR']");
+
+    // Capture the canonical value the server sees right now via a
+    // round-trip through the page; we'll re-check it after typing
+    // garbage to prove no POST snuck through.
+    const before = await cell.inputValue();
+
+    // 1) zero — fails min=1
+    await cell.fill('0');
+    expect(await cell.evaluate((el: HTMLInputElement) => el.checkValidity())).toBe(false);
+    // 2) negative — fails min=1
+    await cell.fill('-5');
+    expect(await cell.evaluate((el: HTMLInputElement) => el.checkValidity())).toBe(false);
+    // 3) blank — fails required
+    await cell.fill('');
+    expect(await cell.evaluate((el: HTMLInputElement) => el.checkValidity())).toBe(false);
+    // 4) overflow — fails max
+    await cell.fill('99999999999');
+    expect(await cell.evaluate((el: HTMLInputElement) => el.checkValidity())).toBe(false);
+
+    // Server still has the original value (no save fired through).
+    const refreshed = await request.get('/manage/billing');
+    const html = await refreshed.text();
+    expect(html).toMatch(
+      new RegExp(`name="unit_price_milli__INR"[^>]*value="${before}"`),
+    );
+  });
+
+  test('valid value passes checkValidity and saves', async ({ page, request }) => {
+    await page.goto('/manage/billing');
+    const cell = page.locator("input[name='unit_price_milli__INR']");
+    await cell.fill('42');
+    expect(await cell.evaluate((el: HTMLInputElement) => el.checkValidity())).toBe(true);
+
+    // Confirm the wire-level shape works end-to-end. (Browser-level
+    // change-event submission has the Playwright/HTMX quirk we
+    // already documented in the cell-attributes test.)
+    const r = await request.post('/manage/billing/settings', {
+      data: { unit_price_milli__INR: 42 },
+      headers: { 'Content-Type': 'application/json' },
+    });
+    expect(r.status()).toBe(200);
+    expect(await r.text()).toMatch(/pricing settings updated/i);
+  });
+});
+
+test.describe('dev login', () => {
+  test('/auth/login surfaces the dev-login form when bypass is active', async ({ page }) => {
+    await page.goto('/auth/login');
+    const form = page.locator("form[action='/auth/dev-login']");
+    await expect(form).toBeVisible();
+    await expect(form.locator("input[name='email']")).toHaveValue('dev@local.test');
+    await expect(form.locator("button[type='submit']")).toBeVisible();
+  });
+
+  test('POST /auth/dev-login mints a session and redirects to /admin', async ({ request }) => {
+    // Don't auto-follow the redirect — we want to inspect the
+    // 302 + Set-Cookie headers directly.
+    const r = await request.post('/auth/dev-login', {
+      data: 'email=dev-test@local.test',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      maxRedirects: 0,
+    });
+    expect(r.status()).toBe(302);
+    expect(r.headers()['location']).toBe('/admin');
+    // Both cookies must be set: HTTP-only session, JS-readable csrf.
+    const setCookie = r.headers()['set-cookie'] ?? '';
+    expect(setCookie).toMatch(/session=[^;]+/);
+    expect(setCookie).toMatch(/csrf=[^;]+/);
   });
 });
 

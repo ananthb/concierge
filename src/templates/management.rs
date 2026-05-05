@@ -1286,10 +1286,19 @@ fn pricing_form_table(cfg: &crate::storage::Pricing, base_url: &str) -> String {
                     // including just one named field updates exactly
                     // one cell. The Save pricing button is a batch
                     // fallback (Enter/Return submits the form).
+                    //
+                    // Client-side validation: `min=1` `max=9999999999`
+                    // `step=1` keep the input in i64-safe positive
+                    // integer territory. The HTMX trigger guards on
+                    // `target.checkValidity()` so blanks, zero,
+                    // negatives, fractions, and overflows never
+                    // reach the wire. Invalid values still surface
+                    // via the :invalid border so the operator sees
+                    // immediately that the field is wrong.
                     format!(
-                        r##"<td><input class="input mono w-input-sm cell-save" name="{name}" type="number" min="1" required value="{value}"
+                        r##"<td><input class="input mono w-input-sm cell-save" name="{name}" type="number" min="1" max="9999999999" step="1" required value="{value}"
                                        hx-post="{base_url}/manage/billing/settings"
-                                       hx-trigger="change"
+                                       hx-trigger="change[target.checkValidity()]"
                                        hx-target="#toast-region" hx-swap="afterbegin"
                                        hx-ext="json-enc"
                                        hx-include="this"></td>"##,

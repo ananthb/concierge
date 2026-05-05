@@ -15,6 +15,7 @@ pub fn auth_login_html(
     wa_config_id: &str,
     wa_state: &str,
     last_provider: Option<&str>,
+    dev_login_enabled: bool,
     locale: &Locale,
 ) -> String {
     let redirect_uri = format!("{}/auth/callback", base_url);
@@ -167,6 +168,33 @@ btn?.addEventListener('click', async () => {{
         )
     };
 
+    // Dev-only login shortcut. Posts an arbitrary email to
+    // /auth/dev-login, which mints a tenant session and redirects
+    // to /admin — no real OAuth round-trip needed. Hidden in
+    // production (the gate flips on `crate::dev_bypass::active`,
+    // which requires `CF_ACCESS_AUD` empty + `MANAGE_BYPASS_EMAIL`
+    // set; production deploys always set the former).
+    let dev_login = if dev_login_enabled {
+        r##"<form method="post" action="/auth/dev-login"
+             class="card p-18 mt-24"
+             style="text-align:left;background:var(--cream-2);border-style:dashed">
+  <div class="eyebrow mb-8">Dev login</div>
+  <p class="muted fs-12 m-0 mb-12">
+    Local-dev shortcut. Mints a tenant session for the supplied email
+    without going through real OAuth. Visible because the bypass is
+    active; never reachable in production.
+  </p>
+  <div class="row gap-8 wrap" style="align-items:center">
+    <input class="input flex-1" type="email" name="email"
+           placeholder="dev@local.test" value="dev@local.test"
+           style="min-width:180px">
+    <button type="submit" class="btn sm">Sign in</button>
+  </div>
+</form>"##
+    } else {
+        ""
+    };
+
     let content = format!(
         r#"<div class="ta-center" style="max-width:360px;margin:4rem auto;padding:0 1rem">
     <div style="margin-bottom:2rem">{logo}
@@ -176,11 +204,13 @@ btn?.addEventListener('click', async () => {{
     <div class="stack gap-12">
       {buttons}
     </div>
+    {dev_login}
     <a href="/" class="btn ghost sm mt-24">{back}</a>
 </div>
 {wa_script}"#,
         logo = super::base::LOGO_INLINE,
         buttons = buttons,
+        dev_login = dev_login,
         tagline = t(locale, "admin-login-tagline"),
         back = t(locale, "admin-login-back"),
     );

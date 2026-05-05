@@ -253,6 +253,16 @@ code {
 .w-input-md { max-width:200px; }
 .w-input-lg { max-width:260px; }
 
+/* Inputs that fail HTML5 validity (min, max, step, required, …) get
+   a danger border so the operator sees the value is unacceptable
+   before they tab away. Scoped to .input.cell-save so we don't tag
+   every form field the moment it's empty — :invalid would otherwise
+   light up cells the user just hasn't filled in yet. */
+.input.cell-save:invalid {
+  border-color:var(--danger);
+  box-shadow:0 0 0 4px var(--danger-soft);
+}
+
 /* Global toast region — fixed top-right, aria-live=polite, replaces
    per-form #toast / #grant-replies-toast / #pricing-toast etc. */
 .toast-region { position:fixed; top:80px; right:24px; z-index:50;
