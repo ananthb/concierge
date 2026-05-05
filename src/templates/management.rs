@@ -1034,14 +1034,27 @@ pub fn demo_config_html(
     }
 
     let stored_block = stored
-        .map(|s| stored_personas_card(s))
+        .map(stored_personas_card)
         .unwrap_or_else(|| {
-            r#"<p class="muted fs-13 m-0">No personas rolled yet. Hit "Re-roll personas" to generate the first set, or wait for the next cron tick.</p>"#
+            r#"<p class="muted fs-13 m-0">No personas rolled yet. Hit "Re-roll" to generate the first set, or wait for the next cron tick.</p>"#
                 .to_string()
         });
+    let stored_meta = match stored {
+        Some(s) => format!(
+            "Last rolled {ts} · {n} personas",
+            ts = html_escape(&s.generated_at),
+            n = s
+                .response
+                .get("personas")
+                .and_then(|v| v.as_array())
+                .map(|a| a.len())
+                .unwrap_or(0)
+        ),
+        None => "Nothing stored yet.".to_string(),
+    };
 
     let content = format!(
-        r##"<div class="page-pad" x-data="{{ promptDirty: false, previewOk: false, advanced: false }}">
+        r##"<div class="page-pad" x-data="{{ promptDirty: false, previewOk: false }}">
   <div class="between mb-16">
     <div>
       <div class="eyebrow">Demo controls</div>
@@ -1051,66 +1064,61 @@ pub fn demo_config_html(
 
   {toggle_card}
 
-  <!-- Stored personas + Re-roll. The cron tick keeps these fresh on
-       the configured cadence; this card is the operator's surface for
-       seeing what's currently live and forcing a refresh. -->
-  <div class="card p-22 mb-16">
-    <div class="between mb-12">
-      <div>
-        <div class="eyebrow">Currently rolled</div>
-        <p class="muted fs-13 m-0 mt-4">{stored_meta}</p>
-      </div>
-      <form hx-post="{base_url}/manage/demo/reroll" hx-target="body" hx-swap="innerHTML">
-        <button type="submit" class="btn primary">Re-roll personas</button>
-      </form>
-    </div>
-    {stored_block}
-  </div>
-
-  <!-- Cadence + advanced prompt. Toggle lives in its own form above. -->
+  <!-- One unified card: cadence + persona prompt + the action row
+       (Preview / Re-roll / Save) and a shared display pane below.
+       The pane starts on the currently-rolled personas; clicking
+       Preview swaps it with the model's draft output (or an error).
+       Save is disabled while the prompt is dirty until Preview
+       returns a valid shape. -->
   <div class="card p-22 mb-16">
     <form hx-post="{base_url}/manage/demo" hx-ext="json-enc" hx-target="body" hx-swap="innerHTML">
       <input type="hidden" name="prompt_verified" :value="String(previewOk || !promptDirty)">
-      <div class="row gap-12 mb-16" style="align-items:center">
+
+      <div class="between mb-12 wrap" style="gap:12px">
+        <div>
+          <div class="eyebrow">Personas</div>
+          <p class="muted fs-13 m-0 mt-4">{stored_meta}</p>
+        </div>
+      </div>
+
+      <div class="row gap-12 mb-16 wrap" style="align-items:center">
         <label for="demo-cadence" class="fw-600">Regenerate every</label>
         <input id="demo-cadence" class="input mono" type="number" name="regeneration_cadence_mins" min="0" max="10080" value="{cadence}" style="max-width:140px">
         <span class="muted fs-13">minutes (0 = manual only).</span>
       </div>
 
-      <!-- Advanced: prompt editor. Save button below is gated on a
-           successful preview when the prompt has been edited. -->
-      <div class="mt-16" style="border-top:1px solid var(--border-soft);padding-top:16px">
-        <button type="button" class="btn ghost sm" @click="advanced = !advanced" :aria-expanded="advanced">
-          <span x-show="!advanced">Advanced ▾</span>
-          <span x-show="advanced" x-cloak>Advanced ▴</span>
-        </button>
-        <div x-show="advanced" x-cloak class="mt-12">
-          <label for="demo-prompt" class="eyebrow lbl">Persona generation system prompt</label>
-          <p class="muted fs-12 m-0 mb-8">Sent as the system message to the LLM with each archetype's label + description as the user message. The model must reply with a JSON array of objects, one per archetype in the same order. Each object: <code>name</code>, <code>business_type</code>, <code>city</code>, <code>hours</code>, <code>goal</code>, <code>goal_url</code>. Leave blank to restore the default.</p>
-          <textarea id="demo-prompt" class="textarea mono" name="persona_generation_prompt" rows="8"
-                    placeholder="{default_prompt}"
-                    @input="promptDirty = true; previewOk = false">{prompt_value}</textarea>
-
-          <div class="row gap-8 mt-12" style="align-items:center">
-            <button type="button" class="btn ghost sm"
-                    hx-post="{base_url}/manage/demo/preview"
-                    hx-include="[name='persona_generation_prompt']"
-                    hx-target="{hash}demo-preview"
-                    hx-swap="innerHTML"
-                    hx-ext="json-enc">Preview generation</button>
-            <span class="muted fs-12" x-show="promptDirty && !previewOk" x-cloak>Preview must succeed before saving.</span>
-          </div>
-          <div id="demo-preview" class="mt-12"
-               @htmx:after-swap="previewOk = !!document.querySelector('#demo-preview .preview-ok')">
-            <div class="muted fs-13">No preview yet.</div>
-          </div>
-        </div>
+      <div class="mt-12">
+        <label for="demo-prompt" class="eyebrow lbl">Persona generation prompt</label>
+        <p class="muted fs-12 m-0 mb-8">Sent as the system message to the LLM with each archetype's label + description as the user message. The model must reply with a JSON array of objects, one per archetype in the same order. Each object: <code>name</code>, <code>business_type</code>, <code>city</code>, <code>hours</code>, <code>goal</code>, <code>goal_url</code>. Leave blank to restore the default.</p>
+        <textarea id="demo-prompt" class="textarea mono" name="persona_generation_prompt" rows="6"
+                  placeholder="{default_prompt}"
+                  @input="promptDirty = true; previewOk = false">{prompt_value}</textarea>
       </div>
 
-      <div class="between pt-16 mt-16" style="border-top:1px solid var(--border-soft)">
-        <span></span>
+      <div class="row gap-8 mt-12 wrap" style="align-items:center">
+        <button type="button" class="btn ghost sm"
+                hx-post="{base_url}/manage/demo/preview"
+                hx-include="[name='persona_generation_prompt']"
+                hx-target="{hash}demo-display"
+                hx-swap="innerHTML"
+                hx-ext="json-enc">Preview</button>
+        <button type="button" class="btn ghost sm"
+                hx-post="{base_url}/manage/demo/reroll"
+                hx-target="body" hx-swap="innerHTML"
+                hx-confirm="Re-roll the stored personas with the currently-saved prompt?">Re-roll</button>
         <button type="submit" class="btn primary"
-                :disabled="promptDirty && !previewOk">Save settings</button>
+                :disabled="promptDirty && !previewOk">Save</button>
+        <span class="muted fs-12" x-show="promptDirty && !previewOk" x-cloak>Preview must succeed before saving.</span>
+      </div>
+
+      <!-- Shared display pane. Server-rendered with the currently
+           stored personas on first paint; swapped to the preview
+           result after a Preview click. The `@htmx:after-swap`
+           listener watches for a `.preview-ok` marker the success
+           template emits and flips the Save gate accordingly. -->
+      <div id="demo-display" class="mt-16" style="border-top:1px solid var(--border-soft);padding-top:16px"
+           @htmx:after-swap="previewOk = !!document.querySelector('#demo-display .preview-ok')">
+        {stored_block}
       </div>
     </form>
   </div>
@@ -1121,19 +1129,7 @@ pub fn demo_config_html(
         prompt_value = prompt_value,
         default_prompt = default_prompt,
         cadence = cadence,
-        stored_meta = match stored {
-            Some(s) => format!(
-                "Last rolled {ts} · {n} personas",
-                ts = html_escape(&s.generated_at),
-                n = s
-                    .response
-                    .get("personas")
-                    .and_then(|v| v.as_array())
-                    .map(|a| a.len())
-                    .unwrap_or(0)
-            ),
-            None => "Nothing stored yet.".to_string(),
-        },
+        stored_meta = stored_meta,
         stored_block = stored_block,
     );
 
