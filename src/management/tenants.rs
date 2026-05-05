@@ -26,16 +26,33 @@ pub async fn handle_tenants(
 
     let locale = crate::locale::Locale::from_request(&req);
 
+    // Pull `?q=` once so both the initial render and the HTMX fragment
+    // path see the same query.
+    let url = req.url()?;
+    let query = url
+        .query_pairs()
+        .find(|(k, _)| k == "q")
+        .map(|(_, v)| v.into_owned())
+        .unwrap_or_default();
+
     match (method, parts.as_slice()) {
-        // List all tenants
+        // List all tenants. If the request carries the HX-Request
+        // header, return just the table fragment so the search input
+        // can swap in place without reloading the page.
         (Method::Get, []) => {
-            let tenants = list_tenants(db).await?;
-            Response::from_html(tmpl::tenants_list_html(
-                &tenants,
-                actor_email,
-                base_url,
-                &locale,
-            ))
+            let tenants = search_tenants(db, &query).await?;
+            let is_htmx = req.headers().get("HX-Request").ok().flatten().is_some();
+            if is_htmx {
+                Response::from_html(tmpl::tenants_table_html(&tenants, base_url))
+            } else {
+                Response::from_html(tmpl::tenants_list_html(
+                    &tenants,
+                    &query,
+                    actor_email,
+                    base_url,
+                    &locale,
+                ))
+            }
         }
 
         // View single tenant

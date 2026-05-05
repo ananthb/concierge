@@ -255,10 +255,49 @@ fn health_panel_html(report: &crate::handlers::health::HealthReport) -> String {
 
 pub fn tenants_list_html(
     tenants: &[Tenant],
+    query: &str,
     actor_email: &str,
     base_url: &str,
     locale: &Locale,
 ) -> String {
+    let table = tenants_table_html(tenants, base_url);
+    let header = manage_header("All tenants", "Tenants", None, None, "");
+
+    let content = format!(
+        r##"<div class="page-pad">
+  {header}
+  <div class="row gap-12 mb-12 wrap" style="align-items:center">
+    <input
+      class="input w-input-lg" type="search" name="q" value="{q}"
+      placeholder="Search by email or name…"
+      hx-get="{base_url}/manage/tenants"
+      hx-trigger="input changed delay:200ms, search"
+      hx-target="{hash}tenants-table" hx-swap="outerHTML"
+      hx-push-url="true"
+      autocomplete="off">
+  </div>
+  {table}
+</div>"##,
+        header = header,
+        base_url = base_url,
+        hash = HASH,
+        q = html_escape(query),
+        table = table,
+    );
+
+    manage_shell(
+        "Tenants · Concierge",
+        &content,
+        "Tenants",
+        actor_email,
+        base_url,
+        locale,
+    )
+}
+
+/// Render just the `<div id="tenants-table">` portion of the tenants
+/// list. Used both for the full page and for the HTMX search swap.
+pub fn tenants_table_html(tenants: &[Tenant], base_url: &str) -> String {
     let rows: String = tenants
         .iter()
         .map(|t| {
@@ -282,50 +321,34 @@ pub fn tenants_list_html(
         })
         .collect();
 
-    let empty = if tenants.is_empty() {
+    let body = if tenants.is_empty() {
         empty_state(
-            "No tenants yet",
-            "Tenants appear here once someone signs up. The first sign-up after launch will land in this table.",
+            "No tenants match",
+            "Try a different search, or clear the box to see every tenant.",
             None,
         )
     } else {
-        String::new()
+        format!(
+            r##"<div class="rt-head" style="grid-template-columns:1fr 1fr 0.6fr 0.5fr 80px">
+  <div>Email</div><div>Name</div><div>Plan</div><div>Created</div><div></div>
+</div>{rows}"##,
+            rows = rows,
+        )
     };
 
-    let header = manage_header(
-        "All tenants",
-        &format!(
-            "{count} tenant{s}",
-            count = tenants.len(),
-            s = if tenants.len() == 1 { "" } else { "s" },
-        ),
-        None,
-        None,
-        "",
+    let count_line = format!(
+        r#"<div class="muted fs-12 mb-8">{n} tenant{s}</div>"#,
+        n = tenants.len(),
+        s = if tenants.len() == 1 { "" } else { "s" },
     );
 
-    let content = format!(
-        r##"<div class="page-pad">
-  {header}
-  <div class="card" style="padding:0;overflow:hidden">
-    <div class="rt-head" style="grid-template-columns:1fr 1fr 0.6fr 0.5fr 80px">
-      <div>Email</div><div>Name</div><div>Plan</div><div>Created</div><div></div>
-    </div>
-    {rows}{empty}
-  </div>
+    format!(
+        r##"<div id="tenants-table">
+  {count_line}
+  <div class="card" style="padding:0;overflow:hidden">{body}</div>
 </div>"##,
-        header = header,
-        rows = rows,
-        empty = empty,
-    );
-
-    manage_shell(
-        "Tenants · Concierge",
-        &content,
-        "Tenants",
-        actor_email,
-        base_url,
-        locale,
+        count_line = count_line,
+        body = body,
     )
 }
 

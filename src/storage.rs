@@ -149,6 +149,39 @@ pub async fn list_tenants(db: &D1Database) -> Result<Vec<Tenant>> {
     Ok(rows.iter().map(row_to_tenant).collect())
 }
 
+/// Case-insensitive LIKE search over tenant email and name. Empty
+/// query returns the same shape as `list_tenants`. Used by the
+/// management panel's tenant search input.
+///
+/// SQLite LIKE treats `%` and `_` as wildcards; the explicit ESCAPE
+/// clause lets a user search for emails that literally contain those
+/// characters (rare but possible: `%@example.com` after the local
+/// part allows it).
+pub async fn search_tenants(db: &D1Database, q: &str) -> Result<Vec<Tenant>> {
+    let q = q.trim();
+    if q.is_empty() {
+        return list_tenants(db).await;
+    }
+    let pattern = format!(
+        "%{}%",
+        q.replace('\\', r"\\")
+            .replace('%', r"\%")
+            .replace('_', r"\_")
+    );
+    let results = db
+        .prepare(
+            "SELECT * FROM tenants
+             WHERE email LIKE ?1 ESCAPE '\\' COLLATE NOCASE
+                OR (name IS NOT NULL AND name LIKE ?1 ESCAPE '\\' COLLATE NOCASE)
+             ORDER BY created_at DESC",
+        )
+        .bind(&[pattern.as_str().into()])?
+        .all()
+        .await?;
+    let rows: Vec<serde_json::Value> = results.results()?;
+    Ok(rows.iter().map(row_to_tenant).collect())
+}
+
 pub async fn count_tenants(db: &D1Database) -> Result<usize> {
     let row = db
         .prepare("SELECT COUNT(*) as cnt FROM tenants")
