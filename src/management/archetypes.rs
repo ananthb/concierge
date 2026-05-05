@@ -33,16 +33,31 @@ pub async fn handle_archetypes(
     let locale = crate::locale::Locale::from_request(&req);
     let kv = env.kv("KV")?;
 
+    let url = req.url()?;
+    let query = url
+        .query_pairs()
+        .find(|(k, _)| k == "q")
+        .map(|(_, v)| v.into_owned())
+        .unwrap_or_default();
+
     match (method, parts.as_slice()) {
-        // List all archetypes (drafts + approved + rejected; operators see everything)
+        // List all archetypes (drafts + approved + rejected; operators see everything).
+        // Same HX-Request fragment trick as the tenants list — the
+        // search input swaps just the table.
         (Method::Get, []) => {
-            let rows = storage::list_archetypes(db, false).await?;
-            Response::from_html(tmpl::archetypes_list_html(
-                &rows,
-                actor_email,
-                base_url,
-                &locale,
-            ))
+            let rows = storage::search_archetypes(db, &query).await?;
+            let is_htmx = req.headers().get("HX-Request").ok().flatten().is_some();
+            if is_htmx {
+                Response::from_html(tmpl::archetypes_table_html(&rows, base_url))
+            } else {
+                Response::from_html(tmpl::archetypes_list_html(
+                    &rows,
+                    &query,
+                    actor_email,
+                    base_url,
+                    &locale,
+                ))
+            }
         }
 
         // New archetype form

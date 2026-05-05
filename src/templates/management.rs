@@ -1060,10 +1060,62 @@ struct CurrencyDisplay {
 
 pub fn archetypes_list_html(
     rows: &[crate::types::Archetype],
+    query: &str,
     actor_email: &str,
     base_url: &str,
     locale: &Locale,
 ) -> String {
+    let new_btn = format!(
+        r#"<a class="btn primary sm" href="{base_url}/manage/archetypes/new">+ New archetype</a>"#,
+        base_url = base_url,
+    );
+
+    let header = manage_header(
+        "Archetype catalog",
+        "Archetypes",
+        None,
+        Some("Every save runs through the safety classifier; only Approved rows are visible in the demo and onboarding."),
+        &new_btn,
+    );
+
+    let table = archetypes_table_html(rows, base_url);
+
+    let content = format!(
+        r##"<div class="page-pad">
+  {header}
+  <div class="row gap-12 mb-12 wrap" style="align-items:center">
+    <input
+      class="input w-input-lg" type="search" name="q" value="{q}"
+      placeholder="Search by slug, label, or description…"
+      hx-get="{base_url}/manage/archetypes"
+      hx-trigger="input changed delay:200ms, search"
+      hx-target="{hash}archetypes-table" hx-swap="outerHTML"
+      hx-push-url="true"
+      autocomplete="off">
+  </div>
+  {table}
+</div>"##,
+        header = header,
+        base_url = base_url,
+        hash = HASH,
+        q = html_escape(query),
+        table = table,
+    );
+    manage_shell(
+        "Archetypes · Concierge",
+        &content,
+        "Archetypes",
+        actor_email,
+        base_url,
+        locale,
+    )
+}
+
+/// Render just the `<div id="archetypes-table">` portion of the
+/// archetypes list. Used both for the full page and the HTMX search
+/// swap. The empty-state branches between "no archetypes ever" and
+/// "no rows match this query" so the CTA fits the situation.
+pub fn archetypes_table_html(rows: &[crate::types::Archetype], base_url: &str) -> String {
     let row_html: String = rows
         .iter()
         .map(|r| {
@@ -1092,57 +1144,34 @@ pub fn archetypes_list_html(
         })
         .collect();
 
-    let empty = if rows.is_empty() {
+    let body = if rows.is_empty() {
         empty_state(
-            "No archetypes yet",
-            "Archetypes define the AI's tone and initial rules. Add the first one to seed the demo and onboarding picker.",
-            Some((
-                &format!("{}/manage/archetypes/new", base_url),
-                "Add the first archetype",
-            )),
+            "No archetypes match",
+            "Try a different search, or clear the box to see every archetype.",
+            None,
         )
     } else {
-        String::new()
+        format!(
+            r##"<div class="rt-head" style="grid-template-columns:0.7fr 0.7fr 1.4fr 0.6fr 0.5fr 80px">
+  <div>Slug</div><div>Label</div><div>Description</div><div>Safety</div><div>Updated</div><div></div>
+</div>{rows}"##,
+            rows = row_html,
+        )
     };
 
-    let new_btn = format!(
-        r#"<a class="btn primary sm" href="{base_url}/manage/archetypes/new">+ New archetype</a>"#,
-        base_url = base_url,
+    let count_line = format!(
+        r#"<div class="muted fs-12 mb-8">{n} archetype{s}</div>"#,
+        n = rows.len(),
+        s = if rows.len() == 1 { "" } else { "s" },
     );
 
-    let header = manage_header(
-        "Archetype catalog",
-        &format!(
-            "{count} archetype{s}",
-            count = rows.len(),
-            s = if rows.len() == 1 { "" } else { "s" },
-        ),
-        None,
-        Some("Every save runs through the safety classifier; only Approved rows are visible in the demo and onboarding."),
-        &new_btn,
-    );
-
-    let content = format!(
-        r##"<div class="page-pad">
-  {header}
-  <div class="card" style="padding:0;overflow:hidden">
-    <div class="rt-head" style="grid-template-columns:0.7fr 0.7fr 1.4fr 0.6fr 0.5fr 80px">
-      <div>Slug</div><div>Label</div><div>Description</div><div>Safety</div><div>Updated</div><div></div>
-    </div>
-    {rows}{empty}
-  </div>
+    format!(
+        r##"<div id="archetypes-table">
+  {count_line}
+  <div class="card" style="padding:0;overflow:hidden">{body}</div>
 </div>"##,
-        header = header,
-        rows = row_html,
-        empty = empty,
-    );
-    manage_shell(
-        "Archetypes · Concierge",
-        &content,
-        "Archetypes",
-        actor_email,
-        base_url,
-        locale,
+        count_line = count_line,
+        body = body,
     )
 }
 

@@ -214,6 +214,34 @@ pub async fn list_archetypes(
     Ok(rows.iter().filter_map(row_to_archetype).collect())
 }
 
+/// Case-insensitive LIKE search over archetype slug, label, and
+/// description. Empty query falls through to `list_archetypes`.
+pub async fn search_archetypes(db: &D1Database, q: &str) -> Result<Vec<crate::types::Archetype>> {
+    let q = q.trim();
+    if q.is_empty() {
+        return list_archetypes(db, false).await;
+    }
+    let pattern = format!(
+        "%{}%",
+        q.replace('\\', r"\\")
+            .replace('%', r"\%")
+            .replace('_', r"\_")
+    );
+    let results = db
+        .prepare(
+            "SELECT * FROM archetypes
+             WHERE slug LIKE ?1 ESCAPE '\\' COLLATE NOCASE
+                OR label LIKE ?1 ESCAPE '\\' COLLATE NOCASE
+                OR description LIKE ?1 ESCAPE '\\' COLLATE NOCASE
+             ORDER BY label ASC",
+        )
+        .bind(&[pattern.as_str().into()])?
+        .all()
+        .await?;
+    let rows: Vec<serde_json::Value> = results.results()?;
+    Ok(rows.iter().filter_map(row_to_archetype).collect())
+}
+
 pub async fn get_archetype(db: &D1Database, slug: &str) -> Result<Option<crate::types::Archetype>> {
     let row = db
         .prepare("SELECT * FROM archetypes WHERE slug = ?")
