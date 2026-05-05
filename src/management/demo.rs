@@ -1,12 +1,18 @@
 //! `/manage/demo`: operator controls for the public homepage demo.
-//! Two settings: an `enabled` toggle (gates `/demo/personas`,
-//! `/demo/chat`, and the homepage entry point) and the system prompt
-//! used to generate fictional sample businesses for each archetype.
 //!
-//! Saving busts `cache:demo:personas:v1` so the change reaches visitors
-//! immediately. A separate preview endpoint runs the prompt against
-//! the current archetypes and returns the raw + parsed result so an
-//! operator can iterate on the prompt without breaking the live demo.
+//! Three settings live on this page: an `enabled` toggle (gates
+//! `/demo/personas`, `/demo/chat`, and the homepage entry point), a
+//! regeneration cadence in minutes (how often the cron tick re-rolls
+//! the stored persona blob), and the system prompt the generator uses.
+//!
+//! The prompt edit flow is preview-gated: a save only persists the new
+//! prompt when the operator has just previewed it and the model
+//! returned a parseable JSON array of the right shape. Toggle/cadence
+//! edits don't need a preview.
+//!
+//! Re-rolling the stored personas is its own action (POST /reroll)
+//! independent of saving config; the cron tick handles the recurring
+//! refresh.
 
 use worker::*;
 
@@ -37,7 +43,13 @@ pub async fn handle_demo(
     match (method, parts.as_slice()) {
         (Method::Get, []) => {
             let cfg = storage::get_demo_config(&kv).await.unwrap_or_default();
-            Response::from_html(tmpl::demo_config_html(&cfg, base_url, &locale))
+            let stored = storage::get_stored_demo_personas(&kv).await.unwrap_or(None);
+            Response::from_html(tmpl::demo_config_html(
+                &cfg,
+                stored.as_ref(),
+                base_url,
+                &locale,
+            ))
         }
 
         (Method::Post, []) => {
@@ -47,28 +59,57 @@ pub async fn handle_demo(
                 .and_then(|v| v.as_str())
                 .map(|s| s == "true" || s == "on")
                 .unwrap_or(false);
-            let prompt_raw = form
+            let cadence = form
+                .get("regeneration_cadence_mins")
+                .and_then(|v| {
+                    v.as_str()
+                        .and_then(|s| s.parse::<u32>().ok())
+                        .or_else(|| v.as_u64().map(|n| n as u32))
+                })
+                .unwrap_or(storage::DEFAULT_DEMO_REGEN_CADENCE_MINS);
+            let new_prompt = form
                 .get("persona_generation_prompt")
                 .and_then(|v| v.as_str())
                 .unwrap_or("")
                 .trim()
                 .to_string();
-            let prompt = if prompt_raw.is_empty() {
+
+            let existing = storage::get_demo_config(&kv).await.unwrap_or_default();
+
+            // Prompt-edit gate: only accept the new prompt if the
+            // operator just verified it via /preview (the form
+            // includes `prompt_verified=true`) OR if it's unchanged
+            // from what's already stored. Empty input falls back to
+            // the default (also pre-verified).
+            let verified = form
+                .get("prompt_verified")
+                .and_then(|v| v.as_str())
+                .map(|s| s == "true")
+                .unwrap_or(false);
+            let prompt = if new_prompt.is_empty() {
                 storage::DEFAULT_DEMO_GENERATION_PROMPT.to_string()
+            } else if new_prompt == existing.persona_generation_prompt || verified {
+                new_prompt
             } else {
-                prompt_raw
+                return Response::from_html(
+                    r#"<div class="error">Click "Preview generation" before saving — the new prompt must produce a valid JSON array first.</div>"#
+                        .to_string(),
+                );
             };
 
             let cfg = DemoConfig {
                 enabled,
                 persona_generation_prompt: prompt,
+                regeneration_cadence_mins: cadence,
             };
             storage::save_demo_config(&kv, &cfg).await?;
-            // Persona list is regenerated against the new prompt next
-            // request. Toggling `enabled` also needs the cache cleared
-            // so a previously-cached non-empty list doesn't survive an
-            // off→off render.
-            let _ = storage::invalidate_demo_personas_cache(&kv).await;
+            // Toggling off clears the stored personas so a re-enable
+            // starts from a clean slate. Toggling on or editing
+            // cadence/prompt leaves the existing blob in place — the
+            // operator can hit Re-roll to refresh on demand.
+            if !cfg.enabled {
+                let _ = storage::delete_stored_demo_personas(&kv).await;
+            }
 
             audit::log_action(
                 db,
@@ -76,7 +117,10 @@ pub async fn handle_demo(
                 "edit_demo_config",
                 "demo_config",
                 None,
-                Some(&serde_json::json!({ "enabled": cfg.enabled })),
+                Some(&serde_json::json!({
+                    "enabled": cfg.enabled,
+                    "regeneration_cadence_mins": cfg.regeneration_cadence_mins,
+                })),
             )
             .await?;
 
@@ -117,10 +161,54 @@ pub async fn handle_demo(
             )
             .await
             {
-                Ok(businesses) => {
+                Ok(businesses) if businesses.len() == archetypes.len() => {
                     Response::from_html(tmpl::demo_preview_success_html(&archetypes, &businesses))
                 }
+                Ok(businesses) => Response::from_html(tmpl::demo_preview_shape_mismatch_html(
+                    archetypes.len(),
+                    businesses.len(),
+                )),
                 Err(msg) => Response::from_html(tmpl::demo_preview_error_html(&msg)),
+            }
+        }
+
+        // Operator-driven re-roll. Generates a fresh personas blob
+        // against the *currently saved* prompt (so a save+reroll
+        // sequence reflects the new prompt) and writes it back.
+        (Method::Post, ["reroll"]) => {
+            let cfg = storage::get_demo_config(&kv).await.unwrap_or_default();
+            if !cfg.enabled {
+                return Response::from_html(
+                    r#"<div class="error">Enable the demo before re-rolling personas.</div>"#
+                        .to_string(),
+                );
+            }
+            match crate::handlers::demo_personas_list::regenerate_and_store(
+                env,
+                &kv,
+                db,
+                &cfg.persona_generation_prompt,
+            )
+            .await
+            {
+                Ok(_) => {
+                    audit::log_action(
+                        db,
+                        actor_email,
+                        "reroll_demo_personas",
+                        "demo_personas",
+                        None,
+                        None,
+                    )
+                    .await?;
+                    let headers = Headers::new();
+                    headers.set("HX-Redirect", &format!("{base_url}/manage/demo"))?;
+                    Ok(Response::empty()?.with_status(200).with_headers(headers))
+                }
+                Err(msg) => Response::from_html(format!(
+                    r#"<div class="error">Re-roll failed: {}</div>"#,
+                    crate::helpers::html_escape(&msg)
+                )),
             }
         }
 

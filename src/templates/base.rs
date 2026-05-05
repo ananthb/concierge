@@ -386,12 +386,19 @@ code {
 .chat-business-card .roleplay { color:var(--ink); margin:0 0 6px; }
 .chat-business-card .roleplay strong { color:var(--ink); }
 .chat-business-card .biz-meta { display:flex; flex-wrap:wrap; gap:4px 14px;
-  color:var(--muted); font-size:12px; margin:0; }
-.chat-business-card .biz-meta span { white-space:nowrap; }
+  color:var(--muted); font-size:12px; margin:0; min-width:0; }
+.chat-business-card .biz-meta span { white-space:nowrap; min-width:0; }
 .chat-business-card .biz-meta b { color:var(--ink-2); font-weight:600;
   letter-spacing:.04em; text-transform:uppercase; font-size:10px; margin-right:4px; }
+/* Goal often runs long (free-text + URL). Take a full row, wrap
+   freely, and let long URLs break across lines so the card doesn't
+   overflow on narrow viewports. */
+.chat-business-card .biz-meta .biz-goal { white-space:normal;
+  overflow-wrap:anywhere; flex-basis:100%; }
 .chat-business-card .biz-goal-link { color:var(--ink); text-decoration:underline;
-  text-decoration-style:dotted; margin-left:6px; }
+  text-decoration-style:dotted; margin-left:6px; overflow-wrap:anywhere;
+  word-break:break-all; max-width:100%; display:inline-block;
+  vertical-align:bottom; }
 .chat-channels-note { color:var(--muted); font-size:12px; line-height:1.45;
   margin:8px 0 0; padding:8px 10px; background:var(--cream-2);
   border:1px dashed var(--hair); border-radius:8px; }

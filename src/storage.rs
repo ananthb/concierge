@@ -234,20 +234,6 @@ pub async fn invalidate_archetype_cache(kv: &kv::KvStore, slug: &str) -> Result<
     Ok(())
 }
 
-/// KV key for the public demo-personas list (the welcome-page picker).
-/// Populated lazily by `handlers::demo_personas_list` and dropped here
-/// whenever a catalog write could change which archetypes appear or
-/// what their voice/greeting/business sample looks like.
-pub const DEMO_PERSONAS_CACHE_KEY: &str = "cache:demo:personas:v1";
-
-/// Drop the cached demo-personas list. Call after any archetype write
-/// (`upsert_archetype`, `delete_archetype`, `set_archetype_safety`) so
-/// the next demo visitor sees the change without waiting on the TTL.
-pub async fn invalidate_demo_personas_cache(kv: &kv::KvStore) -> Result<()> {
-    kv.delete(DEMO_PERSONAS_CACHE_KEY).await?;
-    Ok(())
-}
-
 // ============================================================================
 // Demo Config (KV singleton)
 // ============================================================================
@@ -258,6 +244,10 @@ pub async fn invalidate_demo_personas_cache(kv: &kv::KvStore) -> Result<()> {
 /// management user has touched the page.
 pub const DEFAULT_DEMO_GENERATION_PROMPT: &str = "You are a creative business consultant. Generate fictional but realistic business details for each of the following persona archetypes. For each, provide: name, business_type, city, hours, goal, and goal_url. Return ONLY a JSON array of objects, one for each archetype, in the exact same order. Do not include any other text.";
 
+/// Default cadence (in minutes) at which the cron tick re-rolls the
+/// stored demo personas. Operators can override on /manage/demo.
+pub const DEFAULT_DEMO_REGEN_CADENCE_MINS: u32 = 60;
+
 /// Operator-controlled demo settings. Stored as a singleton KV row
 /// under `DEMO_CONFIG_KEY`. `enabled=false` hides the homepage entry
 /// point and turns `/demo/personas` + `/demo/chat` into noops.
@@ -265,6 +255,14 @@ pub const DEFAULT_DEMO_GENERATION_PROMPT: &str = "You are a creative business co
 pub struct DemoConfig {
     pub enabled: bool,
     pub persona_generation_prompt: String,
+    /// How long the stored persona blob can sit before the cron tick
+    /// regenerates it. 0 disables cron-driven regen (manual only).
+    #[serde(default = "default_demo_regen_cadence")]
+    pub regeneration_cadence_mins: u32,
+}
+
+fn default_demo_regen_cadence() -> u32 {
+    DEFAULT_DEMO_REGEN_CADENCE_MINS
 }
 
 impl Default for DemoConfig {
@@ -272,6 +270,7 @@ impl Default for DemoConfig {
         Self {
             enabled: true,
             persona_generation_prompt: DEFAULT_DEMO_GENERATION_PROMPT.to_string(),
+            regeneration_cadence_mins: DEFAULT_DEMO_REGEN_CADENCE_MINS,
         }
     }
 }
@@ -289,6 +288,50 @@ pub async fn get_demo_config(kv: &kv::KvStore) -> Result<DemoConfig> {
 pub async fn save_demo_config(kv: &kv::KvStore, cfg: &DemoConfig) -> Result<()> {
     let json = serde_json::to_string(cfg).map_err(|e| Error::from(format!("JSON error: {e}")))?;
     kv.put(DEMO_CONFIG_KEY, json)?.execute().await?;
+    Ok(())
+}
+
+// ============================================================================
+// Stored demo personas (KV singleton)
+// ============================================================================
+
+/// Persisted output of the demo persona generator. Replaces the prior
+/// 5-min TTL cache: now we keep the rolled blob durably and let the
+/// cron tick (or a manual re-roll from /manage/demo) refresh it.
+/// Welcome-page traffic always reads this; cache misses regenerate
+/// inline and write back so a brand-new deploy doesn't render an empty
+/// picker.
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
+pub struct StoredDemoPersonas {
+    /// RFC3339 timestamp of when this blob was last rolled. The cron
+    /// tick consults this against `DemoConfig.regeneration_cadence_mins`.
+    pub generated_at: String,
+    /// Full `DemoPersonasResponse` body, kept opaque at the storage
+    /// layer so the demo handler owns the response shape.
+    pub response: serde_json::Value,
+}
+
+const STORED_DEMO_PERSONAS_KEY: &str = "management:demo_personas:v1";
+
+pub async fn get_stored_demo_personas(kv: &kv::KvStore) -> Result<Option<StoredDemoPersonas>> {
+    kv.get(STORED_DEMO_PERSONAS_KEY)
+        .json::<StoredDemoPersonas>()
+        .await
+        .map_err(|e| Error::from(e.to_string()))
+}
+
+pub async fn save_stored_demo_personas(
+    kv: &kv::KvStore,
+    stored: &StoredDemoPersonas,
+) -> Result<()> {
+    let json =
+        serde_json::to_string(stored).map_err(|e| Error::from(format!("JSON error: {e}")))?;
+    kv.put(STORED_DEMO_PERSONAS_KEY, json)?.execute().await?;
+    Ok(())
+}
+
+pub async fn delete_stored_demo_personas(kv: &kv::KvStore) -> Result<()> {
+    kv.delete(STORED_DEMO_PERSONAS_KEY).await?;
     Ok(())
 }
 

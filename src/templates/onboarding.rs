@@ -321,7 +321,7 @@ pub fn welcome_html(
         <span x-show="currentPersona.business && currentPersona.business.business_type"><b>{chat_lbl_type}</b><span x-text="currentPersona.business && currentPersona.business.business_type"></span></span>
         <span x-show="currentPersona.business && currentPersona.business.city"><b>{chat_lbl_city}</b><span x-text="currentPersona.business && currentPersona.business.city"></span></span>
         <span x-show="currentPersona.business && currentPersona.business.hours"><b>{chat_lbl_hours}</b><span x-text="currentPersona.business && currentPersona.business.hours"></span></span>
-        <span x-show="currentPersona.business && currentPersona.business.goal">
+        <span class="biz-goal" x-show="currentPersona.business && currentPersona.business.goal">
           <b>{chat_lbl_goal}</b>
           <span x-text="currentPersona.business && currentPersona.business.goal"></span>
           <template x-if="currentPersona.business && currentPersona.business.goal_url">

@@ -68,7 +68,7 @@ pub async fn handle_archetypes(
 
             storage::upsert_archetype(db, &row).await?;
             let _ = storage::invalidate_archetype_cache(&kv, &row.slug).await;
-            let _ = storage::invalidate_demo_personas_cache(&kv).await;
+            let _ = storage::delete_stored_demo_personas(&kv).await;
             enqueue_catalog_safety(env, &row).await;
 
             audit::log_action(
@@ -119,7 +119,7 @@ pub async fn handle_archetypes(
 
             storage::upsert_archetype(db, &row).await?;
             let _ = storage::invalidate_archetype_cache(&kv, &row.slug).await;
-            let _ = storage::invalidate_demo_personas_cache(&kv).await;
+            let _ = storage::delete_stored_demo_personas(&kv).await;
             enqueue_catalog_safety(env, &row).await;
 
             audit::log_action(
@@ -144,7 +144,7 @@ pub async fn handle_archetypes(
         (Method::Post, [slug, "delete"]) => match storage::delete_archetype(db, slug).await {
             Ok(()) => {
                 let _ = storage::invalidate_archetype_cache(&kv, slug).await;
-                let _ = storage::invalidate_demo_personas_cache(&kv).await;
+                let _ = storage::delete_stored_demo_personas(&kv).await;
                 audit::log_action(
                     db,
                     actor_email,

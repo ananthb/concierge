@@ -431,16 +431,17 @@ async fn handle_request(req: Request, env: Env) -> Result<Response> {
             .await
             .unwrap_or_default()
             .enabled;
-        // Preload: when the personas cache is warm, embed the JSON blob
-        // directly in the welcome page so the chat factory's `init()`
-        // skips the round-trip to /demo/personas. Cold cache falls back
-        // to the existing client-side fetch.
+        // Preload: when the stored personas blob is populated, embed
+        // its body directly in the welcome page so the chat factory's
+        // `init()` skips the round-trip to /demo/personas. Empty/absent
+        // store falls back to the client-side fetch (which itself
+        // regenerates on miss).
         let prefetched_personas = if demo_enabled {
-            kv.get(storage::DEMO_PERSONAS_CACHE_KEY)
-                .text()
+            storage::get_stored_demo_personas(&kv)
                 .await
                 .ok()
                 .flatten()
+                .and_then(|stored| serde_json::to_string(&stored.response).ok())
         } else {
             None
         };

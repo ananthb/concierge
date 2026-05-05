@@ -191,7 +191,7 @@ async fn process_catalog_job(env: &Env, slug: &str) -> std::result::Result<(), (
         Ok(()) => {
             if let Ok(kv) = env.kv("KV") {
                 let _ = crate::storage::invalidate_archetype_cache(&kv, slug).await;
-                let _ = crate::storage::invalidate_demo_personas_cache(&kv).await;
+                let _ = crate::storage::delete_stored_demo_personas(&kv).await;
             }
             Ok(())
         }
