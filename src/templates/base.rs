@@ -62,6 +62,18 @@ a { color:var(--accent); }
   transition:border-color .15s ease, box-shadow .15s ease; }
 .input:focus, .textarea:focus, .select:focus { border-color:var(--accent); box-shadow:0 0 0 4px var(--accent-soft); }
 .textarea { resize:vertical; min-height:90px; font-family:var(--f-mono); }
+/* Strip the native browser dropdown caret and replace it with a
+   hand-drawn SVG chevron so every <select class="select"> across
+   management + admin shows the same caret in the same spot. The
+   `:not([multiple])` carve-out leaves multi-line list pickers (e.g.
+   the Discord channel selector) on their default rendering. */
+.select:not([multiple]) {
+  appearance:none; -webkit-appearance:none; -moz-appearance:none;
+  padding-right:36px;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8' fill='none'><path d='M1 1.5L6 6.5L11 1.5' stroke='%231B1814' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+  background-repeat:no-repeat;
+  background-position:right 12px center;
+}
 .chip { display:inline-flex; align-items:center; gap:6px; padding:4px 10px;
   border-radius:999px; background:var(--cream-2); border:1px solid var(--hair); font-size:12px; color:var(--ink-2); }
 .chip.ok { background:#E8F0DE; border-color:#B5C99B; color:#3E5A26; }
@@ -347,17 +359,10 @@ code {
 .chat-controls { display:flex; align-items:flex-end; gap:10px; margin:0 0 6px; flex-wrap:wrap; }
 .chat-persona-label { display:flex; flex-direction:column; gap:4px; flex:1 1 220px; min-width:180px; }
 .chat-persona-label .eyebrow { font-size:11px; }
-/* min-width keeps the dropdown arrow aligned even when the options list
-   is empty (placeholder-only state). Native browser caret sits right
-   against the box edge, so we strip appearance and draw our own SVG
-   chevron with breathing room from the right border. */
-.chat-persona-select {
-  padding:8px 36px 8px 12px; font-size:14px; min-width:180px;
-  appearance:none; -webkit-appearance:none; -moz-appearance:none;
-  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8' fill='none'><path d='M1 1.5L6 6.5L11 1.5' stroke='%231B1814' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/></svg>");
-  background-repeat:no-repeat;
-  background-position:right 12px center;
-}
+/* Tighter padding + min-width for the chat-modal persona picker.
+   The chevron itself is inherited from the global `.select:not([multiple])`
+   rule near the top of this stylesheet. */
+.chat-persona-select { padding:8px 36px 8px 12px; min-width:180px; }
 /* Multi-line input for the demo chat: proper textarea sized for a
    sentence or two, but without the mono font and tall min-height the
    global .textarea uses for prompt-editing surfaces. */
