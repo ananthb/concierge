@@ -1000,6 +1000,39 @@ pub fn demo_config_html(
     let default_prompt = html_escape(crate::storage::DEFAULT_DEMO_GENERATION_PROMPT);
     let cadence = cfg.regeneration_cadence_mins;
 
+    // Toggle card. Auto-submits on change via HTMX (the form has no
+    // visible Save button) so the operator never has to click twice.
+    // When the toggle is off, everything below this card is hidden.
+    let toggle_card = format!(
+        r##"<div class="card p-22 mb-16">
+    <form hx-post="{base_url}/manage/demo/toggle" hx-ext="json-enc" hx-target="body" hx-swap="innerHTML" hx-trigger="change from:#demo-enabled">
+      <div class="row gap-12" style="align-items:center">
+        <input id="demo-enabled" type="checkbox" name="enabled" value="true"{enabled_checked}>
+        <label for="demo-enabled" class="fw-600">Demo enabled</label>
+        <span class="muted fs-13">When off: homepage hides the chat button.</span>
+      </div>
+    </form>
+  </div>"##,
+        base_url = base_url,
+        enabled_checked = enabled_checked,
+    );
+
+    if !cfg.enabled {
+        let content = format!(
+            r##"<div class="page-pad">
+  <div class="between mb-16">
+    <div>
+      <div class="eyebrow">Demo controls</div>
+      <h2 class="display-sm m-0 mt-4">Live homepage demo</h2>
+    </div>
+  </div>
+  {toggle_card}
+</div>"##,
+            toggle_card = toggle_card,
+        );
+        return manage_shell("Demo · Concierge", &content, "Demo", base_url, locale);
+    }
+
     let stored_block = stored
         .map(|s| stored_personas_card(s))
         .unwrap_or_else(|| {
@@ -1015,7 +1048,8 @@ pub fn demo_config_html(
       <h2 class="display-sm m-0 mt-4">Live homepage demo</h2>
     </div>
   </div>
-  <p class="muted mb-16">Toggle the public homepage chat box, control how often the cron tick re-rolls the demo personas, and (under Advanced) edit the LLM prompt that produces them.</p>
+
+  {toggle_card}
 
   <!-- Stored personas + Re-roll. The cron tick keeps these fresh on
        the configured cadence; this card is the operator's surface for
@@ -1033,16 +1067,10 @@ pub fn demo_config_html(
     {stored_block}
   </div>
 
-  <!-- Toggle + cadence. Independent of the stored blob. -->
+  <!-- Cadence + advanced prompt. Toggle lives in its own form above. -->
   <div class="card p-22 mb-16">
     <form hx-post="{base_url}/manage/demo" hx-ext="json-enc" hx-target="body" hx-swap="innerHTML">
       <input type="hidden" name="prompt_verified" :value="String(previewOk || !promptDirty)">
-      <div class="row gap-12 mb-16" style="align-items:center">
-        <input id="demo-enabled" type="checkbox" name="enabled" value="true"{enabled_checked}>
-        <label for="demo-enabled" class="fw-600">Demo enabled</label>
-        <span class="muted fs-13">When off: homepage hides the chat hint, /demo/personas returns empty, /demo/chat returns 503.</span>
-      </div>
-
       <div class="row gap-12 mb-16" style="align-items:center">
         <label for="demo-cadence" class="fw-600">Regenerate every</label>
         <input id="demo-cadence" class="input mono" type="number" name="regeneration_cadence_mins" min="0" max="10080" value="{cadence}" style="max-width:140px">
@@ -1089,7 +1117,7 @@ pub fn demo_config_html(
 </div>"##,
         base_url = base_url,
         hash = HASH,
-        enabled_checked = enabled_checked,
+        toggle_card = toggle_card,
         prompt_value = prompt_value,
         default_prompt = default_prompt,
         cadence = cadence,

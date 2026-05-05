@@ -52,13 +52,44 @@ pub async fn handle_demo(
             ))
         }
 
-        (Method::Post, []) => {
+        // Dedicated toggle endpoint so the checkbox at the top of the
+        // page can fire on change without resaving cadence/prompt or
+        // requiring a separate Save click. Reads the current config,
+        // flips just the `enabled` field, persists, redirects.
+        (Method::Post, ["toggle"]) => {
             let form: serde_json::Value = req.json().await?;
             let enabled = form
                 .get("enabled")
                 .and_then(|v| v.as_str())
                 .map(|s| s == "true" || s == "on")
                 .unwrap_or(false);
+
+            let mut cfg = storage::get_demo_config(&kv).await.unwrap_or_default();
+            cfg.enabled = enabled;
+            storage::save_demo_config(&kv, &cfg).await?;
+            // Toggling off clears the stored personas so a re-enable
+            // starts from a clean slate.
+            if !cfg.enabled {
+                let _ = storage::delete_stored_demo_personas(&kv).await;
+            }
+
+            audit::log_action(
+                db,
+                actor_email,
+                "edit_demo_config",
+                "demo_config",
+                None,
+                Some(&serde_json::json!({ "enabled": cfg.enabled })),
+            )
+            .await?;
+
+            let headers = Headers::new();
+            headers.set("HX-Redirect", &format!("{base_url}/manage/demo"))?;
+            Ok(Response::empty()?.with_status(200).with_headers(headers))
+        }
+
+        (Method::Post, []) => {
+            let form: serde_json::Value = req.json().await?;
             let cadence = form
                 .get("regeneration_cadence_mins")
                 .and_then(|v| {
@@ -98,18 +129,11 @@ pub async fn handle_demo(
             };
 
             let cfg = DemoConfig {
-                enabled,
+                enabled: existing.enabled,
                 persona_generation_prompt: prompt,
                 regeneration_cadence_mins: cadence,
             };
             storage::save_demo_config(&kv, &cfg).await?;
-            // Toggling off clears the stored personas so a re-enable
-            // starts from a clean slate. Toggling on or editing
-            // cadence/prompt leaves the existing blob in place — the
-            // operator can hit Re-roll to refresh on demand.
-            if !cfg.enabled {
-                let _ = storage::delete_stored_demo_personas(&kv).await;
-            }
 
             audit::log_action(
                 db,
@@ -118,7 +142,6 @@ pub async fn handle_demo(
                 "demo_config",
                 None,
                 Some(&serde_json::json!({
-                    "enabled": cfg.enabled,
                     "regeneration_cadence_mins": cfg.regeneration_cadence_mins,
                 })),
             )
