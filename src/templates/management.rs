@@ -788,7 +788,17 @@ pub fn billing_overview_html(
         r##"<div class="page-pad">
   {header}
 
-  <div class="card p-22 mb-16">
+  <!-- Pricing card has two destructive in-page actions (Remove
+       currency column, Add currency) that swap the whole body — if
+       the operator has typed into a price cell and clicks one, those
+       edits vanish. The x-data wrapper here flips `dirty` on any
+       nested @input and re-disables the destructive actions until
+       Save pricing succeeds. The `htmx:after-request` listener clears
+       dirty when the /settings POST returns successfully. -->
+  <div class="card p-22 mb-16"
+       x-data="{{ dirty: false }}"
+       @input.capture="dirty = true"
+       @htmx:after-request="if ($event.detail.successful && $event.detail.requestConfig.path.endsWith('/billing/settings')) dirty = false">
     <h3 class="mb-8">Pricing</h3>
     <p class="muted mb-12">One column per supported currency. Each cell is the price in that currency's own unit (no conversion). The unit caption under each row shows whether the value is in minor units or milli-minor units.</p>
     <form hx-post="{base_url}/manage/billing/settings" hx-target="{hash}toast-region" hx-swap="afterbegin" hx-ext="json-enc">
@@ -802,7 +812,10 @@ pub fn billing_overview_html(
         </label>
       </div>
 
-      <button class="btn sm mt-12" type="submit">Save pricing</button>
+      <div class="row gap-12 mt-12 wrap" style="align-items:center">
+        <button class="btn sm" type="submit">Save pricing</button>
+        <span class="muted fs-12" x-show="dirty" x-cloak>Unsaved changes — save before removing or adding a currency.</span>
+      </div>
     </form>
   </div>
 
@@ -876,7 +889,7 @@ fn pricing_form_table(cfg: &crate::storage::Pricing, base_url: &str) -> String {
         .map(|c| {
             let info = currency_info(c);
             let remove = format!(
-                r##" <button type="button" class="btn ghost sm danger" hx-delete="{base_url}/manage/billing/currency/{code}" hx-confirm="Remove all {code} prices?" hx-target="body" hx-swap="innerHTML" title="Remove {code} from pricing">Remove</button>"##,
+                r##" <button type="button" class="btn ghost sm danger" :disabled="dirty" hx-delete="{base_url}/manage/billing/currency/{code}" hx-confirm="Remove all {code} prices?" hx-target="body" hx-swap="innerHTML" :title="dirty ? 'Save pricing first to remove a currency' : 'Remove {code} from pricing'">Remove</button>"##,
                 base_url = base_url,
                 code = html_escape(c),
             );
@@ -989,7 +1002,7 @@ fn add_currency_form(base_url: &str, existing: &[String]) -> String {
         x-show="currency">
     <input type="hidden" name="__currencies" :value="JSON.stringify([currency])">
     {seed_inputs}
-    <button class="btn sm" type="submit">Add</button>
+    <button class="btn sm" type="submit" :disabled="dirty" :title="dirty ? 'Save pricing first to add a currency' : ''">Add</button>
   </form>
 </div>"##,
         base_url = base_url,
