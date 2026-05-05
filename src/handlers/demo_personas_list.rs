@@ -186,8 +186,66 @@ pub async fn generate_demo_businesses(
         .trim_end_matches("```")
         .trim();
 
-    serde_json::from_str::<Vec<DemoBusiness>>(clean)
-        .map_err(|e| format!("Could not parse JSON array: {e}. Raw reply: {reply}"))
+    let mut parsed: Vec<DemoBusiness> = serde_json::from_str(clean)
+        .map_err(|e| format!("Could not parse JSON array: {e}. Raw reply: {reply}"))?;
+    // Defensive rewrite: every goal_url must point at example.com so a
+    // model that drifts from the prompt (or an operator who edits the
+    // instructions) can't surface a real-looking domain in the demo.
+    for biz in &mut parsed {
+        biz.goal_url = sanitize_demo_goal_url(&biz.goal_url);
+    }
+    Ok(parsed)
+}
+
+/// Coerce a model-supplied goal_url into something rooted at
+/// `https://example.com`. Empty input passes through (the UI then
+/// hides the link). Anything else gets its host swapped — paths,
+/// queries, and fragments are preserved so the goal copy stays
+/// recognizable. Bare paths and unknown schemes are also normalized.
+pub(crate) fn sanitize_demo_goal_url(raw: &str) -> String {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return String::new();
+    }
+
+    let rest = trimmed
+        .strip_prefix("https://")
+        .or_else(|| trimmed.strip_prefix("http://"));
+    let path_segment = match rest {
+        // Has a scheme: pull out the path-and-after, drop the host.
+        Some(after_scheme) => match after_scheme.find('/') {
+            Some(i) => {
+                let host = &after_scheme[..i];
+                let path = &after_scheme[i..];
+                let host_lower = host.to_lowercase();
+                if host_lower == "example.com" || host_lower.ends_with(".example.com") {
+                    return format!("https://{host}{path}");
+                }
+                path.to_string()
+            }
+            None => {
+                // No path component at all (e.g. https://acme.com).
+                // example.com root stays canonical; other hosts collapse
+                // to a bare example.com root too.
+                let host_lower = after_scheme.to_lowercase();
+                if host_lower == "example.com" || host_lower.ends_with(".example.com") {
+                    return format!("https://{after_scheme}");
+                }
+                "/".to_string()
+            }
+        },
+        // No scheme: treat as a relative path or naked domain. Either
+        // way we ignore the input host (if any) and prepend a slash.
+        None => {
+            if trimmed.starts_with('/') {
+                trimmed.to_string()
+            } else {
+                format!("/{trimmed}")
+            }
+        }
+    };
+
+    format!("https://example.com{path_segment}")
 }
 
 fn json_response(data: &DemoPersonasResponse) -> Result<Response> {
@@ -196,4 +254,50 @@ fn json_response(data: &DemoPersonasResponse) -> Result<Response> {
     headers.set("Content-Type", "application/json")?;
     headers.set("Cache-Control", "no-store")?;
     Ok(Response::ok(body)?.with_headers(headers))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::sanitize_demo_goal_url as s;
+
+    #[test]
+    fn empty_passes_through() {
+        assert_eq!(s(""), "");
+        assert_eq!(s("   "), "");
+    }
+
+    #[test]
+    fn example_com_is_preserved() {
+        assert_eq!(s("https://example.com/book"), "https://example.com/book");
+        assert_eq!(s("https://example.com"), "https://example.com");
+        assert_eq!(s("https://www.example.com/x"), "https://www.example.com/x");
+    }
+
+    #[test]
+    fn other_hosts_get_rewritten_keeping_path() {
+        assert_eq!(
+            s("https://acme.bakery.com/order"),
+            "https://example.com/order"
+        );
+        assert_eq!(
+            s("http://shop.example.org/items?id=1#a"),
+            "https://example.com/items?id=1#a"
+        );
+    }
+
+    #[test]
+    fn other_hosts_with_no_path_collapse_to_root() {
+        assert_eq!(s("https://acme.com"), "https://example.com/");
+    }
+
+    #[test]
+    fn relative_paths_get_a_host() {
+        assert_eq!(s("/book"), "https://example.com/book");
+        assert_eq!(s("book"), "https://example.com/book");
+    }
+
+    #[test]
+    fn http_scheme_is_normalized_to_https() {
+        assert_eq!(s("http://example.com/x"), "https://example.com/x");
+    }
 }

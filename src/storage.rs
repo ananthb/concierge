@@ -242,7 +242,7 @@ pub async fn invalidate_archetype_cache(kv: &kv::KvStore, slug: &str) -> Result<
 /// businesses for the demo personas list. Editable from
 /// `/manage/demo`. Kept here so a fresh deploy works before any
 /// management user has touched the page.
-pub const DEFAULT_DEMO_GENERATION_PROMPT: &str = "You are a creative business consultant. Generate fictional but realistic business details for each of the following persona archetypes. For each, provide: name, business_type, city, hours, goal, and goal_url. Return ONLY a JSON array of objects, one for each archetype, in the exact same order. Do not include any other text.";
+pub const DEFAULT_DEMO_GENERATION_PROMPT: &str = "You are a creative business consultant. Generate fictional but realistic business details for each of the following persona archetypes. For each, provide: name, business_type, city, hours, goal, and goal_url. The goal_url MUST be under https://example.com (e.g. https://example.com/book, https://example.com/menu) — never invent a real-looking domain. Return ONLY a JSON array of objects, one for each archetype, in the exact same order. Do not include any other text.";
 
 /// Default cadence (in minutes) at which the cron tick re-rolls the
 /// stored demo personas. Operators can override on /manage/demo.
