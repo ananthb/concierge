@@ -496,7 +496,7 @@ pub fn admin_settings_html(
         <div class=\"card card-warn p-22\">
             <h2 class=\"text-warn\">{delete_h2}</h2>
             <p class=\"muted mb-16\">{delete_lead}</p>
-            <button class=\"btn\" style=\"background:var(--warn);border-color:var(--warn);color:#fff\"
+            <button class=\"btn danger solid\"
                     hx-delete=\"{base_url}/admin/delete-account\"
                     hx-confirm=\"{delete_confirm}\"
                     >{delete_cta}</button>
@@ -774,7 +774,7 @@ pub fn admin_whatsapp_list_html(
                     <td>{enabled}</td>
                     <td>
                         <a href=\"{base_url}/admin/whatsapp/{id}\" class=\"btn sm\">{edit}</a>
-                        <button class=\"btn sm text-warn\" style=\"border-color:var(--warn)\"
+                        <button class=\"btn sm danger\"
                                 hx-delete=\"{base_url}/admin/whatsapp/{id}\"
                                 hx-confirm=\"{confirm}\"
                                 hx-target=\"closest tr\" hx-swap=\"outerHTML\">{del}</button>
@@ -851,7 +851,7 @@ pub fn admin_whatsapp_signup_html(
         <div class="card ta-center" style="padding: 2rem;">
             <p class="muted" style="margin-bottom: 1.5rem">{lead}</p>
             <div id="signup-error" class="text-warn mb-16" role="alert" aria-live="assertive"></div>
-            <button id="signup-btn" class="btn" style="padding: 0.75rem 2rem; font-size: 1rem;">
+            <button id="signup-btn" class="btn lg">
                 {cta}
             </button>
             <p class="muted" style="margin-top: 1.5rem; font-size: 0.85rem">
@@ -1080,7 +1080,7 @@ pub fn admin_instagram_list_html(
                     <td>{auto}</td>
                     <td>
                         <a href=\"{base_url}/admin/instagram/{id}\" class=\"btn sm\">{edit}</a>
-                        <button class=\"btn sm text-warn\" style=\"border-color:var(--warn)\"
+                        <button class=\"btn sm danger\"
                                 hx-delete=\"{base_url}/admin/instagram/{id}\"
                                 hx-confirm=\"{confirm}\"
                                 hx-target=\"closest tr\" hx-swap=\"outerHTML\">{remove}</button>
@@ -1243,7 +1243,7 @@ pub fn admin_lead_forms_list_html(
                     <td>{status}</td>
                     <td>
                         <a href=\"{base_url}/admin/lead-forms/{id}\" class=\"btn sm\">{edit}</a>
-                        <button class=\"btn sm text-warn\" style=\"border-color:var(--warn)\"
+                        <button class=\"btn sm danger\"
                                 hx-delete=\"{base_url}/admin/lead-forms/{id}\"
                                 hx-confirm=\"{confirm}\"
                                 hx-target=\"closest tr\" hx-swap=\"outerHTML\">{del}</button>

@@ -871,8 +871,8 @@ pub fn archetype_edit_html(
         String::new()
     } else {
         format!(
-            r##"<form hx-post="{action}/delete" hx-target="body" hx-swap="innerHTML" style="display:inline">
-              <button type="submit" class="btn ghost sm" style="color:var(--warn)" onclick="return confirm('Delete this archetype? This cannot be undone.')">Delete</button>
+            r##"<form hx-post="{action}/delete" hx-target="body" hx-swap="innerHTML" hx-confirm="Delete this archetype? This cannot be undone." style="display:inline">
+              <button type="submit" class="btn sm danger">Delete</button>
             </form>"##,
             action = action,
         )
@@ -1101,13 +1101,21 @@ pub fn demo_config_html(
                 hx-include="[name='persona_generation_prompt']"
                 hx-target="{hash}demo-display"
                 hx-swap="innerHTML"
-                hx-ext="json-enc">Preview</button>
+                hx-ext="json-enc">
+          <span>Preview</span>
+          <span class="spinner htmx-indicator" aria-hidden="true"></span>
+        </button>
         <button type="button" class="btn ghost sm"
                 hx-post="{base_url}/manage/demo/reroll"
-                hx-target="body" hx-swap="innerHTML"
-                hx-confirm="Re-roll the stored personas with the currently-saved prompt?">Re-roll</button>
+                hx-target="body" hx-swap="innerHTML">
+          <span>Re-roll</span>
+          <span class="spinner htmx-indicator" aria-hidden="true"></span>
+        </button>
         <button type="submit" class="btn primary"
-                :disabled="promptDirty && !previewOk">Save</button>
+                :disabled="promptDirty && !previewOk">
+          <span>Save</span>
+          <span class="spinner htmx-indicator" aria-hidden="true"></span>
+        </button>
         <span class="muted fs-12" x-show="promptDirty && !previewOk" x-cloak>Preview must succeed before saving.</span>
       </div>
 
@@ -1265,11 +1273,22 @@ pub fn demo_preview_success_html(
         })
         .collect();
 
+    // Hidden field carries the just-rolled businesses back to the Save
+    // POST so the operator's verified preview becomes the persisted
+    // blob (no second non-deterministic LLM roll on save). Lives inside
+    // #demo-display, which itself lives inside the form, so it's
+    // submitted automatically. Cleared whenever the operator edits the
+    // prompt (the textarea's @input flips previewOk false but the
+    // hidden field stays — the server gates on `prompt_verified`).
+    let rolled_json = serde_json::to_string(businesses).unwrap_or_else(|_| "[]".to_string());
+
     // The `preview-ok` class is the signal the management form's
     // Alpine listener watches for to re-enable Save after a clean
     // preview. Don't drop it.
     format!(
-        r#"<span class="chip ok mb-12 preview-ok" style="display:inline-block">Parsed OK · {n} entries</span>{rows}"#,
+        r#"<input type="hidden" name="rolled_personas_json" value="{rolled}">
+<span class="chip ok mb-12 preview-ok" style="display:inline-block">Parsed OK · {n} entries</span>{rows}"#,
+        rolled = html_escape(&rolled_json),
         n = businesses.len(),
         rows = rows,
     )

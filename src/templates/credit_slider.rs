@@ -68,7 +68,7 @@ pub fn slider_html(
             r##"<form hx-post="{base_url}/admin/billing/checkout" hx-ext="json-enc" hx-target="body" hx-swap="innerHTML" class="mt-16">
   <input type="hidden" name="credits" :value="credits">
   <input type="hidden" name="return_to" value="{return_to}">
-  <button type="submit" class="btn primary lg w-full">Buy <span x-text="credits.toLocaleString(countLocale)"></span> replies: {symbol}<span x-text="{price_js}"></span></button>
+  <button type="submit" class="btn primary lg w-full"><span>Buy <span x-text="credits.toLocaleString(countLocale)"></span> replies: {symbol}<span x-text="{price_js}"></span></span><span class="spinner htmx-indicator" aria-hidden="true"></span></button>
 </form>"##,
             base_url = base_url,
             return_to = return_to,

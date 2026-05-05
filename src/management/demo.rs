@@ -135,6 +135,41 @@ pub async fn handle_demo(
             };
             storage::save_demo_config(&kv, &cfg).await?;
 
+            // If the operator just verified the prompt via Preview, the
+            // success template embedded the rolled businesses as a
+            // hidden field. Persist them as the live personas blob so
+            // Save effectively saves both prompt + previewed output —
+            // no second LLM roll, no drift between what was previewed
+            // and what visitors see.
+            if verified && cfg.enabled {
+                if let Some(raw) = form
+                    .get("rolled_personas_json")
+                    .and_then(|v| v.as_str())
+                    .filter(|s| !s.trim().is_empty())
+                {
+                    if let Ok(businesses) = serde_json::from_str::<
+                        Vec<crate::handlers::demo_personas_list::DemoBusiness>,
+                    >(raw)
+                    {
+                        let archetypes =
+                            storage::list_archetypes(db, true).await.unwrap_or_default();
+                        if businesses.len() == archetypes.len() && !archetypes.is_empty() {
+                            let response = crate::handlers::demo_personas_list::build_response(
+                                &archetypes,
+                                businesses,
+                            );
+                            if let Ok(value) = serde_json::to_value(&response) {
+                                let stored = storage::StoredDemoPersonas {
+                                    generated_at: crate::helpers::now_iso(),
+                                    response: value,
+                                };
+                                let _ = storage::save_stored_demo_personas(&kv, &stored).await;
+                            }
+                        }
+                    }
+                }
+            }
+
             audit::log_action(
                 db,
                 actor_email,

@@ -55,6 +55,10 @@ a { color:var(--accent); }
 .btn.lg { padding:14px 22px; font-size:15px; }
 .btn.icon { padding:8px; }
 .btn:disabled { opacity:.45; cursor:not-allowed; transform:none; }
+.btn.danger, .btn-danger { background:transparent; color:var(--warn); border-color:var(--warn); }
+.btn.danger:hover, .btn-danger:hover { background:rgba(196,107,26,.08); }
+.btn.danger.solid { background:var(--warn); color:#fff; border-color:var(--warn); }
+.btn.danger.solid:hover { background:#a8580a; border-color:#a8580a; }
 .card { background:var(--paper); border:1px solid var(--hair); border-radius:var(--r-lg); box-shadow:var(--shadow-1); }
 .input, .textarea, .select { width:100%; padding:10px 12px; background:#fff;
   border:1px solid var(--hair-2); border-radius:var(--r-sm);
@@ -507,8 +511,21 @@ code {
 .legal ul { padding-left:1.5rem; }
 @media(max-width:600px){ .legal { padding:28px 16px 40px; } }
 
-/* HTMX loading state */
-.htmx-request .btn { opacity: 0.6; pointer-events: none; }
+/* HTMX loading state. Buttons dim and lock during their own request,
+   and any nested `.spinner` reveals + spins. The .htmx-indicator class
+   is HTMX's stock convention: hidden by default, shown during request. */
+.htmx-request .btn { opacity: 0.7; pointer-events: none; }
+.spinner { display:inline-block; width:12px; height:12px;
+  border:2px solid currentColor; border-top-color:transparent;
+  border-radius:50%; vertical-align:-2px; }
+.htmx-indicator { display:none; }
+.htmx-request .htmx-indicator,
+.htmx-request.htmx-indicator,
+.is-loading .htmx-indicator { display:inline-block; }
+.htmx-request .spinner.htmx-indicator,
+.is-loading .spinner.htmx-indicator { animation:spin .7s linear infinite; }
+.btn.is-loading { opacity:.7; pointer-events:none; }
+@keyframes spin { to { transform:rotate(360deg); } }
 
 /* The two external nav buttons (Docs ↑ / Open source ↑) get hidden well
    before the 600px mobile breakpoint: with all five buttons on one row,

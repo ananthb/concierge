@@ -176,14 +176,17 @@ pub fn checkout_html(
     <h2 class="display-sm">Complete purchase</h2>
     <p class="muted m-0 mt-8 mb-24">Buying <strong>{credits}</strong> AI reply credits</p>
     <div class="stat-n serif mb-24">{display_amount}</div>
-    <button id="pay-btn" class="btn primary lg w-full">Pay with Razorpay</button>
+    <button id="pay-btn" class="btn primary lg w-full"><span>Pay with Razorpay</span><span class="spinner htmx-indicator" aria-hidden="true"></span></button>
     <p class="mono muted fs-11 mt-12">Secure payment via Razorpay</p>
   </div>
   <a href="{base_url}{return_to}" class="btn ghost sm mt-16">&larr; Cancel</a>
 </div>
 <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
 <script type="module" nonce="__CSP_NONCE__">
-document.getElementById('pay-btn').addEventListener('click', () => {{
+const payBtn = document.getElementById('pay-btn');
+payBtn.addEventListener('click', () => {{
+  payBtn.classList.add('is-loading');
+  payBtn.disabled = true;
   const options = {{
     key: '{key}',
     amount: {amount},
@@ -205,6 +208,7 @@ document.getElementById('pay-btn').addEventListener('click', () => {{
       }});
       window.location.href = '{base_url}{return_to}';
     }},
+    modal: {{ ondismiss: () => {{ payBtn.classList.remove('is-loading'); payBtn.disabled = false; }} }},
     theme: {{ color: '#E86A2C' }},
   }};
   new Razorpay(options).open();
@@ -246,14 +250,17 @@ pub fn verification_checkout_html(
     <p class="muted m-0 mt-8 mb-24">We charge a small amount to confirm a real card and then refund it right away. This keeps the platform free of abuse.</p>
     <div class="stat-n serif mb-8">{display_amount}</div>
     <p class="mono muted fs-11 mb-24">refunded automatically</p>
-    <button id="pay-btn" class="btn primary lg w-full">Verify with Razorpay</button>
+    <button id="pay-btn" class="btn primary lg w-full"><span>Verify with Razorpay</span><span class="spinner htmx-indicator" aria-hidden="true"></span></button>
     <p class="mono muted fs-11 mt-12">Secure payment via Razorpay</p>
   </div>
   <a href="{base_url}{return_to}" class="btn ghost sm mt-16">&larr; Cancel</a>
 </div>
 <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
 <script type="module" nonce="__CSP_NONCE__">
-document.getElementById('pay-btn').addEventListener('click', () => {{
+const payBtn = document.getElementById('pay-btn');
+payBtn.addEventListener('click', () => {{
+  payBtn.classList.add('is-loading');
+  payBtn.disabled = true;
   const options = {{
     key: '{key}',
     amount: {amount},
@@ -274,6 +281,7 @@ document.getElementById('pay-btn').addEventListener('click', () => {{
       }});
       window.location.href = '{base_url}{return_to}';
     }},
+    modal: {{ ondismiss: () => {{ payBtn.classList.remove('is-loading'); payBtn.disabled = false; }} }},
     theme: {{ color: '#E86A2C' }},
   }};
   new Razorpay(options).open();
@@ -311,14 +319,17 @@ pub fn address_checkout_html(
     <h2 class="display-sm">Reply-email subscription</h2>
     <p class="muted m-0 mt-8 mb-24">A pack of concierge addresses, billed monthly.</p>
     <div class="stat-n serif mb-24">{display_amount}</div>
-    <button id="pay-btn" class="btn primary lg w-full">Pay with Razorpay</button>
+    <button id="pay-btn" class="btn primary lg w-full"><span>Pay with Razorpay</span><span class="spinner htmx-indicator" aria-hidden="true"></span></button>
     <p class="mono muted fs-11 mt-12">Secure payment via Razorpay</p>
   </div>
   <a href="{base_url}/admin/email" class="btn ghost sm mt-16">&larr; Cancel</a>
 </div>
 <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
 <script type="module" nonce="__CSP_NONCE__">
-document.getElementById('pay-btn').addEventListener('click', () => {{
+const payBtn = document.getElementById('pay-btn');
+payBtn.addEventListener('click', () => {{
+  payBtn.classList.add('is-loading');
+  payBtn.disabled = true;
   const options = {{
     key: '{key}',
     amount: {amount},
@@ -339,6 +350,7 @@ document.getElementById('pay-btn').addEventListener('click', () => {{
       }});
       window.location.href = '{base_url}/admin/email';
     }},
+    modal: {{ ondismiss: () => {{ payBtn.classList.remove('is-loading'); payBtn.disabled = false; }} }},
     theme: {{ color: '#E86A2C' }},
   }};
   new Razorpay(options).open();
