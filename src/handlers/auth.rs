@@ -446,7 +446,7 @@ pub async fn handle_auth(req: Request, env: Env, path: &str, method: Method) -> 
 }
 
 pub(super) async fn create_session_and_redirect(
-    _req: &Request,
+    req: &Request,
     kv: &kv::KvStore,
     tenant_id: &str,
     provider: &str,
@@ -456,28 +456,46 @@ pub(super) async fn create_session_and_redirect(
     save_session(kv, &session_token, tenant_id, SESSION_TTL_SECONDS).await?;
     save_csrf_token(kv, tenant_id, &csrf_token, SESSION_TTL_SECONDS).await?;
 
+    // The `Secure` cookie attribute pins cookies to HTTPS. Production
+    // is always HTTPS, so we want it there. Local `wrangler dev`
+    // serves over plain HTTP — and while modern Chrome/Firefox treat
+    // localhost as a secure origin and accept Secure cookies anyway,
+    // older Chromium-based browsers and webview shells silently drop
+    // them, leaving the user stuck in a redirect loop after sign-in.
+    // Detect the request scheme and drop the attribute on http.
+    let scheme = req
+        .url()
+        .ok()
+        .map(|u| u.scheme().to_string())
+        .unwrap_or_else(|| "https".to_string());
+    let secure_attr = if scheme == "https" { "; Secure" } else { "" };
+
     let headers = Headers::new();
     headers.set("Location", "/admin")?;
     headers.set(
         "Set-Cookie",
         &format!(
-            "session={}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age={}",
-            session_token, SESSION_TTL_SECONDS
+            "session={token}; Path=/; HttpOnly{secure}; SameSite=Lax; Max-Age={ttl}",
+            token = session_token,
+            secure = secure_attr,
+            ttl = SESSION_TTL_SECONDS,
         ),
     )?;
     headers.append(
         "Set-Cookie",
         &format!(
-            "csrf={}; Path=/; Secure; SameSite=Lax; Max-Age={}",
-            csrf_token, SESSION_TTL_SECONDS
+            "csrf={token}; Path=/{secure}; SameSite=Lax; Max-Age={ttl}",
+            token = csrf_token,
+            secure = secure_attr,
+            ttl = SESSION_TTL_SECONDS,
         ),
     )?;
     // Remember last provider (not HttpOnly so homepage JS can detect returning user)
     headers.append(
         "Set-Cookie",
         &format!(
-            "last_provider={}; Path=/; Secure; SameSite=Lax; Max-Age=31536000",
-            provider
+            "last_provider={provider}; Path=/{secure}; SameSite=Lax; Max-Age=31536000",
+            secure = secure_attr,
         ),
     )?;
     Ok(Response::empty()?.with_status(302).with_headers(headers))
