@@ -1470,82 +1470,84 @@ pub fn demo_config_html(
 
   {toggle_card}
 
-  <!-- One unified card: cadence + persona prompt + the action row
-       (Preview / Re-roll / Save) and a shared display pane below.
-       The pane starts on the currently-rolled personas; clicking
-       Preview swaps it with the model's draft output (or an error).
-       Save is disabled while the prompt is dirty until Preview
-       returns a valid shape. -->
+  <!-- Single card, single form, but split into Timing and Prompt
+       sections so the operator can scan to the relevant control.
+       Save persists everything together (preview-gated only when the
+       prompt is dirty); Preview / Re-roll are isolated to the Prompt
+       section since they only act on persona generation. -->
   <div class="card p-22 mb-16">
     <form hx-post="{base_url}/manage/demo" hx-ext="json-enc" hx-target="body" hx-swap="innerHTML">
       <input type="hidden" name="prompt_verified" :value="String(previewOk || !promptDirty)">
 
-      <div class="between mb-12 wrap" style="gap:12px">
-        <div>
-          <div class="eyebrow">Personas</div>
-          <p class="muted fs-13 m-0 mt-4">{stored_meta}</p>
+      <section class="form-section">
+        <p class="section-eyebrow">Timing</p>
+        <p class="section-help">How often the persona blob refreshes, and how long a homepage visitor can chat before the sign-up CTA takes over the input.</p>
+        <div class="row gap-12 mb-12 wrap" style="align-items:center">
+          <label for="demo-cadence" class="fw-600">Regenerate every</label>
+          <input id="demo-cadence" class="input mono w-input-xs" type="number" name="regeneration_cadence_mins" min="0" max="10080" value="{cadence}">
+          <span class="muted fs-13">minutes (0 = manual only).</span>
         </div>
-      </div>
+        <div class="row gap-12 mb-12 wrap" style="align-items:center">
+          <label for="demo-turns" class="fw-600">User turns per session</label>
+          <input id="demo-turns" class="input mono w-input-xs" type="number" name="max_user_turns" min="1" max="20" value="{max_user_turns}">
+          <span class="muted fs-13">replaces the chat input with the sign-up CTA after this many user messages.</span>
+        </div>
+        <div class="row gap-12 wrap" style="align-items:center">
+          <label for="demo-idle" class="fw-600">Idle timeout</label>
+          <input id="demo-idle" class="input mono w-input-xs" type="number" name="idle_timeout_secs" min="5" max="600" value="{idle_timeout_secs}">
+          <span class="muted fs-13">seconds — restarts on every keystroke; fires the CTA when the visitor stops typing.</span>
+        </div>
+      </section>
 
-      <div class="row gap-12 mb-12 wrap" style="align-items:center">
-        <label for="demo-cadence" class="fw-600">Regenerate every</label>
-        <input id="demo-cadence" class="input mono w-input-xs" type="number" name="regeneration_cadence_mins" min="0" max="10080" value="{cadence}">
-        <span class="muted fs-13">minutes (0 = manual only).</span>
-      </div>
+      <section class="form-section">
+        <div class="between wrap mb-4" style="gap:12px;align-items:flex-start">
+          <div>
+            <p class="section-eyebrow">Prompt &amp; personas</p>
+            <p class="section-help m-0">{stored_meta}</p>
+          </div>
+        </div>
+        <p class="section-help">The prompt is sent as the system message to the LLM with each archetype's label + description as the user message. The model must reply with a JSON array of objects, one per archetype in the same order. Each object: <code>name</code>, <code>business_type</code>, <code>city</code>, <code>hours</code>, <code>goal</code>, <code>goal_url</code>. Leave blank to restore the default.</p>
+        <div>
+          <label for="demo-prompt" class="eyebrow lbl">Persona generation prompt</label>
+          <textarea id="demo-prompt" class="textarea mono" name="persona_generation_prompt" rows="6"
+                    placeholder="{default_prompt}"
+                    @input="promptDirty = true; previewOk = false">{prompt_value}</textarea>
+        </div>
 
-      <div class="row gap-12 mb-12 wrap" style="align-items:center">
-        <label for="demo-turns" class="fw-600">User turns per session</label>
-        <input id="demo-turns" class="input mono w-input-xs" type="number" name="max_user_turns" min="1" max="20" value="{max_user_turns}">
-        <span class="muted fs-13">replaces the chat input with the sign-up CTA after this many user messages.</span>
-      </div>
+        <div class="row gap-8 mt-12 wrap" style="align-items:center">
+          <button type="button" class="btn ghost sm"
+                  hx-post="{base_url}/manage/demo/preview"
+                  hx-include="[name='persona_generation_prompt']"
+                  hx-target="{hash}demo-display"
+                  hx-swap="innerHTML"
+                  hx-ext="json-enc">
+            <span>Preview</span>
+            <span class="spinner htmx-indicator" aria-hidden="true"></span>
+          </button>
+          <button type="button" class="btn ghost sm"
+                  hx-post="{base_url}/manage/demo/reroll"
+                  hx-target="body" hx-swap="innerHTML">
+            <span>Re-roll</span>
+            <span class="spinner htmx-indicator" aria-hidden="true"></span>
+          </button>
+          <button type="submit" class="btn primary"
+                  :disabled="promptDirty && !previewOk">
+            <span>Save</span>
+            <span class="spinner htmx-indicator" aria-hidden="true"></span>
+          </button>
+          <span class="muted fs-12" x-show="promptDirty && !previewOk" x-cloak>Preview must succeed before saving.</span>
+        </div>
 
-      <div class="row gap-12 mb-16 wrap" style="align-items:center">
-        <label for="demo-idle" class="fw-600">Idle timeout</label>
-        <input id="demo-idle" class="input mono w-input-xs" type="number" name="idle_timeout_secs" min="5" max="600" value="{idle_timeout_secs}">
-        <span class="muted fs-13">seconds — restarts on every keystroke; fires the CTA when the visitor stops typing.</span>
-      </div>
-
-      <div class="mt-12">
-        <label for="demo-prompt" class="eyebrow lbl">Persona generation prompt</label>
-        <p class="muted fs-12 m-0 mb-8">Sent as the system message to the LLM with each archetype's label + description as the user message. The model must reply with a JSON array of objects, one per archetype in the same order. Each object: <code>name</code>, <code>business_type</code>, <code>city</code>, <code>hours</code>, <code>goal</code>, <code>goal_url</code>. Leave blank to restore the default.</p>
-        <textarea id="demo-prompt" class="textarea mono" name="persona_generation_prompt" rows="6"
-                  placeholder="{default_prompt}"
-                  @input="promptDirty = true; previewOk = false">{prompt_value}</textarea>
-      </div>
-
-      <div class="row gap-8 mt-12 wrap" style="align-items:center">
-        <button type="button" class="btn ghost sm"
-                hx-post="{base_url}/manage/demo/preview"
-                hx-include="[name='persona_generation_prompt']"
-                hx-target="{hash}demo-display"
-                hx-swap="innerHTML"
-                hx-ext="json-enc">
-          <span>Preview</span>
-          <span class="spinner htmx-indicator" aria-hidden="true"></span>
-        </button>
-        <button type="button" class="btn ghost sm"
-                hx-post="{base_url}/manage/demo/reroll"
-                hx-target="body" hx-swap="innerHTML">
-          <span>Re-roll</span>
-          <span class="spinner htmx-indicator" aria-hidden="true"></span>
-        </button>
-        <button type="submit" class="btn primary"
-                :disabled="promptDirty && !previewOk">
-          <span>Save</span>
-          <span class="spinner htmx-indicator" aria-hidden="true"></span>
-        </button>
-        <span class="muted fs-12" x-show="promptDirty && !previewOk" x-cloak>Preview must succeed before saving.</span>
-      </div>
-
-      <!-- Shared display pane. Server-rendered with the currently
-           stored personas on first paint; swapped to the preview
-           result after a Preview click. The `@htmx:after-swap`
-           listener watches for a `.preview-ok` marker the success
-           template emits and flips the Save gate accordingly. -->
-      <div id="demo-display" class="mt-16" style="border-top:1px solid var(--hair);padding-top:16px"
-           @htmx:after-swap="previewOk = !!document.querySelector('#demo-display .preview-ok')">
-        {stored_block}
-      </div>
+        <!-- Shared display pane. Server-rendered with the currently
+             stored personas on first paint; swapped to the preview
+             result after a Preview click. The `@htmx:after-swap`
+             listener watches for a `.preview-ok` marker the success
+             template emits and flips the Save gate accordingly. -->
+        <div id="demo-display" class="mt-16" style="border-top:1px solid var(--hair);padding-top:16px"
+             @htmx:after-swap="previewOk = !!document.querySelector('#demo-display .preview-ok')">
+          {stored_block}
+        </div>
+      </section>
     </form>
   </div>
 </div>"##,
