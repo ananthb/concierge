@@ -424,7 +424,26 @@ dialog.manage-confirm .confirm-actions { display:flex; gap:10px;
 .rt-head { background:var(--cream-2); font-family:var(--f-mono); font-size:11px;
   letter-spacing:.18em; text-transform:uppercase; color:var(--muted); }
 .rt-row.disabled { opacity:0.5; }
+.rt-row.expanded { background:rgba(232,106,44,.04); }
 .rt-foot { padding:12px 20px; background:var(--cream-2); }
+
+/* Expandable detail row used by the audit table. The wrap is just a
+   grouping element (no layout) — the row + body stack as siblings
+   inside the card. */
+.rt-detail { padding:12px 20px 16px; background:var(--paper);
+  border-bottom:1px solid var(--hair); border-top:1px dashed var(--hair-2); }
+.rt-detail pre { margin:0; padding:10px 12px; background:var(--cream-2);
+  border-radius:8px; font-family:var(--f-mono); font-size:12px;
+  line-height:1.55; color:var(--ink-2); white-space:pre-wrap;
+  word-break:break-word; max-height:320px; overflow:auto; }
+.rt-detail .rt-detail-empty { color:var(--muted); font-size:12px;
+  font-family:var(--f-mono); }
+.rt-row .row-expand { background:none; border:1px solid transparent;
+  border-radius:6px; cursor:pointer; padding:2px 6px;
+  color:var(--muted); font-size:14px; line-height:1;
+  transition:transform .15s ease, color .15s ease, background .15s ease; }
+.rt-row .row-expand:hover { color:var(--ink); background:rgba(27,24,20,.04); }
+.rt-row .row-expand.open { transform:rotate(180deg); color:var(--ink); }
 
 /* Welcome form */
 .welcome { display:grid; grid-template-columns:minmax(0,1fr) 380px; gap:60px; align-items:center; }

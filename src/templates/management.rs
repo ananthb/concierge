@@ -623,6 +623,9 @@ pub fn audit_html(
 /// Render just the `<div id="audit-table">` portion. Used both for
 /// the full page render and the HTMX filter swap.
 pub fn audit_table_html(log: &[serde_json::Value], base_url: &str) -> String {
+    // Five columns: Time / Actor / Action / Resource / chevron.
+    let grid_cols = "0.8fr 1fr 0.7fr 1.4fr 32px";
+
     let rows: String = log
         .iter()
         .map(|entry| {
@@ -646,18 +649,31 @@ pub fn audit_table_html(log: &[serde_json::Value], base_url: &str) -> String {
 
             let action_cell = audit_action_chip(action);
             let resource_cell = audit_resource_cell(base_url, resource_type, resource_id);
+            let details_pretty = audit_details_pretty(entry.get("details"));
 
+            // Each row is wrapped in an Alpine x-data block whose
+            // `open` flag toggles the inline detail pane below it.
+            // The wrap itself doesn't lay out — the rt-row + rt-detail
+            // siblings stack inside the card on their own.
             format!(
-                r##"<div class="rt-row" style="grid-template-columns:0.8fr 1fr 0.7fr 1.4fr">
-  <div class="mono muted fs-11">{created}</div>
-  <div class="fs-13">{actor}</div>
-  <div>{action_cell}</div>
-  <div>{resource_cell}</div>
+                r##"<div x-data="{{ open: false }}">
+  <div class="rt-row" :class="{{ expanded: open }}" style="grid-template-columns:{grid_cols}">
+    <div class="mono muted fs-11">{created}</div>
+    <div class="fs-13">{actor}</div>
+    <div>{action_cell}</div>
+    <div>{resource_cell}</div>
+    <div>
+      <button type="button" class="row-expand" :class="{{ open: open }}" @click="open = !open" :aria-expanded="open" aria-label="Toggle details">▾</button>
+    </div>
+  </div>
+  <div class="rt-detail" x-show="open" x-cloak>{details}</div>
 </div>"##,
+                grid_cols = grid_cols,
                 created = html_escape(created.get(..19).unwrap_or(created)),
                 actor = html_escape(actor),
                 action_cell = action_cell,
                 resource_cell = resource_cell,
+                details = details_pretty,
             )
         })
         .collect();
@@ -670,9 +686,10 @@ pub fn audit_table_html(log: &[serde_json::Value], base_url: &str) -> String {
         )
     } else {
         format!(
-            r##"<div class="rt-head" style="grid-template-columns:0.8fr 1fr 0.7fr 1.4fr">
-  <div>Time</div><div>Actor</div><div>Action</div><div>Resource</div>
+            r##"<div class="rt-head" style="grid-template-columns:{grid_cols}">
+  <div>Time</div><div>Actor</div><div>Action</div><div>Resource</div><div></div>
 </div>{rows}"##,
+            grid_cols = grid_cols,
             rows = rows,
         )
     };
@@ -729,6 +746,41 @@ fn audit_action_options(selected: &str) -> String {
             )
         })
         .collect()
+}
+
+/// Format the `details` JSON column for display in the expanded row
+/// pane. The column stores a JSON string (we serialize on insert in
+/// `log_action`); D1 returns it as either a string we re-parse or a
+/// pre-parsed Value depending on driver behavior. Empty / `{}` /
+/// `null` all collapse to a "no details" line so empty rows don't
+/// look broken.
+fn audit_details_pretty(details: Option<&serde_json::Value>) -> String {
+    let parsed: Option<serde_json::Value> = match details {
+        None | Some(serde_json::Value::Null) => None,
+        Some(serde_json::Value::String(s)) => {
+            let t = s.trim();
+            if t.is_empty() || t == "{}" || t == "null" {
+                None
+            } else {
+                serde_json::from_str(t).ok()
+            }
+        }
+        Some(v) => {
+            if v.is_object() && v.as_object().map_or(false, |m| m.is_empty()) {
+                None
+            } else {
+                Some(v.clone())
+            }
+        }
+    };
+    match parsed {
+        Some(v) => {
+            let pretty = serde_json::to_string_pretty(&v).unwrap_or_else(|_| v.to_string());
+            format!("<pre>{}</pre>", html_escape(&pretty))
+        }
+        None => r#"<p class="rt-detail-empty">No additional details recorded for this action.</p>"#
+            .to_string(),
+    }
 }
 
 fn audit_resource_options(selected: &str) -> String {
