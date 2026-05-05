@@ -66,12 +66,16 @@ pub async fn handle_tenants(
             let addrs = get_email_addresses(kv, id).await?;
             let mut billing = get_tenant_billing(db, id).await?;
             crate::billing::refresh_billing(&mut billing);
+            let recent = audit::get_audit_for_resource(db, "tenant", id, 10)
+                .await
+                .unwrap_or_default();
             Response::from_html(tmpl::tenant_detail_html(
                 &tenant,
                 &wa,
                 &ig,
                 &addrs,
                 &billing,
+                &recent,
                 actor_email,
                 base_url,
                 &locale,

@@ -352,6 +352,64 @@ pub fn tenants_table_html(tenants: &[Tenant], base_url: &str) -> String {
     )
 }
 
+/// Recent activity card shown on the tenant detail page. Renders a
+/// short list of audit entries (already filtered to the resource).
+/// Each row uses the same chevron-expand pattern as the audit log so
+/// the operator can drill into the saved details JSON without
+/// leaving the detail page.
+fn render_recent_activity_card(recent: &[serde_json::Value], base_url: &str) -> String {
+    let body = if recent.is_empty() {
+        r#"<p class="muted fs-13 m-0">Nothing logged for this tenant yet.</p>"#.to_string()
+    } else {
+        recent
+            .iter()
+            .map(|entry| {
+                let action = entry.get("action").and_then(|v| v.as_str()).unwrap_or("?");
+                let actor = entry
+                    .get("actor_email")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("?");
+                let created = entry
+                    .get("created_at")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
+                let chip = audit_action_chip(action);
+                let details_pretty = audit_details_pretty(entry.get("details"));
+                format!(
+                    r##"<div x-data="{{ open: false }}" class="recent-row">
+  <div class="row gap-12 wrap" style="align-items:center">
+    <span class="mono muted fs-11" style="min-width:140px">{created}</span>
+    {chip}
+    <span class="muted fs-12">by {actor}</span>
+    <button type="button" class="row-expand ml-auto" :class="{{ open: open }}" @click="open = !open" :aria-expanded="open" aria-label="Toggle details">▾</button>
+  </div>
+  <div class="rt-detail" x-show="open" x-cloak>{details}</div>
+</div>"##,
+                    created = html_escape(created.get(..19).unwrap_or(created)),
+                    chip = chip,
+                    actor = html_escape(actor),
+                    details = details_pretty,
+                )
+            })
+            .collect::<String>()
+    };
+    let view_all = format!(
+        r#"<a class="btn ghost sm" href="{base_url}/manage/audit?resource_type=tenant">View full audit log</a>"#,
+        base_url = base_url,
+    );
+    format!(
+        r##"<div class="card p-18 mt-16">
+  <div class="between mb-12 wrap" style="gap:12px">
+    <h3 class="m-0">Recent activity</h3>
+    {view_all}
+  </div>
+  <div class="recent-list">{body}</div>
+</div>"##,
+        view_all = view_all,
+        body = body,
+    )
+}
+
 /// Single empty-state component used by all /manage list pages.
 /// `cta` is `(href, label)` for an optional call-to-action.
 fn empty_state(headline: &str, subtext: &str, cta: Option<(&str, &str)>) -> String {
@@ -381,6 +439,7 @@ pub fn tenant_detail_html(
     ig: &[InstagramAccount],
     addrs: &[EmailAddress],
     billing: &TenantBilling,
+    recent_activity: &[serde_json::Value],
     actor_email: &str,
     base_url: &str,
     locale: &Locale,
@@ -415,6 +474,8 @@ pub fn tenant_detail_html(
             )
         })
         .collect();
+
+    let recent_card = render_recent_activity_card(recent_activity, base_url);
 
     let plan_options: String = crate::types::Plan::ALL
         .iter()
@@ -519,8 +580,11 @@ pub fn tenant_detail_html(
       </div>
     </form>
   </div>
+
+  {recent_card}
 </div>"##,
         header = header,
+        recent_card = recent_card,
         base_url = base_url,
         hash = HASH,
         id = html_escape(&tenant.id),

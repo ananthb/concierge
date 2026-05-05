@@ -427,6 +427,16 @@ dialog.manage-confirm .confirm-actions { display:flex; gap:10px;
 .rt-row.expanded { background:rgba(232,106,44,.04); }
 .rt-foot { padding:12px 20px; background:var(--cream-2); }
 
+/* Recent-activity list shown on tenant detail. Tighter than the
+   audit table — each row is one line with an inline chevron and an
+   on-demand details pane below. */
+.recent-list { display:flex; flex-direction:column; }
+.recent-row { padding:10px 0; border-top:1px solid var(--hair); }
+.recent-row:first-child { border-top:none; padding-top:0; }
+.recent-row .rt-detail { margin-top:8px; padding:10px 12px;
+  border-top:none; border-bottom:none; border-radius:8px;
+  background:var(--cream-2); }
+
 /* Expandable detail row used by the audit table. The wrap is just a
    grouping element (no layout) — the row + body stack as siblings
    inside the card. */

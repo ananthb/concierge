@@ -36,6 +36,31 @@ pub async fn log_action(
     Ok(())
 }
 
+/// Recent audit entries for a single resource. Used by detail pages
+/// (e.g. tenant detail) to show what changed recently without
+/// bouncing the operator out to the global audit log.
+pub async fn get_audit_for_resource(
+    db: &D1Database,
+    resource_type: &str,
+    resource_id: &str,
+    limit: u32,
+) -> Result<Vec<serde_json::Value>> {
+    let stmt = db.prepare(
+        "SELECT * FROM audit_log
+         WHERE resource_type = ? AND resource_id = ?
+         ORDER BY created_at DESC LIMIT ?",
+    );
+    let result = stmt
+        .bind(&[
+            resource_type.into(),
+            resource_id.into(),
+            JsValue::from(limit as f64),
+        ])?
+        .all()
+        .await?;
+    result.results::<serde_json::Value>()
+}
+
 /// Filtered audit log query. All three filter args are optional —
 /// pass `""` to skip a filter. `actor` is a case-insensitive LIKE
 /// (matches partial emails); `action` and `resource_type` are exact
