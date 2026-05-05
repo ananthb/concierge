@@ -1000,15 +1000,23 @@ pub fn base_html_with_meta(title: &str, content: &str, meta: &PageMeta, locale: 
 document.addEventListener('click', async (event) => {{
   const btn = event.target.closest('.copy-btn');
   if (!btn) return;
-  const url = btn.dataset.copyUrl;
-  if (!url) return;
+  // `data-copy-url` is the legacy attribute for URL-shaped values;
+  // `data-copy-text` accepts any string. Either works.
+  const text = btn.dataset.copyText || btn.dataset.copyUrl;
+  if (!text) return;
   const copied = document.body.dataset.i18nCopyCopied || 'Copied!';
-  const def = document.body.dataset.i18nCopyDefault || 'Copy';
-  await navigator.clipboard.writeText(url);
+  const def = btn.dataset.copyLabel || document.body.dataset.i18nCopyDefault || 'Copy';
+  await navigator.clipboard.writeText(text);
+  const prev = btn.textContent;
   btn.textContent = copied;
-  const toast = document.getElementById('toast');
-  if (toast) toast.innerHTML = `<div class="success">${{copied}}</div>`;
-  setTimeout(() => {{ btn.textContent = def; }}, 2000);
+  const region = document.getElementById('toast-region');
+  if (region) {{
+    region.insertAdjacentHTML('afterbegin', `<div class="success">${{copied}}</div>`);
+  }} else {{
+    const toast = document.getElementById('toast');
+    if (toast) toast.innerHTML = `<div class="success">${{copied}}</div>`;
+  }}
+  setTimeout(() => {{ btn.textContent = btn.dataset.copyLabel ? def : prev; }}, 2000);
 }});
 
 document.addEventListener('htmx:responseError', () => {{

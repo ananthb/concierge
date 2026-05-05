@@ -539,7 +539,7 @@ pub fn audit_html(
                 .and_then(|v| v.as_str())
                 .unwrap_or("?");
             let action = entry.get("action").and_then(|v| v.as_str()).unwrap_or("?");
-            let resource = entry
+            let resource_type = entry
                 .get("resource_type")
                 .and_then(|v| v.as_str())
                 .unwrap_or("");
@@ -552,19 +552,20 @@ pub fn audit_html(
                 .and_then(|v| v.as_str())
                 .unwrap_or("");
 
+            let action_cell = audit_action_chip(action);
+            let resource_cell = audit_resource_cell(base_url, resource_type, resource_id);
+
             format!(
-                r##"<div class="rt-row" style="grid-template-columns:0.8fr 1fr 0.6fr 0.6fr 0.5fr">
+                r##"<div class="rt-row" style="grid-template-columns:0.8fr 1fr 0.7fr 1.4fr">
   <div class="mono muted fs-11">{created}</div>
-  <div>{actor}</div>
-  <div><span class="chip">{action}</span></div>
-  <div class="mono muted">{resource}</div>
-  <div class="mono muted fs-11">{rid}</div>
+  <div class="fs-13">{actor}</div>
+  <div>{action_cell}</div>
+  <div>{resource_cell}</div>
 </div>"##,
                 created = html_escape(created.get(..19).unwrap_or(created)),
                 actor = html_escape(actor),
-                action = html_escape(action),
-                resource = html_escape(resource),
-                rid = html_escape(resource_id.get(..8).unwrap_or(resource_id)),
+                action_cell = action_cell,
+                resource_cell = resource_cell,
             )
         })
         .collect();
@@ -585,8 +586,8 @@ pub fn audit_html(
         r##"<div class="page-pad">
   {header}
   <div class="card" style="padding:0;overflow:hidden">
-    <div class="rt-head" style="grid-template-columns:0.8fr 1fr 0.6fr 0.6fr 0.5fr">
-      <div>Time</div><div>Actor</div><div>Action</div><div>Resource</div><div>ID</div>
+    <div class="rt-head" style="grid-template-columns:0.8fr 1fr 0.7fr 1.4fr">
+      <div>Time</div><div>Actor</div><div>Action</div><div>Resource</div>
     </div>
     {rows}{empty}
   </div>
@@ -603,6 +604,94 @@ pub fn audit_html(
         actor_email,
         base_url,
         locale,
+    )
+}
+
+/// Render a single audit row's action column. Maps the wire-name
+/// (snake_case stored in D1) to a human label and color-tags
+/// destructive verbs so deletes stand out at a glance.
+fn audit_action_chip(action: &str) -> String {
+    let (label, kind) = match action {
+        "create_archetype" => ("Created archetype", "ok"),
+        "edit_archetype" => ("Edited archetype", ""),
+        "delete_archetype" => ("Deleted archetype", "error"),
+        "grant_replies" => ("Granted replies", "ok"),
+        "grant_addresses" => ("Granted addresses", "ok"),
+        "update_tenant" => ("Updated tenant", ""),
+        "delete_tenant" => ("Deleted tenant", "error"),
+        "update_pricing" => ("Updated pricing", ""),
+        "delete_pricing_currency" => ("Removed currency", "error"),
+        "schedule_grant" => ("Scheduled grant", "ok"),
+        "schedule_grant_remove" => ("Removed scheduled grant", "error"),
+        "edit_demo_config" => ("Edited demo config", ""),
+        other => return format!(r#"<span class="chip mono">{}</span>"#, html_escape(other)),
+    };
+    let cls = if kind.is_empty() {
+        "chip".to_string()
+    } else {
+        format!("chip {kind}")
+    };
+    format!(r#"<span class="{cls}">{}</span>"#, html_escape(label))
+}
+
+/// Render the resource column. Where the resource has a detail page
+/// in /manage we link to it; otherwise we surface the bare ID with a
+/// copy button so an operator can paste it into a search or a query.
+fn audit_resource_cell(base_url: &str, kind: &str, id: &str) -> String {
+    if id.is_empty() {
+        return match kind {
+            "billing" => r#"<a class="mono fs-12" href="/manage/billing">Billing</a>"#.to_string(),
+            "demo_config" => {
+                r#"<a class="mono fs-12" href="/manage/demo">Demo config</a>"#.to_string()
+            }
+            "" => r#"<span class="muted fs-12">—</span>"#.to_string(),
+            other => format!(
+                r#"<span class="mono muted fs-12">{}</span>"#,
+                html_escape(other)
+            ),
+        };
+    }
+    let id_esc = html_escape(id);
+    let kind_label = match kind {
+        "tenant" => "Tenant",
+        "archetype" => "Archetype",
+        "billing" => "Billing",
+        "demo_config" => "Demo",
+        other => other,
+    };
+    let kind_label_esc = html_escape(kind_label);
+    let copy_btn = format!(
+        r##"<button type="button" class="copy-btn btn ghost sm" data-copy-text="{id_esc}" data-copy-label="Copy" title="Copy {kind_label_esc} ID" aria-label="Copy {kind_label_esc} ID">Copy</button>"##,
+        id_esc = id_esc,
+        kind_label_esc = kind_label_esc,
+    );
+    let id_short = id.get(..8).unwrap_or(id);
+    let id_short_esc = html_escape(id_short);
+    let body = match kind {
+        "tenant" => format!(
+            r#"<a class="mono fs-12" href="{base_url}/manage/tenants/{id_esc}" title="{id_esc}">{kind_label_esc} · {id_short_esc}…</a>"#,
+            base_url = base_url,
+            id_esc = id_esc,
+            id_short_esc = id_short_esc,
+            kind_label_esc = kind_label_esc,
+        ),
+        "archetype" => format!(
+            r#"<a class="mono fs-12" href="{base_url}/manage/archetypes/{id_esc}">{kind_label_esc} · {id_esc}</a>"#,
+            base_url = base_url,
+            id_esc = id_esc,
+            kind_label_esc = kind_label_esc,
+        ),
+        _ => format!(
+            r#"<span class="mono fs-12 muted" title="{id_esc}">{kind_label_esc} · {id_short_esc}…</span>"#,
+            id_esc = id_esc,
+            id_short_esc = id_short_esc,
+            kind_label_esc = kind_label_esc,
+        ),
+    };
+    format!(
+        r#"<div class="row gap-8" style="align-items:center">{body}{copy}</div>"#,
+        body = body,
+        copy = copy_btn,
     )
 }
 
