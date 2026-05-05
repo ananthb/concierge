@@ -310,16 +310,46 @@ async fn run_ai_model(env: &Env, model: &str, request: &AiRequest) -> Result<Str
         .await
         .map_err(|e| Error::from(format!("AI model error: {:?}", e)))?;
 
-    let response_str = response
-        .as_str()
-        .map(|s| s.to_string())
-        .or_else(|| {
-            response
-                .get("response")
-                .and_then(|r| r.as_str())
-                .map(|s| s.to_string())
-        })
-        .unwrap_or_else(|| "Thank you for your message.".to_string());
+    // Workers AI text-generation responses come back in a few shapes
+    // depending on the model family. Probe each one in priority order;
+    // log the unknown shape if none match so the wrapper can be
+    // extended for new models.
+    if let Some(s) = response.as_str() {
+        return Ok(s.to_string());
+    }
+    if let Some(s) = response.get("response").and_then(|r| r.as_str()) {
+        return Ok(s.to_string());
+    }
+    // OpenAI-compatible chat-completions shape (Kimi K2.x, gpt-oss):
+    //   { "choices": [ { "message": { "content": "…" } } ] }
+    if let Some(s) = response
+        .get("choices")
+        .and_then(|c| c.get(0))
+        .and_then(|c0| c0.get("message"))
+        .and_then(|m| m.get("content"))
+        .and_then(|c| c.as_str())
+    {
+        return Ok(s.to_string());
+    }
+    // OpenAI Responses-API shape: { "output_text": "…" }.
+    if let Some(s) = response.get("output_text").and_then(|s| s.as_str()) {
+        return Ok(s.to_string());
+    }
+    // Workers AI sometimes wraps the body under `result`.
+    if let Some(s) = response
+        .get("result")
+        .and_then(|r| r.get("response"))
+        .and_then(|r| r.as_str())
+    {
+        return Ok(s.to_string());
+    }
 
-    Ok(response_str)
+    console_log!(
+        "AI: unknown response shape from {}: {}",
+        model,
+        response.to_string().chars().take(500).collect::<String>()
+    );
+    Err(Error::from(format!(
+        "AI model {model} returned unrecognized response shape"
+    )))
 }
