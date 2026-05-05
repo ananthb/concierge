@@ -65,31 +65,57 @@ pub async fn handle_management(
         }
 
         (Method::Get, "audit") => {
-            // Parse filter query params once. The HX-Request header
-            // distinguishes the in-place fragment swap from the
-            // initial full-page render.
+            // Parse filter + cursor query params once. The HX-Request
+            // header distinguishes a "Load older" page swap (`before`
+            // is set) and a filter-input swap (no `before`) from the
+            // initial full-page render. Page size = 50 so a few
+            // pages cover most operator scrutiny without hammering D1.
             let url = req.url()?;
             let mut actor = String::new();
             let mut action = String::new();
             let mut resource_type = String::new();
+            let mut before = String::new();
             for (k, v) in url.query_pairs() {
                 match k.as_ref() {
                     "actor" => actor = v.into_owned(),
                     "action" => action = v.into_owned(),
                     "resource_type" => resource_type = v.into_owned(),
+                    "before" => before = v.into_owned(),
                     _ => {}
                 }
             }
-            let log = audit::search_audit_log(&db, &actor, &action, &resource_type, 100).await?;
+            const PAGE_SIZE: u32 = 50;
+            let log =
+                audit::search_audit_log(&db, &actor, &action, &resource_type, &before, PAGE_SIZE)
+                    .await?;
+            let has_more = log.len() as u32 == PAGE_SIZE;
             let is_htmx = req.headers().get("HX-Request").ok().flatten().is_some();
-            if is_htmx {
-                Response::from_html(tmpl::audit_table_html(&log, &base_url))
+            if is_htmx && !before.is_empty() {
+                // "Load older" click: append-only fragment.
+                Response::from_html(tmpl::audit_page_fragment_html(
+                    &log,
+                    &actor,
+                    &action,
+                    &resource_type,
+                    has_more,
+                    &base_url,
+                ))
+            } else if is_htmx {
+                Response::from_html(tmpl::audit_table_html(
+                    &log,
+                    &actor,
+                    &action,
+                    &resource_type,
+                    has_more,
+                    &base_url,
+                ))
             } else {
                 Response::from_html(tmpl::audit_html(
                     &log,
                     &actor,
                     &action,
                     &resource_type,
+                    has_more,
                     &email,
                     &base_url,
                     &locale,
@@ -114,6 +140,20 @@ pub async fn handle_management(
 /// diagnostic to `console_log!` so failed-Access debugging from
 /// `wrangler tail` shows *why* the 403 happened.
 async fn verify_access(req: &Request, env: &Env) -> Option<String> {
+    // Local-dev bypass for the management panel and the AI stubs that
+    // back it (see `crate::dev_bypass`). Active iff BOTH conditions
+    // hold simultaneously:
+    //   1. `CF_ACCESS_AUD` is empty (production sets this via the
+    //      Cloudflare Workers build env, so prod can never bypass).
+    //   2. `MANAGE_BYPASS_EMAIL` is set to a non-empty value (the dev
+    //      explicitly opts in by setting this in their .env file).
+    // The double-gate means even if MANAGE_BYPASS_EMAIL leaks into a
+    // prod deploy, the presence of CF_ACCESS_AUD still blocks it.
+    if let Some(email) = crate::dev_bypass::manage_bypass_email(env) {
+        worker::console_log!("Access: dev bypass active, treating actor as {email}");
+        return Some(email);
+    }
+
     let token = match req.headers().get("Cf-Access-Jwt-Assertion").ok().flatten() {
         Some(t) => t,
         None => match crate::handlers::auth::get_cookie(req, "CF_Authorization") {

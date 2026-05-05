@@ -325,6 +325,41 @@ code {
 .json-field textarea.invalid { border-color:var(--danger);
   box-shadow:0 0 0 4px var(--danger-soft); }
 
+/* Top-of-page progress bar — visible during any in-flight HTMX
+   request, fixed across the management panel. The wiring (event
+   listeners that toggle .visible) lives in `manage_shell`. */
+.htmx-top-progress { position:fixed; top:0; left:0; right:0; height:2px;
+  background:linear-gradient(90deg, var(--accent), var(--accent-2), var(--accent));
+  background-size:200% 100%; opacity:0; pointer-events:none; z-index:60;
+  transition:opacity .15s ease; }
+.htmx-top-progress.visible { opacity:1; animation:htmx-progress-slide 1.2s linear infinite; }
+@keyframes htmx-progress-slide {
+  0% { background-position:100% 0; }
+  100% { background-position:-100% 0; }
+}
+
+/* Skeleton placeholders. Used during slow HTMX swaps where waiting
+   on opaque content (e.g. demo persona preview) deserves more than a
+   spinner. The shimmer is a moving gradient across a hair-coloured
+   block; size/shape is dictated by the wrapping element. */
+.skeleton { position:relative; overflow:hidden; background:var(--cream-2);
+  border-radius:8px; }
+.skeleton::after { content:""; position:absolute; inset:0;
+  background:linear-gradient(90deg, transparent, rgba(255,255,255,.6), transparent);
+  background-size:200% 100%; animation:skeleton-shimmer 1.4s ease-in-out infinite; }
+@keyframes skeleton-shimmer {
+  0% { background-position:100% 0; }
+  100% { background-position:-100% 0; }
+}
+.skeleton-card { padding:14px; background:var(--paper); border:1px solid var(--hair);
+  border-radius:var(--r-md); margin-bottom:8px; }
+.skeleton-line { height:12px; margin-bottom:8px; }
+.skeleton-line:last-child { margin-bottom:0; }
+.skeleton-line.w-30 { width:30%; }
+.skeleton-line.w-50 { width:50%; }
+.skeleton-line.w-70 { width:70%; }
+.skeleton-line.w-90 { width:90%; }
+
 /* Themed confirmation dialog — replaces the browser-native confirm()
    that hx-confirm uses by default. Listener in manage_shell intercepts
    `htmx:confirm`, populates this dialog, and calls

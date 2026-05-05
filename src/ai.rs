@@ -55,6 +55,9 @@ pub async fn generate_response(
     system_prompt: &str,
     fields_data: &serde_json::Map<String, serde_json::Value>,
 ) -> Result<String> {
+    if crate::dev_bypass::active(env) {
+        return Ok(crate::dev_bypass::STUB_CHAT_REPLY.to_string());
+    }
     let form_context: String = fields_data
         .iter()
         .map(|(key, value)| {
@@ -112,6 +115,9 @@ pub async fn generate_chat_reply(
     system_prompt: &str,
     history: &[(String, String)],
 ) -> Result<String> {
+    if crate::dev_bypass::active(env) {
+        return Ok(crate::dev_bypass::STUB_CHAT_REPLY.to_string());
+    }
     let mut messages = Vec::with_capacity(history.len() + 1);
     messages.push(Message {
         role: "system".to_string(),
@@ -156,6 +162,14 @@ pub async fn generate_persona_businesses(
     user_prompt: &str,
     max_tokens: u32,
 ) -> Result<String> {
+    if crate::dev_bypass::active(env) {
+        // Count `:` occurrences in the user prompt as a rough proxy
+        // for "number of archetypes the caller listed". The persona
+        // generator concatenates `label: description` lines, so the
+        // colon count is one per archetype.
+        let n = user_prompt.matches(':').count().max(1);
+        return Ok(crate::dev_bypass::stub_persona_businesses(n));
+    }
     let combined = format!("{system_prompt}\n\n{user_prompt}");
     let messages = vec![Message {
         role: "user".to_string(),
@@ -181,6 +195,9 @@ pub async fn generate_persona_businesses(
 /// Check if a message looks like a prompt injection attempt.
 /// Returns true if injection is detected. Fails closed (returns true on error).
 pub async fn is_prompt_injection(env: &Env, text: &str) -> bool {
+    if crate::dev_bypass::active(env) {
+        return false;
+    }
     let model = get_fast_model(env);
     // Skip very short messages
     if text.len() < 10 {
@@ -236,6 +253,10 @@ pub async fn is_prompt_injection(env: &Env, text: &str) -> bool {
 /// and by the persona admin handler (embed each Prompt rule's description
 /// on save).
 pub async fn embed(env: &Env, text: &str) -> Result<Vec<f32>> {
+    if crate::dev_bypass::active(env) {
+        let _ = text;
+        return Ok(crate::dev_bypass::stub_embedding());
+    }
     #[derive(Serialize)]
     struct EmbedRequest<'a> {
         text: [&'a str; 1],

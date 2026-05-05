@@ -61,20 +61,24 @@ pub async fn get_audit_for_resource(
     result.results::<serde_json::Value>()
 }
 
-/// Filtered audit log query. All three filter args are optional —
-/// pass `""` to skip a filter. `actor` is a case-insensitive LIKE
-/// (matches partial emails); `action` and `resource_type` are exact
-/// matches against the wire vocab.
+/// Filtered audit log query. All filter args are optional — pass
+/// `""` to skip. `actor` is a case-insensitive LIKE (matches partial
+/// emails); `action` and `resource_type` are exact matches against
+/// the wire vocab. `before` is a `created_at` cursor — when
+/// non-empty, only entries strictly older are returned. Pagination
+/// pages backwards in time, page size = `limit`.
 pub async fn search_audit_log(
     db: &D1Database,
     actor: &str,
     action: &str,
     resource_type: &str,
+    before: &str,
     limit: u32,
 ) -> Result<Vec<serde_json::Value>> {
     let actor = actor.trim();
     let action = action.trim();
     let resource_type = resource_type.trim();
+    let before = before.trim();
 
     let mut where_clauses: Vec<&str> = Vec::new();
     let mut binds: Vec<JsValue> = Vec::new();
@@ -98,6 +102,10 @@ pub async fn search_audit_log(
     if !resource_type.is_empty() {
         where_clauses.push("resource_type = ?");
         binds.push(resource_type.into());
+    }
+    if !before.is_empty() {
+        where_clauses.push("created_at < ?");
+        binds.push(before.into());
     }
 
     let where_sql = if where_clauses.is_empty() {

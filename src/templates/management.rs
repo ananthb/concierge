@@ -44,6 +44,7 @@ fn manage_shell(
     // word to pick a danger-styled OK button when appropriate.
     let inner = format!(
         r##"<div class="app">
+  <div id="manage-top-progress" class="htmx-top-progress" aria-hidden="true"></div>
   <header class="app-top">
     {brand}
     <nav class="app-nav" aria-label="Management sections">{nav}</nav>
@@ -66,6 +67,24 @@ fn manage_shell(
     </div>
   </dialog>
   <script type="module" nonce="__CSP_NONCE__">
+  // Top progress bar — toggled visible while any HTMX request is in
+  // flight. A counter handles overlapping requests (e.g. cell save +
+  // pagination) so the bar stays up until the last one finishes.
+  const progress = document.getElementById('manage-top-progress');
+  let pending = 0;
+  document.addEventListener('htmx:beforeRequest', () => {{
+    pending += 1;
+    progress.classList.add('visible');
+  }});
+  const settle = () => {{
+    pending = Math.max(0, pending - 1);
+    if (pending === 0) progress.classList.remove('visible');
+  }};
+  document.addEventListener('htmx:afterRequest', settle);
+  document.addEventListener('htmx:responseError', settle);
+  document.addEventListener('htmx:sendError', settle);
+  document.addEventListener('htmx:swapError', settle);
+
   const dialog = document.getElementById('manage-confirm');
   const msgEl = document.getElementById('manage-confirm-msg');
   const titleEl = document.getElementById('manage-confirm-title');
@@ -627,11 +646,12 @@ pub fn audit_html(
     actor_q: &str,
     action_q: &str,
     resource_q: &str,
+    has_more: bool,
     actor_email: &str,
     base_url: &str,
     locale: &Locale,
 ) -> String {
-    let table = audit_table_html(log, base_url);
+    let table = audit_table_html(log, actor_q, action_q, resource_q, has_more, base_url);
     let header = manage_header("Audit log", "Management actions", None, None, "");
 
     // Two selects + a free-text input. All three trigger the same
@@ -684,14 +704,56 @@ pub fn audit_html(
     )
 }
 
-/// Render just the `<div id="audit-table">` portion. Used both for
-/// the full page render and the HTMX filter swap.
-pub fn audit_table_html(log: &[serde_json::Value], base_url: &str) -> String {
-    // Five columns: Time / Actor / Action / Resource / chevron.
-    let grid_cols = "0.8fr 1fr 0.7fr 1.4fr 32px";
+/// Render just the `<div id="audit-table">` portion. Used for the
+/// full-page render and the HTMX filter swap (which always starts
+/// over from the most recent entry; pagination starts fresh whenever
+/// the filters change).
+pub fn audit_table_html(
+    log: &[serde_json::Value],
+    actor_q: &str,
+    action_q: &str,
+    resource_q: &str,
+    has_more: bool,
+    base_url: &str,
+) -> String {
+    let rows = audit_rows_html(log, base_url);
+    let body = if log.is_empty() {
+        empty_state(
+            "No audit entries match",
+            "Loosen the filters or hit Reset to see every action again.",
+            None,
+        )
+    } else {
+        let grid_cols = "0.8fr 1fr 0.7fr 1.4fr 32px";
+        format!(
+            r##"<div class="rt-head" style="grid-template-columns:{grid_cols}">
+  <div>Time</div><div>Actor</div><div>Action</div><div>Resource</div><div></div>
+</div><div id="audit-rows">{rows}</div>"##,
+            grid_cols = grid_cols,
+            rows = rows,
+        )
+    };
 
-    let rows: String = log
-        .iter()
+    let load_more = audit_load_more_button(log, actor_q, action_q, resource_q, has_more, base_url);
+
+    format!(
+        r##"<div id="audit-table">
+  <div class="muted fs-12 mb-8" id="audit-count">{n} {label}</div>
+  <div class="card" style="padding:0;overflow:hidden">{body}</div>
+  {load_more}
+</div>"##,
+        n = log.len(),
+        label = if log.len() == 1 { "entry" } else { "entries" },
+        body = body,
+    )
+}
+
+/// Render the rows chunk on its own. Used by `audit_table_html` for
+/// the initial paint and by `audit_page_fragment_html` for "Load
+/// older" appends.
+fn audit_rows_html(log: &[serde_json::Value], base_url: &str) -> String {
+    let grid_cols = "0.8fr 1fr 0.7fr 1.4fr 32px";
+    log.iter()
         .map(|entry| {
             let actor = entry
                 .get("actor_email")
@@ -740,43 +802,91 @@ pub fn audit_table_html(log: &[serde_json::Value], base_url: &str) -> String {
                 details = details_pretty,
             )
         })
-        .collect();
+        .collect()
+}
 
-    let body = if log.is_empty() {
-        empty_state(
-            "No audit entries match",
-            "Loosen the filters or hit Reset to see every action again.",
-            None,
-        )
-    } else {
-        format!(
-            r##"<div class="rt-head" style="grid-template-columns:{grid_cols}">
-  <div>Time</div><div>Actor</div><div>Action</div><div>Resource</div><div></div>
-</div>{rows}"##,
-            grid_cols = grid_cols,
-            rows = rows,
-        )
-    };
-
-    let count_line = format!(
-        r#"<div class="muted fs-12 mb-8">{n} {label}{cap}</div>"#,
-        n = log.len(),
-        label = if log.len() == 1 { "entry" } else { "entries" },
-        cap = if log.len() == 100 {
-            " (cap reached — narrow filters to see older)"
-        } else {
-            ""
-        },
-    );
-
+/// Render the "Load older" button (or the "End of log" stub when
+/// there's nothing more to fetch). The button's hx-swap is
+/// `outerHTML` and its hx-target is itself; the response is
+/// `audit_page_fragment_html`, which carries both the next batch of
+/// rows (out-of-band swap into #audit-rows) and the new button.
+fn audit_load_more_button(
+    log: &[serde_json::Value],
+    actor_q: &str,
+    action_q: &str,
+    resource_q: &str,
+    has_more: bool,
+    base_url: &str,
+) -> String {
+    if log.is_empty() {
+        return String::new();
+    }
+    if !has_more {
+        return r#"<div class="muted fs-12 ta-center mt-12" id="audit-load-more">— end of log —</div>"#
+            .to_string();
+    }
+    let oldest = log
+        .last()
+        .and_then(|e| e.get("created_at"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
     format!(
-        r##"<div id="audit-table">
-  {count_line}
-  <div class="card" style="padding:0;overflow:hidden">{body}</div>
+        r##"<div id="audit-load-more" class="row jc-center mt-12">
+  <button type="button" class="btn ghost sm"
+          hx-get="{base_url}/manage/audit?actor={actor}&action={action}&resource_type={resource}&before={before}"
+          hx-target="this" hx-swap="outerHTML">
+    <span>Load older</span>
+    <span class="spinner htmx-indicator" aria-hidden="true"></span>
+  </button>
 </div>"##,
-        count_line = count_line,
-        body = body,
+        base_url = base_url,
+        actor = url_encode(actor_q),
+        action = url_encode(action_q),
+        resource = url_encode(resource_q),
+        before = url_encode(oldest),
     )
+}
+
+/// Response body for a "Load older" click. Two pieces:
+///   * an HTMX out-of-band swap that appends the new rows into the
+///     existing `#audit-rows` container,
+///   * the in-place outerHTML swap that replaces the previous Load
+///     Older button with either the next-cursor button or the
+///     end-of-log marker.
+pub fn audit_page_fragment_html(
+    log: &[serde_json::Value],
+    actor_q: &str,
+    action_q: &str,
+    resource_q: &str,
+    has_more: bool,
+    base_url: &str,
+) -> String {
+    let rows = audit_rows_html(log, base_url);
+    let next_button =
+        audit_load_more_button(log, actor_q, action_q, resource_q, has_more, base_url);
+    format!(
+        r##"<div hx-swap-oob="beforeend:#audit-rows">{rows}</div>
+{next_button}"##,
+        rows = rows,
+        next_button = next_button,
+    )
+}
+
+/// URL-encode a query-string value. Tiny helper so we don't pull in a
+/// crate; only escapes the characters HTML attribute + URL contexts
+/// can mishandle when an operator searches for "marketing@" or
+/// similar.
+fn url_encode(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for b in s.bytes() {
+        match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                out.push(b as char)
+            }
+            _ => out.push_str(&format!("%{b:02X}")),
+        }
+    }
+    out
 }
 
 /// Build the <option> list for the action filter. The labels mirror
@@ -1167,8 +1277,23 @@ fn pricing_form_table(cfg: &crate::storage::Pricing, base_url: &str) -> String {
                 .iter()
                 .map(|code| {
                     let value = cfg.amount(*concept, code).unwrap_or(0);
+                    // Save-on-blur: `change` is the HTMX default for
+                    // input elements and fires on blur whenever the
+                    // value differs from when focus was acquired —
+                    // exactly the semantics we want. The handler
+                    // iterates cfg.currencies() × concepts and upserts
+                    // whatever positive values it sees in the form, so
+                    // including just one named field updates exactly
+                    // one cell. The Save pricing button is a batch
+                    // fallback (Enter/Return submits the form).
                     format!(
-                        r##"<td><input class="input mono w-input-sm" name="{name}" type="number" min="1" required value="{value}"></td>"##,
+                        r##"<td><input class="input mono w-input-sm cell-save" name="{name}" type="number" min="1" required value="{value}"
+                                       hx-post="{base_url}/manage/billing/settings"
+                                       hx-trigger="change"
+                                       hx-target="#toast-region" hx-swap="afterbegin"
+                                       hx-ext="json-enc"
+                                       hx-include="this"></td>"##,
+                        base_url = base_url,
                         name = format!("{}__{}", concept.as_wire(), code),
                         value = value,
                     )
@@ -1814,13 +1939,15 @@ pub fn demo_config_html(
                   hx-include="[name='persona_generation_prompt']"
                   hx-target="{hash}demo-display"
                   hx-swap="innerHTML"
-                  hx-ext="json-enc">
+                  hx-ext="json-enc"
+                  @click="$nextTick(() => document.getElementById('demo-display').innerHTML = document.getElementById('demo-skeleton-tpl').innerHTML)">
             <span>Preview</span>
             <span class="spinner htmx-indicator" aria-hidden="true"></span>
           </button>
           <button type="button" class="btn ghost sm"
                   hx-post="{base_url}/manage/demo/reroll"
-                  hx-target="body" hx-swap="innerHTML">
+                  hx-target="body" hx-swap="innerHTML"
+                  @click="$nextTick(() => document.getElementById('demo-display').innerHTML = document.getElementById('demo-skeleton-tpl').innerHTML)">
             <span>Re-roll</span>
             <span class="spinner htmx-indicator" aria-hidden="true"></span>
           </button>
@@ -1836,11 +1963,32 @@ pub fn demo_config_html(
              stored personas on first paint; swapped to the preview
              result after a Preview click. The `@htmx:after-swap`
              listener watches for a `.preview-ok` marker the success
-             template emits and flips the Save gate accordingly. -->
+             template emits and flips the Save gate accordingly. The
+             #demo-skeleton-tpl below is a hidden placeholder block
+             we copy into #demo-display the moment Preview/Re-roll is
+             clicked, so the operator sees shimmer placeholders
+             instead of the stale persona list while the AI runs. -->
         <div id="demo-display" class="mt-16" style="border-top:1px solid var(--hair);padding-top:16px"
              @htmx:after-swap="previewOk = !!document.querySelector('#demo-display .preview-ok')">
           {stored_block}
         </div>
+        <template id="demo-skeleton-tpl">
+          <div class="skeleton-card">
+            <div class="skeleton skeleton-line w-30"></div>
+            <div class="skeleton skeleton-line w-70"></div>
+            <div class="skeleton skeleton-line w-50"></div>
+          </div>
+          <div class="skeleton-card">
+            <div class="skeleton skeleton-line w-30"></div>
+            <div class="skeleton skeleton-line w-70"></div>
+            <div class="skeleton skeleton-line w-50"></div>
+          </div>
+          <div class="skeleton-card">
+            <div class="skeleton skeleton-line w-30"></div>
+            <div class="skeleton skeleton-line w-70"></div>
+            <div class="skeleton skeleton-line w-50"></div>
+          </div>
+        </template>
       </section>
     </form>
   </div>

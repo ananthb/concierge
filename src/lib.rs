@@ -30,6 +30,7 @@ mod approvals;
 mod billing;
 mod channel;
 mod crypto;
+mod dev_bypass;
 mod discord;
 mod durable_objects;
 mod email;
