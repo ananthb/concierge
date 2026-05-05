@@ -11,6 +11,7 @@ fn manage_shell(
     title: &str,
     content: &str,
     active: &str,
+    actor_email: &str,
     base_url: &str,
     locale: &Locale,
 ) -> String {
@@ -31,23 +32,137 @@ fn manage_shell(
         })
         .collect();
 
+    // Cloudflare Access sign-out endpoint clears the CF_Authorization
+    // cookie + JWT, which is the only credential the management panel
+    // accepts. After logout the user is bounced back to the team's IdP
+    // picker.
+    //
+    // The confirm dialog at the bottom intercepts every `hx-confirm`
+    // attribute on /manage and routes it through a themed `<dialog>`
+    // instead of the browser-native `confirm()` modal. The script reads
+    // the verb (Delete / Remove / Wipe / …) out of the prompt's first
+    // word to pick a danger-styled OK button when appropriate.
     let inner = format!(
         r##"<div class="app">
-  <header class="app-top" style="border-bottom-color:var(--accent)">
+  <header class="app-top">
     {brand}
-    <nav class="app-nav">{nav}</nav>
-    <div class="row gap-12">
-      <span class="chip warn">management</span>
+    <nav class="app-nav" aria-label="Management sections">{nav}</nav>
+    <div class="app-actor">
+      <span class="actor-email" title="{email}">{email}</span>
+      <a class="signout" href="/cdn-cgi/access/logout" rel="nofollow">Sign out</a>
     </div>
   </header>
+  <div id="toast-region" class="toast-region" role="status" aria-live="polite" aria-atomic="false"></div>
   {content}
+
+  <dialog id="manage-confirm" class="manage-confirm" aria-labelledby="manage-confirm-title">
+    <div class="confirm-card">
+      <p id="manage-confirm-title" class="confirm-eyebrow">Confirm</p>
+      <p id="manage-confirm-msg" class="confirm-msg"></p>
+      <div class="confirm-actions">
+        <button type="button" class="btn ghost sm" data-confirm-cancel>Cancel</button>
+        <button type="button" class="btn sm" data-confirm-ok>Confirm</button>
+      </div>
+    </div>
+  </dialog>
+  <script type="module" nonce="__CSP_NONCE__">
+  const dialog = document.getElementById('manage-confirm');
+  const msgEl = document.getElementById('manage-confirm-msg');
+  const titleEl = document.getElementById('manage-confirm-title');
+  const okBtn = dialog.querySelector('[data-confirm-ok]');
+  const cancelBtn = dialog.querySelector('[data-confirm-cancel]');
+  let pendingEvt = null;
+
+  // Pick eyebrow + button styling from the first word of the prompt.
+  // "Delete" / "Wipe" → destructive; "Remove" → mild; default → neutral.
+  function classify(prompt) {{
+    const w = (prompt || '').trim().split(/\s+/)[0].toLowerCase();
+    if (w === 'delete' || w === 'wipe') return {{ eyebrow: 'Destructive action', danger: true, ok: 'Delete' }};
+    if (w === 'remove') return {{ eyebrow: 'Remove', danger: true, ok: 'Remove' }};
+    return {{ eyebrow: 'Confirm', danger: false, ok: 'Confirm' }};
+  }}
+
+  document.body.addEventListener('htmx:confirm', (evt) => {{
+    const prompt = evt.detail.question;
+    if (!prompt) return; // no hx-confirm set — let HTMX proceed
+    evt.preventDefault();
+    pendingEvt = evt;
+    const c = classify(prompt);
+    titleEl.textContent = c.eyebrow;
+    msgEl.textContent = prompt;
+    okBtn.textContent = c.ok;
+    okBtn.classList.toggle('danger', c.danger);
+    okBtn.classList.toggle('primary', !c.danger);
+    dialog.showModal();
+    okBtn.focus();
+  }});
+
+  okBtn.addEventListener('click', () => {{
+    dialog.close();
+    if (pendingEvt) {{
+      pendingEvt.detail.issueRequest(true);
+      pendingEvt = null;
+    }}
+  }});
+  cancelBtn.addEventListener('click', () => {{
+    dialog.close();
+    pendingEvt = null;
+  }});
+  dialog.addEventListener('cancel', () => {{ pendingEvt = null; }});
+  </script>
 </div>"##,
         brand = brand_mark(),
         nav = nav,
+        email = html_escape(actor_email),
         content = content,
     );
 
     base_html(title, &inner, locale)
+}
+
+/// Standardized page header for /manage pages.
+///
+/// `back` is `(href, label)` for detail/edit views; `None` on top-level
+/// list pages. `right_slot` is raw HTML for the right-aligned action(s)
+/// (e.g. the "+ New archetype" button on the archetypes list).
+/// `subtitle` is a single-line muted line under the title.
+fn manage_header(
+    eyebrow: &str,
+    title: &str,
+    back: Option<(&str, &str)>,
+    subtitle: Option<&str>,
+    right_slot: &str,
+) -> String {
+    let back_html = match back {
+        Some((href, label)) => format!(
+            r#"<a class="back" href="{href}">&larr; {label}</a>"#,
+            href = href,
+            label = html_escape(label),
+        ),
+        None => String::new(),
+    };
+    let subtitle_html = match subtitle {
+        Some(s) if !s.is_empty() => format!(r#"<p class="header-subtitle">{}</p>"#, s),
+        _ => String::new(),
+    };
+    format!(
+        r##"<div class="manage-header">
+  {back}
+  <div class="header-row">
+    <div class="header-title">
+      <div class="eyebrow">{eyebrow}</div>
+      <h1 class="display-sm m-0 mt-4">{title}</h1>
+      {subtitle}
+    </div>
+    <div class="header-actions">{right_slot}</div>
+  </div>
+</div>"##,
+        back = back_html,
+        eyebrow = html_escape(eyebrow),
+        title = title,
+        subtitle = subtitle_html,
+        right_slot = right_slot,
+    )
 }
 
 pub fn dashboard_html(
@@ -58,51 +173,36 @@ pub fn dashboard_html(
     locale: &Locale,
 ) -> String {
     let health_panel = health_panel_html(health);
+    let header = manage_header(
+        "Management",
+        "Overview",
+        None,
+        Some(&format!("Signed in as {}", html_escape(email))),
+        "",
+    );
+    // KPI placeholders for MRR and Active are deliberately omitted until
+    // their data sources land. The single Tenants tile keeps the
+    // dashboard honest about what it actually knows today.
     let content = format!(
         r##"<div class="page-pad">
-  <div class="between mb-24">
-    <div>
-      <div class="eyebrow">Management Panel</div>
-      <h2 class="display-sm m-0 mt-4">Welcome, {email}</h2>
-    </div>
-  </div>
-  <div class="mb-24" style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px">
-    <div class="card p-18 ta-center">
-      <div class="stat-n serif">{tenant_count}</div>
-      <div class="mono muted fs-11">Tenants</div>
-    </div>
-    <div class="card p-18 ta-center">
-      <div class="stat-n serif">–</div>
-      <div class="mono muted fs-11">MRR</div>
-    </div>
-    <div class="card p-18 ta-center">
-      <div class="stat-n serif">–</div>
-      <div class="mono muted fs-11">Active</div>
-    </div>
+  {header}
+  <div class="card p-18 mb-16" style="max-width:240px">
+    <div class="stat-n serif">{tenant_count}</div>
+    <div class="mono muted fs-11">Tenants</div>
   </div>
 
   {health_panel}
-
-  <div class="card p-18 mt-16">
-    <div class="between">
-      <div class="eyebrow">Quick actions</div>
-    </div>
-    <div class="row gap-12 mt-12">
-      <a href="{base_url}/manage/tenants" class="btn sm">View tenants</a>
-      <a href="{base_url}/manage/audit" class="btn ghost sm">Audit log</a>
-    </div>
-  </div>
 </div>"##,
-        email = html_escape(email),
+        header = header,
         tenant_count = tenant_count,
         health_panel = health_panel,
-        base_url = base_url,
     );
 
     manage_shell(
-        "Management - Concierge",
+        "Management · Concierge",
         &content,
         "Dashboard",
+        email,
         base_url,
         locale,
     )
@@ -113,9 +213,7 @@ fn health_panel_html(report: &crate::handlers::health::HealthReport) -> String {
     let overall_chip = match report.overall {
         Status::Ok => r#"<span class="chip ok">All systems normal</span>"#,
         Status::Warn => r#"<span class="chip warn">Degraded</span>"#,
-        Status::Error => {
-            r#"<span class="chip warn" style="background:#FCE8D5;border-color:#E08070;color:#8A1F0E">Issues detected</span>"#
-        }
+        Status::Error => r#"<span class="chip error">Issues detected</span>"#,
     };
     let rows: String = report
         .checks
@@ -123,10 +221,8 @@ fn health_panel_html(report: &crate::handlers::health::HealthReport) -> String {
         .map(|c| {
             let dot = match c.status {
                 Status::Ok => r#"<span class="dot ok"></span>"#,
-                Status::Warn => r#"<span class="dot" style="background:var(--warn)"></span>"#,
-                Status::Error => {
-                    r#"<span class="dot" style="background:#C03020;box-shadow:0 0 0 3px rgba(192,48,32,.2)"></span>"#
-                }
+                Status::Warn => r#"<span class="dot warn"></span>"#,
+                Status::Error => r#"<span class="dot error"></span>"#,
             };
             format!(
                 r#"<div class="rt-row" style="grid-template-columns:auto 1.2fr 2fr">
@@ -157,7 +253,12 @@ fn health_panel_html(report: &crate::handlers::health::HealthReport) -> String {
     )
 }
 
-pub fn tenants_list_html(tenants: &[Tenant], base_url: &str, locale: &Locale) -> String {
+pub fn tenants_list_html(
+    tenants: &[Tenant],
+    actor_email: &str,
+    base_url: &str,
+    locale: &Locale,
+) -> String {
     let rows: String = tenants
         .iter()
         .map(|t| {
@@ -168,7 +269,7 @@ pub fn tenants_list_html(tenants: &[Tenant], base_url: &str, locale: &Locale) ->
   <div><span class="chip">{plan}</span></div>
   <div class="mono muted fs-11">{created}</div>
   <div>
-    <button class="btn ghost sm btn-danger" hx-delete="{base_url}/manage/tenants/{id}" hx-confirm="Delete tenant {email} and ALL their data?" hx-target="closest .rt-row" hx-swap="outerHTML">Delete</button>
+    <button class="btn ghost sm danger" hx-delete="{base_url}/manage/tenants/{id}" hx-confirm="Delete tenant {email} and ALL their data?" hx-target="closest .rt-row" hx-swap="outerHTML">Delete</button>
   </div>
 </div>"##,
                 base_url = base_url,
@@ -182,19 +283,30 @@ pub fn tenants_list_html(tenants: &[Tenant], base_url: &str, locale: &Locale) ->
         .collect();
 
     let empty = if tenants.is_empty() {
-        r##"<div class="muted p-20 ta-center">No tenants yet.</div>"##
+        empty_state(
+            "No tenants yet",
+            "Tenants appear here once someone signs up. The first sign-up after launch will land in this table.",
+            None,
+        )
     } else {
-        ""
+        String::new()
     };
+
+    let header = manage_header(
+        "All tenants",
+        &format!(
+            "{count} tenant{s}",
+            count = tenants.len(),
+            s = if tenants.len() == 1 { "" } else { "s" },
+        ),
+        None,
+        None,
+        "",
+    );
 
     let content = format!(
         r##"<div class="page-pad">
-  <div class="between mb-16">
-    <div>
-      <div class="eyebrow">All tenants</div>
-      <h2 class="display-sm m-0 mt-4">{count} tenant{s}</h2>
-    </div>
-  </div>
+  {header}
   <div class="card" style="padding:0;overflow:hidden">
     <div class="rt-head" style="grid-template-columns:1fr 1fr 0.6fr 0.5fr 80px">
       <div>Email</div><div>Name</div><div>Plan</div><div>Created</div><div></div>
@@ -202,13 +314,42 @@ pub fn tenants_list_html(tenants: &[Tenant], base_url: &str, locale: &Locale) ->
     {rows}{empty}
   </div>
 </div>"##,
-        count = tenants.len(),
-        s = if tenants.len() == 1 { "" } else { "s" },
+        header = header,
         rows = rows,
         empty = empty,
     );
 
-    manage_shell("Tenants - Concierge", &content, "Tenants", base_url, locale)
+    manage_shell(
+        "Tenants · Concierge",
+        &content,
+        "Tenants",
+        actor_email,
+        base_url,
+        locale,
+    )
+}
+
+/// Single empty-state component used by all /manage list pages.
+/// `cta` is `(href, label)` for an optional call-to-action.
+fn empty_state(headline: &str, subtext: &str, cta: Option<(&str, &str)>) -> String {
+    let cta_html = match cta {
+        Some((href, label)) => format!(
+            r#"<div class="empty-cta"><a class="btn sm" href="{href}">{label}</a></div>"#,
+            href = href,
+            label = html_escape(label),
+        ),
+        None => String::new(),
+    };
+    format!(
+        r##"<div class="empty-state">
+  <p class="empty-headline">{headline}</p>
+  <p class="empty-sub">{subtext}</p>
+  {cta}
+</div>"##,
+        headline = html_escape(headline),
+        subtext = html_escape(subtext),
+        cta = cta_html,
+    )
 }
 
 pub fn tenant_detail_html(
@@ -217,6 +358,7 @@ pub fn tenant_detail_html(
     ig: &[InstagramAccount],
     addrs: &[EmailAddress],
     billing: &TenantBilling,
+    actor_email: &str,
     base_url: &str,
     locale: &Locale,
 ) -> String {
@@ -251,26 +393,50 @@ pub fn tenant_detail_html(
         })
         .collect();
 
+    let plan_options: String = crate::types::Plan::ALL
+        .iter()
+        .map(|p| {
+            let sel = if *p == tenant.plan { " selected" } else { "" };
+            format!(
+                r#"<option value="{val}"{sel}>{label}</option>"#,
+                val = p.as_str(),
+                label = p.label(),
+            )
+        })
+        .collect();
+
+    let delete_btn = format!(
+        r##"<button class="btn ghost sm danger" hx-delete="{base_url}/manage/tenants/{id}" hx-confirm="Delete this tenant and ALL their data?">Delete tenant</button>"##,
+        base_url = base_url,
+        id = html_escape(&tenant.id),
+    );
+
+    let header = manage_header(
+        "Tenant",
+        &html_escape(&tenant.email),
+        Some((&format!("{}/manage/tenants", base_url), "Back to tenants")),
+        Some(&format!(
+            "{name} · {plan} · joined {created}",
+            name = html_escape(tenant.name.as_deref().unwrap_or("–")),
+            plan = html_escape(tenant.plan.label()),
+            created = html_escape(&tenant.created_at.get(..10).unwrap_or(&tenant.created_at)),
+        )),
+        &delete_btn,
+    );
+
     let content = format!(
         r##"<div class="page-pad">
-  <p><a href="{base_url}/manage/tenants">&larr; Back to tenants</a></p>
-  <div class="between" style="margin:16px 0">
-    <div>
-      <div class="eyebrow">Tenant</div>
-      <h2 class="display-sm">{email}</h2>
-      <div class="muted">{name} &middot; {plan} &middot; joined {created}</div>
-    </div>
-    <button class="btn ghost sm btn-danger" hx-delete="{base_url}/manage/tenants/{id}" hx-confirm="Delete this tenant and ALL their data?">Delete tenant</button>
-  </div>
-  <div id="toast" role="status" aria-live="polite" aria-atomic="true"></div>
+  {header}
   <div class="card p-18 mb-16">
-    <h3 class="mb-12">Plan</h3>
-    <form hx-put="{base_url}/manage/tenants/{id}" hx-target="{hash}toast" hx-swap="innerHTML">
+    <h3 class="mb-8">Plan</h3>
+    <p class="muted mb-12">Currently on <strong>{plan_label}</strong>.</p>
+    <form hx-put="{base_url}/manage/tenants/{id}" hx-target="{hash}toast-region" hx-swap="afterbegin">
       <div class="row gap-12">
-        <select class="select" name="plan" style="max-width:200px">
+        <label for="tenant-plan" class="sr-only">Plan</label>
+        <select id="tenant-plan" class="select w-input-md" name="plan">
           {plan_options}
         </select>
-        <button class="btn sm" type="submit">Update</button>
+        <button class="btn sm" type="submit">Save plan</button>
       </div>
     </form>
   </div>
@@ -292,11 +458,16 @@ pub fn tenant_detail_html(
   <div class="card p-18 mt-16">
     <h3 class="mb-8">Grant free replies</h3>
     <p class="muted mb-12">Add reply credits to this tenant's balance. Current balance: <strong>{balance}</strong>.</p>
-    <div id="grant-replies-toast"></div>
-    <form hx-post="{base_url}/manage/tenants/{id}/grant-replies" hx-target="{hash}grant-replies-toast" hx-swap="innerHTML" hx-ext="json-enc">
-      <div class="row gap-12 wrap">
-        <input class="input" name="replies" placeholder="Replies" type="number" min="1" required style="max-width:160px">
-        <input class="input" name="expires_days" placeholder="Expires in (days)" type="number" min="1" value="365" style="max-width:180px">
+    <form hx-post="{base_url}/manage/tenants/{id}/grant-replies" hx-target="{hash}toast-region" hx-swap="afterbegin" hx-ext="json-enc">
+      <div class="row gap-12 wrap" style="align-items:flex-end">
+        <label class="stack">
+          <span class="eyebrow lbl">Replies</span>
+          <input class="input mono w-input-sm" name="replies" type="number" min="1" required placeholder="e.g. 100">
+        </label>
+        <label class="stack">
+          <span class="eyebrow lbl">Expires in (days)</span>
+          <input class="input mono w-input-sm" name="expires_days" type="number" min="1" value="365" required>
+        </label>
         <button class="btn sm" type="submit">Grant replies</button>
       </div>
     </form>
@@ -305,33 +476,23 @@ pub fn tenant_detail_html(
   <div class="card p-18 mt-16">
     <h3 class="mb-8">Grant reply-email addresses</h3>
     <p class="muted mb-12">Add to this tenant's reply-email quota. Current quota: <strong>{quota}</strong> address(es).</p>
-    <div id="grant-addresses-toast"></div>
-    <form hx-post="{base_url}/manage/tenants/{id}/grant-addresses" hx-target="{hash}grant-addresses-toast" hx-swap="innerHTML" hx-ext="json-enc">
-      <div class="row gap-12 wrap">
-        <input class="input" name="addresses" placeholder="Address slots" type="number" min="1" required style="max-width:160px">
+    <form hx-post="{base_url}/manage/tenants/{id}/grant-addresses" hx-target="{hash}toast-region" hx-swap="afterbegin" hx-ext="json-enc">
+      <div class="row gap-12 wrap" style="align-items:flex-end">
+        <label class="stack">
+          <span class="eyebrow lbl">Address slots</span>
+          <input class="input mono w-input-sm" name="addresses" type="number" min="1" required placeholder="e.g. 5">
+        </label>
         <button class="btn sm" type="submit">Grant addresses</button>
       </div>
     </form>
   </div>
 </div>"##,
+        header = header,
         base_url = base_url,
         hash = HASH,
         id = html_escape(&tenant.id),
-        email = html_escape(&tenant.email),
-        name = html_escape(tenant.name.as_deref().unwrap_or("–")),
-        plan = html_escape(tenant.plan.label()),
-        created = html_escape(&tenant.created_at.get(..10).unwrap_or(&tenant.created_at)),
-        plan_options = crate::types::Plan::ALL
-            .iter()
-            .map(|p| {
-                let sel = if *p == tenant.plan { " selected" } else { "" };
-                format!(
-                    r#"<option value="{val}"{sel}>{label}</option>"#,
-                    val = p.as_str(),
-                    label = p.label(),
-                )
-            })
-            .collect::<String>(),
+        plan_label = html_escape(tenant.plan.label()),
+        plan_options = plan_options,
         wa_count = wa.len(),
         ig_count = ig.len(),
         domain_count = addrs.len(),
@@ -355,15 +516,21 @@ pub fn tenant_detail_html(
     );
 
     manage_shell(
-        &format!("{} - Concierge", tenant.email),
+        &format!("{} · Concierge", tenant.email),
         &content,
         "Tenants",
+        actor_email,
         base_url,
         locale,
     )
 }
 
-pub fn audit_html(log: &[serde_json::Value], base_url: &str, locale: &Locale) -> String {
+pub fn audit_html(
+    log: &[serde_json::Value],
+    actor_email: &str,
+    base_url: &str,
+    locale: &Locale,
+) -> String {
     let rows: String = log
         .iter()
         .map(|entry| {
@@ -403,15 +570,20 @@ pub fn audit_html(log: &[serde_json::Value], base_url: &str, locale: &Locale) ->
         .collect();
 
     let empty = if log.is_empty() {
-        r##"<div class="muted p-20 ta-center">No audit entries yet.</div>"##
+        empty_state(
+            "No audit entries yet",
+            "Every management action (plan change, credit grant, archetype edit, …) is recorded here. Take an action and it will appear at the top.",
+            None,
+        )
     } else {
-        ""
+        String::new()
     };
+
+    let header = manage_header("Audit log", "Management actions", None, None, "");
 
     let content = format!(
         r##"<div class="page-pad">
-  <div class="eyebrow">Audit Log</div>
-  <h2 class="display-sm" style="margin:4px 0 16px">Management actions</h2>
+  {header}
   <div class="card" style="padding:0;overflow:hidden">
     <div class="rt-head" style="grid-template-columns:0.8fr 1fr 0.6fr 0.6fr 0.5fr">
       <div>Time</div><div>Actor</div><div>Action</div><div>Resource</div><div>ID</div>
@@ -419,14 +591,16 @@ pub fn audit_html(log: &[serde_json::Value], base_url: &str, locale: &Locale) ->
     {rows}{empty}
   </div>
 </div>"##,
+        header = header,
         rows = rows,
         empty = empty,
     );
 
     manage_shell(
-        "Audit Log - Concierge",
+        "Audit Log · Concierge",
         &content,
         "Audit Log",
+        actor_email,
         base_url,
         locale,
     )
@@ -434,7 +608,11 @@ pub fn audit_html(log: &[serde_json::Value], base_url: &str, locale: &Locale) ->
 
 fn scheduled_grants_table(scheduled: &[crate::types::ScheduledGrant], base_url: &str) -> String {
     if scheduled.is_empty() {
-        return r#"<p class="muted fs-13 m-0">No scheduled grants yet.</p>"#.to_string();
+        return empty_state(
+            "No scheduled grants yet",
+            "Add a recurring grant below to automatically credit every tenant on a calendar cadence.",
+            None,
+        );
     }
 
     let rows: String = scheduled
@@ -457,7 +635,7 @@ fn scheduled_grants_table(scheduled: &[crate::types::ScheduledGrant], base_url: 
   <td><span class="chip">{active}</span></td>
   <td>
     <form hx-delete="{base_url}/manage/billing/schedule/{id}" hx-target="body" hx-swap="innerHTML" hx-confirm="Remove this scheduled grant?">
-      <button class="btn ghost sm" type="submit">Remove</button>
+      <button class="btn ghost sm danger" type="submit">Remove</button>
     </form>
   </td>
 </tr>"##,
@@ -495,6 +673,7 @@ fn scheduled_grants_table(scheduled: &[crate::types::ScheduledGrant], base_url: 
 }
 
 pub fn billing_overview_html(
+    actor_email: &str,
     base_url: &str,
     locale: &Locale,
     cfg: &crate::storage::Pricing,
@@ -505,16 +684,15 @@ pub fn billing_overview_html(
     let scheduled_rows = scheduled_grants_table(scheduled, base_url);
     let schedule_msg = schedule_form_msg.unwrap_or("");
 
+    let header = manage_header("Billing", "Pricing & grants", None, None, "");
     let content = format!(
         r##"<div class="page-pad">
-  <div class="eyebrow">Billing</div>
-  <h2 class="display-sm m-0 mt-4 mb-16">Pricing &amp; grants</h2>
+  {header}
 
   <div class="card p-22 mb-16">
     <h3 class="mb-8">Pricing</h3>
     <p class="muted mb-12">One column per supported currency. Each cell is the price in that currency's own unit (no conversion). The unit caption under each row shows whether the value is in minor units or milli-minor units.</p>
-    <div id="pricing-toast"></div>
-    <form hx-post="{base_url}/manage/billing/settings" hx-target="{hash}pricing-toast" hx-swap="innerHTML" hx-ext="json-enc">
+    <form hx-post="{base_url}/manage/billing/settings" hx-target="{hash}toast-region" hx-swap="afterbegin" hx-ext="json-enc">
       {pricing_table}
 
       <div class="row gap-12 wrap mb-12 mt-16">
@@ -525,7 +703,7 @@ pub fn billing_overview_html(
         </label>
       </div>
 
-      <button class="btn sm mt-12" type="submit">Save settings</button>
+      <button class="btn sm mt-12" type="submit">Save pricing</button>
     </form>
   </div>
 
@@ -535,10 +713,10 @@ pub fn billing_overview_html(
     {scheduled_rows}
     <div id="schedule-toast">{schedule_msg}</div>
     <form hx-post="{base_url}/manage/billing/schedule" hx-target="body" hx-swap="innerHTML" hx-ext="json-enc" class="mt-12">
-      <div class="row gap-12 wrap mb-12">
+      <div class="row gap-12 wrap mb-12" style="align-items:flex-end">
         <label style="min-width:220px">
-          <div class="eyebrow mb-4">Cadence</div>
-          <select class="input" name="cadence" required>
+          <div class="eyebrow lbl">Cadence</div>
+          <select class="select" name="cadence" required>
             <option value="monthly_first">1st of every month</option>
             <option value="weekly_mon">Every Monday</option>
             <option value="weekly_tue">Every Tuesday</option>
@@ -550,19 +728,20 @@ pub fn billing_overview_html(
             <option value="daily">Every day at 00:00 UTC</option>
           </select>
         </label>
-        <label style="min-width:140px">
-          <div class="eyebrow mb-4">Credits</div>
-          <input class="input mono" name="credits" type="number" min="1" required>
+        <label class="stack">
+          <span class="eyebrow lbl">Credits</span>
+          <input class="input mono w-input-xs" name="credits" type="number" min="1" required placeholder="e.g. 50">
         </label>
-        <label style="min-width:140px">
-          <div class="eyebrow mb-4">Expires in (days, 0 = never)</div>
-          <input class="input mono" name="expires_in_days" type="number" min="0" value="0" required>
+        <label class="stack">
+          <span class="eyebrow lbl">Expires in (days, 0 = never)</span>
+          <input class="input mono w-input-sm" name="expires_in_days" type="number" min="0" value="0" required>
         </label>
+        <button class="btn sm" type="submit">Add scheduled grant</button>
       </div>
-      <button class="btn sm" type="submit">Add scheduled grant</button>
     </form>
   </div>
 </div>"##,
+        header = header,
         base_url = base_url,
         hash = HASH,
         pricing_table = pricing_table,
@@ -571,7 +750,14 @@ pub fn billing_overview_html(
         schedule_msg = schedule_msg,
     );
 
-    manage_shell("Billing - Concierge", &content, "Billing", base_url, locale)
+    manage_shell(
+        "Billing · Concierge",
+        &content,
+        "Billing",
+        actor_email,
+        base_url,
+        locale,
+    )
 }
 
 /// Build the per-(concept, currency) input grid plus the "add currency"
@@ -591,13 +777,13 @@ fn pricing_form_table(cfg: &crate::storage::Pricing, base_url: &str) -> String {
         .map(|c| {
             let info = currency_info(c);
             let remove = format!(
-                r##" <button type="button" class="btn ghost sm btn-danger" hx-delete="{base_url}/manage/billing/currency/{code}" hx-confirm="Remove all {code} prices?" hx-target="body" hx-swap="innerHTML" title="Remove {code}">×</button>"##,
+                r##" <button type="button" class="btn ghost sm danger" hx-delete="{base_url}/manage/billing/currency/{code}" hx-confirm="Remove all {code} prices?" hx-target="body" hx-swap="innerHTML" title="Remove {code} from pricing">Remove</button>"##,
                 base_url = base_url,
                 code = html_escape(c),
             );
             format!(
                 r##"<th class="ta-right">
-  <div class="row gap-4" style="justify-content:flex-end;align-items:center">
+  <div class="row gap-8" style="justify-content:flex-end;align-items:center">
     <span class="mono">{symbol} {code}</span>{remove}
   </div>
   <div class="muted fs-11">{name}</div>
@@ -618,7 +804,7 @@ fn pricing_form_table(cfg: &crate::storage::Pricing, base_url: &str) -> String {
                 .map(|code| {
                     let value = cfg.amount(*concept, code).unwrap_or(0);
                     format!(
-                        r##"<td><input class="input mono" name="{name}" type="number" min="1" required value="{value}" style="max-width:160px"></td>"##,
+                        r##"<td><input class="input mono w-input-sm" name="{name}" type="number" min="1" required value="{value}"></td>"##,
                         name = format!("{}__{}", concept.as_wire(), code),
                         value = value,
                     )
@@ -739,6 +925,7 @@ struct CurrencyDisplay {
 
 pub fn archetypes_list_html(
     rows: &[crate::types::Archetype],
+    actor_email: &str,
     base_url: &str,
     locale: &Locale,
 ) -> String {
@@ -771,21 +958,38 @@ pub fn archetypes_list_html(
         .collect();
 
     let empty = if rows.is_empty() {
-        r##"<div class="muted p-20 ta-center">No archetypes yet. Add the first one to seed the demo and onboarding picker.</div>"##.to_string()
+        empty_state(
+            "No archetypes yet",
+            "Archetypes define the AI's tone and initial rules. Add the first one to seed the demo and onboarding picker.",
+            Some((
+                &format!("{}/manage/archetypes/new", base_url),
+                "Add the first archetype",
+            )),
+        )
     } else {
         String::new()
     };
 
+    let new_btn = format!(
+        r#"<a class="btn primary sm" href="{base_url}/manage/archetypes/new">+ New archetype</a>"#,
+        base_url = base_url,
+    );
+
+    let header = manage_header(
+        "Archetype catalog",
+        &format!(
+            "{count} archetype{s}",
+            count = rows.len(),
+            s = if rows.len() == 1 { "" } else { "s" },
+        ),
+        None,
+        Some("Every save runs through the safety classifier; only Approved rows are visible in the demo and onboarding."),
+        &new_btn,
+    );
+
     let content = format!(
         r##"<div class="page-pad">
-  <div class="between mb-16">
-    <div>
-      <div class="eyebrow">Archetype catalog</div>
-      <h2 class="display-sm m-0 mt-4">{count} archetype{s}</h2>
-    </div>
-    <a class="btn primary" href="{base_url}/manage/archetypes/new">+ New archetype</a>
-  </div>
-  <p class="muted mb-16">Archetypes define the AI's tone and initial rules. Every save runs through the safety classifier; only Approved rows are visible in the demo and onboarding.</p>
+  {header}
   <div class="card" style="padding:0;overflow:hidden">
     <div class="rt-head" style="grid-template-columns:0.7fr 0.7fr 1.4fr 0.6fr 0.5fr 80px">
       <div>Slug</div><div>Label</div><div>Description</div><div>Safety</div><div>Updated</div><div></div>
@@ -793,9 +997,7 @@ pub fn archetypes_list_html(
     {rows}{empty}
   </div>
 </div>"##,
-        base_url = base_url,
-        count = rows.len(),
-        s = if rows.len() == 1 { "" } else { "s" },
+        header = header,
         rows = row_html,
         empty = empty,
     );
@@ -803,6 +1005,7 @@ pub fn archetypes_list_html(
         "Archetypes · Concierge",
         &content,
         "Archetypes",
+        actor_email,
         base_url,
         locale,
     )
@@ -820,6 +1023,7 @@ fn persona_status_chip(status: &PersonaSafetyStatus) -> String {
 
 pub fn archetype_edit_html(
     row: Option<&crate::types::Archetype>,
+    actor_email: &str,
     base_url: &str,
     locale: &Locale,
 ) -> String {
@@ -872,7 +1076,7 @@ pub fn archetype_edit_html(
     } else {
         format!(
             r##"<form hx-post="{action}/delete" hx-target="body" hx-swap="innerHTML" hx-confirm="Delete this archetype? This cannot be undone." style="display:inline">
-              <button type="submit" class="btn sm danger">Delete</button>
+              <button type="submit" class="btn ghost sm danger">Delete archetype</button>
             </form>"##,
             action = action,
         )
@@ -882,7 +1086,7 @@ pub fn archetype_edit_html(
         format!(
             r#"<div class="mt-12">
               <label for="archetype-slug" class="eyebrow lbl">Slug (lowercase, _ or -)</label>
-              <input id="archetype-slug" class="input" name="slug" required pattern="[a-z0-9_-]+">
+              <input id="archetype-slug" class="input w-input-md" name="slug" required pattern="[a-z0-9_-]+">
             </div>"#
         )
     } else {
@@ -892,11 +1096,34 @@ pub fn archetype_edit_html(
         )
     };
 
+    let title = if is_new {
+        "New archetype".to_string()
+    } else {
+        html_escape(&row_ref.label)
+    };
+    let subtitle = if is_new {
+        Some("Define a new persona's tone and initial rules.".to_string())
+    } else {
+        Some(format!("Slug: <code>{}</code>", html_escape(&row_ref.slug)))
+    };
+    let header = manage_header(
+        if is_new {
+            "New archetype"
+        } else {
+            "Edit archetype"
+        },
+        &title,
+        Some((
+            &format!("{base_url}/manage/archetypes"),
+            "Back to archetypes",
+        )),
+        subtitle.as_deref(),
+        "",
+    );
+
     let content = format!(
         r##"<div class="page-pad">
-  <div class="row between mb-16">
-    <h1 class="display-sm m-0">{} archetype</h1>
-  </div>
+  {header}
 
   <div class="card p-18 mb-16 row gap-12" style="align-items:center">
     {safety_chip}
@@ -924,44 +1151,44 @@ pub fn archetype_edit_html(
       </div>
 
       <div class="mt-12">
-        <label for="archetype-voice" class="eyebrow lbl">Voice Prompt</label>
+        <label for="archetype-voice" class="eyebrow lbl">Voice prompt</label>
         <textarea id="archetype-voice" class="textarea mono" name="voice_prompt" rows="8" required>{voice_prompt}</textarea>
       </div>
 
       <div class="mt-12">
-        <label for="archetype-never" class="eyebrow lbl">Never (Policy constraints)</label>
+        <label for="archetype-never" class="eyebrow lbl">Never (policy constraints)</label>
         <input id="archetype-never" class="input" name="never" value="{never}">
       </div>
 
       <div class="mt-12">
-        <label for="archetype-phrases" class="eyebrow lbl">Catch-phrases (One per line)</label>
+        <label for="archetype-phrases" class="eyebrow lbl">Catch-phrases (one per line)</label>
         <textarea id="archetype-phrases" class="textarea" name="catch_phrases" rows="4">{catch_phrases}</textarea>
       </div>
 
       <div class="mt-12">
-        <label for="archetype-off" class="eyebrow lbl">Off-topics (One per line)</label>
+        <label for="archetype-off" class="eyebrow lbl">Off-topics (one per line)</label>
         <textarea id="archetype-off" class="textarea" name="off_topics" rows="4">{off_topics}</textarea>
       </div>
 
       <div class="mt-12">
-        <label for="archetype-handoff" class="eyebrow lbl">Handoff conditions (One per line)</label>
+        <label for="archetype-handoff" class="eyebrow lbl">Handoff conditions (one per line)</label>
         <textarea id="archetype-handoff" class="textarea" name="handoff_conditions" rows="4">{handoff_conditions}</textarea>
       </div>
 
       <div class="mt-12">
-        <label for="archetype-rules" class="eyebrow lbl">Default Rules (JSON)</label>
+        <label for="archetype-rules" class="eyebrow lbl">Default rules (JSON)</label>
         <textarea id="archetype-rules" class="textarea mono" name="default_rules_json" rows="10" required>{rules_json}</textarea>
       </div>
 
 
-      <div class="between pt-16 mt-16" style="border-top:1px solid var(--border-soft)">
+      <div class="between pt-16 mt-16" style="border-top:1px solid var(--hair)">
         <div>{delete_button}</div>
         <button type="submit" class="btn primary">Save archetype</button>
       </div>
     </form>
   </div>
 </div>"##,
-        if is_new { "New" } else { "Edit" },
+        header = header,
         delete_button = delete_button,
         action = action,
         label = html_escape(&row_ref.label),
@@ -980,6 +1207,7 @@ pub fn archetype_edit_html(
         "Archetype · Concierge",
         &content,
         "Archetypes",
+        actor_email,
         base_url,
         locale,
     )
@@ -992,6 +1220,7 @@ pub fn archetype_edit_html(
 pub fn demo_config_html(
     cfg: &crate::storage::DemoConfig,
     stored: Option<&crate::storage::StoredDemoPersonas>,
+    actor_email: &str,
     base_url: &str,
     locale: &Locale,
 ) -> String {
@@ -1019,20 +1248,25 @@ pub fn demo_config_html(
         enabled_checked = enabled_checked,
     );
 
+    let header = manage_header("Demo controls", "Live homepage demo", None, None, "");
+
     if !cfg.enabled {
         let content = format!(
             r##"<div class="page-pad">
-  <div class="between mb-16">
-    <div>
-      <div class="eyebrow">Demo controls</div>
-      <h2 class="display-sm m-0 mt-4">Live homepage demo</h2>
-    </div>
-  </div>
+  {header}
   {toggle_card}
 </div>"##,
+            header = header,
             toggle_card = toggle_card,
         );
-        return manage_shell("Demo · Concierge", &content, "Demo", base_url, locale);
+        return manage_shell(
+            "Demo · Concierge",
+            &content,
+            "Demo",
+            actor_email,
+            base_url,
+            locale,
+        );
     }
 
     let stored_block = stored
@@ -1057,12 +1291,7 @@ pub fn demo_config_html(
 
     let content = format!(
         r##"<div class="page-pad" x-data="{{ promptDirty: false, previewOk: false }}">
-  <div class="between mb-16">
-    <div>
-      <div class="eyebrow">Demo controls</div>
-      <h2 class="display-sm m-0 mt-4">Live homepage demo</h2>
-    </div>
-  </div>
+  {header}
 
   {toggle_card}
 
@@ -1085,19 +1314,19 @@ pub fn demo_config_html(
 
       <div class="row gap-12 mb-12 wrap" style="align-items:center">
         <label for="demo-cadence" class="fw-600">Regenerate every</label>
-        <input id="demo-cadence" class="input mono" type="number" name="regeneration_cadence_mins" min="0" max="10080" value="{cadence}" style="max-width:140px">
+        <input id="demo-cadence" class="input mono w-input-xs" type="number" name="regeneration_cadence_mins" min="0" max="10080" value="{cadence}">
         <span class="muted fs-13">minutes (0 = manual only).</span>
       </div>
 
       <div class="row gap-12 mb-12 wrap" style="align-items:center">
         <label for="demo-turns" class="fw-600">User turns per session</label>
-        <input id="demo-turns" class="input mono" type="number" name="max_user_turns" min="1" max="20" value="{max_user_turns}" style="max-width:120px">
+        <input id="demo-turns" class="input mono w-input-xs" type="number" name="max_user_turns" min="1" max="20" value="{max_user_turns}">
         <span class="muted fs-13">replaces the chat input with the sign-up CTA after this many user messages.</span>
       </div>
 
       <div class="row gap-12 mb-16 wrap" style="align-items:center">
         <label for="demo-idle" class="fw-600">Idle timeout</label>
-        <input id="demo-idle" class="input mono" type="number" name="idle_timeout_secs" min="5" max="600" value="{idle_timeout_secs}" style="max-width:120px">
+        <input id="demo-idle" class="input mono w-input-xs" type="number" name="idle_timeout_secs" min="5" max="600" value="{idle_timeout_secs}">
         <span class="muted fs-13">seconds — restarts on every keystroke; fires the CTA when the visitor stops typing.</span>
       </div>
 
@@ -1138,13 +1367,14 @@ pub fn demo_config_html(
            result after a Preview click. The `@htmx:after-swap`
            listener watches for a `.preview-ok` marker the success
            template emits and flips the Save gate accordingly. -->
-      <div id="demo-display" class="mt-16" style="border-top:1px solid var(--border-soft);padding-top:16px"
+      <div id="demo-display" class="mt-16" style="border-top:1px solid var(--hair);padding-top:16px"
            @htmx:after-swap="previewOk = !!document.querySelector('#demo-display .preview-ok')">
         {stored_block}
       </div>
     </form>
   </div>
 </div>"##,
+        header = header,
         base_url = base_url,
         hash = HASH,
         toggle_card = toggle_card,
@@ -1157,7 +1387,14 @@ pub fn demo_config_html(
         stored_block = stored_block,
     );
 
-    manage_shell("Demo · Concierge", &content, "Demo", base_url, locale)
+    manage_shell(
+        "Demo · Concierge",
+        &content,
+        "Demo",
+        actor_email,
+        base_url,
+        locale,
+    )
 }
 
 /// Render the saved persona blob as a list of business cards. Reads

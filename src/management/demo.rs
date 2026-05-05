@@ -47,6 +47,7 @@ pub async fn handle_demo(
             Response::from_html(tmpl::demo_config_html(
                 &cfg,
                 stored.as_ref(),
+                actor_email,
                 base_url,
                 &locale,
             ))

@@ -32,7 +32,12 @@ pub async fn handle_billing(
             let scheduled = storage::list_scheduled_grants(db).await.unwrap_or_default();
 
             Response::from_html(tmpl::billing_overview_html(
-                base_url, &locale, &cfg, &scheduled, None,
+                actor_email,
+                base_url,
+                &locale,
+                &cfg,
+                &scheduled,
+                None,
             ))
         }
 
@@ -119,6 +124,7 @@ pub async fn handle_billing(
             .await?;
             rerender_with_msg(
                 db,
+                actor_email,
                 base_url,
                 &locale,
                 Some(&format!(
@@ -138,6 +144,7 @@ pub async fn handle_billing(
                 None => {
                     return rerender_with_msg(
                         db,
+                        actor_email,
                         base_url,
                         &locale,
                         Some(&format!(
@@ -159,6 +166,7 @@ pub async fn handle_billing(
             if credits <= 0 {
                 return rerender_with_msg(
                     db,
+                    actor_email,
                     base_url,
                     &locale,
                     Some(r#"<div class="error">Credits must be positive.</div>"#),
@@ -204,6 +212,7 @@ pub async fn handle_billing(
 
             rerender_with_msg(
                 db,
+                actor_email,
                 base_url,
                 &locale,
                 Some(r#"<div class="success">Scheduled grant added.</div>"#),
@@ -225,6 +234,7 @@ pub async fn handle_billing(
             .await?;
             rerender_with_msg(
                 db,
+                actor_email,
                 base_url,
                 &locale,
                 Some(r#"<div class="success">Scheduled grant removed.</div>"#),
@@ -241,6 +251,7 @@ pub async fn handle_billing(
 /// so the operator sees validation errors and success notes in context.
 async fn rerender_with_msg(
     db: &D1Database,
+    actor_email: &str,
     base_url: &str,
     locale: &crate::locale::Locale,
     msg: Option<&str>,
@@ -248,6 +259,11 @@ async fn rerender_with_msg(
     let cfg = storage::get_pricing(db).await;
     let scheduled = storage::list_scheduled_grants(db).await.unwrap_or_default();
     Response::from_html(tmpl::billing_overview_html(
-        base_url, locale, &cfg, &scheduled, msg,
+        actor_email,
+        base_url,
+        locale,
+        &cfg,
+        &scheduled,
+        msg,
     ))
 }

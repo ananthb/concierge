@@ -30,7 +30,12 @@ pub async fn handle_tenants(
         // List all tenants
         (Method::Get, []) => {
             let tenants = list_tenants(db).await?;
-            Response::from_html(tmpl::tenants_list_html(&tenants, base_url, &locale))
+            Response::from_html(tmpl::tenants_list_html(
+                &tenants,
+                actor_email,
+                base_url,
+                &locale,
+            ))
         }
 
         // View single tenant
@@ -45,7 +50,14 @@ pub async fn handle_tenants(
             let mut billing = get_tenant_billing(db, id).await?;
             crate::billing::refresh_billing(&mut billing);
             Response::from_html(tmpl::tenant_detail_html(
-                &tenant, &wa, &ig, &addrs, &billing, base_url, &locale,
+                &tenant,
+                &wa,
+                &ig,
+                &addrs,
+                &billing,
+                actor_email,
+                base_url,
+                &locale,
             ))
         }
 

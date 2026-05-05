@@ -66,7 +66,7 @@ pub async fn handle_management(
 
         (Method::Get, "audit") => {
             let log = audit::get_audit_log(&db, 100).await?;
-            Response::from_html(tmpl::audit_html(&log, &base_url, &locale))
+            Response::from_html(tmpl::audit_html(&log, &email, &base_url, &locale))
         }
 
         _ => Response::error("Not Found", 404),

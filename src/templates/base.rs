@@ -11,7 +11,7 @@ pub const CSS: &str = r##"
   --hair: #D9CEB8; --hair-2: #C7BA9E;
   --accent: #E86A2C; --accent-2: #C8541C; --accent-soft: #F9D9C2;
   --sage: #6E8A5C; --plum: #6B3E5C; --sky: #3A6B8A; --butter: #E8C66A;
-  --ok: #3E7F4A; --warn: #C46B1A;
+  --ok: #3E7F4A; --warn: #C46B1A; --danger: #B23A2A; --danger-2: #8E2C1F; --danger-soft: #F6DDD5;
   --r-sm: 8px; --r-md: 12px; --r-lg: 20px; --r-xl: 28px;
   --shadow-1: 0 1px 0 rgba(27,24,20,.04), 0 2px 6px rgba(27,24,20,.04);
   --shadow-2: 0 2px 0 rgba(27,24,20,.04), 0 12px 28px rgba(27,24,20,.08);
@@ -55,10 +55,10 @@ a { color:var(--accent); }
 .btn.lg { padding:14px 22px; font-size:15px; }
 .btn.icon { padding:8px; }
 .btn:disabled { opacity:.45; cursor:not-allowed; transform:none; }
-.btn.danger, .btn-danger { background:transparent; color:var(--warn); border-color:var(--warn); }
-.btn.danger:hover, .btn-danger:hover { background:rgba(196,107,26,.08); }
-.btn.danger.solid { background:var(--warn); color:#fff; border-color:var(--warn); }
-.btn.danger.solid:hover { background:#a8580a; border-color:#a8580a; }
+.btn.danger { background:transparent; color:var(--danger); border-color:var(--danger); }
+.btn.danger:hover { background:var(--danger-soft); }
+.btn.danger.solid { background:var(--danger); color:#fff; border-color:var(--danger); }
+.btn.danger.solid:hover { background:var(--danger-2); border-color:var(--danger-2); }
 .card { background:var(--paper); border:1px solid var(--hair); border-radius:var(--r-lg); box-shadow:var(--shadow-1); }
 .input, .textarea, .select { width:100%; padding:10px 12px; background:#fff;
   border:1px solid var(--hair-2); border-radius:var(--r-sm);
@@ -82,9 +82,11 @@ a { color:var(--accent); }
   border-radius:999px; background:var(--cream-2); border:1px solid var(--hair); font-size:12px; color:var(--ink-2); }
 .chip.ok { background:#E8F0DE; border-color:#B5C99B; color:#3E5A26; }
 .chip.warn { background:#FCE8D5; border-color:#E9BC8D; color:#8A4B14; }
+.chip.error { background:var(--danger-soft); border-color:#E0A097; color:var(--danger-2); }
 .dot { width:8px; height:8px; border-radius:50%; background:var(--muted); display:inline-block; }
 .dot.ok { background:var(--ok); box-shadow:0 0 0 3px rgba(62,127,74,.18); }
 .dot.warn { background:var(--warn); }
+.dot.error { background:var(--danger); box-shadow:0 0 0 3px var(--danger-soft); }
 .hr { height:1px; background:var(--hair); border:0; margin:16px 0; }
 .row { display:flex; align-items:center; }
 .between { display:flex; align-items:center; justify-content:space-between; }
@@ -214,11 +216,72 @@ code {
   border-bottom:1px solid var(--hair); background:var(--paper); }
 .app { min-height:100vh; }
 .app-top { display:flex; align-items:center; gap:28px; padding:16px 28px;
-  border-bottom:1px solid var(--hair); background:var(--paper); }
+  border-bottom:1px solid var(--hair); background:rgba(251,247,238,0.92); backdrop-filter:blur(10px);
+  position:sticky; top:0; z-index:20; }
 .app-nav { display:flex; gap:18px; flex:1; }
 .app-nav a { text-decoration:none; color:var(--muted); font-size:14px; padding:8px 2px;
   border-bottom:2px solid transparent; }
 .app-nav a.active { color:var(--ink); border-color:var(--accent); }
+.app-actor { display:flex; align-items:center; gap:10px; font-size:13px; color:var(--muted); }
+.app-actor .actor-email { font-family:var(--f-mono); color:var(--ink-2); font-size:12px;
+  max-width:220px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.app-actor a.signout { color:var(--muted); text-decoration:none; font-size:12px;
+  padding:4px 10px; border:1px solid var(--hair-2); border-radius:999px;
+  transition:color .15s ease, border-color .15s ease; }
+.app-actor a.signout:hover { color:var(--ink); border-color:var(--ink-2); }
+
+/* Management page header: eyebrow + title + optional back link + right slot */
+.manage-header { margin-bottom:20px; }
+.manage-header .back { display:inline-block; font-size:13px; color:var(--muted);
+  text-decoration:none; margin-bottom:10px; }
+.manage-header .back:hover { color:var(--ink); }
+.manage-header .header-row { display:flex; align-items:flex-end;
+  justify-content:space-between; gap:16px; flex-wrap:wrap; }
+.manage-header .header-title { min-width:0; flex:1 1 auto; }
+.manage-header .header-actions { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+.manage-header .header-subtitle { color:var(--muted); font-size:14px; margin:6px 0 0; }
+
+/* Empty state — single shape used by every list */
+.empty-state { padding:36px 24px; text-align:center; color:var(--muted); }
+.empty-state .empty-headline { color:var(--ink-2); font-size:15px; font-weight:500; margin:0 0 4px; }
+.empty-state .empty-sub { color:var(--muted); font-size:13px; margin:0 auto; max-width:420px; }
+.empty-state .empty-cta { margin-top:14px; }
+
+/* Input width utilities — replaces inline style="max-width:160px" etc. */
+.w-input-xs { max-width:120px; }
+.w-input-sm { max-width:160px; }
+.w-input-md { max-width:200px; }
+.w-input-lg { max-width:260px; }
+
+/* Global toast region — fixed top-right, aria-live=polite, replaces
+   per-form #toast / #grant-replies-toast / #pricing-toast etc. */
+.toast-region { position:fixed; top:80px; right:24px; z-index:50;
+  display:flex; flex-direction:column; gap:8px; max-width:360px; pointer-events:none; }
+.toast-region:empty { display:none; }
+.toast-region > * { pointer-events:auto; box-shadow:var(--shadow-2);
+  margin-bottom:0; }
+@media(max-width:600px) {
+  .toast-region { top:auto; bottom:16px; left:16px; right:16px; max-width:none; }
+}
+
+/* Themed confirmation dialog — replaces the browser-native confirm()
+   that hx-confirm uses by default. Listener in manage_shell intercepts
+   `htmx:confirm`, populates this dialog, and calls
+   `evt.detail.issueRequest()` once the user accepts. */
+dialog.manage-confirm { padding:0; border:none; background:transparent;
+  max-width:440px; width:calc(100% - 32px); }
+dialog.manage-confirm::backdrop { background:rgba(27,24,20,.45);
+  backdrop-filter:blur(2px); }
+dialog.manage-confirm .confirm-card { background:var(--paper);
+  border:1px solid var(--hair); border-radius:var(--r-lg);
+  box-shadow:var(--shadow-2); padding:22px 24px; }
+dialog.manage-confirm .confirm-eyebrow { font-family:var(--f-mono);
+  font-size:11px; letter-spacing:.18em; text-transform:uppercase;
+  color:var(--muted); margin:0 0 8px; }
+dialog.manage-confirm .confirm-msg { color:var(--ink); font-size:15px;
+  line-height:1.5; margin:0 0 18px; white-space:pre-wrap; }
+dialog.manage-confirm .confirm-actions { display:flex; gap:10px;
+  justify-content:flex-end; flex-wrap:wrap; }
 .avatar { width:30px; height:30px; border-radius:50%; background:var(--plum); color:#fff;
   display:flex; align-items:center; justify-content:center; font-size:13px; }
 .brand { display:flex; align-items:center; gap:10px; font-size:20px; letter-spacing:-0.01em; }
@@ -902,8 +965,14 @@ document.addEventListener('click', async (event) => {{
 }});
 
 document.addEventListener('htmx:responseError', () => {{
-  const toast = document.getElementById('toast');
   const msg = document.body.dataset.i18nHtmxError || 'Something went wrong. Please try again.';
+  // Prefer the global /manage toast region; fall back to legacy #toast.
+  const region = document.getElementById('toast-region');
+  if (region) {{
+    region.insertAdjacentHTML('afterbegin', `<div class="error">${{msg}}</div>`);
+    return;
+  }}
+  const toast = document.getElementById('toast');
   if (toast) toast.innerHTML = `<div class="error">${{msg}}</div>`;
 }});
 

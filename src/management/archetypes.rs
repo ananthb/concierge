@@ -37,13 +37,21 @@ pub async fn handle_archetypes(
         // List all archetypes (drafts + approved + rejected; operators see everything)
         (Method::Get, []) => {
             let rows = storage::list_archetypes(db, false).await?;
-            Response::from_html(tmpl::archetypes_list_html(&rows, base_url, &locale))
+            Response::from_html(tmpl::archetypes_list_html(
+                &rows,
+                actor_email,
+                base_url,
+                &locale,
+            ))
         }
 
         // New archetype form
-        (Method::Get, ["new"]) => {
-            Response::from_html(tmpl::archetype_edit_html(None, base_url, &locale))
-        }
+        (Method::Get, ["new"]) => Response::from_html(tmpl::archetype_edit_html(
+            None,
+            actor_email,
+            base_url,
+            &locale,
+        )),
 
         // Create
         (Method::Post, ["new"]) => {
@@ -95,7 +103,12 @@ pub async fn handle_archetypes(
                 Some(r) => r,
                 None => return Response::error("Archetype not found", 404),
             };
-            Response::from_html(tmpl::archetype_edit_html(Some(&row), base_url, &locale))
+            Response::from_html(tmpl::archetype_edit_html(
+                Some(&row),
+                actor_email,
+                base_url,
+                &locale,
+            ))
         }
 
         // Update
