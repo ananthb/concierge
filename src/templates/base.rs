@@ -649,8 +649,26 @@ mod footer_tests {
     #[test]
     fn welcome_has_one_footer() {
         let l = crate::locale::Locale::default_inr();
-        let s = crate::templates::onboarding::welcome_html("", &l, true, None);
+        let s = crate::templates::onboarding::welcome_html("", &l, true, 3, 30, None);
         assert_eq!(count(&s, r#"<footer class="site-footer">"#), 1, "welcome");
+    }
+
+    #[test]
+    fn welcome_substitutes_demo_chat_limits() {
+        let l = crate::locale::Locale::default_inr();
+        let s = crate::templates::onboarding::welcome_html("", &l, true, 5, 45, None);
+        assert!(
+            !s.contains("__TURN_LIMIT__") && !s.contains("__CTA_TIMEOUT_MS__"),
+            "demo chat JS placeholders must be substituted"
+        );
+        assert!(
+            s.contains("const TURN_LIMIT = 5;"),
+            "user-turn limit must be threaded into hero chat JS"
+        );
+        assert!(
+            s.contains("const CTA_TIMEOUT_MS = 45000;"),
+            "idle timeout must be converted to ms and threaded into hero chat JS"
+        );
     }
 
     /// Verify every FTL key used by the page resolves: `t()` falls back to
@@ -671,7 +689,7 @@ mod footer_tests {
     #[test]
     fn welcome_resolves_all_keys() {
         let l = crate::locale::Locale::default_inr();
-        let s = crate::templates::onboarding::welcome_html("", &l, true, None);
+        let s = crate::templates::onboarding::welcome_html("", &l, true, 3, 30, None);
         assert_keys_resolved(
             &s,
             &[

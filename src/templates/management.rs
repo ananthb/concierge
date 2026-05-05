@@ -999,6 +999,8 @@ pub fn demo_config_html(
     let prompt_value = html_escape(&cfg.persona_generation_prompt);
     let default_prompt = html_escape(crate::storage::DEFAULT_DEMO_GENERATION_PROMPT);
     let cadence = cfg.regeneration_cadence_mins;
+    let idle_timeout_secs = cfg.idle_timeout_secs;
+    let max_user_turns = cfg.max_user_turns;
 
     // Toggle card. Auto-submits on change via HTMX (the form has no
     // visible Save button) so the operator never has to click twice.
@@ -1081,10 +1083,22 @@ pub fn demo_config_html(
         </div>
       </div>
 
-      <div class="row gap-12 mb-16 wrap" style="align-items:center">
+      <div class="row gap-12 mb-12 wrap" style="align-items:center">
         <label for="demo-cadence" class="fw-600">Regenerate every</label>
         <input id="demo-cadence" class="input mono" type="number" name="regeneration_cadence_mins" min="0" max="10080" value="{cadence}" style="max-width:140px">
         <span class="muted fs-13">minutes (0 = manual only).</span>
+      </div>
+
+      <div class="row gap-12 mb-12 wrap" style="align-items:center">
+        <label for="demo-turns" class="fw-600">User turns per session</label>
+        <input id="demo-turns" class="input mono" type="number" name="max_user_turns" min="1" max="20" value="{max_user_turns}" style="max-width:120px">
+        <span class="muted fs-13">replaces the chat input with the sign-up CTA after this many user messages.</span>
+      </div>
+
+      <div class="row gap-12 mb-16 wrap" style="align-items:center">
+        <label for="demo-idle" class="fw-600">Idle timeout</label>
+        <input id="demo-idle" class="input mono" type="number" name="idle_timeout_secs" min="5" max="600" value="{idle_timeout_secs}" style="max-width:120px">
+        <span class="muted fs-13">seconds — restarts on every keystroke; fires the CTA when the visitor stops typing.</span>
       </div>
 
       <div class="mt-12">
@@ -1137,6 +1151,8 @@ pub fn demo_config_html(
         prompt_value = prompt_value,
         default_prompt = default_prompt,
         cadence = cadence,
+        idle_timeout_secs = idle_timeout_secs,
+        max_user_turns = max_user_turns,
         stored_meta = stored_meta,
         stored_block = stored_block,
     );

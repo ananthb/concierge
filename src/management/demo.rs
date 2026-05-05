@@ -90,14 +90,26 @@ pub async fn handle_demo(
 
         (Method::Post, []) => {
             let form: serde_json::Value = req.json().await?;
-            let cadence = form
-                .get("regeneration_cadence_mins")
-                .and_then(|v| {
-                    v.as_str()
-                        .and_then(|s| s.parse::<u32>().ok())
-                        .or_else(|| v.as_u64().map(|n| n as u32))
-                })
-                .unwrap_or(storage::DEFAULT_DEMO_REGEN_CADENCE_MINS);
+            let parse_u32 = |key: &str, fallback: u32| -> u32 {
+                form.get(key)
+                    .and_then(|v| {
+                        v.as_str()
+                            .and_then(|s| s.parse::<u32>().ok())
+                            .or_else(|| v.as_u64().map(|n| n as u32))
+                    })
+                    .unwrap_or(fallback)
+            };
+            let cadence = parse_u32(
+                "regeneration_cadence_mins",
+                storage::DEFAULT_DEMO_REGEN_CADENCE_MINS,
+            );
+            // Idle timer + turn limit. Clamp to sane bounds so a typo
+            // can't lock visitors out (turns=0) or bake in a 24h idle.
+            let idle_timeout_secs =
+                parse_u32("idle_timeout_secs", storage::DEFAULT_DEMO_IDLE_TIMEOUT_SECS)
+                    .clamp(5, 600);
+            let max_user_turns =
+                parse_u32("max_user_turns", storage::DEFAULT_DEMO_MAX_USER_TURNS).clamp(1, 20);
             let new_prompt = form
                 .get("persona_generation_prompt")
                 .and_then(|v| v.as_str())
@@ -132,6 +144,8 @@ pub async fn handle_demo(
                 enabled: existing.enabled,
                 persona_generation_prompt: prompt,
                 regeneration_cadence_mins: cadence,
+                idle_timeout_secs,
+                max_user_turns,
             };
             storage::save_demo_config(&kv, &cfg).await?;
 

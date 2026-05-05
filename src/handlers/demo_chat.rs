@@ -21,7 +21,12 @@ use worker::*;
 use crate::ai;
 use crate::storage;
 
-const MAX_TURNS: usize = 6;
+/// Hard ceiling on total messages in a single /demo/chat request,
+/// regardless of operator config. The configured `max_user_turns`
+/// caps the conversation at `2 * max_user_turns` (one assistant per
+/// user turn); this constant clamps that so a misconfigured value
+/// can't blow up token spend on a single request.
+const MAX_TURNS_CEILING: usize = 40;
 const MAX_BODY_BYTES: usize = 4096;
 const MAX_CONTENT_CHARS: usize = 300;
 const RATE_LIMIT_PER_HOUR: i64 = 10;
@@ -82,9 +87,6 @@ pub async fn handle_demo_chat(mut req: Request, env: Env) -> Result<Response> {
     if parsed.messages.is_empty() {
         return json_error("No messages.", 400);
     }
-    if parsed.messages.len() > MAX_TURNS {
-        return json_error("Too many turns; refresh and start over.", 400);
-    }
     for m in &parsed.messages {
         if m.role != "user" && m.role != "assistant" {
             return json_error("Invalid message role.", 400);
@@ -110,12 +112,16 @@ pub async fn handle_demo_chat(mut req: Request, env: Env) -> Result<Response> {
 
     // Demo gate. Operator-controlled flag from /manage/demo. When off,
     // refuse before doing any work or burning rate-limit budget.
-    if !storage::get_demo_config(&kv)
-        .await
-        .unwrap_or_default()
-        .enabled
-    {
+    let demo_cfg = storage::get_demo_config(&kv).await.unwrap_or_default();
+    if !demo_cfg.enabled {
         return json_error("The demo is currently unavailable.", 503);
+    }
+    // Total-message cap derived from the operator's configured turn
+    // limit (one assistant reply per user turn). Hard-clamped to
+    // MAX_TURNS_CEILING to bound worst-case spend per request.
+    let max_turns = ((demo_cfg.max_user_turns as usize) * 2).clamp(2, MAX_TURNS_CEILING);
+    if parsed.messages.len() > max_turns {
+        return json_error("Too many turns; refresh and start over.", 400);
     }
 
     // Global daily cap. Checked first so an exhausted day refuses

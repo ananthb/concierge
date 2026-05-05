@@ -248,6 +248,15 @@ pub const DEFAULT_DEMO_GENERATION_PROMPT: &str = "You are a creative business co
 /// stored demo personas. Operators can override on /manage/demo.
 pub const DEFAULT_DEMO_REGEN_CADENCE_MINS: u32 = 60;
 
+/// Default idle window (seconds) before the welcome-page chat modal
+/// swaps the input for the sign-up CTA. Restarts on every keystroke.
+pub const DEFAULT_DEMO_IDLE_TIMEOUT_SECS: u32 = 30;
+
+/// Default number of user turns the demo allows before the input is
+/// replaced by the sign-up CTA. The server caps total messages at
+/// `2 * max_user_turns` (one assistant reply per user turn).
+pub const DEFAULT_DEMO_MAX_USER_TURNS: u32 = 3;
+
 /// Operator-controlled demo settings. Stored as a singleton KV row
 /// under `DEMO_CONFIG_KEY`. `enabled=false` hides the homepage entry
 /// point and turns `/demo/personas` + `/demo/chat` into noops.
@@ -259,10 +268,26 @@ pub struct DemoConfig {
     /// regenerates it. 0 disables cron-driven regen (manual only).
     #[serde(default = "default_demo_regen_cadence")]
     pub regeneration_cadence_mins: u32,
+    /// Idle window (seconds) before the chat modal swaps the input for
+    /// the sign-up CTA. Restarts on every keystroke.
+    #[serde(default = "default_demo_idle_timeout")]
+    pub idle_timeout_secs: u32,
+    /// Max user turns before the chat input is replaced by the CTA.
+    /// Drives both client UX and the server-side total-message cap.
+    #[serde(default = "default_demo_max_user_turns")]
+    pub max_user_turns: u32,
 }
 
 fn default_demo_regen_cadence() -> u32 {
     DEFAULT_DEMO_REGEN_CADENCE_MINS
+}
+
+fn default_demo_idle_timeout() -> u32 {
+    DEFAULT_DEMO_IDLE_TIMEOUT_SECS
+}
+
+fn default_demo_max_user_turns() -> u32 {
+    DEFAULT_DEMO_MAX_USER_TURNS
 }
 
 impl Default for DemoConfig {
@@ -271,6 +296,8 @@ impl Default for DemoConfig {
             enabled: true,
             persona_generation_prompt: DEFAULT_DEMO_GENERATION_PROMPT.to_string(),
             regeneration_cadence_mins: DEFAULT_DEMO_REGEN_CADENCE_MINS,
+            idle_timeout_secs: DEFAULT_DEMO_IDLE_TIMEOUT_SECS,
+            max_user_turns: DEFAULT_DEMO_MAX_USER_TURNS,
         }
     }
 }

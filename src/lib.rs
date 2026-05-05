@@ -427,16 +427,13 @@ async fn handle_request(req: Request, env: Env) -> Result<Response> {
             return Ok(Response::empty()?.with_status(302).with_headers(headers));
         }
         let locale = locale::Locale::from_request(&req);
-        let demo_enabled = storage::get_demo_config(&kv)
-            .await
-            .unwrap_or_default()
-            .enabled;
+        let demo_cfg = storage::get_demo_config(&kv).await.unwrap_or_default();
         // Preload: when the stored personas blob is populated, embed
         // its body directly in the welcome page so the chat factory's
         // `init()` skips the round-trip to /demo/personas. Empty/absent
         // store falls back to the client-side fetch (which itself
         // regenerates on miss).
-        let prefetched_personas = if demo_enabled {
+        let prefetched_personas = if demo_cfg.enabled {
             storage::get_stored_demo_personas(&kv)
                 .await
                 .ok()
@@ -448,7 +445,9 @@ async fn handle_request(req: Request, env: Env) -> Result<Response> {
         return Response::from_html(templates::onboarding::welcome_html(
             "",
             &locale,
-            demo_enabled,
+            demo_cfg.enabled,
+            demo_cfg.max_user_turns,
+            demo_cfg.idle_timeout_secs,
             prefetched_personas.as_deref(),
         ));
     }

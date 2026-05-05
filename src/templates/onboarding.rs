@@ -122,6 +122,8 @@ pub fn welcome_html(
     _base_url: &str,
     locale: &crate::locale::Locale,
     demo_enabled: bool,
+    demo_max_user_turns: u32,
+    demo_idle_timeout_secs: u32,
     prefetched_personas_json: Option<&str>,
 ) -> String {
     use crate::i18n::t;
@@ -156,7 +158,12 @@ pub fn welcome_html(
             &js_string_for_html(crate::prompt::POSTAMBLE),
         )
         .replace("__ERROR__", &js_string_for_html(&chat_error))
-        .replace("__RATE_LIMITED__", &js_string_for_html(&chat_rate_limited));
+        .replace("__RATE_LIMITED__", &js_string_for_html(&chat_rate_limited))
+        .replace("__TURN_LIMIT__", &demo_max_user_turns.to_string())
+        .replace(
+            "__CTA_TIMEOUT_MS__",
+            &(u64::from(demo_idle_timeout_secs) * 1000).to_string(),
+        );
 
     let chat_hint = html_escape(&t(locale, "demo-chat-hint"));
     let chat_title = html_escape(&t(locale, "demo-chat-title"));
@@ -365,6 +372,7 @@ pub fn welcome_html(
     <form x-show="!showCta" @submit.prevent="send()" class="row gap-8 mt-12 chat-form">
       <textarea class="chat-input" x-model="input" :placeholder="currentPersona.slug === 'concierge' ? '{chat_placeholder}' : ('{chat_placeholder_prefix} ' + currentPersona.label + ' {chat_placeholder_suffix}')"
         :disabled="sending || !personas.length" x-ref="input" maxlength="300" rows="2"
+        @input="resetIdleTimer()"
         @keydown.enter="if (!$event.shiftKey) {{ $event.preventDefault(); send(); }}"
         autocomplete="off" autocorrect="off" autocapitalize="off"></textarea>
       <button type="submit" class="btn primary" :disabled="sending || !input.trim() || !personas.length">{chat_send}</button>
@@ -563,12 +571,14 @@ const HERO_CHAT_JS: &str = r##"<script nonce="__CSP_NONCE__">
   })();
   // Demo session is intentionally short. After this many user turns
   // the input form is replaced with the sign-up CTA; the visitor has
-  // either gotten the gist by then or they haven't.
-  const TURN_LIMIT = 3;
-  // Same CTA fires automatically after this many ms of the modal
-  // being open, so visitors who park the modal without typing also
-  // see the next step.
-  const CTA_TIMEOUT_MS = 30000;
+  // either gotten the gist by then or they haven't. Operator-tunable
+  // from /manage/demo (max_user_turns).
+  const TURN_LIMIT = __TURN_LIMIT__;
+  // Same CTA fires after this many ms of typing inactivity. The timer
+  // starts on modal open and restarts on every keystroke in the chat
+  // input — so it's an idle window, not a session ceiling. Tunable
+  // from /manage/demo (idle_timeout_secs).
+  const CTA_TIMEOUT_MS = __CTA_TIMEOUT_MS__;
   window.conciergeChat = () => ({
     open: false,
     sending: false,
@@ -626,13 +636,13 @@ const HERO_CHAT_JS: &str = r##"<script nonce="__CSP_NONCE__">
       this.$watch('open', (v) => {
         window.__heroPaused = !!v;
         if (v) {
-          this._ctaTimer = setTimeout(() => { this.ctaShown = true; }, CTA_TIMEOUT_MS);
+          this.resetIdleTimer();
           this.$nextTick(() => {
             if (this.$refs.input) this.$refs.input.focus();
             this.scrollDown();
           });
         } else {
-          if (this._ctaTimer) { clearTimeout(this._ctaTimer); this._ctaTimer = null; }
+          this.clearIdleTimer();
           this.ctaShown = false;
           this.personaSlug = this._defaultPersonaSlug;
           this.resetTranscript();
@@ -657,6 +667,18 @@ const HERO_CHAT_JS: &str = r##"<script nonce="__CSP_NONCE__">
     scrollDown() {
       const el = this.$refs.msgs;
       if (el) el.scrollTop = el.scrollHeight;
+    },
+    // Idle window: starts on modal open, restarts on every keystroke
+    // in the chat input. When it fires the input swaps for the sign-up
+    // CTA. Cleared on modal close and once the CTA is up (no point
+    // running a timer for a state we've already entered).
+    resetIdleTimer() {
+      this.clearIdleTimer();
+      if (this.ctaShown || !this.open) return;
+      this._ctaTimer = setTimeout(() => { this.ctaShown = true; }, CTA_TIMEOUT_MS);
+    },
+    clearIdleTimer() {
+      if (this._ctaTimer) { clearTimeout(this._ctaTimer); this._ctaTimer = null; }
     },
     async send() {
       if (this.showCta) return;
