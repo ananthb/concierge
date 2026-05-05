@@ -337,10 +337,17 @@ pub fn welcome_html(
         </span>
       </p>
     </div>
-    <!-- Single scroll region for the conversation + the toggleable prompt
-         panel. Form stays pinned at the bottom even when the prompt panel
-         is open and pushes the messages region's content overflow. -->
+    <!-- Scroll region. Shows EITHER the conversation OR the system
+         prompt panel, never both at once — toggling "View system
+         prompt" swaps the view in place so the panel reads as a
+         distinct screen rather than a block jammed above the chat. -->
     <div class="chat-scroll" x-ref="msgs">
+      <div class="chat-messages" x-show="!showPrompt">
+        <template x-for="(m, i) in messages" :key="i">
+          <div :class="'chat-msg ' + m.role" x-text="m.content"></div>
+        </template>
+        <div class="chat-thinking" x-show="sending">{chat_thinking}</div>
+      </div>
       <section id="demo-chat-prompt-panel" class="chat-prompt-panel" x-show="showPrompt" x-cloak aria-live="polite">
         <div class="eyebrow mb-6">{chat_prompt_heading}</div>
         <p class="muted fs-12 mb-6">{chat_envelope_note}</p>
@@ -348,12 +355,6 @@ pub fn welcome_html(
         <pre class="chat-prompt-body chat-prompt-middle" x-text="currentPersona.prompt"></pre>
         <pre class="chat-prompt-body chat-prompt-fixed" x-text="postamble"></pre>
       </section>
-      <div class="chat-messages">
-        <template x-for="(m, i) in messages" :key="i">
-          <div :class="'chat-msg ' + m.role" x-text="m.content"></div>
-        </template>
-        <div class="chat-thinking" x-show="sending">{chat_thinking}</div>
-      </div>
     </div>
     <!-- Handoff chip: appears once the model has emitted the handoff
          token on a turn. Pure demo theater (there's no real human to

@@ -187,29 +187,14 @@ pub fn wrap(custom: &str) -> String {
 // Demo frame
 // =====================================================================
 
-/// Frame prepended to every *non-system* persona's middle on the public
-/// homepage demo (`/demo/chat`). The visitor isn't actually a customer
-/// of Petals & Stems. They're a small business owner kicking the tyres
-/// on Concierge by roleplaying as one. This frame tells the model that
-/// context and asks it to stay in character. Sign-up nudging is handled
-/// by the modal's CTA (turn-limit and timer-driven), not by the model.
-///
-/// Not used for the system Concierge persona, which already addresses
-/// the visitor directly as a prospect.
-pub const DEMO_BUSINESS_FRAME: &str = "Demo context (applies on top of the business voice below):
-- This conversation is happening in a chat box on Concierge's marketing homepage. Concierge is the auto-reply service that hosts you. The person typing is NOT a real customer of the business. They are a small business owner trying out Concierge by pretending to be a customer of this sample business.
-- Stay fully in character as the business's auto-replier. Answer the visitor's questions the way you would answer any real customer of this business. Do not break character to talk about Concierge or to mention this demo.";
-
-/// Compose the editable middle for the demo. The demo frame is
-/// prepended so the model knows it's inside a marketing-site demo and
-/// should stay in character as the sample business.
+/// Compose the editable middle for the public homepage demo
+/// (`/demo/chat`). Just the persona middle, trimmed — earlier
+/// versions also prepended a "this is a marketing demo, stay in
+/// character" frame, but it confused the model more than it helped
+/// (the persona voice already carries the business identity, and
+/// sign-up nudging is handled by the modal's CTA, not the model).
 pub fn compose_demo_middle(persona_middle: &str) -> String {
-    let middle = persona_middle.trim();
-    if middle.is_empty() {
-        DEMO_BUSINESS_FRAME.to_string()
-    } else {
-        format!("{DEMO_BUSINESS_FRAME}\n\n---\n\n{middle}")
-    }
+    persona_middle.trim().to_string()
 }
 
 // =====================================================================
@@ -258,27 +243,23 @@ mod tests {
     }
 
     #[test]
-    fn compose_demo_prepends_frame_to_persona_middle() {
+    fn compose_demo_returns_trimmed_persona_middle() {
         let out = compose_demo_middle("Business: Petals & Stems, a florist.");
-        assert!(out.starts_with(DEMO_BUSINESS_FRAME));
-        assert!(out.contains("Business: Petals & Stems, a florist."));
-        assert!(out.contains("\n\n---\n\n"));
+        assert_eq!(out, "Business: Petals & Stems, a florist.");
+    }
+
+    #[test]
+    fn compose_demo_trims_whitespace() {
+        assert_eq!(
+            compose_demo_middle("  Business: Petals & Stems.\n\n"),
+            "Business: Petals & Stems."
+        );
     }
 
     #[test]
     fn compose_demo_handles_empty_middle() {
-        assert_eq!(compose_demo_middle(""), DEMO_BUSINESS_FRAME);
-        assert_eq!(compose_demo_middle("   "), DEMO_BUSINESS_FRAME);
-    }
-
-    #[test]
-    fn demo_frame_keeps_visitor_in_character() {
-        // Sign-up nudging moved to the modal's CTA; the model frame
-        // should *not* steer the AI toward sign-up or push a URL.
-        // Just the roleplay framing.
-        assert!(DEMO_BUSINESS_FRAME.contains("Stay fully in character"));
-        assert!(!DEMO_BUSINESS_FRAME.contains("/auth/login"));
-        assert!(!DEMO_BUSINESS_FRAME.contains("sign up"));
+        assert_eq!(compose_demo_middle(""), "");
+        assert_eq!(compose_demo_middle("   "), "");
     }
 
     #[test]
