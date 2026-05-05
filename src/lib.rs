@@ -159,21 +159,36 @@ pub const CSP_NONCE_PLACEHOLDER: &str = "__CSP_NONCE__";
 ///   are blocked, which is how the WhatsApp button mysteriously "cancelled"
 ///   on production); Razorpay's verify call goes to `api.razorpay.com`.
 /// - **frame-src**: FB login popup + Razorpay checkout iframe.
-fn add_security_headers(resp: &mut Response, nonce: &str) -> Result<()> {
+///
+/// `is_dev_http` is set when the response is being served over plain
+/// HTTP (only happens locally — `wrangler dev` is the only http origin
+/// the worker ever sees). When true, `form-action` and `img-src` are
+/// loosened to also accept `http://localhost:*` / `http://127.0.0.1:*`
+/// and `blob:` so the dev-login form and any browser-extension blob
+/// URLs don't trip the policy. Production responses stay tight.
+fn add_security_headers(resp: &mut Response, nonce: &str, is_dev_http: bool) -> Result<()> {
     let headers = resp.headers_mut();
     headers.set("X-Frame-Options", "DENY")?;
     headers.set("X-Content-Type-Options", "nosniff")?;
     headers.set("Referrer-Policy", "strict-origin-when-cross-origin")?;
+    let (img_extra, form_action_extra) = if is_dev_http {
+        (
+            " blob:",
+            " http://localhost:* http://127.0.0.1:* https://localhost:* https://127.0.0.1:*",
+        )
+    } else {
+        ("", "")
+    };
     let csp = format!(
         "default-src 'self'; \
          script-src 'self' 'nonce-{nonce}' 'unsafe-eval' https://unpkg.com https://checkout.razorpay.com https://connect.facebook.net; \
          style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; \
          font-src https://fonts.gstatic.com; \
-         img-src 'self' data: https:; \
+         img-src 'self' data: https:{img_extra}; \
          connect-src 'self' https://www.facebook.com https://graph.facebook.com https://*.facebook.com https://api.razorpay.com; \
          frame-src https://www.facebook.com https://*.facebook.com https://api.razorpay.com https://checkout.razorpay.com; \
          base-uri 'self'; \
-         form-action 'self' https://www.facebook.com https://accounts.google.com; \
+         form-action 'self' https://www.facebook.com https://accounts.google.com{form_action_extra}; \
          object-src 'none'"
     );
     headers.set("Content-Security-Policy", &csp)?;
@@ -197,6 +212,14 @@ fn serve_png(body: &[u8]) -> Result<Response> {
 #[event(fetch)]
 async fn fetch(req: Request, env: Env, _ctx: Context) -> Result<Response> {
     console_error_panic_hook::set_once();
+    // Capture the request scheme before consuming `req` — the CSP
+    // builder needs it so dev-mode (http) responses get a relaxed
+    // form-action / img-src policy.
+    let is_dev_http = req
+        .url()
+        .ok()
+        .map(|u| u.scheme() == "http")
+        .unwrap_or(false);
     let mut resp = handle_request(req, env).await?;
     let is_html = resp
         .headers()
@@ -221,7 +244,7 @@ async fn fetch(req: Request, env: Env, _ctx: Context) -> Result<Response> {
     let mut new_resp = Response::ok(body)?
         .with_status(status)
         .with_headers(headers);
-    add_security_headers(&mut new_resp, &nonce)?;
+    add_security_headers(&mut new_resp, &nonce, is_dev_http)?;
     Ok(new_resp)
 }
 
