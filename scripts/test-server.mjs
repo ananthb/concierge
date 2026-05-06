@@ -61,18 +61,16 @@ writeFileSync(
   ].join('\n'),
 );
 
-// Wipe `.wrangler/state` so each run starts from a clean local D1 +
-// KV. Without this, leftover schema from a previous wrangler dev
-// session (created by an older migration) trips IF NOT EXISTS checks
-// on subsequent runs. Anchored at CWD because the read-only Nix
-// store copy doesn't have a `.wrangler/` directory anyway.
-try {
-  rmSync(join(CWD, '.wrangler', 'state'), {
-    recursive: true,
-    force: true,
-  });
-} catch {
-  // No prior state to wipe; first ever boot.
+// Optional fresh-slate wipe — only runs when `CONCIERGE_TEST_RESET=1`
+// is set. Playwright sets it so each suite starts on a clean D1 + KV;
+// interactive `nix run .#dev` leaves it unset so signups, tenants,
+// and KV state persist across restarts.
+if (process.env.CONCIERGE_TEST_RESET === '1') {
+  try {
+    rmSync(join(CWD, '.wrangler', 'state'), { recursive: true, force: true });
+  } catch {
+    // No prior state to wipe.
+  }
 }
 
 // Apply every migration in `migrations/` against the local D1 before
