@@ -1159,7 +1159,7 @@ impl OnboardingStep {
 }
 
 /// Onboarding state for the setup wizard.
-#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct OnboardingState {
     #[serde(default)]
     pub step: OnboardingStep,
@@ -1175,12 +1175,28 @@ pub struct OnboardingState {
     /// this tenant connects later. Per-account overrides live on each ReplyConfig.
     #[serde(default = "default_wait_seconds")]
     pub default_wait_seconds: u32,
+    #[serde(default)]
     pub completed: bool,
     /// Tenant has dismissed the one-time banner explaining that AI replies
     /// now pause for review when a draft mentions money or makes a commitment.
     /// Sticky across sessions.
     #[serde(default)]
     pub risk_gate_banner_dismissed: bool,
+}
+
+impl Default for OnboardingState {
+    fn default() -> Self {
+        Self {
+            step: OnboardingStep::default(),
+            business: BusinessInfo::default(),
+            notifications: NotificationConfig::default(),
+            conversation: ConversationConfig::default(),
+            persona: PersonaConfig::default(),
+            default_wait_seconds: default_wait_seconds(),
+            completed: false,
+            risk_gate_banner_dismissed: false,
+        }
+    }
 }
 
 /// Tenant-wide AI persona used as the system prompt for every AI reply.

@@ -113,6 +113,7 @@ pub fn slider_html(
   <div x-show="custom" x-cloak>
     <input type="number" min="{custom_min}" max="{max}" step="1"
            x-model.number="credits"
+           @input="credits = Math.max({custom_min}, Math.min({max}, parseInt($el.value) || {custom_min}))"
            class="input mono"
            placeholder="How many replies?">
     <div class="between mt-4 mono muted fs-11">
