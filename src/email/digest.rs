@@ -193,7 +193,7 @@ fn build_digest_email(
 <h1 style="font-size:22px;margin:0 0 16px">{count} reply draft{plural} waiting</h1>
 <p style="color:#555">These AI replies paused for your review. Click through to approve, edit, or reject.</p>
 <ol style="padding-left:20px">{html_items}</ol>
-<p style="color:#999;font-size:12px;margin-top:32px">You're getting this because email approvals are turned on for your tenant. <a href="{base_url}/dashboard/wizard/notifications">Change cadence</a>.</p>
+<p style="color:#999;font-size:12px;margin-top:32px">You're getting this because email approvals are turned on for your tenant.</p>
 </body></html>"#,
         count = count,
         plural = plural,
@@ -215,7 +215,7 @@ fn build_digest_email(
         })
         .collect();
     let text = format!(
-        "{count} reply draft{plural} waiting for review.\n\n{text_items}\nChange cadence: {base_url}/dashboard/wizard/notifications\n",
+        "{count} reply draft{plural} waiting for review.\n\n{text_items}",
         count = count,
         plural = plural,
     );

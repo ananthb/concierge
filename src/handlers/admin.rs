@@ -131,10 +131,6 @@ pub async fn handle_admin(req: Request, env: Env, path: &str, method: Method) ->
             .await;
     }
 
-    if path.starts_with("/dashboard/wizard") {
-        return super::onboarding::handle_wizard(req, env, path, &base_url, &tenant_id).await;
-    }
-
     if path.starts_with("/dashboard/persona") {
         return super::admin_persona::handle_persona_admin(req, env, path, &base_url, &tenant_id)
             .await;
@@ -166,7 +162,7 @@ pub async fn handle_admin(req: Request, env: Env, path: &str, method: Method) ->
         let onboarding = crate::storage::get_onboarding(&kv, &tenant_id).await?;
         if !onboarding.completed {
             let headers = Headers::new();
-            headers.set("Location", &format!("{}/dashboard/wizard", base_url))?;
+            headers.set("Location", &format!("{}/wizard", base_url))?;
             return Ok(Response::empty()?.with_status(302).with_headers(headers));
         }
 

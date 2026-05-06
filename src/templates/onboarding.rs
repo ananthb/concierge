@@ -770,7 +770,7 @@ pub fn basics_html(
   <div class="section-label"><span class="mono muted">01 / 05</span><span class="eyebrow">{eyebrow}</span></div>
   <h2 class="display-md">{headline}</h2>
   <p class="lead">{lead}</p>
-  <form hx-post="{base_url}/dashboard/wizard/basics" hx-target="body" hx-swap="innerHTML">
+  <form hx-post="{base_url}/wizard/basics" hx-target="body" hx-swap="innerHTML">
     <div class="card p-24">
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
         <div>
@@ -934,7 +934,7 @@ pub fn connect_html(
                 r#"<div class="side-row" style="padding:10px 14px">
   <span>{mail_icon}</span>
   <div class="flex-1"><span class="mono fs-13">{full}</span></div>
-  <button class="btn ghost sm text-warn" hx-post="{base_url}/dashboard/wizard/email/remove" hx-vals='{{"label":"{label}"}}' hx-target="body" hx-swap="innerHTML">Remove</button>
+  <button class="btn ghost sm text-warn" hx-post="{base_url}/wizard/email/remove" hx-vals='{{"label":"{label}"}}' hx-target="body" hx-swap="innerHTML">Remove</button>
 </div>"#,
                 mail_icon = channel_icon("mail"),
                 full = html_escape(&full),
@@ -956,7 +956,7 @@ pub fn connect_html(
   <div class="channel-body">
     <p class="muted m-0 mb-12">{lead_prefix} <code>name@{base_domain}</code>{lead_suffix}</p>
     {email_rows}
-    <form hx-post="{base_url}/dashboard/wizard/email/add" hx-target="body" hx-swap="innerHTML"
+    <form hx-post="{base_url}/wizard/email/add" hx-target="body" hx-swap="innerHTML"
           class="row gap-8 mt-8">
       <label for="wiz-email-label" class="sr-only">{email_name}</label>
       <input id="wiz-email-label" class="input fs-13" type="text" name="label" value="{slug}" placeholder="{ph}" style="max-width:160px">
@@ -1002,8 +1002,8 @@ pub fn connect_html(
   <p class="lead">{lead}</p>
   <div class="channels-grid">{ig_card}{wa_card}{dc_card}{email_section}</div>
   <div class="between mt-36">
-    <button class="btn ghost" hx-post="{base_url}/dashboard/wizard/goto" hx-vals='{{"to":"basics"}}' hx-target="body" hx-swap="innerHTML">{back}</button>
-    <button class="btn primary" hx-post="{base_url}/dashboard/wizard/goto" hx-vals='{{"to":"notifications"}}' hx-target="body" hx-swap="innerHTML">{continue_label}</button>
+    <button class="btn ghost" hx-post="{base_url}/wizard/goto" hx-vals='{{"to":"basics"}}' hx-target="body" hx-swap="innerHTML">{back}</button>
+    <button class="btn primary" hx-post="{base_url}/wizard/goto" hx-vals='{{"to":"notifications"}}' hx-target="body" hx-swap="innerHTML">{continue_label}</button>
   </div>
 </section>"#,
         ig_card = ig_card,
@@ -1195,7 +1195,7 @@ pub fn notifications_html(
   <h2 class="display-md">{headline}</h2>
   <p class="lead">{lead}</p>
 
-  <form hx-post="{base_url}/dashboard/wizard/notifications" hx-target="#notif-toast" hx-swap="innerHTML">
+  <form hx-post="{base_url}/wizard/notifications" hx-target="#notif-toast" hx-swap="innerHTML">
     <div class="card p-22 mb-16">
       <div class="eyebrow mb-12">{card_eyebrow} <span class="text-warn">{required_mark}</span></div>
       <p class="muted mb-14 fs-14">{card_lead}</p>
@@ -1241,7 +1241,7 @@ pub fn notifications_html(
     </div>
 
     <div class="between mt-36">
-      <button type="button" class="btn ghost" hx-post="{base_url}/dashboard/wizard/goto" hx-vals='{{"to":"channels"}}' hx-target="body" hx-swap="innerHTML">{back}</button>
+      <button type="button" class="btn ghost" hx-post="{base_url}/wizard/goto" hx-vals='{{"to":"channels"}}' hx-target="body" hx-swap="innerHTML">{back}</button>
       <button type="submit" class="btn primary" :disabled="!approval.discord && !approval.email">{cont}</button>
     </div>
     <div id="notif-toast" class="mt-12" role="status" aria-live="polite" aria-atomic="true"></div>
@@ -1339,7 +1339,7 @@ pub fn replies_html(
   <h2 class="display-md">{headline}</h2>
   <p class="lead">{lead_prefix} <a href="{base_url}/dashboard/persona">{lead_link}</a> {lead_suffix}</p>
 
-  <form hx-post="{base_url}/dashboard/wizard/replies/save" hx-target="body" hx-swap="innerHTML">
+  <form hx-post="{base_url}/wizard/replies/save" hx-target="body" hx-swap="innerHTML">
     <div style="display:grid;gap:12px;grid-template-columns:1fr 1fr;margin-bottom:24px" role="radiogroup" aria-labelledby="replies-preset-label">
       <span id="replies-preset-label" class="sr-only">{headline}</span>
       {preset_cards}
@@ -1369,7 +1369,7 @@ pub fn replies_html(
     </div>
 
     <div class="between mt-36">
-      <button type="button" class="btn ghost" hx-post="{base_url}/dashboard/wizard/goto" hx-vals='{{"to":"notifications"}}' hx-target="body" hx-swap="innerHTML">{back}</button>
+      <button type="button" class="btn ghost" hx-post="{base_url}/wizard/goto" hx-vals='{{"to":"notifications"}}' hx-target="body" hx-swap="innerHTML">{back}</button>
       <button type="submit" class="btn primary" :disabled="!preset">{cont}</button>
     </div>
   </form>
@@ -1458,7 +1458,7 @@ pub fn launch_html(
             locale,
             base_url,
             crate::templates::credit_slider::SliderMode::Buy {
-                return_to: "/dashboard/wizard/launch",
+                return_to: "/wizard/launch",
             },
             milli_price,
             min_credits,
@@ -1491,7 +1491,7 @@ pub fn launch_html(
         <div class="fw-600">{headline}</div>
         <p class="muted fs-14 m-0 mt-4 mb-12">{body}</p>
         <form hx-post="{base_url}/dashboard/billing/verification" hx-target="body" hx-swap="innerHTML" hx-ext="json-enc">
-          <input type="hidden" name="return_to" value="/dashboard/wizard/launch">
+          <input type="hidden" name="return_to" value="/wizard/launch">
           <button type="submit" class="btn primary">{cta} ({amount})</button>
           <span class="mono muted fs-11 ml-12">{refund}</span>
         </form>
@@ -1525,8 +1525,8 @@ pub fn launch_html(
   {status_card}
 
   <div class="between mt-36">
-    <button class="btn ghost" hx-post="{base_url}/dashboard/wizard/goto" hx-vals='{{"to":"replies"}}' hx-target="body" hx-swap="innerHTML">{back}</button>
-    <button class="btn primary" hx-post="{base_url}/dashboard/wizard/complete" hx-target="body"{finish_attrs}>{finish}</button>
+    <button class="btn ghost" hx-post="{base_url}/wizard/goto" hx-vals='{{"to":"replies"}}' hx-target="body" hx-swap="innerHTML">{back}</button>
+    <button class="btn primary" hx-post="{base_url}/wizard/complete" hx-target="body"{finish_attrs}>{finish}</button>
   </div>
 </section>"##,
         email_section = email_section,
@@ -1790,7 +1790,7 @@ mod pricing_tests {
         assert!(html.contains("₹1"), "verify amount missing: {html}");
         // Finish is gated: the button rendered with our `disabled` attr.
         assert!(
-            html.contains("/dashboard/wizard/complete\" hx-target=\"body\" disabled"),
+            html.contains("/wizard/complete\" hx-target=\"body\" disabled"),
             "finish button should carry the disabled attribute when unverified"
         );
     }
@@ -1819,7 +1819,7 @@ mod pricing_tests {
         );
         // The Finish button renders with no disabled attribute.
         assert!(
-            !html.contains("/dashboard/wizard/complete\" hx-target=\"body\" disabled"),
+            !html.contains("/wizard/complete\" hx-target=\"body\" disabled"),
             "finish should not be disabled when verified"
         );
     }

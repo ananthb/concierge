@@ -277,7 +277,7 @@ async fn handle_request(req: Request, env: Env) -> Result<Response> {
     match path {
         "/robots.txt" => {
             let body = format!(
-                "User-agent: *\nAllow: /\nAllow: /features\nAllow: /pricing\nAllow: /terms\nAllow: /privacy\nDisallow: /dashboard\nDisallow: /manage\nDisallow: /auth\nDisallow: /webhook\nDisallow: /discord\nDisallow: /instagram\nDisallow: /whatsapp\n\nSitemap: {req_base}/sitemap.txt\n"
+                "User-agent: *\nAllow: /\nAllow: /features\nAllow: /pricing\nAllow: /terms\nAllow: /privacy\nDisallow: /dashboard\nDisallow: /wizard\nDisallow: /manage\nDisallow: /auth\nDisallow: /webhook\nDisallow: /discord\nDisallow: /instagram\nDisallow: /whatsapp\n\nSitemap: {req_base}/sitemap.txt\n"
             );
             return serve_text(&body, "text/plain");
         }
@@ -308,6 +308,8 @@ async fn handle_request(req: Request, env: Env) -> Result<Response> {
     // are unaffected.
     let needs_essentials = path.starts_with("/auth")
         || path.starts_with("/dashboard")
+        || path == "/wizard"
+        || path.starts_with("/wizard/")
         || path.starts_with("/whatsapp/signup")
         || path.starts_with("/instagram/");
     let request_locale = locale::Locale::from_request(&req);
@@ -387,6 +389,11 @@ async fn handle_request(req: Request, env: Env) -> Result<Response> {
     // Management panel (Cloudflare Access protected)
     if path.starts_with("/manage") {
         return management::handle_management(req, env, path, method).await;
+    }
+
+    // Onboarding wizard (session-protected, sealed once completed)
+    if path == "/wizard" || path.starts_with("/wizard/") {
+        return handlers::handle_wizard_top(req, env, path, method).await;
     }
 
     // Admin routes (session-protected)

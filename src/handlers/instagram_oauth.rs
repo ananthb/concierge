@@ -181,7 +181,7 @@ pub async fn handle_instagram(
 
             // If the user is mid-wizard, send them back to the channels step.
             let dest = match get_onboarding(&kv, &account.tenant_id).await {
-                Ok(s) if !s.completed => format!("{}/dashboard/wizard/channels", base_url),
+                Ok(s) if !s.completed => format!("{}/wizard/channels", base_url),
                 _ => format!("{}/dashboard/instagram?success=connected", base_url),
             };
             let headers = Headers::new();

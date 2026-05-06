@@ -1,10 +1,51 @@
-//! Onboarding wizard handler: /dashboard/wizard/* routes
+//! Onboarding wizard handler: /wizard/* routes.
+//!
+//! `handle_wizard_top` is the top-level entry: resolves session, blocks
+//! re-entry once `state.completed`, then dispatches to `handle_wizard`.
 
 use worker::*;
 
 use crate::storage::*;
 use crate::templates::onboarding::*;
 use crate::types::*;
+
+/// Top-level entry for `/wizard*`. Resolves the session, applies CSRF
+/// for state-changing requests, and short-circuits to `/dashboard` once
+/// `state.completed` — the wizard is one-shot, no do-overs.
+pub async fn handle_wizard_top(
+    req: Request,
+    env: Env,
+    path: &str,
+    method: Method,
+) -> Result<Response> {
+    let kv = env.kv("KV")?;
+
+    let tenant_id = match super::auth::resolve_tenant_id(&req, &kv).await {
+        Some(id) => id,
+        None => {
+            let headers = Headers::new();
+            headers.set("Location", "/auth/login")?;
+            return Ok(Response::empty()?.with_status(302).with_headers(headers));
+        }
+    };
+
+    let base_url = super::get_base_url(&req);
+
+    if matches!(method, Method::Post | Method::Put | Method::Delete) {
+        if let Err(e) = super::auth::validate_csrf(&req, &kv, &tenant_id).await {
+            return Response::error(format!("CSRF validation failed: {e}"), 403);
+        }
+    }
+
+    let state = get_onboarding(&kv, &tenant_id).await?;
+    if state.completed {
+        let headers = Headers::new();
+        headers.set("Location", &format!("{base_url}/dashboard"))?;
+        return Ok(Response::empty()?.with_status(302).with_headers(headers));
+    }
+
+    handle_wizard(req, env, path, &base_url, &tenant_id).await
+}
 
 pub async fn handle_wizard(
     mut req: Request,
@@ -19,7 +60,7 @@ pub async fn handle_wizard(
     let locale = crate::locale::Locale::from_request(&req);
 
     let sub = path
-        .strip_prefix("/dashboard/wizard")
+        .strip_prefix("/wizard")
         .unwrap_or("")
         .trim_start_matches('/');
 
@@ -36,7 +77,7 @@ pub async fn handle_wizard(
             let headers = Headers::new();
             headers.set(
                 "Location",
-                &format!("{base_url}/dashboard/wizard/{}", state.step.as_str()),
+                &format!("{base_url}/wizard/{}", state.step.as_str()),
             )?;
             return Ok(Response::empty()?.with_status(302).with_headers(headers));
         }
@@ -57,10 +98,7 @@ pub async fn handle_wizard(
 
             // Redirect so the URL changes (enables back/forward)
             let headers = Headers::new();
-            headers.set(
-                "HX-Redirect",
-                &format!("{base_url}/dashboard/wizard/{}", to.as_str()),
-            )?;
+            headers.set("HX-Redirect", &format!("{base_url}/wizard/{}", to.as_str()))?;
             Ok(Response::empty()?.with_status(200).with_headers(headers))
         }
 
@@ -98,10 +136,7 @@ pub async fn handle_wizard(
             save_onboarding(&kv, tenant_id, &state).await?;
 
             let headers = Headers::new();
-            headers.set(
-                "HX-Redirect",
-                &format!("{base_url}/dashboard/wizard/channels"),
-            )?;
+            headers.set("HX-Redirect", &format!("{base_url}/wizard/channels"))?;
             Ok(Response::empty()?.with_status(200).with_headers(headers))
         }
 
@@ -212,10 +247,7 @@ pub async fn handle_wizard(
             save_onboarding(&kv, tenant_id, &state).await?;
 
             let headers = Headers::new();
-            headers.set(
-                "HX-Redirect",
-                &format!("{base_url}/dashboard/wizard/replies"),
-            )?;
+            headers.set("HX-Redirect", &format!("{base_url}/wizard/replies"))?;
             Ok(Response::empty()?.with_status(200).with_headers(headers))
         }
 
@@ -298,10 +330,7 @@ pub async fn handle_wizard(
             let _ = crate::safety_queue::enqueue(&env, job).await;
 
             let headers = Headers::new();
-            headers.set(
-                "HX-Redirect",
-                &format!("{base_url}/dashboard/wizard/launch"),
-            )?;
+            headers.set("HX-Redirect", &format!("{base_url}/wizard/launch"))?;
             Ok(Response::empty()?.with_status(200).with_headers(headers))
         }
 
@@ -336,7 +365,7 @@ pub async fn handle_wizard(
             let headers = Headers::new();
             headers.set(
                 "Location",
-                &format!("{base_url}/dashboard/wizard/{}", state.step.as_str()),
+                &format!("{base_url}/wizard/{}", state.step.as_str()),
             )?;
             Ok(Response::empty()?.with_status(302).with_headers(headers))
         }

@@ -96,7 +96,7 @@ pub async fn handle_billing_admin(
                 .clamp(cfg.min_credits, cfg.max_credits);
 
             // Accept a return_to path (used by the wizard to send users back
-            // to /dashboard/wizard/launch after payment). Restrict to same-origin
+            // to /wizard/launch after payment). Restrict to same-origin
             // paths to avoid open redirects.
             let return_to = form
                 .get("return_to")
@@ -138,7 +138,7 @@ pub async fn handle_billing_admin(
                 .get("return_to")
                 .and_then(|v| v.as_str())
                 .filter(|p| p.starts_with('/') && !p.starts_with("//"))
-                .unwrap_or("/dashboard/wizard/launch")
+                .unwrap_or("/wizard/launch")
                 .to_string();
 
             let tenant = storage::get_tenant(&db, tenant_id)

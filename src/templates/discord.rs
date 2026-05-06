@@ -242,8 +242,8 @@ pub fn manage_html(
 
 fn back_href_for(from: &str, base_url: &str) -> String {
     match from {
-        "wizard_channels" => format!("{base_url}/dashboard/wizard/channels"),
-        "wizard_heads_up" => format!("{base_url}/dashboard/wizard/notifications"),
+        "wizard_channels" => format!("{base_url}/wizard/channels"),
+        "wizard_heads_up" => format!("{base_url}/wizard/notifications"),
         _ => format!("{base_url}/dashboard/settings"),
     }
 }

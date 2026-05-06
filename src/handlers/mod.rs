@@ -29,6 +29,7 @@ pub use demo_chat::handle_demo_chat;
 pub use demo_personas_list::handle_demo_personas;
 pub use instagram_oauth::handle_instagram;
 pub use lead_form::handle_lead_form;
+pub use onboarding::handle_wizard_top;
 pub use webhook::handle_webhook;
 pub use whatsapp_signup::handle_whatsapp_signup;
 
