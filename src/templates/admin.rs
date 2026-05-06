@@ -5,7 +5,7 @@ use crate::i18n::t;
 use crate::locale::Locale;
 use crate::types::*;
 
-use super::base::base_html;
+use super::base::{app_shell, base_html};
 use super::HASH;
 
 pub fn auth_login_html(
@@ -311,23 +311,20 @@ fn conversation_settings_card(base_url: &str, cfg: &ConversationConfig, locale: 
     )
 }
 
-pub fn admin_settings_html(
-    tenant: &Tenant,
+/// Single page that renders all four channel cards (Instagram,
+/// WhatsApp, Discord, Email) with Connect/Manage buttons. Reuses the
+/// wizard's channel_card_html so the card shape is identical to step
+/// 02/05 of onboarding.
+pub fn channels_page_html(
     base_url: &str,
-    google_client_id: &str,
-    meta_app_id: &str,
     wa: &[WhatsAppAccount],
     ig: &[InstagramAccount],
     discord: Option<&DiscordConfig>,
-    conversation: &ConversationConfig,
+    addresses: &[crate::types::EmailAddress],
+    email_base_domain: &str,
     tenant_id: &str,
     locale: &Locale,
 ) -> String {
-    let has_google = !tenant.email.is_empty();
-    let has_facebook = tenant.facebook_id.is_some();
-
-    // Integrations section reuses the wizard's channel card helper, so
-    // Connect/Manage behaves identically to the onboarding Channels step.
     use super::onboarding::{channel_card_html, ChannelCardProps};
     let ig_name = t(locale, "wizard-channels-name-instagram");
     let ig_flavor = t(locale, "wizard-channels-flavor-instagram");
@@ -336,84 +333,114 @@ pub fn admin_settings_html(
     let dc_name = t(locale, "wizard-channels-name-discord");
     let dc_flavor = t(locale, "wizard-channels-flavor-discord");
     let dc_fallback = t(locale, "wizard-channels-discord-handle-fallback");
-    let ig_card = {
-        let ig_handle = ig
-            .first()
-            .map(|a| format!("@{}", a.instagram_username))
-            .unwrap_or_default();
-        let connect = format!(
-            "{base_url}/instagram/auth/{}",
-            crate::helpers::html_escape(tenant_id)
-        );
-        let manage = format!("{base_url}/dashboard/instagram");
-        channel_card_html(
-            &ChannelCardProps {
-                key: "ig",
-                name: &ig_name,
-                connected: !ig.is_empty(),
-                status_line: if ig.is_empty() {
-                    &ig_flavor
-                } else {
-                    &ig_handle
-                },
-                connect_href: &connect,
-                manage_href: &manage,
+    let email_name = t(locale, "wizard-channels-name-email");
+
+    let ig_handle = ig
+        .first()
+        .map(|a| format!("@{}", a.instagram_username))
+        .unwrap_or_default();
+    let ig_card = channel_card_html(
+        &ChannelCardProps {
+            key: "ig",
+            name: &ig_name,
+            connected: !ig.is_empty(),
+            status_line: if ig.is_empty() {
+                &ig_flavor
+            } else {
+                &ig_handle
             },
-            locale,
-        )
-    };
-    let wa_card = {
-        let wa_handle = wa
-            .first()
-            .map(|a| a.phone_number.clone())
-            .unwrap_or_default();
-        let connect = format!("{base_url}/dashboard/whatsapp/new");
-        let manage = format!("{base_url}/dashboard/whatsapp");
-        channel_card_html(
-            &ChannelCardProps {
-                key: "wa",
-                name: &wa_name,
-                connected: !wa.is_empty(),
-                status_line: if wa.is_empty() {
-                    &wa_flavor
-                } else {
-                    &wa_handle
-                },
-                connect_href: &connect,
-                manage_href: &manage,
-            },
-            locale,
-        )
-    };
-    let dc_card = {
-        let dc_handle = discord
-            .and_then(|c| c.guild_name.clone())
-            .unwrap_or_else(|| dc_fallback.clone());
-        let connect = format!("{base_url}/dashboard/discord/install");
-        let manage = format!("{base_url}/dashboard/discord");
-        channel_card_html(
-            &ChannelCardProps {
-                key: "discord",
-                name: &dc_name,
-                connected: discord.is_some(),
-                status_line: if discord.is_some() {
-                    &dc_handle
-                } else {
-                    &dc_flavor
-                },
-                connect_href: &connect,
-                manage_href: &manage,
-            },
-            locale,
-        )
-    };
-    let integrations_section = format!(
-        r#"<div class="card p-22">
-    <h2>Integrations</h2>
-    <p class="muted mb-16">Connect, reconfigure, or disconnect messaging channels.</p>
-    <div class="channels-grid">{ig_card}{wa_card}{dc_card}</div>
-  </div>"#
+            connect_href: &format!("{base_url}/instagram/auth/{}", html_escape(tenant_id)),
+            manage_href: &format!("{base_url}/dashboard/instagram"),
+        },
+        locale,
     );
+    let wa_handle = wa
+        .first()
+        .map(|a| a.phone_number.clone())
+        .unwrap_or_default();
+    let wa_card = channel_card_html(
+        &ChannelCardProps {
+            key: "wa",
+            name: &wa_name,
+            connected: !wa.is_empty(),
+            status_line: if wa.is_empty() {
+                &wa_flavor
+            } else {
+                &wa_handle
+            },
+            connect_href: &format!("{base_url}/dashboard/whatsapp/new"),
+            manage_href: &format!("{base_url}/dashboard/whatsapp"),
+        },
+        locale,
+    );
+    let dc_handle = discord
+        .and_then(|c| c.guild_name.clone())
+        .unwrap_or_else(|| dc_fallback.clone());
+    let dc_card = channel_card_html(
+        &ChannelCardProps {
+            key: "discord",
+            name: &dc_name,
+            connected: discord.is_some(),
+            status_line: if discord.is_some() {
+                &dc_handle
+            } else {
+                &dc_flavor
+            },
+            connect_href: &format!("{base_url}/dashboard/discord/install"),
+            manage_href: &format!("{base_url}/dashboard/discord"),
+        },
+        locale,
+    );
+    // Email "connected" means the tenant has at least one address
+    // claimed. Status line names the addresses so the card is
+    // self-explanatory at a glance.
+    let email_summary: String = addresses
+        .iter()
+        .map(|a| format!("{}@{}", a.local_part, email_base_domain))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let email_flavor = format!("Catch-all inbox at @{}", email_base_domain);
+    let email_card = channel_card_html(
+        &ChannelCardProps {
+            key: "mail",
+            name: &email_name,
+            connected: !addresses.is_empty(),
+            status_line: if addresses.is_empty() {
+                &email_flavor
+            } else {
+                &email_summary
+            },
+            connect_href: &format!("{base_url}/dashboard/email"),
+            manage_href: &format!("{base_url}/dashboard/email"),
+        },
+        locale,
+    );
+
+    let content = format!(
+        r#"<div class="page-pad">
+  <h1 class="display-sm m-0 mb-8">Channels</h1>
+  <p class="muted mb-16">Connect, reconfigure, or disconnect every messaging channel from a single page.</p>
+  <div class="channels-grid">{ig_card}{wa_card}{dc_card}{email_card}</div>
+</div>"#,
+        ig_card = ig_card,
+        wa_card = wa_card,
+        dc_card = dc_card,
+        email_card = email_card,
+    );
+    let page = app_shell(&content, "Channels", base_url, locale);
+    base_html("Channels - Concierge", &page, locale)
+}
+
+pub fn admin_settings_html(
+    tenant: &Tenant,
+    base_url: &str,
+    google_client_id: &str,
+    meta_app_id: &str,
+    conversation: &ConversationConfig,
+    locale: &Locale,
+) -> String {
+    let has_google = !tenant.email.is_empty();
+    let has_facebook = tenant.facebook_id.is_some();
 
     let google_row = if has_google {
         let unlink = if has_facebook {
@@ -504,21 +531,6 @@ pub fn admin_settings_html(
                 </table></div>
             </div>
         </div>
-        {integrations_section}
-        <div class=\"card p-22\" hx-ext=\"json-enc\">
-            <h2>{currency_h2}</h2>
-            <p class=\"muted mb-16\">{currency_lead}</p>
-            <form hx-put=\"{base_url}/dashboard/settings/currency\" hx-target=\"{hash}currency-toast\" hx-swap=\"innerHTML\">
-                <div class=\"row gap-12\">
-                    <select class=\"select\" name=\"currency\" style=\"width:auto\">
-                        <option value=\"INR\"{inr_sel}>{inr_label}</option>
-                        <option value=\"USD\"{usd_sel}>{usd_label}</option>
-                    </select>
-                    <button type=\"submit\" class=\"btn sm\">{save}</button>
-                </div>
-            </form>
-            <div id=\"currency-toast\" class=\"mt-8\" role=\"status\" aria-live=\"polite\" aria-atomic=\"true\"></div>
-        </div>
         {conversation_section}
         <div class=\"card p-22\">
             <h2>{session_h2}</h2>
@@ -535,24 +547,15 @@ pub fn admin_settings_html(
         </div>
         </div>",
         base_url = base_url,
-        hash = HASH,
         google_row = google_row,
         facebook_row = facebook_row,
-        integrations_section = integrations_section,
         conversation_section = conversation_section,
-        inr_sel = if tenant.currency == crate::locale::Currency::Inr { " selected" } else { "" },
-        usd_sel = if tenant.currency == crate::locale::Currency::Usd { " selected" } else { "" },
         h1 = t(locale, "admin-settings-h1"),
         linked_h2 = t(locale, "admin-settings-linked-h2"),
         linked_lead = t(locale, "admin-settings-linked-lead"),
         linked_region = html_escape(&t(locale, "admin-settings-linked-region")),
         th_provider = t(locale, "admin-settings-th-provider"),
         th_details = t(locale, "admin-settings-th-details"),
-        currency_h2 = t(locale, "admin-settings-currency-h2"),
-        currency_lead = t(locale, "admin-settings-currency-lead"),
-        inr_label = t(locale, "admin-settings-currency-inr"),
-        usd_label = t(locale, "admin-settings-currency-usd"),
-        save = t(locale, "admin-save"),
         session_h2 = t(locale, "admin-settings-session-h2"),
         signout = t(locale, "admin-settings-signout"),
         delete_h2 = t(locale, "admin-settings-delete-h2"),

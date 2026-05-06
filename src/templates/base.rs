@@ -1170,11 +1170,10 @@ pub fn app_shell(content: &str, active_nav: &str, base_url: &str, locale: &Local
     // Each entry: (active_key, FTL key, href).
     // active_key matches the `active_nav` arg (kept as English for stable
     // cross-locale routing; callers don't have to translate it too).
-    let nav_items: [(&str, &str, &str); 6] = [
+    let nav_items: [(&str, &str, &str); 5] = [
         ("Overview", "app-nav-overview", "/dashboard"),
         ("Approvals", "app-nav-approvals", "/dashboard/approvals"),
-        ("Channels", "app-nav-channels", "/dashboard/whatsapp"),
-        ("Email", "app-nav-email", "/dashboard/email"),
+        ("Channels", "app-nav-channels", "/dashboard/channels"),
         ("Billing", "app-nav-billing", "/dashboard/billing"),
         ("Settings", "app-nav-settings", "/dashboard/settings"),
     ];

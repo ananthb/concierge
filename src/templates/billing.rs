@@ -1,7 +1,8 @@
 //! Billing templates: tenant-facing credit balance + purchase
 
 use crate::helpers::{format_money, html_escape};
-use crate::locale::Locale;
+use crate::i18n::t;
+use crate::locale::{Currency, Locale};
 use crate::types::{CreditSource, TenantBilling};
 
 use super::base::{app_shell, base_html};
@@ -67,6 +68,7 @@ pub fn billing_overview_with_addresses_html(
     email_pack_size: i64,
     min_credits: i64,
     max_credits: i64,
+    tenant_currency: crate::locale::Currency,
 ) -> String {
     let summary = summarize(billing);
 
@@ -144,7 +146,39 @@ pub fn billing_overview_with_addresses_html(
   </div>
 
   {slider}
+
+  <div class="card p-22 mt-16" hx-ext="json-enc">
+    <h2 class="m-0 mb-8">{currency_h2}</h2>
+    <p class="muted mb-12">{currency_lead}</p>
+    <form hx-put="{base_url}/dashboard/billing/currency" hx-target="{hash}currency-toast" hx-swap="innerHTML">
+      <div class="row gap-12">
+        <select class="select" name="currency" style="width:auto">
+          <option value="INR"{inr_sel}>{inr_label}</option>
+          <option value="USD"{usd_sel}>{usd_label}</option>
+        </select>
+        <button type="submit" class="btn sm">{save}</button>
+      </div>
+    </form>
+    <div id="currency-toast" class="mt-8" role="status" aria-live="polite" aria-atomic="true"></div>
+  </div>
 </div>"##,
+        base_url = base_url,
+        hash = crate::templates::HASH,
+        inr_sel = if tenant_currency == Currency::Inr {
+            " selected"
+        } else {
+            ""
+        },
+        usd_sel = if tenant_currency == Currency::Usd {
+            " selected"
+        } else {
+            ""
+        },
+        currency_h2 = t(locale, "admin-settings-currency-h2"),
+        currency_lead = t(locale, "admin-settings-currency-lead"),
+        inr_label = t(locale, "admin-settings-currency-inr"),
+        usd_label = t(locale, "admin-settings-currency-usd"),
+        save = t(locale, "admin-save"),
         total = summary.total,
         total_class = total_class,
         purchased = summary.purchased,

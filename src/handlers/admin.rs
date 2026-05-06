@@ -47,61 +47,36 @@ pub async fn handle_admin(req: Request, env: Env, path: &str, method: Method) ->
             .secret("META_APP_ID")
             .map(|s| s.to_string())
             .unwrap_or_default();
-        let wa = list_whatsapp_accounts(&kv, &tenant_id).await?;
-        let ig = list_instagram_accounts(&kv, &tenant_id).await?;
-        let dc = get_discord_config_by_tenant(&kv, &tenant_id).await?;
         let onboarding = get_onboarding(&kv, &tenant_id).await?;
         return Response::from_html(admin_settings_html(
             &tenant,
             &base_url,
             &google_client_id,
             &meta_app_id,
-            &wa,
-            &ig,
-            dc.as_ref(),
             &onboarding.conversation,
-            &tenant_id,
             &locale,
         ));
     }
 
-    if path == "/dashboard/settings/currency" && method == Method::Put {
-        let db = env.d1("DB")?;
-        let mut req = req;
-        let form: serde_json::Value = req.json().await?;
-        // Currency and locale are independent: a tenant can read English-IN
-        // copy with USD prices, or vice versa. Both are accepted in the same
-        // PUT so the settings page can offer them as paired controls.
-        let currency = form
-            .get("currency")
-            .and_then(|v| v.as_str())
-            .map(crate::locale::Currency::parse);
-        let locale_str = form
-            .get("locale")
-            .and_then(|v| v.as_str())
-            .filter(|s| matches!(*s, "en-IN" | "en-US"));
-
-        if let Some(mut tenant) = get_tenant(&db, &tenant_id).await? {
-            let mut changed = false;
-            if let Some(c) = currency {
-                if tenant.currency != c {
-                    tenant.currency = c;
-                    changed = true;
-                }
-            }
-            if let Some(l) = locale_str {
-                if tenant.locale != l {
-                    tenant.locale = l.to_string();
-                    changed = true;
-                }
-            }
-            if changed {
-                tenant.updated_at = crate::helpers::now_iso();
-                save_tenant(&db, &tenant).await?;
-            }
-        }
-
-        return Response::from_html("<div class=\"success\">Settings updated.</div>".to_string());
+    if path == "/dashboard/channels" && method == Method::Get {
+        let wa = list_whatsapp_accounts(&kv, &tenant_id).await?;
+        let ig = list_instagram_accounts(&kv, &tenant_id).await?;
+        let dc = get_discord_config_by_tenant(&kv, &tenant_id).await?;
+        let addrs = get_email_addresses(&kv, &tenant_id).await?;
+        let email_base_domain = env
+            .var("EMAIL_DOMAIN")
+            .map(|v| v.to_string())
+            .unwrap_or_default();
+        return Response::from_html(crate::templates::channels_page_html(
+            &base_url,
+            &wa,
+            &ig,
+            dc.as_ref(),
+            &addrs,
+            &email_base_domain,
+            &tenant_id,
+            &locale,
+        ));
     }
 
     if path == "/dashboard/settings/conversation" && method == Method::Put {

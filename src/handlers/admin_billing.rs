@@ -54,7 +54,28 @@ pub async fn handle_billing_admin(
                 cfg.email_pack_size,
                 cfg.min_credits,
                 cfg.max_credits,
+                tenant.currency,
             ))
+        }
+
+        // Update display currency. Posted from the currency selector
+        // on /dashboard/billing.
+        (Method::Put, "currency") => {
+            let form: serde_json::Value = req.json().await?;
+            let currency = form
+                .get("currency")
+                .and_then(|v| v.as_str())
+                .map(crate::locale::Currency::parse);
+            if let Some(c) = currency {
+                if let Some(mut tenant) = storage::get_tenant(&db, tenant_id).await? {
+                    if tenant.currency != c {
+                        tenant.currency = c;
+                        tenant.updated_at = crate::helpers::now_iso();
+                        storage::save_tenant(&db, &tenant).await?;
+                    }
+                }
+            }
+            Response::from_html(r#"<div class="success">Currency updated.</div>"#.to_string())
         }
 
         // Create Razorpay order: flat per-reply rate, any quantity.
