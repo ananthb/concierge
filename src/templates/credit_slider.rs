@@ -76,7 +76,7 @@ pub fn slider_html(
             r##"<form hx-post="{base_url}/dashboard/billing/checkout" hx-ext="json-enc" hx-target="body" hx-swap="innerHTML" class="mt-16">
   <input type="hidden" name="credits" :value="credits">
   <input type="hidden" name="return_to" value="{return_to}">
-  <button type="submit" class="btn primary lg w-full"><span>Buy <span x-text="credits.toLocaleString(countLocale)"></span> replies: {symbol}<span x-text="{price_js}"></span></span><span class="spinner htmx-indicator" aria-hidden="true"></span></button>
+  <button type="submit" class="btn primary lg"><span>Buy <span x-text="credits.toLocaleString(countLocale)"></span> replies: {symbol}<span x-text="{price_js}"></span></span><span class="spinner htmx-indicator" aria-hidden="true"></span></button>
 </form>"##,
             base_url = base_url,
             return_to = return_to,
@@ -87,7 +87,7 @@ pub fn slider_html(
             cta_href,
             cta_label,
         } => format!(
-            r##"<a href="{cta_href}" class="btn primary lg w-full jc-center mt-16">{cta_label}</a>"##,
+            r##"<a href="{cta_href}" class="btn primary lg jc-center mt-16">{cta_label}</a>"##,
             cta_href = cta_href,
             cta_label = cta_label,
         ),
