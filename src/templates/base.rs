@@ -114,6 +114,10 @@ a { color:var(--accent); }
 .wrap{flex-wrap:wrap}
 .jc-center{justify-content:center}
 .link-reset{text-decoration:none;color:inherit}
+/* Cards used as links: hint they're clickable on hover/focus. */
+a.card.link-reset { display:block; transition:border-color .12s ease, box-shadow .12s ease, transform .12s ease; }
+a.card.link-reset:hover { border-color:var(--accent); box-shadow:var(--shadow-2); transform:translateY(-1px); }
+a.card.link-reset:focus-visible { outline:none; border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft); }
 [x-cloak]{display:none!important}
 .inline{display:inline} .block{display:block} .hidden{display:none}
 .sr-only{position:absolute!important;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
