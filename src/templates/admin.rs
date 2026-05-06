@@ -493,6 +493,7 @@ pub fn admin_settings_html(
     let content = format!(
         "<div class=\"page-pad\">
         <h1 class=\"display-sm m-0 mb-16\">{h1}</h1>
+        <div class=\"stack gap-16\">
         <div class=\"card p-22\">
             <h2>{linked_h2}</h2>
             <p class=\"muted mb-16\">{linked_lead}</p>
@@ -530,6 +531,7 @@ pub fn admin_settings_html(
                     hx-delete=\"{base_url}/dashboard/delete-account\"
                     hx-confirm=\"{delete_confirm}\"
                     >{delete_cta}</button>
+        </div>
         </div>
         </div>",
         base_url = base_url,

@@ -88,16 +88,34 @@ pub fn email_dashboard_html(
     };
 
     let add_form = if at_limit {
+        // Two flavours: tenant has a quota and used it up vs. tenant
+        // never bought any address slots in the first place. The old
+        // copy read "you've used your 0 address slot(s)" when quota
+        // was zero, which doesn't make sense.
+        let warn_body = if quota == 0 {
+            format!(
+                r#"<strong>{none}</strong> <a href="{base_url}/dashboard/billing">{warn_link}</a> {tail}"#,
+                base_url = base_url,
+                none = t(locale, "admin-email-quota-none"),
+                warn_link = t(locale, "admin-email-quota-warn-link"),
+                tail = t(locale, "admin-email-quota-none-tail"),
+            )
+        } else {
+            format!(
+                r#"<strong>{warn_prefix} {quota} {warn_suffix}</strong> <a href="{base_url}/dashboard/billing">{warn_link}</a> {warn_tail}"#,
+                base_url = base_url,
+                quota = quota,
+                warn_prefix = t(locale, "admin-email-quota-warn-prefix"),
+                warn_suffix = t(locale, "admin-email-quota-warn-suffix"),
+                warn_link = t(locale, "admin-email-quota-warn-link"),
+                warn_tail = t(locale, "admin-email-quota-warn-tail"),
+            )
+        };
         format!(
             r#"<div class="card p-18 mt-16 card-warn">
-                <p class="m-0"><strong>{warn_prefix} {quota} {warn_suffix}</strong> <a href="{base_url}/dashboard/billing">{warn_link}</a> {warn_tail}</p>
+                <p class="m-0">{warn_body}</p>
             </div>"#,
-            base_url = base_url,
-            quota = quota,
-            warn_prefix = t(locale, "admin-email-quota-warn-prefix"),
-            warn_suffix = t(locale, "admin-email-quota-warn-suffix"),
-            warn_link = t(locale, "admin-email-quota-warn-link"),
-            warn_tail = t(locale, "admin-email-quota-warn-tail"),
+            warn_body = warn_body,
         )
     } else {
         format!(
