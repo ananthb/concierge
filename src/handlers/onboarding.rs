@@ -76,17 +76,19 @@ pub async fn handle_wizard(
             };
             let name = get("name");
             let phone = get("phone");
+            let business_type = get("business_type");
 
-            if name.is_empty() || phone.is_empty() {
+            if name.is_empty() || phone.is_empty() || business_type.is_empty() {
                 return Response::from_html(
-                    "<div class=\"error\">Brand name and phone are required.</div>".to_string(),
+                    "<div class=\"error\">Brand name, phone, and entity type are required.</div>"
+                        .to_string(),
                 );
             }
 
             state.business.name = name;
             state.business.contact_name = get("contact_name");
             state.business.phone = phone;
-            state.business.business_type = get("business_type");
+            state.business.business_type = business_type;
             state.business.pan = get("pan").to_uppercase();
             state.business.gstin = get("gstin").to_uppercase();
             state.business.address = get("address");

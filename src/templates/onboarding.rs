@@ -788,7 +788,7 @@ pub fn basics_html(
         </div>
         <div>
           <label for="biz-type" class="eyebrow lbl">{lbl_type}</label>
-          <select id="biz-type" class="select" name="business_type" x-model="bizType">{biz_type_html}</select>
+          <select id="biz-type" class="select" name="business_type" required aria-required="true" x-model="bizType">{biz_type_html}</select>
         </div>
       </div>
       <div class="mt-16" x-show="bizType &amp;&amp; bizType !== 'unregistered'" x-cloak :aria-hidden="!(bizType &amp;&amp; bizType !== 'unregistered')" style="grid-template-columns:1fr 1fr;gap:16px;display:grid">
@@ -816,7 +816,7 @@ pub fn basics_html(
     </div>
     <div class="between mt-36">
       <a href="/" class="btn ghost">{back}</a>
-      <button class="btn primary" type="submit" :disabled="!(name &amp;&amp; name.trim() &amp;&amp; phone &amp;&amp; phone.trim())">{cont}</button>
+      <button class="btn primary" type="submit" :disabled="!(name &amp;&amp; name.trim() &amp;&amp; phone &amp;&amp; phone.trim() &amp;&amp; bizType)">{cont}</button>
     </div>
   </form>
 </section>"#,
