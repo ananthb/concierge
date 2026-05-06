@@ -47,14 +47,11 @@ pub async fn handle_admin(req: Request, env: Env, path: &str, method: Method) ->
             .secret("META_APP_ID")
             .map(|s| s.to_string())
             .unwrap_or_default();
-        let onboarding = get_onboarding(&kv, &tenant_id).await?;
         return Response::from_html(admin_settings_html(
             &tenant,
             &base_url,
             &google_client_id,
             &meta_app_id,
-            &onboarding.conversation,
-            onboarding.default_wait_seconds,
             &locale,
         ));
     }
@@ -64,6 +61,7 @@ pub async fn handle_admin(req: Request, env: Env, path: &str, method: Method) ->
         let ig = list_instagram_accounts(&kv, &tenant_id).await?;
         let dc = get_discord_config_by_tenant(&kv, &tenant_id).await?;
         let addrs = get_email_addresses(&kv, &tenant_id).await?;
+        let onboarding = get_onboarding(&kv, &tenant_id).await?;
         let email_base_domain = env
             .var("EMAIL_DOMAIN")
             .map(|v| v.to_string())
@@ -76,11 +74,13 @@ pub async fn handle_admin(req: Request, env: Env, path: &str, method: Method) ->
             &addrs,
             &email_base_domain,
             &tenant_id,
+            &onboarding.conversation,
+            onboarding.default_wait_seconds,
             &locale,
         ));
     }
 
-    if path == "/dashboard/settings/conversation" && method == Method::Put {
+    if path == "/dashboard/channels/conversation" && method == Method::Put {
         return save_conversation_settings(req, &env, &kv, &tenant_id, &locale).await;
     }
 
@@ -195,7 +195,7 @@ pub async fn handle_admin(req: Request, env: Env, path: &str, method: Method) ->
     Response::error("Not Found", 404)
 }
 
-/// PUT /dashboard/settings/conversation
+/// PUT /dashboard/channels/conversation
 ///
 /// Updates the tenant's `ConversationConfig` on `OnboardingState`.
 /// Each of the three fields is optional: a missing or empty value

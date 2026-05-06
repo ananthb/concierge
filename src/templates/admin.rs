@@ -218,15 +218,11 @@ btn?.addEventListener('click', async () => {{
     base_html(&t(locale, "admin-login-title"), &content, locale)
 }
 
-/// Render the "Conversation Timing" card on /dashboard/settings.
-///
-/// Three optional integer inputs map directly to `ConversationConfig`'s
-/// `Option<u32>` fields. Empty value = `None` = use the prompt default,
-/// shown in placeholder + an explicit "Default: N" hint so the tenant
-/// can see what they'll fall back to without saving. Submits as JSON
-/// (HTMX json-enc) PUT to `/dashboard/settings/conversation`; the
-/// response is an inline fragment (success/error toast) swapped into
-/// the per-card toast div.
+/// "Conversation Timing" card rendered on /dashboard/channels — these
+/// are operator knobs that affect how the AI replies on every connected
+/// channel. Optional integer inputs map to `ConversationConfig`'s
+/// `Option<u32>` fields; empty = use the prompt default (shown as
+/// placeholder + inline hint).
 fn conversation_settings_card(
     base_url: &str,
     cfg: &ConversationConfig,
@@ -268,7 +264,7 @@ fn conversation_settings_card(
         r#"<div class="card p-22" hx-ext="json-enc">
             <h2>{h2}</h2>
             <p class="muted mb-16">{lead}</p>
-            <form hx-put="{base_url}/dashboard/settings/conversation" hx-target="{hash}conversation-toast" hx-swap="innerHTML">
+            <form hx-put="{base_url}/dashboard/channels/conversation" hx-target="{hash}conversation-toast" hx-swap="innerHTML">
                 <div class="stack gap-16">
                     <label class="stack gap-4">
                         <span><strong>{idle_label}</strong></span>
@@ -340,6 +336,8 @@ pub fn channels_page_html(
     addresses: &[crate::types::EmailAddress],
     email_base_domain: &str,
     tenant_id: &str,
+    conversation: &ConversationConfig,
+    default_wait_seconds: u32,
     locale: &Locale,
 ) -> String {
     use super::onboarding::{channel_card_html, ChannelCardProps};
@@ -433,16 +431,21 @@ pub fn channels_page_html(
         locale,
     );
 
+    let timing_card =
+        conversation_settings_card(base_url, conversation, default_wait_seconds, locale);
+
     let content = format!(
         r#"<div class="page-pad">
   <h1 class="display-sm m-0 mb-8">Channels</h1>
   <p class="muted mb-16">Connect, reconfigure, or disconnect every messaging channel from a single page.</p>
   <div class="channels-grid">{ig_card}{wa_card}{dc_card}{email_card}</div>
+  <div class="mt-24">{timing_card}</div>
 </div>"#,
         ig_card = ig_card,
         wa_card = wa_card,
         dc_card = dc_card,
         email_card = email_card,
+        timing_card = timing_card,
     );
     let page = app_shell(&content, "Channels", base_url, locale);
     base_html("Channels - Concierge", &page, locale)
@@ -453,8 +456,6 @@ pub fn admin_settings_html(
     base_url: &str,
     google_client_id: &str,
     meta_app_id: &str,
-    conversation: &ConversationConfig,
-    default_wait_seconds: u32,
     locale: &Locale,
 ) -> String {
     let has_google = !tenant.email.is_empty();
@@ -533,9 +534,6 @@ pub fn admin_settings_html(
         }
     };
 
-    let conversation_section =
-        conversation_settings_card(base_url, conversation, default_wait_seconds, locale);
-
     let content = format!(
         "<div class=\"page-pad\">
         <h1 class=\"display-sm m-0 mb-16\">{h1}</h1>
@@ -550,7 +548,6 @@ pub fn admin_settings_html(
                 </table></div>
             </div>
         </div>
-        {conversation_section}
         <div class=\"card p-22\">
             <h2>{session_h2}</h2>
             <a href=\"{base_url}/auth/logout\" class=\"btn ghost\">{signout}</a>
@@ -568,7 +565,6 @@ pub fn admin_settings_html(
         base_url = base_url,
         google_row = google_row,
         facebook_row = facebook_row,
-        conversation_section = conversation_section,
         h1 = t(locale, "admin-settings-h1"),
         linked_h2 = t(locale, "admin-settings-linked-h2"),
         linked_lead = t(locale, "admin-settings-linked-lead"),
@@ -1481,7 +1477,7 @@ mod conversation_card_tests {
 
         // Form posts to the right endpoint with the right swap target.
         assert!(
-            html.contains(r#"hx-put="https://example.test/dashboard/settings/conversation""#),
+            html.contains(r#"hx-put="https://example.test/dashboard/channels/conversation""#),
             "form action missing"
         );
         assert!(html.contains(r##"hx-target="#conversation-toast""##));
