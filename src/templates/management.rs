@@ -4,7 +4,7 @@ use crate::helpers::html_escape;
 use crate::locale::Locale;
 use crate::types::*;
 
-use super::base::{base_html, brand_mark};
+use super::base::{base_html, brand_mark, empty_state};
 use super::HASH;
 
 fn manage_shell(
@@ -426,29 +426,6 @@ fn render_recent_activity_card(recent: &[serde_json::Value], base_url: &str) -> 
 </div>"##,
         view_all = view_all,
         body = body,
-    )
-}
-
-/// Single empty-state component used by all /manage list pages.
-/// `cta` is `(href, label)` for an optional call-to-action.
-fn empty_state(headline: &str, subtext: &str, cta: Option<(&str, &str)>) -> String {
-    let cta_html = match cta {
-        Some((href, label)) => format!(
-            r#"<div class="empty-cta"><a class="btn sm" href="{href}">{label}</a></div>"#,
-            href = href,
-            label = html_escape(label),
-        ),
-        None => String::new(),
-    };
-    format!(
-        r##"<div class="empty-state">
-  <p class="empty-headline">{headline}</p>
-  <p class="empty-sub">{subtext}</p>
-  {cta}
-</div>"##,
-        headline = html_escape(headline),
-        subtext = html_escape(subtext),
-        cta = cta_html,
     )
 }
 

@@ -68,7 +68,11 @@ pub fn email_dashboard_html(
         .collect();
 
     let address_table = if addrs.is_empty() {
-        format!(r#"<p class="muted">{}</p>"#, t(locale, "admin-email-empty"),)
+        super::base::empty_state(
+            &t(locale, "admin-email-empty-headline"),
+            &t(locale, "admin-email-empty-sub"),
+            None,
+        )
     } else {
         format!(
             r#"<div class="card p-0" style="overflow:hidden">

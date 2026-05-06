@@ -1212,3 +1212,25 @@ pub fn app_shell(content: &str, active_nav: &str, base_url: &str, locale: &Local
         content = content,
     )
 }
+
+/// Standard empty state. `cta` is `(href, label)`.
+pub fn empty_state(headline: &str, subtext: &str, cta: Option<(&str, &str)>) -> String {
+    let cta_html = match cta {
+        Some((href, label)) => format!(
+            r#"<div class="empty-cta"><a class="btn sm" href="{href}">{label}</a></div>"#,
+            href = href,
+            label = html_escape(label),
+        ),
+        None => String::new(),
+    };
+    format!(
+        r##"<div class="empty-state">
+  <p class="empty-headline">{headline}</p>
+  <p class="empty-sub">{subtext}</p>
+  {cta}
+</div>"##,
+        headline = html_escape(headline),
+        subtext = html_escape(subtext),
+        cta = cta_html,
+    )
+}

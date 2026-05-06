@@ -623,64 +623,6 @@ pub fn admin_dashboard_html(
         String::new()
     };
 
-    // Sidebar: connected channels.
-    let ig_label = html_escape(&t(locale, "admin-icon-instagram"));
-    let wa_label = html_escape(&t(locale, "admin-icon-whatsapp"));
-    let em_label = html_escape(&t(locale, "admin-icon-email"));
-    let ig_icon = format!(
-        r#"<svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-label="{ig_label}"><rect x="3" y="3" width="18" height="18" rx="5" stroke="currentColor" stroke-width="1.6"/><circle cx="12" cy="12" r="4.2" stroke="currentColor" stroke-width="1.6"/></svg>"#,
-    );
-    let wa_icon = format!(
-        r#"<svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-label="{wa_label}"><path d="M4 20l1.3-4.1A8 8 0 1 1 8.2 18.8L4 20z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>"#,
-    );
-    let mail_icon = format!(
-        r#"<svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-label="{em_label}"><rect x="3" y="5" width="18" height="14" rx="2" stroke="currentColor" stroke-width="1.6"/><path d="M3.5 6.5l8.5 6 8.5-6" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>"#,
-    );
-
-    let wa_text = t(locale, "admin-icon-whatsapp");
-    let ig_text = t(locale, "admin-icon-instagram");
-    let channel_rows: String = whatsapp_accounts
-        .iter()
-        .map(|a| {
-            let dot = if a.auto_reply.enabled { r#"<span class="dot ok"></span>"# } else { r#"<span class="dot"></span>"# };
-            format!(
-                r#"<a href="{base_url}/dashboard/whatsapp/{id}" class="side-row"><span>{wa_icon}</span><div><div>{wa_text}</div><div class="mono muted">{phone}</div></div>{dot}</a>"#,
-                base_url = base_url,
-                id = html_escape(&a.id),
-                phone = html_escape(&a.phone_number),
-                wa_icon = wa_icon,
-                wa_text = wa_text,
-                dot = dot,
-            )
-        })
-        .collect();
-
-    let ig_rows: String = instagram_accounts
-        .iter()
-        .map(|a| {
-            let dot = if a.enabled { r#"<span class="dot ok"></span>"# } else { r#"<span class="dot"></span>"# };
-            format!(
-                r#"<a href="{base_url}/dashboard/instagram/{id}" class="side-row"><span>{ig_icon}</span><div><div>{ig_text}</div><div class="mono muted">@{username}</div></div>{dot}</a>"#,
-                base_url = base_url,
-                id = html_escape(&a.id),
-                username = html_escape(&a.instagram_username),
-                ig_icon = ig_icon,
-                ig_text = ig_text,
-                dot = dot,
-            )
-        })
-        .collect();
-
-    let empty_hint = if whatsapp_accounts.is_empty() && instagram_accounts.is_empty() {
-        format!(
-            r#"<div class="side-row"><span class="muted fs-13">{prefix} <a href="/dashboard/whatsapp">{link}</a>.</span></div>"#,
-            prefix = t(locale, "admin-side-empty-prefix"),
-            link = t(locale, "admin-side-empty-link"),
-        )
-    } else {
-        String::new()
-    };
-
     let email_headline = if has_email_domains {
         t(locale, "admin-dashboard-email-headline-active")
     } else {
@@ -697,69 +639,47 @@ pub fn admin_dashboard_html(
         t(locale, "admin-dashboard-email-desc-empty")
     };
     let content = format!(
-        r#"<div class="dash-grid">
-  <aside class="dash-side">
-    <div class="card p-16">
-      <div class="eyebrow">{side_channels}</div>
-      <div class="side-list">
-        {channel_rows}{ig_rows}{empty_hint}
-        <a href="{base_url}/dashboard/email" class="side-row"><span>{mail_icon}</span><div><div>{email_row_name}</div><div class="mono muted">{email_row_cta}</div></div></a>
+        r#"<div class="page-pad">
+  {suspended_banner}
+  {risk_gate_banner}
+  <div class="card p-22">
+    <div class="between mb-16">
+      <div>
+        <div class="eyebrow">{eyebrow}</div>
+        <h3 class="display-sm m-0 mt-4">{headline}</h3>
       </div>
     </div>
-    <div class="card p-16 mt-14">
-      <div class="eyebrow">{quick_links}</div>
-      <div class="side-list">
-        <a href="{base_url}/dashboard/lead-forms" class="side-row link-reset"><div class="flex-1 fs-13">{leads_prefix} ({lf_count})</div></a>
-        <a href="{base_url}/dashboard/email/log" class="side-row link-reset"><div class="flex-1 fs-13">{email_log}</div></a>
-      </div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px">
+      <a href="{base_url}/dashboard/channels" class="card p-16 ta-center link-reset">
+        <div class="stat-n serif">{wa_count}</div>
+        <div class="mono muted fs-11">{stat_wa}</div>
+      </a>
+      <a href="{base_url}/dashboard/channels" class="card p-16 ta-center link-reset">
+        <div class="stat-n serif">{ig_count}</div>
+        <div class="mono muted fs-11">{stat_ig}</div>
+      </a>
+      <a href="{base_url}/dashboard/lead-forms" class="card p-16 ta-center link-reset">
+        <div class="stat-n serif">{lf_count}</div>
+        <div class="mono muted fs-11">{stat_lf}</div>
+      </a>
+      <a href="{base_url}/dashboard/billing" class="card p-16 ta-center link-reset{credit_warn_cls}" style="{credit_warn_style}">
+        <div class="stat-n serif">{credits}</div>
+        <div class="mono muted fs-11">{stat_credits}</div>
+      </a>
     </div>
-  </aside>
-  <main class="dash-main">
-    {suspended_banner}
-    {risk_gate_banner}
-    <div class="card p-22">
-      <div class="between mb-16">
-        <div>
-          <div class="eyebrow">{eyebrow}</div>
-          <h3 class="display-sm m-0 mt-4">{headline}</h3>
-        </div>
+  </div>
+  <div class="card p-22 mt-16{email_highlight_cls}">
+    <div class="between mb-12">
+      <div>
+        <div class="eyebrow">{email_eyebrow}</div>
+        <h3 class="display-sm m-0 mt-4">{email_headline}</h3>
       </div>
-      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px">
-        <div class="card p-16 ta-center">
-          <div class="stat-n serif">{wa_count}</div>
-          <div class="mono muted fs-11">{stat_wa}</div>
-        </div>
-        <div class="card p-16 ta-center">
-          <div class="stat-n serif">{ig_count}</div>
-          <div class="mono muted fs-11">{stat_ig}</div>
-        </div>
-        <div class="card p-16 ta-center">
-          <div class="stat-n serif">{lf_count}</div>
-          <div class="mono muted fs-11">{stat_lf}</div>
-        </div>
-        <div class="card p-16 ta-center{credit_warn_cls}" style="{credit_warn_style}">
-          <div class="stat-n serif">{credits}</div>
-          <div class="mono muted fs-11">{stat_credits}</div>
-        </div>
-      </div>
+      <a href="{base_url}/dashboard/channels" class="btn sm">{email_cta}</a>
     </div>
-    <div class="card p-22 mt-16{email_highlight_cls}">
-      <div class="between mb-12">
-        <div>
-          <div class="eyebrow">{email_eyebrow}</div>
-          <h3 class="display-sm m-0 mt-4">{email_headline}</h3>
-        </div>
-        <a href="{base_url}/dashboard/email" class="btn sm">{email_cta}</a>
-      </div>
-      <p class="muted">{email_desc}</p>
-    </div>
-  </main>
+    <p class="muted">{email_desc}</p>
+  </div>
 </div>"#,
         base_url = base_url,
-        channel_rows = channel_rows,
-        ig_rows = ig_rows,
-        empty_hint = empty_hint,
-        mail_icon = mail_icon,
         suspended_banner = suspended_banner,
         wa_count = whatsapp_accounts.len(),
         ig_count = instagram_accounts.len(),
@@ -784,12 +704,6 @@ pub fn admin_dashboard_html(
         email_cta = email_cta,
         email_desc = email_desc,
         risk_gate_banner = risk_gate_banner,
-        side_channels = t(locale, "admin-side-channels"),
-        email_row_name = t(locale, "admin-side-email-row-name"),
-        email_row_cta = t(locale, "admin-side-email-row-cta"),
-        quick_links = t(locale, "admin-side-quick-links"),
-        leads_prefix = t(locale, "admin-side-lead-forms-prefix"),
-        email_log = t(locale, "admin-side-email-log"),
         eyebrow = t(locale, "admin-dashboard-eyebrow"),
         headline = t(locale, "admin-dashboard-headline"),
         stat_wa = t(locale, "admin-dashboard-stat-whatsapp"),
@@ -846,13 +760,26 @@ pub fn admin_whatsapp_list_html(
         })
         .collect();
 
-    let empty = if accounts.is_empty() {
-        format!(
-            "<tr><td colspan=\"4\" class=\"muted\">{}</td></tr>",
-            t(locale, "admin-wa-list-empty"),
+    let body = if accounts.is_empty() {
+        super::base::empty_state(
+            &t(locale, "admin-wa-list-empty-headline"),
+            &t(locale, "admin-wa-list-empty-sub"),
+            Some((
+                &format!("{base_url}/dashboard/whatsapp/new"),
+                &t(locale, "admin-wa-list-empty-cta"),
+            )),
         )
     } else {
-        String::new()
+        format!(
+            "<div class=\"table-wrap\"><table>
+                <thead><tr><th scope=\"col\">{th_name}</th><th scope=\"col\">{th_phone}</th><th scope=\"col\">{th_auto}</th><th></th></tr></thead>
+                <tbody>{rows}</tbody>
+            </table></div>",
+            rows = rows,
+            th_name = t(locale, "admin-wa-list-th-name"),
+            th_phone = t(locale, "admin-wa-list-th-phone"),
+            th_auto = t(locale, "admin-wa-list-th-auto"),
+        )
     };
 
     let content = format!(
@@ -862,21 +789,12 @@ pub fn admin_whatsapp_list_html(
             <a href=\"{base_url}/dashboard/whatsapp/new\" class=\"btn\">{add}</a>
         </div>
         <div id=\"toast\" role=\"status\" aria-live=\"polite\" aria-atomic=\"true\"></div>
-        <div class=\"card p-22\">
-            <div class=\"table-wrap\"><table>
-                <thead><tr><th scope=\"col\">{th_name}</th><th scope=\"col\">{th_phone}</th><th scope=\"col\">{th_auto}</th><th></th></tr></thead>
-                <tbody>{rows}{empty}</tbody>
-            </table></div>
-        </div>
+        <div class=\"card p-22\">{body}</div>
         </div>",
         base_url = base_url,
-        rows = rows,
-        empty = empty,
+        body = body,
         h1 = t(locale, "admin-wa-list-h1"),
         add = t(locale, "admin-wa-list-add"),
-        th_name = t(locale, "admin-wa-list-th-name"),
-        th_phone = t(locale, "admin-wa-list-th-phone"),
-        th_auto = t(locale, "admin-wa-list-th-auto"),
     );
 
     let page = super::base::app_shell(&content, "Channels", base_url, locale);
@@ -1152,13 +1070,26 @@ pub fn admin_instagram_list_html(
         })
         .collect();
 
-    let empty = if accounts.is_empty() {
-        format!(
-            "<tr><td colspan=\"4\" class=\"muted\">{}</td></tr>",
-            t(locale, "admin-ig-list-empty"),
+    let body = if accounts.is_empty() {
+        super::base::empty_state(
+            &t(locale, "admin-ig-list-empty-headline"),
+            &t(locale, "admin-ig-list-empty-sub"),
+            Some((
+                &format!("{base_url}/instagram/auth/{}", html_escape(tenant_id)),
+                &t(locale, "admin-ig-list-empty-cta"),
+            )),
         )
     } else {
-        String::new()
+        format!(
+            "<div class=\"table-wrap\"><table>
+                <thead><tr><th scope=\"col\">{th_user}</th><th scope=\"col\">{th_status}</th><th scope=\"col\">{th_auto}</th><th></th></tr></thead>
+                <tbody>{rows}</tbody>
+            </table></div>",
+            rows = rows,
+            th_user = t(locale, "admin-ig-list-th-username"),
+            th_status = t(locale, "admin-ig-list-th-status"),
+            th_auto = t(locale, "admin-ig-list-th-auto"),
+        )
     };
 
     let content = format!(
@@ -1168,22 +1099,13 @@ pub fn admin_instagram_list_html(
             <a href=\"{base_url}/instagram/auth/{tenant_id}\" class=\"btn\">{add}</a>
         </div>
         <div id=\"toast\" role=\"status\" aria-live=\"polite\" aria-atomic=\"true\"></div>
-        <div class=\"card p-22\">
-            <div class=\"table-wrap\"><table>
-                <thead><tr><th scope=\"col\">{th_user}</th><th scope=\"col\">{th_status}</th><th scope=\"col\">{th_auto}</th><th></th></tr></thead>
-                <tbody>{rows}{empty}</tbody>
-            </table></div>
-        </div>
+        <div class=\"card p-22\">{body}</div>
         </div>",
         base_url = base_url,
         tenant_id = html_escape(tenant_id),
-        rows = rows,
-        empty = empty,
+        body = body,
         h1 = t(locale, "admin-ig-list-h1"),
         add = t(locale, "admin-ig-list-add"),
-        th_user = t(locale, "admin-ig-list-th-username"),
-        th_status = t(locale, "admin-ig-list-th-status"),
-        th_auto = t(locale, "admin-ig-list-th-auto"),
     );
 
     let page = super::base::app_shell(&content, "Channels", base_url, locale);
@@ -1315,40 +1237,45 @@ pub fn admin_lead_forms_list_html(
         })
         .collect();
 
-    let empty = if forms.is_empty() {
-        format!(
-            "<tr><td colspan=\"4\" class=\"muted\">{}</td></tr>",
-            t(locale, "admin-lf-list-empty"),
+    let body = if forms.is_empty() {
+        super::base::empty_state(
+            &t(locale, "admin-lf-list-empty-headline"),
+            &t(locale, "admin-lf-list-empty-sub"),
+            Some((
+                &format!("{base_url}/dashboard/lead-forms/new"),
+                &t(locale, "admin-lf-list-empty-cta"),
+            )),
         )
     } else {
-        String::new()
+        format!(
+            "<div class=\"table-wrap\"><table>
+                <thead><tr><th scope=\"col\">{th_name}</th><th scope=\"col\">{th_slug}</th><th scope=\"col\">{th_status}</th><th></th></tr></thead>
+                <tbody>{rows}</tbody>
+            </table></div>",
+            rows = rows,
+            th_name = t(locale, "admin-lf-list-th-name"),
+            th_slug = t(locale, "admin-lf-list-th-slug"),
+            th_status = t(locale, "admin-lf-list-th-status"),
+        )
     };
 
     let content = format!(
-        "<p><a href=\"{base_url}/dashboard\">{back}</a></p>
+        "<div class=\"page-pad\">
         <div class=\"between mb-16\">
-            <h1>{h1}</h1>
+            <h1 class=\"display-sm m-0\">{h1}</h1>
             <a href=\"{base_url}/dashboard/lead-forms/new\" class=\"btn\">{add}</a>
         </div>
         <div id=\"toast\" role=\"status\" aria-live=\"polite\" aria-atomic=\"true\"></div>
-        <div class=\"card p-22\">
-            <div class=\"table-wrap\"><table>
-                <thead><tr><th scope=\"col\">{th_name}</th><th scope=\"col\">{th_slug}</th><th scope=\"col\">{th_status}</th><th></th></tr></thead>
-                <tbody>{rows}{empty}</tbody>
-            </table></div>
+        <div class=\"card p-22\">{body}</div>
         </div>",
         base_url = base_url,
-        rows = rows,
-        empty = empty,
-        back = t(locale, "admin-lf-list-back"),
+        body = body,
         h1 = t(locale, "admin-lf-list-h1"),
         add = t(locale, "admin-lf-list-add"),
-        th_name = t(locale, "admin-lf-list-th-name"),
-        th_slug = t(locale, "admin-lf-list-th-slug"),
-        th_status = t(locale, "admin-lf-list-th-status"),
     );
 
-    base_html(&t(locale, "admin-lf-list-title"), &content, locale)
+    let page = super::base::app_shell(&content, "Overview", base_url, locale);
+    base_html(&t(locale, "admin-lf-list-title"), &page, locale)
 }
 
 pub fn admin_lead_form_edit_html(

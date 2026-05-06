@@ -1368,7 +1368,7 @@ pub fn replies_html(
                 aria-labelledby="wiz-handoff-label">{handoff_value}</textarea>
     </div>
 
-    <div class="between mt-32">
+    <div class="between mt-36">
       <button type="button" class="btn ghost" hx-post="{base_url}/dashboard/wizard/goto" hx-vals='{{"to":"notifications"}}' hx-target="body" hx-swap="innerHTML">{back}</button>
       <button type="submit" class="btn primary" :disabled="!preset">{cont}</button>
     </div>
