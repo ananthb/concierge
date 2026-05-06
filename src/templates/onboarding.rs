@@ -775,7 +775,7 @@ pub fn basics_html(
     <div class="card p-24">
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
         <div>
-          <label for="biz-name" class="eyebrow lbl">{lbl_name}</label>
+          <label for="biz-name" class="eyebrow lbl">{lbl_name} <span class="text-warn" aria-hidden="true">*</span></label>
           <input id="biz-name" class="input" name="name" value="{name}" placeholder="{ph_name}" required aria-required="true" x-model="name">
         </div>
         <div>
@@ -783,11 +783,11 @@ pub fn basics_html(
           <input id="biz-contact-name" class="input" name="contact_name" value="{contact_name}" placeholder="{ph_contact}">
         </div>
         <div>
-          <label for="biz-phone" class="eyebrow lbl">{lbl_phone}</label>
+          <label for="biz-phone" class="eyebrow lbl">{lbl_phone} <span class="text-warn" aria-hidden="true">*</span></label>
           <input id="biz-phone" class="input" type="tel" name="phone" value="{phone}" placeholder="{ph_phone}" required aria-required="true" x-model="phone">
         </div>
         <div>
-          <label for="biz-type" class="eyebrow lbl">{lbl_type}</label>
+          <label for="biz-type" class="eyebrow lbl">{lbl_type} <span class="text-warn" aria-hidden="true">*</span></label>
           <select id="biz-type" class="select" name="business_type" required aria-required="true" x-model="bizType">{biz_type_html}</select>
         </div>
       </div>
