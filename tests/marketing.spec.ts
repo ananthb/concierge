@@ -209,7 +209,7 @@ test('hero hint informs users the headline is clickable', async ({ page }) => {
   await expect(page.locator('#demo-chat-hint-text')).toContainText(/click to try the live demo/i);
 });
 
-test('demo-chat surfaces the rate-limit message on 429', async ({ page }) => {
+test('demo-chat shows the rate-limit message on 429', async ({ page }) => {
   await stubDemoPersonas(page);
   await page.route('**/demo/chat', (route) =>
     route.fulfill({

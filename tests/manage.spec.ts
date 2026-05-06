@@ -234,7 +234,7 @@ test.describe('billing pricing input validation', () => {
 });
 
 test.describe('dev login', () => {
-  test('/auth/login surfaces the dev-login form when bypass is active', async ({ page }) => {
+  test('/auth/login renders the dev-login form when bypass is active', async ({ page }) => {
     await page.goto('/auth/login');
     const form = page.locator("form[action='/auth/dev-login']");
     await expect(form).toBeVisible();

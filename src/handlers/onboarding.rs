@@ -304,7 +304,7 @@ pub async fn handle_wizard(
         }
 
         // Complete the wizard. Email subdomains left unpaid stay Suspended.
-        // The dashboard surfaces them with a banner so the user can subscribe
+        // The dashboard shows a banner so the user can subscribe
         // later from Email Routing.
         //
         // Refuse to finish if the tenant hasn't been through the

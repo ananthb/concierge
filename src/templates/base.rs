@@ -277,7 +277,7 @@ code {
 /* Segmented tab control. Used to flip between modes inside a single
    card (e.g. tenant grant Replies/Addresses, billing schedule
    frequency/day). The "active" segment gets paper background; the
-   rest stay flush with the card's outer surface. */
+   rest stay flush with the card's outer fill. */
 .seg-tabs { display:inline-flex; gap:0; padding:3px; background:var(--cream-2);
   border:1px solid var(--hair); border-radius:999px; }
 .seg-tabs button { background:transparent; border:none; cursor:pointer;
@@ -326,7 +326,7 @@ code {
 .chip-input .hint { color:var(--muted); font-size:11px;
   margin-top:6px; padding-left:4px; }
 
-/* JSON-validation surface for textareas. The error chip lives below
+/* JSON-validation feedback for textareas. The error chip lives below
    the textarea and shows the parser message inline. */
 .json-field { position:relative; }
 .json-field .json-error { color:var(--danger-2); font-size:12px;
@@ -567,7 +567,7 @@ dialog.manage-confirm .confirm-actions { display:flex; gap:10px;
 .chat-persona-select { padding:8px 36px 8px 12px; min-width:180px; }
 /* Multi-line input for the demo chat: proper textarea sized for a
    sentence or two, but without the mono font and tall min-height the
-   global .textarea uses for prompt-editing surfaces. */
+   global .textarea uses for prompt-editing fields. */
 .chat-input {
   flex:1 1 auto; min-height:64px; max-height:160px;
   padding:10px 12px; resize:vertical; font-family:var(--f-body);
@@ -611,7 +611,7 @@ dialog.manage-confirm .confirm-actions { display:flex; gap:10px;
   border:1px dashed var(--hair); border-radius:8px; }
 /* Handoff chip: sits above the channels-note once the demo flips into
    holding-pattern mode. Pure UX theater in the demo (no real human
-   gets paged); same shape we'll surface in the tenant dashboard once
+   gets paged); same shape we'll show in the tenant dashboard once
    the real-channel side ships. */
 .chat-handoff-chip { display:flex; align-items:center; gap:8px;
   margin:6px 0 0; padding:8px 10px; font-size:12px; line-height:1.45;

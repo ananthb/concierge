@@ -1007,7 +1007,7 @@ fn audit_action_chip(action: &str) -> String {
 }
 
 /// Render the resource column. Where the resource has a detail page
-/// in /manage we link to it; otherwise we surface the bare ID with a
+/// in /manage we link to it; otherwise we render the bare ID with a
 /// copy button so an operator can paste it into a search or a query.
 fn audit_resource_cell(base_url: &str, kind: &str, id: &str) -> String {
     if id.is_empty() {
@@ -1292,8 +1292,8 @@ fn pricing_form_table(cfg: &crate::storage::Pricing, base_url: &str) -> String {
                     // integer territory. The HTMX trigger guards on
                     // `target.checkValidity()` so blanks, zero,
                     // negatives, fractions, and overflows never
-                    // reach the wire. Invalid values still surface
-                    // via the :invalid border so the operator sees
+                    // reach the wire. Invalid values still get the
+                    // :invalid border so the operator sees
                     // immediately that the field is wrong.
                     format!(
                         r##"<td><input class="input mono w-input-sm cell-save" name="{name}" type="number" min="1" max="9999999999" step="1" required value="{value}"

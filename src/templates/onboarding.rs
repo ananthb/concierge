@@ -1785,7 +1785,7 @@ mod pricing_tests {
     fn launch_html_unverified_shows_verify_cta_and_disables_finish() {
         let l = crate::locale::Locale::default_inr();
         let html = launch_html(&[], "example.com", &l, "https://x.test", 25_000, false, 100);
-        // Verify card surfaces the Razorpay-bound POST and the verify
+        // Verify card emits the Razorpay-bound POST and the verify
         // copy + amount.
         assert!(
             html.contains("/admin/billing/verification"),

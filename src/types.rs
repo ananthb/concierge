@@ -6,7 +6,7 @@ use crate::locale::Currency;
 // Tenant Types
 // ============================================================================
 
-/// Tenant subscription tier. Pricing surfaces (`templates/management.rs`)
+/// Tenant subscription tier. Pricing pages (`templates/management.rs`)
 /// match on this enum; rate-limit/quota logic that needs a plan branch
 /// adds a method here so adding a tier doesn't fan out across files.
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -225,7 +225,7 @@ pub struct NoGateAcceptance {
 }
 
 /// Why an AI draft was diverted from the auto-send path to the approval
-/// queue. Logged on the pending_approvals row and surfaced in the admin UI.
+/// queue. Logged on the pending_approvals row and shown in the admin UI.
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum QueueReason {

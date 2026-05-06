@@ -59,7 +59,7 @@ pub fn approvals_list_html(rows: &[PendingApproval]) -> String {
 fn approvals_list_inner_html(rows: &[PendingApproval]) -> String {
     if rows.is_empty() {
         return r##"<div class="card p-22 ta-center">
-  <p class="muted m-0">Nothing waiting on you. We'll surface drafts here when an AI reply needs your review.</p>
+  <p class="muted m-0">Nothing waiting on you. Drafts will show up here when an AI reply needs your review.</p>
 </div>"##
             .to_string();
     }

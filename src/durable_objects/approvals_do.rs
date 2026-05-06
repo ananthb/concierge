@@ -2,7 +2,7 @@
 //!
 //! Each connected `/admin/approvals` browser tab opens an SSE stream that
 //! routes through this Durable Object. When `approvals::enqueue` queues a
-//! new draft, or any surface (Discord button, web button) resolves one,
+//! new draft, or any client (Discord button, web button) resolves one,
 //! the caller posts to this DO's `/broadcast` endpoint. The DO writes a
 //! single SSE event to every open writer; clients re-fetch the list.
 //!

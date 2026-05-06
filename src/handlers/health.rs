@@ -50,7 +50,7 @@ struct PublicHealth {
 
 /// Quick synchronous check for the secrets that are *required* to serve any
 /// user-facing flow at all (sessions and login). When any of these are
-/// missing the worker can't actually do anything useful: we surface a
+/// missing the worker can't actually do anything useful: we serve a
 /// maintenance page rather than letting the user reach a broken OAuth
 /// redirect or a session that can't be encrypted.
 ///

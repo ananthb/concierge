@@ -190,7 +190,7 @@ pub async fn generate_demo_businesses(
         .map_err(|e| format!("Could not parse JSON array: {e}. Raw reply: {reply}"))?;
     // Defensive rewrite: every goal_url must point at example.com so a
     // model that drifts from the prompt (or an operator who edits the
-    // instructions) can't surface a real-looking domain in the demo.
+    // instructions) can't sneak a real-looking domain into the demo.
     for biz in &mut parsed {
         biz.goal_url = sanitize_demo_goal_url(&biz.goal_url);
     }

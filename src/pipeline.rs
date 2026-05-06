@@ -128,7 +128,7 @@ async fn handle_auto_reply(
         _ => return Ok(()),
     };
 
-    // Inbound text. Cap to limit injection surface; same value feeds the
+    // Inbound text. Cap to limit injection scope; same value feeds the
     // injection scanner, the matcher, and the AI context.
     let safe_body: String = msg.body.chars().take(1000).collect();
 

@@ -71,7 +71,7 @@ fn format_from(
     if !errors.is_empty() {
         // worker::console_log! is wasm-bindgen-backed and panics on the
         // host targets used by `cargo test`. Gate it to wasm only so a
-        // missing-arg bug surfaces as a benign log in production but
+        // missing-arg bug shows up as a benign log in production but
         // doesn't abort the host test runner.
         #[cfg(target_arch = "wasm32")]
         worker::console_log!("i18n: {key} formatting issues: {errors:?}");

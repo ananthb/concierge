@@ -7,7 +7,7 @@
 //! runs the classifier, and writes the verdict back to either KV
 //! (tenant) or D1 (catalog) depending on the job's target.
 //!
-//! Failures are surfaced via `message.retry()` so the queue's DLQ
+//! Failures are reported via `message.retry()` so the queue's DLQ
 //! retry policy applies.
 
 use serde::{Deserialize, Serialize};

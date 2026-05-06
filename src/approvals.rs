@@ -16,7 +16,7 @@ use crate::types::{ConversationContext, InboundMessage, PendingApproval, QueueRe
 ///
 /// The `id` lives across three places: the KV ConversationContext key, the
 /// D1 pending_approvals.id, and the Discord button custom_id. A single
-/// token threads decisions across surfaces.
+/// token threads decisions across clients.
 pub async fn enqueue(
     env: &Env,
     msg: &InboundMessage,
@@ -87,7 +87,7 @@ pub async fn enqueue(
     notify_change(env, &msg.tenant_id).await;
 
     // Discord post is best-effort: if the bot isn't configured or the post
-    // fails, the row still lives in D1 and the web queue surfaces it.
+    // fails, the row still lives in D1 and the web queue picks it up.
     if !discord_channel_id.is_empty() {
         if let Err(e) = discord::post_ai_draft(
             env,

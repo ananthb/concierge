@@ -187,7 +187,7 @@ pub fn format_money(amount_minor: i64, locale: &crate::locale::Locale) -> String
 }
 
 /// Format a money amount given an ISO 4217 code directly. Used by
-/// surfaces that don't have a `Locale` handy (e.g. the management form's
+/// callers that don't have a `Locale` handy (e.g. the management form's
 /// preview labels).
 pub fn format_money_code(amount_minor: i64, currency_code: &str) -> String {
     use rusty_money::{iso, Money};

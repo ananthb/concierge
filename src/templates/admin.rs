@@ -83,7 +83,7 @@ pub fn auth_login_html(
 // The SDK loads `async defer`. Without this guard an early click hits
 // `FB is not defined`. We expose a Promise resolved from inside
 // `fbAsyncInit` and have the click handler await it (with a timeout
-// so a blocked / failed load surfaces an error instead of hanging).
+// so a blocked / failed load shows an error instead of hanging).
 //
 // Module scripts are deferred, so the SDK can run *before* this code
 // executes. Handle both orderings: if FB is already loaded, init now;
