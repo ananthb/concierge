@@ -456,8 +456,16 @@ pub fn admin_settings_html(
     base_url: &str,
     google_client_id: &str,
     meta_app_id: &str,
+    dev_session: bool,
     locale: &Locale,
 ) -> String {
+    // In dev-bypass mode, neither Google nor Facebook were involved —
+    // misrepresenting that as a Google link is misleading. Render a
+    // single "Demo" row so the table reflects reality.
+    if dev_session {
+        return demo_settings_html(tenant, base_url, locale);
+    }
+
     let has_google = !tenant.email.is_empty();
     let has_facebook = tenant.facebook_id.is_some();
 
@@ -577,6 +585,52 @@ pub fn admin_settings_html(
         delete_lead = t(locale, "admin-settings-delete-lead"),
         delete_confirm = html_escape(&t(locale, "admin-settings-delete-confirm")),
         delete_cta = t(locale, "admin-settings-delete-cta"),
+    );
+
+    let page = super::base::app_shell(&content, "Settings", base_url, locale);
+    base_html(&t(locale, "admin-settings-title"), &page, locale)
+}
+
+/// Settings page rendered for dev-bypass sessions: there's no real OAuth
+/// provider behind the login, so we render a single "Demo" row instead
+/// of pretending Google or Facebook are linked. Dev-only — production
+/// deployments never hit this branch.
+fn demo_settings_html(tenant: &Tenant, base_url: &str, locale: &Locale) -> String {
+    let h1 = t(locale, "admin-settings-h1");
+    let session_h2 = t(locale, "admin-settings-session-h2");
+    let signout = t(locale, "admin-settings-signout");
+    let delete_h2 = t(locale, "admin-settings-delete-h2");
+    let delete_lead = t(locale, "admin-settings-delete-lead");
+    let delete_confirm = html_escape(&t(locale, "admin-settings-delete-confirm"));
+    let delete_cta = t(locale, "admin-settings-delete-cta");
+
+    let content = format!(
+        r##"<div class="page-pad">
+        <h1 class="display-sm m-0 mb-16">{h1}</h1>
+        <div class="stack gap-16">
+        <div class="card p-22">
+            <h2>Sign-in</h2>
+            <p class="muted mb-16">Demo sessions are local-only — no real OAuth provider is linked.</p>
+            <div class="table-wrap"><table>
+                <thead><tr><th scope="col">Provider</th><th scope="col">Account</th><th></th></tr></thead>
+                <tbody><tr><td><span class="chip">Demo</span></td><td>{email}</td><td><span class="muted">dev bypass</span></td></tr></tbody>
+            </table></div>
+        </div>
+        <div class="card p-22">
+            <h2>{session_h2}</h2>
+            <a href="{base_url}/auth/logout" class="btn ghost">{signout}</a>
+        </div>
+        <div class="card card-warn p-22">
+            <h2 class="text-warn">{delete_h2}</h2>
+            <p class="muted mb-16">{delete_lead}</p>
+            <button class="btn danger solid"
+                    hx-delete="{base_url}/dashboard/delete-account"
+                    hx-confirm="{delete_confirm}"
+                    >{delete_cta}</button>
+        </div>
+        </div>
+        </div>"##,
+        email = html_escape(&tenant.email),
     );
 
     let page = super::base::app_shell(&content, "Settings", base_url, locale);

@@ -52,6 +52,7 @@ pub async fn handle_admin(req: Request, env: Env, path: &str, method: Method) ->
             &base_url,
             &google_client_id,
             &meta_app_id,
+            crate::dev_bypass::active(&env),
             &locale,
         ));
     }
