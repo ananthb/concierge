@@ -160,18 +160,14 @@ pub const CSP_NONCE_PLACEHOLDER: &str = "__CSP_NONCE__";
 ///   on production); Razorpay's verify call goes to `api.razorpay.com`.
 /// - **frame-src**: FB login popup + Razorpay checkout iframe.
 ///
-/// `is_dev_http` is set when the response is being served over plain
-/// HTTP (only happens locally — `wrangler dev` is the only http origin
-/// the worker ever sees). When true, `form-action` and `img-src` are
-/// loosened to also accept `http://localhost:*` / `http://127.0.0.1:*`
-/// and `blob:` so the dev-login form and any browser-extension blob
-/// URLs don't trip the policy. Production responses stay tight.
-fn add_security_headers(resp: &mut Response, nonce: &str, is_dev_http: bool) -> Result<()> {
+/// `is_dev` mirrors `dev_bypass::active(env)`. When true, form-action
+/// allows localhost + 127.0.0.1 and img-src allows `blob:`.
+fn add_security_headers(resp: &mut Response, nonce: &str, is_dev: bool) -> Result<()> {
     let headers = resp.headers_mut();
     headers.set("X-Frame-Options", "DENY")?;
     headers.set("X-Content-Type-Options", "nosniff")?;
     headers.set("Referrer-Policy", "strict-origin-when-cross-origin")?;
-    let (img_extra, form_action_extra) = if is_dev_http {
+    let (img_extra, form_action_extra) = if is_dev {
         (
             " blob:",
             " http://localhost:* http://127.0.0.1:* https://localhost:* https://127.0.0.1:*",
@@ -212,14 +208,9 @@ fn serve_png(body: &[u8]) -> Result<Response> {
 #[event(fetch)]
 async fn fetch(req: Request, env: Env, _ctx: Context) -> Result<Response> {
     console_error_panic_hook::set_once();
-    // Capture the request scheme before consuming `req` — the CSP
-    // builder needs it so dev-mode (http) responses get a relaxed
-    // form-action / img-src policy.
-    let is_dev_http = req
-        .url()
-        .ok()
-        .map(|u| u.scheme() == "http")
-        .unwrap_or(false);
+    // Captured before `env` is consumed so add_security_headers can
+    // pick the dev vs. prod CSP profile.
+    let is_dev = dev_bypass::active(&env);
     let mut resp = handle_request(req, env).await?;
     let is_html = resp
         .headers()
@@ -244,7 +235,7 @@ async fn fetch(req: Request, env: Env, _ctx: Context) -> Result<Response> {
     let mut new_resp = Response::ok(body)?
         .with_status(status)
         .with_headers(headers);
-    add_security_headers(&mut new_resp, &nonce, is_dev_http)?;
+    add_security_headers(&mut new_resp, &nonce, is_dev)?;
     Ok(new_resp)
 }
 

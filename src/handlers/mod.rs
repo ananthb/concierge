@@ -34,14 +34,14 @@ pub use whatsapp_signup::handle_whatsapp_signup;
 
 use worker::Request;
 
-/// Extract base URL from request
+/// Extract base URL (scheme + host + port) from a request.
 pub(crate) fn get_base_url(req: &Request) -> String {
     match req.url() {
-        Ok(url) => format!(
-            "{}://{}",
-            url.scheme(),
-            url.host_str().unwrap_or("localhost")
-        ),
+        Ok(url) => match (url.host_str(), url.port()) {
+            (Some(host), Some(port)) => format!("{}://{}:{}", url.scheme(), host, port),
+            (Some(host), None) => format!("{}://{}", url.scheme(), host),
+            (None, _) => format!("{}://localhost", url.scheme()),
+        },
         Err(_) => String::from("https://localhost"),
     }
 }

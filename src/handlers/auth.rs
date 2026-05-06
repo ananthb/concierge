@@ -456,19 +456,16 @@ pub(super) async fn create_session_and_redirect(
     save_session(kv, &session_token, tenant_id, SESSION_TTL_SECONDS).await?;
     save_csrf_token(kv, tenant_id, &csrf_token, SESSION_TTL_SECONDS).await?;
 
-    // The `Secure` cookie attribute pins cookies to HTTPS. Production
-    // is always HTTPS, so we want it there. Local `wrangler dev`
-    // serves over plain HTTP — and while modern Chrome/Firefox treat
-    // localhost as a secure origin and accept Secure cookies anyway,
-    // older Chromium-based browsers and webview shells silently drop
-    // them, leaving the user stuck in a redirect loop after sign-in.
-    // Detect the request scheme and drop the attribute on http.
-    let scheme = req
+    // Drop the Secure cookie attribute on http origins so plain
+    // wrangler dev still authenticates on browsers that don't treat
+    // localhost as a secure origin.
+    let secure_attr = req
         .url()
         .ok()
-        .map(|u| u.scheme().to_string())
-        .unwrap_or_else(|| "https".to_string());
-    let secure_attr = if scheme == "https" { "; Secure" } else { "" };
+        .map(|u| u.scheme() == "https")
+        .unwrap_or(true)
+        .then_some("; Secure")
+        .unwrap_or("");
 
     let headers = Headers::new();
     headers.set("Location", "/admin")?;
