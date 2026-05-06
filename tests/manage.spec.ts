@@ -242,7 +242,7 @@ test.describe('dev login', () => {
     await expect(form.locator("button[type='submit']")).toBeVisible();
   });
 
-  test('POST /auth/dev-login mints a session and redirects to /admin', async ({ request }) => {
+  test('POST /auth/dev-login mints a session and redirects to /dashboard', async ({ request }) => {
     // Don't auto-follow the redirect — we want to inspect the
     // 302 + Set-Cookie headers directly.
     const r = await request.post('/auth/dev-login', {
@@ -251,7 +251,7 @@ test.describe('dev login', () => {
       maxRedirects: 0,
     });
     expect(r.status()).toBe(302);
-    expect(r.headers()['location']).toBe('/admin');
+    expect(r.headers()['location']).toBe('/dashboard');
     // Both cookies must be set: HTTP-only session, JS-readable csrf.
     const setCookie = r.headers()['set-cookie'] ?? '';
     expect(setCookie).toMatch(/session=[^;]+/);

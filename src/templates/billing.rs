@@ -88,7 +88,7 @@ pub fn billing_overview_with_addresses_html(
         locale,
         base_url,
         SliderMode::Buy {
-            return_to: "/admin/billing",
+            return_to: "/dashboard/billing",
         },
         milli_price,
         min_credits,
@@ -104,7 +104,7 @@ pub fn billing_overview_with_addresses_html(
                     <div class="stat-n serif">{addresses_used} / {address_quota}</div>
                     <div class="mono muted fs-11">addresses used / quota</div>
                 </div>
-                <form hx-post="{base_url}/admin/billing/address" hx-target="body" hx-swap="innerHTML">
+                <form hx-post="{base_url}/dashboard/billing/address" hx-target="body" hx-swap="innerHTML">
                     <button class="btn primary" type="submit">Add a pack ({pack_size} for {address_price_label}/mo)</button>
                 </form>
             </div>
@@ -118,7 +118,7 @@ pub fn billing_overview_with_addresses_html(
 
     let content = format!(
         r##"<div class="page-pad">
-  <p><a href="{base_url}/admin">&larr; Back to Dashboard</a></p>
+  <p><a href="{base_url}/dashboard">&larr; Back to Dashboard</a></p>
   <div class="eyebrow">Billing</div>
   <h2 class="display-sm m-0 mt-4 mb-16">AI reply credits</h2>
   {address_card}
@@ -200,7 +200,7 @@ payBtn.addEventListener('click', () => {{
     description: '{credits} AI reply credits',
     notes: {{ tenant_id: '{tenant_id}', credits: '{credits}' }},
     handler: async (response) => {{
-      await fetch('{base_url}/admin/billing/verify', {{
+      await fetch('{base_url}/dashboard/billing/verify', {{
         method: 'POST',
         headers: {{ 'Content-Type': 'application/json' }},
         body: JSON.stringify({{
@@ -274,7 +274,7 @@ payBtn.addEventListener('click', () => {{
     description: 'Sign-up verification (refunded)',
     notes: {{ tenant_id: '{tenant_id}', kind: 'verification' }},
     handler: async (response) => {{
-      await fetch('{base_url}/admin/billing/verify', {{
+      await fetch('{base_url}/dashboard/billing/verify', {{
         method: 'POST',
         headers: {{ 'Content-Type': 'application/json' }},
         body: JSON.stringify({{
@@ -326,7 +326,7 @@ pub fn address_checkout_html(
     <button id="pay-btn" class="btn primary lg w-full"><span>Pay with Razorpay</span><span class="spinner htmx-indicator" aria-hidden="true"></span></button>
     <p class="mono muted fs-11 mt-12">Secure payment via Razorpay</p>
   </div>
-  <a href="{base_url}/admin/email" class="btn ghost sm mt-16">&larr; Cancel</a>
+  <a href="{base_url}/dashboard/email" class="btn ghost sm mt-16">&larr; Cancel</a>
 </div>
 <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
 <script type="module" nonce="__CSP_NONCE__">
@@ -343,7 +343,7 @@ payBtn.addEventListener('click', () => {{
     description: 'Extra email address',
     notes: {{ tenant_id: '{tenant_id}', kind: 'address', extras: '1' }},
     handler: async (response) => {{
-      await fetch('{base_url}/admin/billing/verify', {{
+      await fetch('{base_url}/dashboard/billing/verify', {{
         method: 'POST',
         headers: {{ 'Content-Type': 'application/json' }},
         body: JSON.stringify({{
@@ -352,7 +352,7 @@ payBtn.addEventListener('click', () => {{
           razorpay_signature: response.razorpay_signature,
         }}),
       }});
-      window.location.href = '{base_url}/admin/email';
+      window.location.href = '{base_url}/dashboard/email';
     }},
     modal: {{ ondismiss: () => {{ payBtn.classList.remove('is-loading'); payBtn.disabled = false; }} }},
     theme: {{ color: '#E86A2C' }},

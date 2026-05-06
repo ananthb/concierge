@@ -105,7 +105,7 @@ pub async fn handle_instagram(
                 let headers = Headers::new();
                 headers.set(
                     "Location",
-                    &format!("{}/admin/instagram?error=no_pages", base_url),
+                    &format!("{}/dashboard/instagram?error=no_pages", base_url),
                 )?;
                 return Ok(Response::empty()?.with_status(302).with_headers(headers));
             }
@@ -132,7 +132,7 @@ pub async fn handle_instagram(
                     let headers = Headers::new();
                     headers.set(
                         "Location",
-                        &format!("{}/admin/instagram?error=no_ig_account", base_url),
+                        &format!("{}/dashboard/instagram?error=no_ig_account", base_url),
                     )?;
                     return Ok(Response::empty()?.with_status(302).with_headers(headers));
                 }
@@ -147,7 +147,7 @@ pub async fn handle_instagram(
                 let headers = Headers::new();
                 headers.set(
                     "Location",
-                    &format!("{}/admin/instagram?error=already_connected", base_url),
+                    &format!("{}/dashboard/instagram?error=already_connected", base_url),
                 )?;
                 return Ok(Response::empty()?.with_status(302).with_headers(headers));
             }
@@ -181,8 +181,8 @@ pub async fn handle_instagram(
 
             // If the user is mid-wizard, send them back to the channels step.
             let dest = match get_onboarding(&kv, &account.tenant_id).await {
-                Ok(s) if !s.completed => format!("{}/admin/wizard/channels", base_url),
-                _ => format!("{}/admin/instagram?success=connected", base_url),
+                Ok(s) if !s.completed => format!("{}/dashboard/wizard/channels", base_url),
+                _ => format!("{}/dashboard/instagram?success=connected", base_url),
             };
             let headers = Headers::new();
             headers.set("Location", &dest)?;

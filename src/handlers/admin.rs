@@ -30,7 +30,7 @@ pub async fn handle_admin(req: Request, env: Env, path: &str, method: Method) ->
         }
     }
 
-    if path == "/admin/settings" && method == Method::Get {
+    if path == "/dashboard/settings" && method == Method::Get {
         let db = env.d1("DB")?;
         let tenant = get_tenant(&db, &tenant_id)
             .await?
@@ -65,7 +65,7 @@ pub async fn handle_admin(req: Request, env: Env, path: &str, method: Method) ->
         ));
     }
 
-    if path == "/admin/settings/currency" && method == Method::Put {
+    if path == "/dashboard/settings/currency" && method == Method::Put {
         let db = env.d1("DB")?;
         let mut req = req;
         let form: serde_json::Value = req.json().await?;
@@ -104,11 +104,11 @@ pub async fn handle_admin(req: Request, env: Env, path: &str, method: Method) ->
         return Response::from_html("<div class=\"success\">Settings updated.</div>".to_string());
     }
 
-    if path == "/admin/settings/conversation" && method == Method::Put {
+    if path == "/dashboard/settings/conversation" && method == Method::Put {
         return save_conversation_settings(req, &env, &kv, &tenant_id, &locale).await;
     }
 
-    if path == "/admin/delete-account" && method == Method::Delete {
+    if path == "/dashboard/delete-account" && method == Method::Delete {
         let db = env.d1("DB")?;
         delete_tenant_data(&kv, &db, &tenant_id).await?;
 
@@ -122,58 +122,58 @@ pub async fn handle_admin(req: Request, env: Env, path: &str, method: Method) ->
         return Ok(Response::empty()?.with_status(302).with_headers(headers));
     }
 
-    if path.starts_with("/admin/billing") {
+    if path.starts_with("/dashboard/billing") {
         return super::admin_billing::handle_billing_admin(req, env, path, &base_url, &tenant_id)
             .await;
     }
 
-    if path.starts_with("/admin/whatsapp") {
+    if path.starts_with("/dashboard/whatsapp") {
         return super::admin_whatsapp::handle_whatsapp_admin(req, env, path, &base_url, &tenant_id)
             .await;
     }
 
-    if path.starts_with("/admin/lead-forms") {
+    if path.starts_with("/dashboard/lead-forms") {
         return super::admin_lead_forms::handle_lead_forms_admin(
             req, env, path, &base_url, &tenant_id,
         )
         .await;
     }
 
-    if path.starts_with("/admin/instagram") {
+    if path.starts_with("/dashboard/instagram") {
         return super::admin_instagram::handle_instagram_admin(
             req, env, path, &base_url, &tenant_id,
         )
         .await;
     }
 
-    if path.starts_with("/admin/email") {
+    if path.starts_with("/dashboard/email") {
         return super::admin_email::handle_email_admin(req, env, path, &base_url, &tenant_id).await;
     }
 
-    if path.starts_with("/admin/discord") {
+    if path.starts_with("/dashboard/discord") {
         return super::discord_oauth::handle_discord_admin(req, env, path, &base_url, &tenant_id)
             .await;
     }
 
-    if path.starts_with("/admin/wizard") {
+    if path.starts_with("/dashboard/wizard") {
         return super::onboarding::handle_wizard(req, env, path, &base_url, &tenant_id).await;
     }
 
-    if path.starts_with("/admin/persona") {
+    if path.starts_with("/dashboard/persona") {
         return super::admin_persona::handle_persona_admin(req, env, path, &base_url, &tenant_id)
             .await;
     }
 
-    if path.starts_with("/admin/rules/") {
+    if path.starts_with("/dashboard/rules/") {
         return super::admin_rules::handle_rules(req, env, path, &base_url, &tenant_id).await;
     }
 
-    if path == "/admin/approvals" || path.starts_with("/admin/approvals/") {
+    if path == "/dashboard/approvals" || path.starts_with("/dashboard/approvals/") {
         return super::admin_approvals::handle_approvals(req, env, path, &base_url, &tenant_id)
             .await;
     }
 
-    if path == "/admin/risk-gate-banner/dismiss" && method == Method::Post {
+    if path == "/dashboard/risk-gate-banner/dismiss" && method == Method::Post {
         let mut state = crate::storage::get_onboarding(&kv, &tenant_id).await?;
         if !state.risk_gate_banner_dismissed {
             state.risk_gate_banner_dismissed = true;
@@ -183,14 +183,14 @@ pub async fn handle_admin(req: Request, env: Env, path: &str, method: Method) ->
         return Response::ok("");
     }
 
-    if path == "/admin" || path == "/admin/" {
+    if path == "/dashboard" || path == "/dashboard/" {
         let kv = env.kv("KV")?;
 
         // Redirect to onboarding if not completed
         let onboarding = crate::storage::get_onboarding(&kv, &tenant_id).await?;
         if !onboarding.completed {
             let headers = Headers::new();
-            headers.set("Location", &format!("{}/admin/wizard", base_url))?;
+            headers.set("Location", &format!("{}/dashboard/wizard", base_url))?;
             return Ok(Response::empty()?.with_status(302).with_headers(headers));
         }
 
@@ -219,7 +219,7 @@ pub async fn handle_admin(req: Request, env: Env, path: &str, method: Method) ->
     Response::error("Not Found", 404)
 }
 
-/// PUT /admin/settings/conversation
+/// PUT /dashboard/settings/conversation
 ///
 /// Updates the tenant's `ConversationConfig` on `OnboardingState`.
 /// Each of the three fields is optional: a missing or empty value

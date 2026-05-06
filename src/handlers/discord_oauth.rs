@@ -2,16 +2,16 @@
 //!
 //! Flow:
 //!   1. User clicks Connect on wizard Channels step or Settings.
-//!   2. GET /admin/discord/install generates a one-shot state token in KV
+//!   2. GET /dashboard/discord/install generates a one-shot state token in KV
 //!      and 302s to Discord's `oauth2/authorize` with `scope=bot
 //!      applications.commands` and a permissions bitfield.
 //!   3. Discord redirects to /auth/discord/callback with ?code, ?state,
 //!      ?guild_id. We verify state, record `guild_id -> tenant_id` via
-//!      `save_discord_config`, then 302 to /admin/discord for the channel
+//!      `save_discord_config`, then 302 to /dashboard/discord for the channel
 //!      picker.
-//!   4. Picker is a small form on /admin/discord. PUT /admin/discord/config
+//!   4. Picker is a small form on /dashboard/discord. PUT /dashboard/discord/config
 //!      saves approval/digest/relay channel IDs back to `DiscordConfig`.
-//!   5. DELETE /admin/discord uninstalls: removes KV entries and asks the
+//!   5. DELETE /dashboard/discord uninstalls: removes KV entries and asks the
 //!      bot to leave the guild.
 
 use worker::*;
@@ -25,7 +25,7 @@ const DISCORD_AUTHORIZE_URL: &str = "https://discord.com/api/oauth2/authorize";
 const BOT_PERMISSIONS: u64 = 76928;
 const OAUTH_STATE_TTL: u64 = 600;
 
-/// Handle /admin/discord/*: tenant-scoped Discord management.
+/// Handle /dashboard/discord/*: tenant-scoped Discord management.
 pub async fn handle_discord_admin(
     mut req: Request,
     env: Env,
@@ -35,7 +35,7 @@ pub async fn handle_discord_admin(
 ) -> Result<Response> {
     let kv = env.kv("KV")?;
     let sub = path
-        .strip_prefix("/admin/discord")
+        .strip_prefix("/dashboard/discord")
         .unwrap_or("")
         .trim_start_matches('/');
     let method = req.method();
@@ -134,10 +134,10 @@ pub async fn handle_discord_callback(req: Request, env: Env) -> Result<Response>
 
     // Land on the manage/picker page so the user can pick channels right away.
     let dest = if from.is_empty() {
-        format!("{base_url}/admin/discord")
+        format!("{base_url}/dashboard/discord")
     } else {
         format!(
-            "{base_url}/admin/discord?from={}",
+            "{base_url}/dashboard/discord?from={}",
             urlencoding::encode(&from)
         )
     };
@@ -312,6 +312,6 @@ async fn uninstall(
     }
 
     let headers = Headers::new();
-    headers.set("HX-Redirect", &format!("{base_url}/admin/discord"))?;
+    headers.set("HX-Redirect", &format!("{base_url}/dashboard/discord"))?;
     Ok(Response::empty()?.with_status(200).with_headers(headers))
 }

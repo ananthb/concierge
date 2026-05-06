@@ -1,6 +1,6 @@
 //! Per-tenant Server-Sent Events fan-out for the approvals page.
 //!
-//! Each connected `/admin/approvals` browser tab opens an SSE stream that
+//! Each connected `/dashboard/approvals` browser tab opens an SSE stream that
 //! routes through this Durable Object. When `approvals::enqueue` queues a
 //! new draft, or any client (Discord button, web button) resolves one,
 //! the caller posts to this DO's `/broadcast` endpoint. The DO writes a
@@ -13,7 +13,7 @@
 //!   `EventSource` reconnects automatically and the new DO instance starts
 //!   with an empty writer set.
 //! - Event payloads are tiny pings ("data: {}\n\n"). The list HTML lives
-//!   in the worker's `/admin/approvals/list` endpoint. The browser fires
+//!   in the worker's `/dashboard/approvals/list` endpoint. The browser fires
 //!   `hx-trigger="sse:approval-changed"` to refetch it. Keeping template
 //!   logic out of the DO means the DO knows nothing about what changed,
 //!   only that *something* changed for this tenant.

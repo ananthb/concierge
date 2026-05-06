@@ -206,7 +206,7 @@
 
       <h2 id="persona">Persona &amp; safety check</h2>
       <ol>
-        <li>The tenant fills in the persona builder at <code>/admin/persona</code>: a voice archetype (Friendly / Professional / Playful / Formal), business name and type, a <em>goal</em> (what to drive customers toward, free text + optional URL), catch&#8209;phrases, off&#8209;topic boundaries, and <em>handoff conditions</em> (what to escalate to a human). Alternatively the tenant copies a curated archetype from the platform&rsquo;s D1 catalog (<code>/manage/personas</code>) or writes a raw custom prompt.</li>
+        <li>The tenant fills in the persona builder at <code>/dashboard/persona</code>: a voice archetype (Friendly / Professional / Playful / Formal), business name and type, a <em>goal</em> (what to drive customers toward, free text + optional URL), catch&#8209;phrases, off&#8209;topic boundaries, and <em>handoff conditions</em> (what to escalate to a human). Alternatively the tenant copies a curated archetype from the platform&rsquo;s D1 catalog (<code>/manage/personas</code>) or writes a raw custom prompt.</li>
         <li>On save, the rendered active prompt is hashed; if the hash differs from the last&#8209;vetted hash, status flips to <em>Pending</em> and a <code>SafetyJob</code> is enqueued onto Cloudflare Queue <code>concierge-safety</code>.</li>
         <li>The queue consumer reads the job, re&#8209;checks the hash (drops stale jobs), and runs the safety classifier with Calculon Tech&rsquo;s content policy.</li>
         <li>The result lands back in KV as <em>Approved</em> or <em>Rejected</em> with a vague user&#8209;facing reason.</li>
@@ -225,7 +225,7 @@
         <li><strong>Tenant page.</strong> The tenant is paged once per handoff via their configured approval&#8209;notification channels &mdash; Discord embed (via the bot) and/or immediate email through <code>send_outbound</code>. This is not the digest cron: the page goes out the moment the handoff fires.</li>
       </ol>
       <p>
-        Operators tune all three knobs (<code>idle_gap_mins</code>, <code>handoff_cooldown_mins</code>, <code>max_history_messages</code>) per&#8209;tenant from the Conversation Timing card on <code>/admin/settings</code>. The form enforces sensible bounds (5&ndash;1440 min, 1&ndash;200 turns) and a cross&#8209;field invariant: idle gap must be longer than handoff cooldown, otherwise an active handoff could be wiped before its cooldown ended. Empty fields fall back to the in&#8209;code defaults.
+        Operators tune all three knobs (<code>idle_gap_mins</code>, <code>handoff_cooldown_mins</code>, <code>max_history_messages</code>) per&#8209;tenant from the Conversation Timing card on <code>/dashboard/settings</code>. The form enforces sensible bounds (5&ndash;1440 min, 1&ndash;200 turns) and a cross&#8209;field invariant: idle gap must be longer than handoff cooldown, otherwise an active handoff could be wiped before its cooldown ended. Empty fields fall back to the in&#8209;code defaults.
       </p>
 
       <h2 id="demo">Live demo chat</h2>

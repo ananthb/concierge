@@ -6,7 +6,7 @@ use crate::helpers::*;
 use crate::storage::*;
 use crate::templates::*;
 
-/// Handle /admin/instagram routes
+/// Handle /dashboard/instagram routes
 pub async fn handle_instagram_admin(
     mut req: Request,
     env: Env,
@@ -18,7 +18,7 @@ pub async fn handle_instagram_admin(
     let locale = crate::locale::Locale::from_request(&req);
 
     let path_parts: Vec<&str> = path
-        .strip_prefix("/admin/instagram")
+        .strip_prefix("/dashboard/instagram")
         .unwrap_or("")
         .trim_start_matches('/')
         .split('/')

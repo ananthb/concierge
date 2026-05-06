@@ -11,10 +11,10 @@ use super::HASH;
 /// Render a "Connect Discord" CTA for tenants that have no `DiscordConfig`.
 pub fn install_cta_html(from: &str, base_url: &str, locale: &Locale) -> String {
     let install_href = if from.is_empty() {
-        format!("{base_url}/admin/discord/install")
+        format!("{base_url}/dashboard/discord/install")
     } else {
         format!(
-            "{base_url}/admin/discord/install?from={}",
+            "{base_url}/dashboard/discord/install?from={}",
             urlencoding::encode(from)
         )
     };
@@ -115,12 +115,12 @@ pub fn manage_html(
       <p class="muted m-0 mt-4 fs-13">{server_prefix} <strong>{guild}</strong></p>
     </div>
     <div class="row gap-8">
-      <a href="{base_url}/admin/discord/install?from={from_enc}" class="btn ghost sm">{reinstall}</a>
-      <button class="btn ghost sm text-warn" hx-delete="{base_url}/admin/discord" hx-confirm="{uninstall_confirm}">{uninstall}</button>
+      <a href="{base_url}/dashboard/discord/install?from={from_enc}" class="btn ghost sm">{reinstall}</a>
+      <button class="btn ghost sm text-warn" hx-delete="{base_url}/dashboard/discord" hx-confirm="{uninstall_confirm}">{uninstall}</button>
     </div>
   </div>
 
-  <form class="card p-22" hx-put="{base_url}/admin/discord/config" hx-ext="json-enc" hx-target="{hash}dc-toast" hx-swap="innerHTML"
+  <form class="card p-22" hx-put="{base_url}/dashboard/discord/config" hx-ext="json-enc" hx-target="{hash}dc-toast" hx-swap="innerHTML"
         x-data="{{ ar_enabled: {ar_enabled}, ar_mode: '{ar_mode}', wait_seconds: {wait}, mentions: {inbound_mentions}, channels: {inbound_channels_json} }}">
     <h3 class="m-0 mb-12">{out_h3}</h3>
     <p class="muted m-0 mb-16 fs-14">{out_lead}</p>
@@ -146,7 +146,7 @@ pub fn manage_html(
     </div>
 
     <h3 class="m-0 mt-24 mb-12">{ar_h3}</h3>
-    <p class="muted fs-13 mb-12">{ar_rules_prefix} <a href="{base_url}/admin/rules/discord/_">{ar_rules_link}</a>.</p>
+    <p class="muted fs-13 mb-12">{ar_rules_prefix} <a href="{base_url}/dashboard/rules/discord/_">{ar_rules_link}</a>.</p>
 
     <div class="form-group">
       <label><input type="checkbox" name="auto_reply_enabled" value="true" x-model="ar_enabled"> {ar_enabled_lbl}</label>
@@ -242,9 +242,9 @@ pub fn manage_html(
 
 fn back_href_for(from: &str, base_url: &str) -> String {
     match from {
-        "wizard_channels" => format!("{base_url}/admin/wizard/channels"),
-        "wizard_heads_up" => format!("{base_url}/admin/wizard/notifications"),
-        _ => format!("{base_url}/admin/settings"),
+        "wizard_channels" => format!("{base_url}/dashboard/wizard/channels"),
+        "wizard_heads_up" => format!("{base_url}/dashboard/wizard/notifications"),
+        _ => format!("{base_url}/dashboard/settings"),
     }
 }
 

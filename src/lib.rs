@@ -277,7 +277,7 @@ async fn handle_request(req: Request, env: Env) -> Result<Response> {
     match path {
         "/robots.txt" => {
             let body = format!(
-                "User-agent: *\nAllow: /\nAllow: /features\nAllow: /pricing\nAllow: /terms\nAllow: /privacy\nDisallow: /admin\nDisallow: /manage\nDisallow: /auth\nDisallow: /webhook\nDisallow: /discord\nDisallow: /instagram\nDisallow: /whatsapp\n\nSitemap: {req_base}/sitemap.txt\n"
+                "User-agent: *\nAllow: /\nAllow: /features\nAllow: /pricing\nAllow: /terms\nAllow: /privacy\nDisallow: /dashboard\nDisallow: /manage\nDisallow: /auth\nDisallow: /webhook\nDisallow: /discord\nDisallow: /instagram\nDisallow: /whatsapp\n\nSitemap: {req_base}/sitemap.txt\n"
             );
             return serve_text(&body, "text/plain");
         }
@@ -307,7 +307,7 @@ async fn handle_request(req: Request, env: Env) -> Result<Response> {
     // /manage/* (Cloudflare Access protected: how the operator recovers)
     // are unaffected.
     let needs_essentials = path.starts_with("/auth")
-        || path.starts_with("/admin")
+        || path.starts_with("/dashboard")
         || path.starts_with("/whatsapp/signup")
         || path.starts_with("/instagram/");
     let request_locale = locale::Locale::from_request(&req);
@@ -390,7 +390,7 @@ async fn handle_request(req: Request, env: Env) -> Result<Response> {
     }
 
     // Admin routes (session-protected)
-    if path.starts_with("/admin") {
+    if path.starts_with("/dashboard") {
         return handlers::handle_admin(req, env, path, method).await;
     }
 
@@ -438,7 +438,7 @@ async fn handle_request(req: Request, env: Env) -> Result<Response> {
         let kv = env.kv("KV")?;
         if handlers::auth::resolve_tenant_id(&req, &kv).await.is_some() {
             let headers = Headers::new();
-            headers.set("Location", "/admin")?;
+            headers.set("Location", "/dashboard")?;
             return Ok(Response::empty()?.with_status(302).with_headers(headers));
         }
         let locale = locale::Locale::from_request(&req);

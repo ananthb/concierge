@@ -275,7 +275,7 @@
 
       <h2 id="locale">Locale &amp; supported languages</h2>
       <p>
-        Every tenant has a BCP&#8209;47 locale tag (<code>Tenant.locale</code>) plus an independent currency override. Currently shipped: <code>en-IN</code> (default; Indian&#8209;style number grouping, INR currency) and <code>en-US</code> (Western grouping, USD). Locale is set at signup from the request&rsquo;s <code>Accept-Language</code> header, falling back to <code>cf-ipcountry</code>, then to <code>en-IN</code>. Admins can change both locale and currency independently from <code>/admin/settings</code>.
+        Every tenant has a BCP&#8209;47 locale tag (<code>Tenant.locale</code>) plus an independent currency override. Currently shipped: <code>en-IN</code> (default; Indian&#8209;style number grouping, INR currency) and <code>en-US</code> (Western grouping, USD). Locale is set at signup from the request&rsquo;s <code>Accept-Language</code> header, falling back to <code>cf-ipcountry</code>, then to <code>en-IN</code>. Admins can change both locale and currency independently from <code>/dashboard/settings</code>.
       </p>
       <p>
         Adding a new locale is a drop&#8209;in change: place a translated <code>messages.ftl</code> at <code>assets/locales/{tag}/</code>, register the tag in <code>src/i18n.rs::Translator::new</code> and <code>src/locale.rs::Locale::from_request</code>, then rebuild. CLDR data for number / currency formatting ships automatically via icu4x&rsquo;s <code>compiled_data</code> feature. AI&#8209;generated reply content stays English regardless of the UI locale.
@@ -283,7 +283,7 @@
 
       <h2 id="conversation">Conversation timing</h2>
       <p>
-        Three per&#8209;tenant knobs control how the worker treats a customer thread. They live on <code>OnboardingState.conversation</code> (a <code>ConversationConfig</code>) in KV at <code>onboarding:{tenant}</code>; each is <code>Option&lt;u32&gt;</code> and falls back to a constant in <code>src/prompt.rs</code> when unset. Tenants edit them from the <em>Conversation Timing</em> card on <code>/admin/settings</code>; <code>PUT /admin/settings/conversation</code> validates bounds and the cross&#8209;field invariant before persisting.
+        Three per&#8209;tenant knobs control how the worker treats a customer thread. They live on <code>OnboardingState.conversation</code> (a <code>ConversationConfig</code>) in KV at <code>onboarding:{tenant}</code>; each is <code>Option&lt;u32&gt;</code> and falls back to a constant in <code>src/prompt.rs</code> when unset. Tenants edit them from the <em>Conversation Timing</em> card on <code>/dashboard/settings</code>; <code>PUT /dashboard/settings/conversation</code> validates bounds and the cross&#8209;field invariant before persisting.
       </p>
       <div class="table-wrap">
         <div class="table-wrap__head">

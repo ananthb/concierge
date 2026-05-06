@@ -1,4 +1,4 @@
-//! `/admin/persona`: read + edit the tenant's AI persona.
+//! `/dashboard/persona`: read + edit the tenant's AI persona.
 //!
 //! The persona has three modes (PersonaSource): Preset / Builder / Custom.
 //! Each save recomputes `active_prompt_hash`; if it differs from the
@@ -33,14 +33,14 @@ pub async fn handle_persona_admin(
     let archetypes = crate::storage::list_archetypes(&db, true).await?;
 
     match (method, path) {
-        (Method::Get, "/admin/persona") => Response::from_html(persona_admin_html(
+        (Method::Get, "/dashboard/persona") => Response::from_html(persona_admin_html(
             &state.persona,
             &archetypes,
             base_url,
             &locale,
         )),
 
-        (Method::Post, "/admin/persona") => {
+        (Method::Post, "/dashboard/persona") => {
             let form: serde_json::Value = req.json().await?;
 
             let mode = form
@@ -156,14 +156,14 @@ pub async fn handle_persona_admin(
             }
 
             let headers = Headers::new();
-            headers.set("HX-Redirect", &format!("{base_url}/admin/persona"))?;
+            headers.set("HX-Redirect", &format!("{base_url}/dashboard/persona"))?;
             Ok(Response::empty()?.with_status(200).with_headers(headers))
         }
 
         // Live preview endpoint: takes Builder field values, returns the
         // generated prompt. Lets the UI show a current preview without
         // committing to a save.
-        (Method::Post, "/admin/persona/preview") => {
+        (Method::Post, "/dashboard/persona/preview") => {
             let form: serde_json::Value = req.json().await?;
             let s = |k: &str| {
                 form.get(k)

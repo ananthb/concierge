@@ -1,20 +1,20 @@
-//! Unified per-channel reply-rules CRUD: `/admin/rules/{channel}/{id}/...`.
+//! Unified per-channel reply-rules CRUD: `/dashboard/rules/{channel}/{id}/...`.
 //!
 //! All four conversational channels (WhatsApp, Instagram, Email, Discord)
 //! store a `ReplyConfig` with the same shape, so the CRUD logic lives once
 //! here and dispatches to the right loader/saver via `ChannelRef`.
 //!
 //! Routes:
-//!   GET    /admin/rules/{ch}/{id}                  list page
-//!   GET    /admin/rules/{ch}/{id}/new              new-rule form
-//!   POST   /admin/rules/{ch}/{id}                  create rule
-//!   GET    /admin/rules/{ch}/{id}/{rule_id}        edit-rule form
-//!   PUT    /admin/rules/{ch}/{id}/{rule_id}        update rule
-//!   DELETE /admin/rules/{ch}/{id}/{rule_id}        delete rule
-//!   POST   /admin/rules/{ch}/{id}/{rule_id}/move/up
-//!   POST   /admin/rules/{ch}/{id}/{rule_id}/move/down
-//!   GET    /admin/rules/{ch}/{id}/default          edit-default form
-//!   PUT    /admin/rules/{ch}/{id}/default          update default rule
+//!   GET    /dashboard/rules/{ch}/{id}                  list page
+//!   GET    /dashboard/rules/{ch}/{id}/new              new-rule form
+//!   POST   /dashboard/rules/{ch}/{id}                  create rule
+//!   GET    /dashboard/rules/{ch}/{id}/{rule_id}        edit-rule form
+//!   PUT    /dashboard/rules/{ch}/{id}/{rule_id}        update rule
+//!   DELETE /dashboard/rules/{ch}/{id}/{rule_id}        delete rule
+//!   POST   /dashboard/rules/{ch}/{id}/{rule_id}/move/up
+//!   POST   /dashboard/rules/{ch}/{id}/{rule_id}/move/down
+//!   GET    /dashboard/rules/{ch}/{id}/default          edit-default form
+//!   PUT    /dashboard/rules/{ch}/{id}/default          update default rule
 //!
 //! `ch` is one of: `whatsapp`, `instagram`, `email`, `discord`.
 //! `id` for `discord` is the literal string `_` (single config per tenant).
@@ -76,15 +76,15 @@ impl<'a> ChannelRef<'a> {
 
     pub fn back_url(&self, base: &str) -> String {
         match self {
-            ChannelRef::WhatsApp { id } => format!("{base}/admin/whatsapp/{id}"),
-            ChannelRef::Instagram { id } => format!("{base}/admin/instagram/{id}"),
-            ChannelRef::Email { label } => format!("{base}/admin/email/addresses/{label}"),
-            ChannelRef::Discord => format!("{base}/admin/discord"),
+            ChannelRef::WhatsApp { id } => format!("{base}/dashboard/whatsapp/{id}"),
+            ChannelRef::Instagram { id } => format!("{base}/dashboard/instagram/{id}"),
+            ChannelRef::Email { label } => format!("{base}/dashboard/email/addresses/{label}"),
+            ChannelRef::Discord => format!("{base}/dashboard/discord"),
         }
     }
 
     pub fn rules_base(&self, base: &str) -> String {
-        format!("{base}/admin/rules/{}/{}", self.slug(), self.id_part())
+        format!("{base}/dashboard/rules/{}/{}", self.slug(), self.id_part())
     }
 
     async fn load(&self, kv: &kv::KvStore, tenant_id: &str) -> Result<Option<ReplyConfig>> {
@@ -154,11 +154,11 @@ impl<'a> ChannelRef<'a> {
     }
 }
 
-/// Parse a `/admin/rules/{ch}/{id}/...` path into a `ChannelRef` plus the
+/// Parse a `/dashboard/rules/{ch}/{id}/...` path into a `ChannelRef` plus the
 /// remaining sub-path segments.
 fn parse_path<'a>(path: &'a str) -> Option<(ChannelRef<'a>, Vec<&'a str>)> {
     let parts: Vec<&str> = path
-        .strip_prefix("/admin/rules/")?
+        .strip_prefix("/dashboard/rules/")?
         .split('/')
         .filter(|s| !s.is_empty())
         .collect();

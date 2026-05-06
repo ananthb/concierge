@@ -1,4 +1,4 @@
-//! Onboarding wizard handler: /admin/wizard/* routes
+//! Onboarding wizard handler: /dashboard/wizard/* routes
 
 use worker::*;
 
@@ -19,7 +19,7 @@ pub async fn handle_wizard(
     let locale = crate::locale::Locale::from_request(&req);
 
     let sub = path
-        .strip_prefix("/admin/wizard")
+        .strip_prefix("/dashboard/wizard")
         .unwrap_or("")
         .trim_start_matches('/');
 
@@ -36,7 +36,7 @@ pub async fn handle_wizard(
             let headers = Headers::new();
             headers.set(
                 "Location",
-                &format!("{base_url}/admin/wizard/{}", state.step.as_str()),
+                &format!("{base_url}/dashboard/wizard/{}", state.step.as_str()),
             )?;
             return Ok(Response::empty()?.with_status(302).with_headers(headers));
         }
@@ -59,7 +59,7 @@ pub async fn handle_wizard(
             let headers = Headers::new();
             headers.set(
                 "HX-Redirect",
-                &format!("{base_url}/admin/wizard/{}", to.as_str()),
+                &format!("{base_url}/dashboard/wizard/{}", to.as_str()),
             )?;
             Ok(Response::empty()?.with_status(200).with_headers(headers))
         }
@@ -98,7 +98,10 @@ pub async fn handle_wizard(
             save_onboarding(&kv, tenant_id, &state).await?;
 
             let headers = Headers::new();
-            headers.set("HX-Redirect", &format!("{base_url}/admin/wizard/channels"))?;
+            headers.set(
+                "HX-Redirect",
+                &format!("{base_url}/dashboard/wizard/channels"),
+            )?;
             Ok(Response::empty()?.with_status(200).with_headers(headers))
         }
 
@@ -209,25 +212,28 @@ pub async fn handle_wizard(
             save_onboarding(&kv, tenant_id, &state).await?;
 
             let headers = Headers::new();
-            headers.set("HX-Redirect", &format!("{base_url}/admin/wizard/replies"))?;
+            headers.set(
+                "HX-Redirect",
+                &format!("{base_url}/dashboard/wizard/replies"),
+            )?;
             Ok(Response::empty()?.with_status(200).with_headers(headers))
         }
 
         // Save persona preset choice + default wait, advance to launch.
-        // Detailed persona editing lives at /admin/persona.
+        // Detailed persona editing lives at /dashboard/persona.
         "replies/save" => {
             let form: serde_json::Value = req.json().await?;
 
             // Wizard preset cards select an archetype only. Carry over
             // the business name from the basics step so the generated
             // prompt mentions the actual business; biz_type is a
-            // description ("florist", "cafe") and lives on /admin/persona.
+            // description ("florist", "cafe") and lives on /dashboard/persona.
             //
             // Goal + handoff conditions are wizard-collected (the two
             // questions tenants are best-positioned to answer up front),
             // sanitised and capped here. The rest of the builder fields
             // (catch_phrases, off_topics, etc.) still get filled in at
-            // /admin/persona later.
+            // /dashboard/persona later.
             let archetype_slug = form.get("preset_id").and_then(|v| v.as_str()).unwrap_or("");
             let archetype = match crate::storage::get_archetype(&db, archetype_slug).await? {
                 Some(a) => a,
@@ -299,7 +305,10 @@ pub async fn handle_wizard(
             let _ = crate::safety_queue::enqueue(&env, job).await;
 
             let headers = Headers::new();
-            headers.set("HX-Redirect", &format!("{base_url}/admin/wizard/launch"))?;
+            headers.set(
+                "HX-Redirect",
+                &format!("{base_url}/dashboard/wizard/launch"),
+            )?;
             Ok(Response::empty()?.with_status(200).with_headers(headers))
         }
 
@@ -325,7 +334,7 @@ pub async fn handle_wizard(
             save_onboarding(&kv, tenant_id, &state).await?;
 
             let headers = Headers::new();
-            headers.set("HX-Redirect", &format!("{base_url}/admin"))?;
+            headers.set("HX-Redirect", &format!("{base_url}/dashboard"))?;
             Ok(Response::empty()?.with_status(200).with_headers(headers))
         }
 
@@ -334,7 +343,7 @@ pub async fn handle_wizard(
             let headers = Headers::new();
             headers.set(
                 "Location",
-                &format!("{base_url}/admin/wizard/{}", state.step.as_str()),
+                &format!("{base_url}/dashboard/wizard/{}", state.step.as_str()),
             )?;
             Ok(Response::empty()?.with_status(302).with_headers(headers))
         }

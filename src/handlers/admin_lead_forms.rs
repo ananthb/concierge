@@ -7,7 +7,7 @@ use crate::storage::*;
 use crate::templates::*;
 use crate::types::*;
 
-/// Handle /admin/lead-forms routes
+/// Handle /dashboard/lead-forms routes
 pub async fn handle_lead_forms_admin(
     mut req: Request,
     env: Env,
@@ -18,7 +18,7 @@ pub async fn handle_lead_forms_admin(
     let kv = env.kv("KV")?;
 
     let path_parts: Vec<&str> = path
-        .strip_prefix("/admin/lead-forms")
+        .strip_prefix("/dashboard/lead-forms")
         .unwrap_or("")
         .trim_start_matches('/')
         .split('/')
@@ -35,7 +35,7 @@ pub async fn handle_lead_forms_admin(
             Response::from_html(admin_lead_forms_list_html(&forms, base_url, &locale))
         }
 
-        // Create new lead form (GET /admin/lead-forms/new or POST /admin/lead-forms)
+        // Create new lead form (GET /dashboard/lead-forms/new or POST /dashboard/lead-forms)
         (Method::Get, ["new"]) | (Method::Post, []) => {
             let now = now_iso();
             let slug = generate_slug()?;
@@ -58,7 +58,10 @@ pub async fn handle_lead_forms_admin(
             save_lead_form(&kv, &form).await?;
 
             let headers = Headers::new();
-            headers.set("Location", &format!("{}/admin/lead-forms/{}", base_url, id))?;
+            headers.set(
+                "Location",
+                &format!("{}/dashboard/lead-forms/{}", base_url, id),
+            )?;
             Ok(Response::empty()?.with_status(302).with_headers(headers))
         }
 

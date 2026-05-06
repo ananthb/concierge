@@ -37,7 +37,7 @@ pub async fn handle_auth(req: Request, env: Env, path: &str, method: Method) -> 
             let kv = env.kv("KV")?;
             if resolve_tenant_id(&req, &kv).await.is_some() {
                 let headers = Headers::new();
-                headers.set("Location", "/admin")?;
+                headers.set("Location", "/dashboard")?;
                 return Ok(Response::empty()?.with_status(302).with_headers(headers));
             }
 
@@ -360,7 +360,7 @@ pub async fn handle_auth(req: Request, env: Env, path: &str, method: Method) -> 
 
         // Dev-only login shortcut. Mints a session for an arbitrary
         // tenant email without going through Google / Facebook / WA
-        // OAuth — useful for clicking through `/admin` against
+        // OAuth — useful for clicking through `/dashboard` against
         // `wrangler dev` (where real OAuth callbacks won't reach
         // localhost). Gated on the same `crate::dev_bypass::active`
         // flag the management panel uses; production deploys set
@@ -468,7 +468,7 @@ pub(super) async fn create_session_and_redirect(
         .unwrap_or("");
 
     let headers = Headers::new();
-    headers.set("Location", "/admin")?;
+    headers.set("Location", "/dashboard")?;
     headers.set(
         "Set-Cookie",
         &format!(

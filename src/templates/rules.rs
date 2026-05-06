@@ -1,4 +1,4 @@
-//! Templates for `/admin/rules/{channel}/{id}`: rules list page and the
+//! Templates for `/dashboard/rules/{channel}/{id}`: rules list page and the
 //! shared add/edit form. The default rule is rendered at the top of the
 //! list (always present, mandatory) and uses a separate edit URL since its
 //! matcher is fixed to `Default`.

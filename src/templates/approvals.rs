@@ -1,4 +1,4 @@
-//! `/admin/approvals`: list of pending AI drafts awaiting human approval.
+//! `/dashboard/approvals`: list of pending AI drafts awaiting human approval.
 //!
 //! The list refreshes via HTMX polling (`hx-trigger="every 5s"`); fine for
 //! Phase 2. A future Phase 2.5 may swap the polling block for an SSE
@@ -18,7 +18,7 @@ pub fn approvals_page_html(rows: &[PendingApproval], base_url: &str, locale: &Lo
     // hears the event. Polling every 30s is the belt-and-suspenders
     // fallback if the SSE connection drops between reconnect retries.
     let body = format!(
-        r##"<div class="page-pad" hx-ext="sse" sse-connect="/admin/approvals/stream">
+        r##"<div class="page-pad" hx-ext="sse" sse-connect="/dashboard/approvals/stream">
   <h1 class="display-sm m-0 mb-4">Approvals</h1>
   <p class="muted mb-16">AI drafts that paused for review. Approve, reject, or edit and send.</p>
 
@@ -26,7 +26,7 @@ pub fn approvals_page_html(rows: &[PendingApproval], base_url: &str, locale: &Lo
     role="region"
     aria-live="polite"
     aria-atomic="false"
-    hx-get="/admin/approvals/list"
+    hx-get="/dashboard/approvals/list"
     hx-trigger="sse:approval-changed, every 30s"
     hx-swap="outerHTML">
     {list}
@@ -38,7 +38,7 @@ pub fn approvals_page_html(rows: &[PendingApproval], base_url: &str, locale: &Lo
     base_html("Approvals - Concierge", &page, locale)
 }
 
-/// Render just the inner list. Returned by GET `/admin/approvals/list`,
+/// Render just the inner list. Returned by GET `/dashboard/approvals/list`,
 /// which the SSE event triggers (with a 30s polling fallback). The
 /// `outerHTML` swap replaces the wrapping div so the next tick rebinds.
 pub fn approvals_list_html(rows: &[PendingApproval]) -> String {
@@ -48,7 +48,7 @@ pub fn approvals_list_html(rows: &[PendingApproval]) -> String {
   role="region"
   aria-live="polite"
   aria-atomic="false"
-  hx-get="/admin/approvals/list"
+  hx-get="/dashboard/approvals/list"
   hx-trigger="sse:approval-changed, every 30s"
   hx-swap="outerHTML">
   {inner}
@@ -98,11 +98,11 @@ pub fn approval_row_html(row: &PendingApproval) -> String {
     <pre class="mono fs-13 m-0 mb-12" style="white-space:pre-wrap">{draft}</pre>
     <div class="row gap-8">
       <button class="btn primary"
-        hx-post="/admin/approvals/{id}/approve"
+        hx-post="/dashboard/approvals/{id}/approve"
         hx-target="{HASH}approval-{id}"
         hx-swap="outerHTML">Approve and send</button>
       <button class="btn ghost"
-        hx-post="/admin/approvals/{id}/reject"
+        hx-post="/dashboard/approvals/{id}/reject"
         hx-target="{HASH}approval-{id}"
         hx-swap="outerHTML"
         hx-confirm="Reject this draft? The credit will be refunded.">Reject</button>
@@ -115,7 +115,7 @@ pub fn approval_row_html(row: &PendingApproval) -> String {
     <textarea class="textarea" name="draft" rows="5" maxlength="2000" x-model="draft"></textarea>
     <div class="row gap-8 mt-8">
       <button class="btn primary" type="button"
-        hx-post="/admin/approvals/{id}/edit"
+        hx-post="/dashboard/approvals/{id}/edit"
         hx-vals='js:{{draft: document.querySelector("#approval-{id} textarea").value}}'
         hx-target="{HASH}approval-{id}"
         hx-swap="outerHTML">Send edit</button>

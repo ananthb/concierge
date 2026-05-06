@@ -82,7 +82,7 @@ pub async fn enqueue(
     )
     .await?;
 
-    // Best-effort SSE ping so any browser tab on /admin/approvals
+    // Best-effort SSE ping so any browser tab on /dashboard/approvals
     // refreshes its list without waiting for the polling fallback.
     notify_change(env, &msg.tenant_id).await;
 
@@ -393,7 +393,7 @@ pub fn queue_reason_label(reason: QueueReason) -> &'static str {
 }
 
 /// Tell the per-tenant `ApprovalsDO` that the approval set has changed, so
-/// any open `/admin/approvals` browser tabs refresh. Best-effort: if the
+/// any open `/dashboard/approvals` browser tabs refresh. Best-effort: if the
 /// DO binding is missing or the call fails, the browsers' 5s polling
 /// fallback still picks up the change.
 pub async fn notify_change(env: &Env, tenant_id: &str) {

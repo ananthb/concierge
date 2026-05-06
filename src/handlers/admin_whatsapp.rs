@@ -7,7 +7,7 @@ use crate::storage::*;
 use crate::templates::*;
 use crate::types::*;
 
-/// Handle /admin/whatsapp routes
+/// Handle /dashboard/whatsapp routes
 pub async fn handle_whatsapp_admin(
     mut req: Request,
     env: Env,
@@ -18,7 +18,7 @@ pub async fn handle_whatsapp_admin(
     let kv = env.kv("KV")?;
 
     let path_parts: Vec<&str> = path
-        .strip_prefix("/admin/whatsapp")
+        .strip_prefix("/dashboard/whatsapp")
         .unwrap_or("")
         .trim_start_matches('/')
         .split('/')
@@ -76,7 +76,7 @@ pub async fn handle_whatsapp_admin(
             let headers = Headers::new();
             headers.set(
                 "Location",
-                &format!("{}/admin/whatsapp/{}", base_url, account.id),
+                &format!("{}/dashboard/whatsapp/{}", base_url, account.id),
             )?;
             Ok(Response::empty()?.with_status(302).with_headers(headers))
         }

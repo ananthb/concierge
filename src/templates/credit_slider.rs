@@ -1,4 +1,4 @@
-//! Credit-purchase slider: used on /pricing, /admin/billing, and the wizard
+//! Credit-purchase slider: used on /pricing, /dashboard/billing, and the wizard
 //! launch step so the buying experience is identical everywhere.
 //!
 //! Bounds (`min_credits` / `max_credits`) come from `pricing_config` so
@@ -16,7 +16,7 @@ pub const SLIDER_MAX: i64 = 10_000;
 
 /// Variant of the slider: controls the bottom action area.
 pub enum SliderMode<'a> {
-    /// Renders a Buy button that POSTs to /admin/billing/checkout. Logged-in tenants.
+    /// Renders a Buy button that POSTs to /dashboard/billing/checkout. Logged-in tenants.
     Buy { return_to: &'a str },
     /// Renders no action: just shows the slider + price. Used on the public
     /// pricing page where unauthenticated visitors can play with the slider.
@@ -73,7 +73,7 @@ pub fn slider_html(
 
     let action_html = match mode {
         SliderMode::Buy { return_to } => format!(
-            r##"<form hx-post="{base_url}/admin/billing/checkout" hx-ext="json-enc" hx-target="body" hx-swap="innerHTML" class="mt-16">
+            r##"<form hx-post="{base_url}/dashboard/billing/checkout" hx-ext="json-enc" hx-target="body" hx-swap="innerHTML" class="mt-16">
   <input type="hidden" name="credits" :value="credits">
   <input type="hidden" name="return_to" value="{return_to}">
   <button type="submit" class="btn primary lg w-full"><span>Buy <span x-text="credits.toLocaleString(countLocale)"></span> replies: {symbol}<span x-text="{price_js}"></span></span><span class="spinner htmx-indicator" aria-hidden="true"></span></button>

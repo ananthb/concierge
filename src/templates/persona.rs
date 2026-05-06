@@ -1,4 +1,4 @@
-//! `/admin/persona`: render the three-mode (Preset/Builder/Custom)
+//! `/dashboard/persona`: render the three-mode (Preset/Builder/Custom)
 //! persona editor with a live prompt preview and a safety badge.
 //!
 //! The page is a single Alpine `x-data` form; the active mode swaps the
@@ -67,7 +67,7 @@ pub fn persona_admin_html(
 
     let body = format!(
         r##"<div class="page-pad" x-data="{x_data}" hx-ext="json-enc">
-  <p><a href="{base_url}/admin" class="btn ghost sm">{back}</a></p>
+  <p><a href="{base_url}/dashboard" class="btn ghost sm">{back}</a></p>
   <h1 class="display-sm m-0 mb-4">{h1}</h1>
   <p class="muted mb-16">{lead}</p>
 
@@ -80,7 +80,7 @@ pub fn persona_admin_html(
       <label class="row gap-6"><input type="radio" name="mode" value="custom" x-model="mode"> {mode_custom}</label>
     </div>
 
-    <form hx-post="{base_url}/admin/persona" hx-target="body" hx-swap="innerHTML">
+    <form hx-post="{base_url}/dashboard/persona" hx-target="body" hx-swap="innerHTML">
       <input type="hidden" name="mode" :value="mode">
 
       <!-- BUILDER -->
@@ -155,7 +155,7 @@ pub fn persona_admin_html(
     <pre id="prompt-preview" class="prompt-preview prompt-preview-middle">{initial_preview}</pre>
     <pre class="prompt-preview prompt-preview-fixed" aria-label="{postamble_label}">{postamble}</pre>
     <div class="row gap-8 mt-8" x-show="mode === 'builder'" x-cloak :aria-hidden="mode !== 'builder'">
-      <button type="button" class="btn ghost sm" hx-post="{base_url}/admin/persona/preview" hx-target="#prompt-preview" hx-swap="outerHTML" hx-include="[name='archetype_slug'],[name='biz_name'],[name='biz_type'],[name='city'],[name='goal'],[name='goal_url'],[name='never'],[name='catch_phrases'],[name='off_topics'],[name='handoff_conditions']">{refresh}</button>
+      <button type="button" class="btn ghost sm" hx-post="{base_url}/dashboard/persona/preview" hx-target="#prompt-preview" hx-swap="outerHTML" hx-include="[name='archetype_slug'],[name='biz_name'],[name='biz_type'],[name='city'],[name='goal'],[name='goal_url'],[name='never'],[name='catch_phrases'],[name='off_topics'],[name='handoff_conditions']">{refresh}</button>
     </div>
   </div>
 </div>"##,

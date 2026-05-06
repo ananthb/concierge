@@ -45,12 +45,12 @@ pub fn email_dashboard_html(
             };
             format!(
                 r#"<tr>
-                    <td><a href="{base_url}/admin/email/addresses/{label}" class="link-reset"><strong>{full}</strong></a></td>
+                    <td><a href="{base_url}/dashboard/email/addresses/{label}" class="link-reset"><strong>{full}</strong></a></td>
                     <td>{mode_label} {on_off}</td>
                     <td>{count} {recip_suffix}</td>
                     <td class="ta-right">
-                        <a href="{base_url}/admin/email/addresses/{label}" class="btn ghost sm">{edit_label}</a>
-                        <button class="btn ghost sm" hx-delete="{base_url}/admin/email/addresses/{label}" hx-confirm="{delete_confirm}">{delete_label}</button>
+                        <a href="{base_url}/dashboard/email/addresses/{label}" class="btn ghost sm">{edit_label}</a>
+                        <button class="btn ghost sm" hx-delete="{base_url}/dashboard/email/addresses/{label}" hx-confirm="{delete_confirm}">{delete_label}</button>
                     </td>
                 </tr>"#,
                 base_url = base_url,
@@ -90,7 +90,7 @@ pub fn email_dashboard_html(
     let add_form = if at_limit {
         format!(
             r#"<div class="card p-18 mt-16 card-warn">
-                <p class="m-0"><strong>{warn_prefix} {quota} {warn_suffix}</strong> <a href="{base_url}/admin/billing">{warn_link}</a> {warn_tail}</p>
+                <p class="m-0"><strong>{warn_prefix} {quota} {warn_suffix}</strong> <a href="{base_url}/dashboard/billing">{warn_link}</a> {warn_tail}</p>
             </div>"#,
             base_url = base_url,
             quota = quota,
@@ -104,7 +104,7 @@ pub fn email_dashboard_html(
             r##"<div class="card p-18 mt-16">
                 <h2 class="display-sm m-0 mb-8">{add_h2}</h2>
                 <p class="muted mb-12">{used} {prefix} {quota} {suffix}</p>
-                <form hx-post="{base_url}/admin/email/addresses" hx-ext="json-enc" hx-target="{HASH}toast" hx-swap="innerHTML">
+                <form hx-post="{base_url}/dashboard/email/addresses" hx-ext="json-enc" hx-target="{HASH}toast" hx-swap="innerHTML">
                     <div class="row gap-8 wrap">
                         <label for="email-local-part" class="sr-only">{add_h2}</label>
                         <input id="email-local-part" class="input" name="local_part" placeholder="{ph}" required aria-required="true" style="max-width:240px">
@@ -164,8 +164,8 @@ pub fn email_address_html(
     };
 
     let auto_reply_form = format!(
-        r##"<p class="muted fs-13 mb-12">{rules_prefix} <a href="{base_url}/admin/rules/email/{label}">{rules_link}</a>.</p>
-        <form hx-put="{base_url}/admin/email/addresses/{label}/auto-reply" hx-ext="json-enc" hx-target="{HASH}auto-toast" hx-swap="innerHTML">
+        r##"<p class="muted fs-13 mb-12">{rules_prefix} <a href="{base_url}/dashboard/rules/email/{label}">{rules_link}</a>.</p>
+        <form hx-put="{base_url}/dashboard/email/addresses/{label}/auto-reply" hx-ext="json-enc" hx-target="{HASH}auto-toast" hx-swap="innerHTML">
             <div class="form-group">
                 <label class="row gap-8">
                     <span class="toggle">
@@ -243,7 +243,7 @@ pub fn email_address_html(
                 String::new()
             } else {
                 format!(
-                    r#"<button class="btn ghost sm" hx-delete="{base_url}/admin/email/addresses/{label}/recipients/{id}" hx-confirm="{confirm}" hx-target="closest tr" hx-swap="outerHTML">{remove}</button>"#,
+                    r#"<button class="btn ghost sm" hx-delete="{base_url}/dashboard/email/addresses/{label}/recipients/{id}" hx-confirm="{confirm}" hx-target="closest tr" hx-swap="outerHTML">{remove}</button>"#,
                     base_url = base_url,
                     label = html_escape(&addr.local_part),
                     id = html_escape(&r.id),
@@ -274,7 +274,7 @@ pub fn email_address_html(
                 <tbody>{recipient_rows}</tbody>
             </table>
         </div>
-        <form class="card p-18 mt-12" hx-post="{base_url}/admin/email/addresses/{label}/recipients" hx-ext="json-enc" hx-target="{HASH}rec-toast" hx-swap="innerHTML">
+        <form class="card p-18 mt-12" hx-post="{base_url}/dashboard/email/addresses/{label}/recipients" hx-ext="json-enc" hx-target="{HASH}rec-toast" hx-swap="innerHTML">
             <div class="row gap-8 wrap">
                 <label for="recipient-address" class="sr-only">{th_addr}</label>
                 <input id="recipient-address" class="input" name="address" type="email" placeholder="{ph}" required aria-required="true" style="flex:1;max-width:340px">
@@ -306,7 +306,7 @@ pub fn email_address_html(
 
     let body = format!(
         r#"<div class="page-pad">
-            <p><a href="{base_url}/admin/email" class="btn ghost sm">{back}</a></p>
+            <p><a href="{base_url}/dashboard/email" class="btn ghost sm">{back}</a></p>
             <h1 class="display-sm mt-8 mb-4">{full}</h1>
             <p class="muted mb-24">{lead}</p>
             <h2 class="display-sm mb-8">{auto_h2}</h2>

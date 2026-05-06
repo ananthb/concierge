@@ -170,7 +170,7 @@ btn?.addEventListener('click', async () => {{
 
     // Dev-only login shortcut. Posts an arbitrary email to
     // /auth/dev-login, which mints a tenant session and redirects
-    // to /admin — no real OAuth round-trip needed. Hidden in
+    // to /dashboard — no real OAuth round-trip needed. Hidden in
     // production (the gate flips on `crate::dev_bypass::active`,
     // which requires `CF_ACCESS_AUD` empty + `MANAGE_BYPASS_EMAIL`
     // set; production deploys always set the former).
@@ -218,13 +218,13 @@ btn?.addEventListener('click', async () => {{
     base_html(&t(locale, "admin-login-title"), &content, locale)
 }
 
-/// Render the "Conversation Timing" card on /admin/settings.
+/// Render the "Conversation Timing" card on /dashboard/settings.
 ///
 /// Three optional integer inputs map directly to `ConversationConfig`'s
 /// `Option<u32>` fields. Empty value = `None` = use the prompt default,
 /// shown in placeholder + an explicit "Default: N" hint so the tenant
 /// can see what they'll fall back to without saving. Submits as JSON
-/// (HTMX json-enc) PUT to `/admin/settings/conversation`; the
+/// (HTMX json-enc) PUT to `/dashboard/settings/conversation`; the
 /// response is an inline fragment (success/error toast) swapped into
 /// the per-card toast div.
 fn conversation_settings_card(base_url: &str, cfg: &ConversationConfig, locale: &Locale) -> String {
@@ -262,7 +262,7 @@ fn conversation_settings_card(base_url: &str, cfg: &ConversationConfig, locale: 
         r#"<div class="card p-22" hx-ext="json-enc">
             <h2>{h2}</h2>
             <p class="muted mb-16">{lead}</p>
-            <form hx-put="{base_url}/admin/settings/conversation" hx-target="{hash}conversation-toast" hx-swap="innerHTML">
+            <form hx-put="{base_url}/dashboard/settings/conversation" hx-target="{hash}conversation-toast" hx-swap="innerHTML">
                 <div class="stack gap-16">
                     <label class="stack gap-4">
                         <span><strong>{idle_label}</strong></span>
@@ -345,7 +345,7 @@ pub fn admin_settings_html(
             "{base_url}/instagram/auth/{}",
             crate::helpers::html_escape(tenant_id)
         );
-        let manage = format!("{base_url}/admin/instagram");
+        let manage = format!("{base_url}/dashboard/instagram");
         channel_card_html(
             &ChannelCardProps {
                 key: "ig",
@@ -367,8 +367,8 @@ pub fn admin_settings_html(
             .first()
             .map(|a| a.phone_number.clone())
             .unwrap_or_default();
-        let connect = format!("{base_url}/admin/whatsapp/new");
-        let manage = format!("{base_url}/admin/whatsapp");
+        let connect = format!("{base_url}/dashboard/whatsapp/new");
+        let manage = format!("{base_url}/dashboard/whatsapp");
         channel_card_html(
             &ChannelCardProps {
                 key: "wa",
@@ -389,8 +389,8 @@ pub fn admin_settings_html(
         let dc_handle = discord
             .and_then(|c| c.guild_name.clone())
             .unwrap_or_else(|| dc_fallback.clone());
-        let connect = format!("{base_url}/admin/discord/install");
-        let manage = format!("{base_url}/admin/discord");
+        let connect = format!("{base_url}/dashboard/discord/install");
+        let manage = format!("{base_url}/dashboard/discord");
         channel_card_html(
             &ChannelCardProps {
                 key: "discord",
@@ -507,7 +507,7 @@ pub fn admin_settings_html(
         <div class=\"card p-22\" hx-ext=\"json-enc\">
             <h2>{currency_h2}</h2>
             <p class=\"muted mb-16\">{currency_lead}</p>
-            <form hx-put=\"{base_url}/admin/settings/currency\" hx-target=\"{hash}currency-toast\" hx-swap=\"innerHTML\">
+            <form hx-put=\"{base_url}/dashboard/settings/currency\" hx-target=\"{hash}currency-toast\" hx-swap=\"innerHTML\">
                 <div class=\"row gap-12\">
                     <select class=\"select\" name=\"currency\" style=\"width:auto\">
                         <option value=\"INR\"{inr_sel}>{inr_label}</option>
@@ -527,7 +527,7 @@ pub fn admin_settings_html(
             <h2 class=\"text-warn\">{delete_h2}</h2>
             <p class=\"muted mb-16\">{delete_lead}</p>
             <button class=\"btn danger solid\"
-                    hx-delete=\"{base_url}/admin/delete-account\"
+                    hx-delete=\"{base_url}/dashboard/delete-account\"
                     hx-confirm=\"{delete_confirm}\"
                     >{delete_cta}</button>
         </div>
@@ -586,7 +586,7 @@ pub fn admin_dashboard_html(
       <p class="muted fs-13 m-0 mt-4">{body}</p>
     </div>
     <button class="btn ghost sm"
-      hx-post="/admin/risk-gate-banner/dismiss"
+      hx-post="/dashboard/risk-gate-banner/dismiss"
       hx-target="#risk-gate-banner"
       hx-swap="outerHTML">{dismiss}</button>
   </div>
@@ -620,7 +620,7 @@ pub fn admin_dashboard_html(
         .map(|a| {
             let dot = if a.auto_reply.enabled { r#"<span class="dot ok"></span>"# } else { r#"<span class="dot"></span>"# };
             format!(
-                r#"<a href="{base_url}/admin/whatsapp/{id}" class="side-row"><span>{wa_icon}</span><div><div>{wa_text}</div><div class="mono muted">{phone}</div></div>{dot}</a>"#,
+                r#"<a href="{base_url}/dashboard/whatsapp/{id}" class="side-row"><span>{wa_icon}</span><div><div>{wa_text}</div><div class="mono muted">{phone}</div></div>{dot}</a>"#,
                 base_url = base_url,
                 id = html_escape(&a.id),
                 phone = html_escape(&a.phone_number),
@@ -636,7 +636,7 @@ pub fn admin_dashboard_html(
         .map(|a| {
             let dot = if a.enabled { r#"<span class="dot ok"></span>"# } else { r#"<span class="dot"></span>"# };
             format!(
-                r#"<a href="{base_url}/admin/instagram/{id}" class="side-row"><span>{ig_icon}</span><div><div>{ig_text}</div><div class="mono muted">@{username}</div></div>{dot}</a>"#,
+                r#"<a href="{base_url}/dashboard/instagram/{id}" class="side-row"><span>{ig_icon}</span><div><div>{ig_text}</div><div class="mono muted">@{username}</div></div>{dot}</a>"#,
                 base_url = base_url,
                 id = html_escape(&a.id),
                 username = html_escape(&a.instagram_username),
@@ -649,7 +649,7 @@ pub fn admin_dashboard_html(
 
     let empty_hint = if whatsapp_accounts.is_empty() && instagram_accounts.is_empty() {
         format!(
-            r#"<div class="side-row"><span class="muted fs-13">{prefix} <a href="/admin/whatsapp">{link}</a>.</span></div>"#,
+            r#"<div class="side-row"><span class="muted fs-13">{prefix} <a href="/dashboard/whatsapp">{link}</a>.</span></div>"#,
             prefix = t(locale, "admin-side-empty-prefix"),
             link = t(locale, "admin-side-empty-link"),
         )
@@ -679,14 +679,14 @@ pub fn admin_dashboard_html(
       <div class="eyebrow">{side_channels}</div>
       <div class="side-list">
         {channel_rows}{ig_rows}{empty_hint}
-        <a href="{base_url}/admin/email" class="side-row"><span>{mail_icon}</span><div><div>{email_row_name}</div><div class="mono muted">{email_row_cta}</div></div></a>
+        <a href="{base_url}/dashboard/email" class="side-row"><span>{mail_icon}</span><div><div>{email_row_name}</div><div class="mono muted">{email_row_cta}</div></div></a>
       </div>
     </div>
     <div class="card p-16 mt-14">
       <div class="eyebrow">{quick_links}</div>
       <div class="side-list">
-        <a href="{base_url}/admin/lead-forms" class="side-row link-reset"><div class="flex-1 fs-13">{leads_prefix} ({lf_count})</div></a>
-        <a href="{base_url}/admin/email/log" class="side-row link-reset"><div class="flex-1 fs-13">{email_log}</div></a>
+        <a href="{base_url}/dashboard/lead-forms" class="side-row link-reset"><div class="flex-1 fs-13">{leads_prefix} ({lf_count})</div></a>
+        <a href="{base_url}/dashboard/email/log" class="side-row link-reset"><div class="flex-1 fs-13">{email_log}</div></a>
       </div>
     </div>
   </aside>
@@ -725,7 +725,7 @@ pub fn admin_dashboard_html(
           <div class="eyebrow">{email_eyebrow}</div>
           <h3 class="display-sm m-0 mt-4">{email_headline}</h3>
         </div>
-        <a href="{base_url}/admin/email" class="btn sm">{email_cta}</a>
+        <a href="{base_url}/dashboard/email" class="btn sm">{email_cta}</a>
       </div>
       <p class="muted">{email_desc}</p>
     </div>
@@ -799,13 +799,13 @@ pub fn admin_whatsapp_list_html(
             };
             format!(
                 "<tr>
-                    <td><a href=\"{base_url}/admin/whatsapp/{id}\">{name}</a></td>
+                    <td><a href=\"{base_url}/dashboard/whatsapp/{id}\">{name}</a></td>
                     <td><code>{phone}</code></td>
                     <td>{enabled}</td>
                     <td>
-                        <a href=\"{base_url}/admin/whatsapp/{id}\" class=\"btn sm\">{edit}</a>
+                        <a href=\"{base_url}/dashboard/whatsapp/{id}\" class=\"btn sm\">{edit}</a>
                         <button class=\"btn sm danger\"
-                                hx-delete=\"{base_url}/admin/whatsapp/{id}\"
+                                hx-delete=\"{base_url}/dashboard/whatsapp/{id}\"
                                 hx-confirm=\"{confirm}\"
                                 hx-target=\"closest tr\" hx-swap=\"outerHTML\">{del}</button>
                     </td>
@@ -835,7 +835,7 @@ pub fn admin_whatsapp_list_html(
         "<div class=\"page-pad\">
         <div class=\"between mb-16\">
             <h1 class=\"display-sm m-0\">{h1}</h1>
-            <a href=\"{base_url}/admin/whatsapp/new\" class=\"btn\">{add}</a>
+            <a href=\"{base_url}/dashboard/whatsapp/new\" class=\"btn\">{add}</a>
         </div>
         <div id=\"toast\" role=\"status\" aria-live=\"polite\" aria-atomic=\"true\"></div>
         <div class=\"card p-22\">
@@ -876,7 +876,7 @@ pub fn admin_whatsapp_signup_html(
     let signup_error = t(locale, "admin-wa-signup-cancel-error");
     let content = format!(
         r#"<div class="page-pad">
-        <p><a href="{base_url}/admin/whatsapp" class="btn ghost sm">{back}</a></p>
+        <p><a href="{base_url}/dashboard/whatsapp" class="btn ghost sm">{back}</a></p>
         <h1 class="display-sm" style="margin:8px 0 16px">{h1}</h1>
         <div class="card ta-center" style="padding: 2rem;">
             <p class="muted" style="margin-bottom: 1.5rem">{lead}</p>
@@ -885,7 +885,7 @@ pub fn admin_whatsapp_signup_html(
                 {cta}
             </button>
             <p class="muted" style="margin-top: 1.5rem; font-size: 0.85rem">
-                {manual_prefix} <a href="{base_url}/admin/whatsapp/manual">{manual_link}</a>
+                {manual_prefix} <a href="{base_url}/dashboard/whatsapp/manual">{manual_link}</a>
             </p>
         </div>
         <script async defer crossorigin="anonymous" src="https://connect.facebook.net/en_US/sdk.js"></script>
@@ -1002,11 +1002,11 @@ pub fn admin_whatsapp_edit_html(
     let wait_label_template = t(locale, "admin-wa-edit-wait-prefix");
     let content = format!(
         "<div class=\"page-pad\">
-        <p><a href=\"{base_url}/admin/whatsapp\" class=\"btn ghost sm\">{back}</a></p>
+        <p><a href=\"{base_url}/dashboard/whatsapp\" class=\"btn ghost sm\">{back}</a></p>
         <h1 class=\"display-sm\" style=\"margin:8px 0 16px\">{h1}</h1>
         <div id=\"toast\" role=\"status\" aria-live=\"polite\" aria-atomic=\"true\"></div>
         <div class=\"card p-22\">
-            <form hx-put=\"{base_url}/admin/whatsapp/{id}\" hx-target=\"{hash}toast\" hx-swap=\"innerHTML\">
+            <form hx-put=\"{base_url}/dashboard/whatsapp/{id}\" hx-target=\"{hash}toast\" hx-swap=\"innerHTML\">
                 <div class=\"form-group\">
                     <label for=\"wa-name\">{lbl_name}</label>
                     <input type=\"text\" id=\"wa-name\" name=\"name\" value=\"{name}\" required>
@@ -1020,7 +1020,7 @@ pub fn admin_whatsapp_edit_html(
                     <input type=\"text\" id=\"wa-phone-id\" name=\"phone_number_id\" value=\"{phone_id}\" placeholder=\"{ph_phone_id}\" required class=\"mono\">
                 </div>
                 <h3 style=\"margin: 1rem 0 0.5rem;\">{h3_auto}</h3>
-                <p class=\"muted fs-13 mb-12\">{rules_prefix} <a href=\"{base_url}/admin/rules/whatsapp/{id}\">{rules_link}</a>.</p>
+                <p class=\"muted fs-13 mb-12\">{rules_prefix} <a href=\"{base_url}/dashboard/rules/whatsapp/{id}\">{rules_link}</a>.</p>
                 <div class=\"form-group\">
                     <label><input type=\"checkbox\" name=\"auto_reply_enabled\" value=\"true\"{enabled_checked}> {enabled}</label>
                 </div>
@@ -1105,13 +1105,13 @@ pub fn admin_instagram_list_html(
             let confirm = html_escape(&t(locale, "admin-ig-list-delete-confirm"));
             format!(
                 "<tr>
-                    <td><a href=\"{base_url}/admin/instagram/{id}\">@{username}</a></td>
+                    <td><a href=\"{base_url}/dashboard/instagram/{id}\">@{username}</a></td>
                     <td>{status}</td>
                     <td>{auto}</td>
                     <td>
-                        <a href=\"{base_url}/admin/instagram/{id}\" class=\"btn sm\">{edit}</a>
+                        <a href=\"{base_url}/dashboard/instagram/{id}\" class=\"btn sm\">{edit}</a>
                         <button class=\"btn sm danger\"
-                                hx-delete=\"{base_url}/admin/instagram/{id}\"
+                                hx-delete=\"{base_url}/dashboard/instagram/{id}\"
                                 hx-confirm=\"{confirm}\"
                                 hx-target=\"closest tr\" hx-swap=\"outerHTML\">{remove}</button>
                     </td>
@@ -1184,17 +1184,17 @@ pub fn admin_instagram_edit_html(
     let wait_prefix = t(locale, "admin-ig-edit-wait-prefix");
     let content = format!(
         "<div class=\"page-pad\">
-        <p><a href=\"{base_url}/admin/instagram\" class=\"btn ghost sm\">{back}</a></p>
+        <p><a href=\"{base_url}/dashboard/instagram\" class=\"btn ghost sm\">{back}</a></p>
         <h1 class=\"display-sm\" style=\"margin:8px 0 4px\">{h1}</h1>
         <p class=\"muted mb-16\">@{username}</p>
         <div id=\"toast\" role=\"status\" aria-live=\"polite\" aria-atomic=\"true\"></div>
         <div class=\"card p-22\">
-            <form hx-put=\"{base_url}/admin/instagram/{id}\" hx-target=\"{hash}toast\" hx-swap=\"innerHTML\">
+            <form hx-put=\"{base_url}/dashboard/instagram/{id}\" hx-target=\"{hash}toast\" hx-swap=\"innerHTML\">
                 <div class=\"form-group\">
                     <label><input type=\"checkbox\" name=\"enabled\" value=\"true\"{enabled_checked}> {account_enabled}</label>
                 </div>
                 <h3 style=\"margin: 1rem 0 0.5rem;\">{h3_auto}</h3>
-                <p class=\"muted fs-13 mb-12\">{rules_prefix} <a href=\"{base_url}/admin/rules/instagram/{id}\">{rules_link}</a>.</p>
+                <p class=\"muted fs-13 mb-12\">{rules_prefix} <a href=\"{base_url}/dashboard/rules/instagram/{id}\">{rules_link}</a>.</p>
                 <div class=\"form-group\">
                     <label><input type=\"checkbox\" name=\"auto_reply_enabled\" value=\"true\"{ar_enabled_checked}> {enabled}</label>
                 </div>
@@ -1268,13 +1268,13 @@ pub fn admin_lead_forms_list_html(
             };
             format!(
                 "<tr>
-                    <td><a href=\"{base_url}/admin/lead-forms/{id}\">{name}</a></td>
+                    <td><a href=\"{base_url}/dashboard/lead-forms/{id}\">{name}</a></td>
                     <td><code>{slug}</code></td>
                     <td>{status}</td>
                     <td>
-                        <a href=\"{base_url}/admin/lead-forms/{id}\" class=\"btn sm\">{edit}</a>
+                        <a href=\"{base_url}/dashboard/lead-forms/{id}\" class=\"btn sm\">{edit}</a>
                         <button class=\"btn sm danger\"
-                                hx-delete=\"{base_url}/admin/lead-forms/{id}\"
+                                hx-delete=\"{base_url}/dashboard/lead-forms/{id}\"
                                 hx-confirm=\"{confirm}\"
                                 hx-target=\"closest tr\" hx-swap=\"outerHTML\">{del}</button>
                     </td>
@@ -1301,10 +1301,10 @@ pub fn admin_lead_forms_list_html(
     };
 
     let content = format!(
-        "<p><a href=\"{base_url}/admin\">{back}</a></p>
+        "<p><a href=\"{base_url}/dashboard\">{back}</a></p>
         <div class=\"between mb-16\">
             <h1>{h1}</h1>
-            <a href=\"{base_url}/admin/lead-forms/new\" class=\"btn\">{add}</a>
+            <a href=\"{base_url}/dashboard/lead-forms/new\" class=\"btn\">{add}</a>
         </div>
         <div id=\"toast\" role=\"status\" aria-live=\"polite\" aria-atomic=\"true\"></div>
         <div class=\"card p-22\">
@@ -1368,11 +1368,11 @@ pub fn admin_lead_form_edit_html(
     );
 
     let content = format!(
-        "<p><a href=\"{base_url}/admin/lead-forms\">{back}</a></p>
+        "<p><a href=\"{base_url}/dashboard/lead-forms\">{back}</a></p>
         <h1>{h1}</h1>
         <div id=\"toast\" role=\"status\" aria-live=\"polite\" aria-atomic=\"true\"></div>
         <div class=\"card p-22\">
-            <form hx-put=\"{base_url}/admin/lead-forms/{id}\" hx-target=\"{hash}toast\" hx-swap=\"innerHTML\">
+            <form hx-put=\"{base_url}/dashboard/lead-forms/{id}\" hx-target=\"{hash}toast\" hx-swap=\"innerHTML\">
                 <div class=\"form-group\">
                     <label for=\"lf-name\">{lbl_name}</label>
                     <input type=\"text\" id=\"lf-name\" name=\"name\" value=\"{name}\" required aria-required=\"true\">
@@ -1529,7 +1529,7 @@ mod conversation_card_tests {
 
         // Form posts to the right endpoint with the right swap target.
         assert!(
-            html.contains(r#"hx-put="https://example.test/admin/settings/conversation""#),
+            html.contains(r#"hx-put="https://example.test/dashboard/settings/conversation""#),
             "form action missing"
         );
         assert!(html.contains(r##"hx-target="#conversation-toast""##));

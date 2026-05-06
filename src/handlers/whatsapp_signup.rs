@@ -37,7 +37,7 @@ pub async fn handle_whatsapp_signup(
             let state = match form.get("state") {
                 Some(FormEntry::Field(s)) => s,
                 _ => {
-                    return redirect_error("/admin/whatsapp", "invalid_state");
+                    return redirect_error("/dashboard/whatsapp", "invalid_state");
                 }
             };
             let state_key = format!("wa_signup_state:{}", state);
@@ -46,14 +46,14 @@ pub async fn handle_whatsapp_signup(
                     kv.delete(&state_key).await?;
                 }
                 _ => {
-                    return redirect_error("/admin/whatsapp", "invalid_state");
+                    return redirect_error("/dashboard/whatsapp", "invalid_state");
                 }
             }
 
             let code = match form.get("code") {
                 Some(FormEntry::Field(c)) if !c.is_empty() => c,
                 _ => {
-                    return redirect_error("/admin/whatsapp", "missing_code");
+                    return redirect_error("/dashboard/whatsapp", "missing_code");
                 }
             };
 
@@ -89,7 +89,7 @@ pub async fn handle_whatsapp_signup(
                 match get_phone_number_details(&waba_id, &pnid, &platform_token).await? {
                     Some((display_phone, _)) => (display_phone, pnid),
                     None => {
-                        return redirect_error("/admin/whatsapp", "phone_not_found");
+                        return redirect_error("/dashboard/whatsapp", "phone_not_found");
                     }
                 }
             } else {
@@ -97,14 +97,14 @@ pub async fn handle_whatsapp_signup(
                 match discover_new_phone(&waba_id, &platform_token).await? {
                     Some(result) => result,
                     None => {
-                        return redirect_error("/admin/whatsapp", "no_phone_numbers");
+                        return redirect_error("/dashboard/whatsapp", "no_phone_numbers");
                     }
                 }
             };
 
             // Check for duplicate
             if let Some(_existing) = get_whatsapp_account_by_phone(&kv, &phone_number_id).await? {
-                return redirect_error("/admin/whatsapp", "already_connected");
+                return redirect_error("/dashboard/whatsapp", "already_connected");
             }
 
             // Create WhatsApp account
@@ -123,8 +123,8 @@ pub async fn handle_whatsapp_signup(
 
             // If the user is mid-wizard, send them back to the channels step.
             let dest = match get_onboarding(&kv, &account.tenant_id).await {
-                Ok(s) if !s.completed => "/admin/wizard/channels",
-                _ => "/admin/whatsapp?success=connected",
+                Ok(s) if !s.completed => "/dashboard/wizard/channels",
+                _ => "/dashboard/whatsapp?success=connected",
             };
             let headers = Headers::new();
             headers.set("Location", dest)?;

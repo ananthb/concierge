@@ -12,7 +12,7 @@ use crate::storage::*;
 use crate::templates::admin_email::*;
 use crate::types::*;
 
-/// Handle `/admin/email/*` routes.
+/// Handle `/dashboard/email/*` routes.
 pub async fn handle_email_admin(
     mut req: Request,
     env: Env,
@@ -25,7 +25,7 @@ pub async fn handle_email_admin(
     let locale = crate::locale::Locale::from_request(&req);
 
     let path_parts: Vec<&str> = path
-        .strip_prefix("/admin/email")
+        .strip_prefix("/dashboard/email")
         .unwrap_or("")
         .trim_start_matches('/')
         .split('/')
@@ -74,7 +74,7 @@ pub async fn handle_email_admin(
             let addrs = get_email_addresses(&kv, tenant_id).await?;
             if (addrs.len() as u32) >= tenant.email_address_quota() {
                 return Response::from_html(
-                    r#"<div class="error">Address quota reached. <a href="/admin/billing">Buy more</a> to add additional addresses.</div>"#
+                    r#"<div class="error">Address quota reached. <a href="/dashboard/billing">Buy more</a> to add additional addresses.</div>"#
                         .to_string(),
                 );
             }
@@ -111,7 +111,7 @@ pub async fn handle_email_admin(
             set_email_address_index(&kv, &label, tenant_id).await?;
 
             let headers = Headers::new();
-            headers.set("HX-Redirect", &format!("{base_url}/admin/email"))?;
+            headers.set("HX-Redirect", &format!("{base_url}/dashboard/email"))?;
             Ok(Response::empty()?.with_status(200).with_headers(headers))
         }
 
@@ -166,7 +166,7 @@ pub async fn handle_email_admin(
             let headers = Headers::new();
             headers.set(
                 "HX-Redirect",
-                &format!("{base_url}/admin/email/addresses/{label}"),
+                &format!("{base_url}/dashboard/email/addresses/{label}"),
             )?;
             Ok(Response::empty()?.with_status(200).with_headers(headers))
         }
@@ -269,7 +269,7 @@ pub async fn handle_email_admin(
             let headers = Headers::new();
             headers.set(
                 "HX-Redirect",
-                &format!("{base_url}/admin/email/addresses/{label}"),
+                &format!("{base_url}/dashboard/email/addresses/{label}"),
             )?;
             Ok(Response::empty()?.with_status(200).with_headers(headers))
         }

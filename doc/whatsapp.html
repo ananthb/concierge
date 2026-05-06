@@ -131,7 +131,7 @@
         <div class="callout__icon">→</div>
         <div class="callout__body">
           <strong>Manual fallback</strong>
-          <p>If you already know your phone number ID, use <code>/admin/whatsapp/manual</code> instead. Useful for migrating from another platform or when Embedded Signup isn&rsquo;t available in your region.</p>
+          <p>If you already know your phone number ID, use <code>/dashboard/whatsapp/manual</code> instead. Useful for migrating from another platform or when Embedded Signup isn&rsquo;t available in your region.</p>
         </div>
       </div>
 
@@ -139,7 +139,7 @@
       <p>Each WhatsApp account has its own <code>ReplyConfig</code> with two layers:</p>
       <ul>
         <li><strong>Default reply</strong>: edited inline on the account&rsquo;s edit page. Sets the fallback when no rule matches. Pick canned text or AI prompt.</li>
-        <li><strong>Reply rules</strong>: managed at <code>/admin/rules/whatsapp/{account_id}</code>. An ordered list checked top&#8209;down on every inbound message; first match wins.</li>
+        <li><strong>Reply rules</strong>: managed at <code>/dashboard/rules/whatsapp/{account_id}</code>. An ordered list checked top&#8209;down on every inbound message; first match wins.</li>
       </ul>
 
       <div class="table-wrap">
@@ -181,7 +181,7 @@
       </div>
 
       <h3 id="ai">AI prompt response</h3>
-      <p>The matched rule&rsquo;s prompt is concatenated to the tenant&rsquo;s <em>persona prompt</em> (set at <code>/admin/persona</code>) and sent to Workers AI as the system instruction. The sender&rsquo;s name and message are passed as user&#8209;message context. One credit deducts before the call.</p>
+      <p>The matched rule&rsquo;s prompt is concatenated to the tenant&rsquo;s <em>persona prompt</em> (set at <code>/dashboard/persona</code>) and sent to Workers AI as the system instruction. The sender&rsquo;s name and message are passed as user&#8209;message context. One credit deducts before the call.</p>
 
       <div class="codeblock">
         <div class="codeblock__head">
@@ -214,7 +214,7 @@
 
       <h2 id="persona">Persona</h2>
       <p>
-        The system prompt for every AI reply is the tenant&#8209;wide persona prompt at <code>/admin/persona</code> (preset, builder, or custom) concatenated with the matched rule&rsquo;s prompt. AI replies are blocked unless the persona&rsquo;s safety status is <em>Approved</em>; canned default replies still send.
+        The system prompt for every AI reply is the tenant&#8209;wide persona prompt at <code>/dashboard/persona</code> (preset, builder, or custom) concatenated with the matched rule&rsquo;s prompt. AI replies are blocked unless the persona&rsquo;s safety status is <em>Approved</em>; canned default replies still send.
       </p>
       <p>See <a href="how-it-works.html#persona">Persona &amp; safety check</a> for the async classifier flow.</p>
 

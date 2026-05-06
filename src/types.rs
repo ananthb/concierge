@@ -1088,7 +1088,7 @@ mod cadence_tests {
 }
 
 /// Steps in the onboarding wizard, in display order. The wizard URL
-/// (`/admin/wizard/<step>`) mirrors `as_str` exactly.
+/// (`/dashboard/wizard/<step>`) mirrors `as_str` exactly.
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, Default, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum OnboardingStep {

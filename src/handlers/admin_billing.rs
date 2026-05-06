@@ -19,7 +19,7 @@ pub async fn handle_billing_admin(
     let db = env.d1("DB")?;
 
     let sub = path
-        .strip_prefix("/admin/billing")
+        .strip_prefix("/dashboard/billing")
         .unwrap_or("")
         .trim_start_matches('/');
 
@@ -75,13 +75,13 @@ pub async fn handle_billing_admin(
                 .clamp(cfg.min_credits, cfg.max_credits);
 
             // Accept a return_to path (used by the wizard to send users back
-            // to /admin/wizard/launch after payment). Restrict to same-origin
+            // to /dashboard/wizard/launch after payment). Restrict to same-origin
             // paths to avoid open redirects.
             let return_to = form
                 .get("return_to")
                 .and_then(|v| v.as_str())
                 .filter(|p| p.starts_with('/') && !p.starts_with("//"))
-                .unwrap_or("/admin/billing")
+                .unwrap_or("/dashboard/billing")
                 .to_string();
 
             let tenant = storage::get_tenant(&db, tenant_id)
@@ -117,7 +117,7 @@ pub async fn handle_billing_admin(
                 .get("return_to")
                 .and_then(|v| v.as_str())
                 .filter(|p| p.starts_with('/') && !p.starts_with("//"))
-                .unwrap_or("/admin/wizard/launch")
+                .unwrap_or("/dashboard/wizard/launch")
                 .to_string();
 
             let tenant = storage::get_tenant(&db, tenant_id)
@@ -234,7 +234,7 @@ pub async fn handle_billing_admin(
 
             // Redirect to billing page. Webhook will handle crediting.
             let headers = Headers::new();
-            headers.set("HX-Redirect", &format!("{base_url}/admin/billing"))?;
+            headers.set("HX-Redirect", &format!("{base_url}/dashboard/billing"))?;
             Ok(Response::empty()?.with_status(200).with_headers(headers))
         }
 

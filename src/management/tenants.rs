@@ -131,7 +131,7 @@ pub async fn handle_tenants(
         }
 
         // Grant reply-email address slots to a tenant. Bumps the tenant's
-        // purchased-extras counter so the quota gate at /admin/email opens
+        // purchased-extras counter so the quota gate at /dashboard/email opens
         // up `count` more local-parts. Mirrors what a paid pack purchase
         // does, minus the Razorpay round-trip.
         (Method::Post, [id, "grant-addresses"]) => {

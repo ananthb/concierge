@@ -1,4 +1,4 @@
-//! `/admin/approvals/*` routes: list pending AI drafts and act on them.
+//! `/dashboard/approvals/*` routes: list pending AI drafts and act on them.
 //!
 //! All routes are authenticated and CSRF-protected by the `handle_admin`
 //! dispatcher. Approve / edit / reject mutate the D1 row, the KV
@@ -33,9 +33,9 @@ pub async fn handle_approvals(
     let _ = base_url;
     let locale = crate::locale::Locale::from_request(&req);
 
-    // Strip the "/admin/approvals" prefix; what remains is "" for the
+    // Strip the "/dashboard/approvals" prefix; what remains is "" for the
     // index page or "/{id}/{action}" for per-approval actions.
-    let rest = path.strip_prefix("/admin/approvals").unwrap_or("");
+    let rest = path.strip_prefix("/dashboard/approvals").unwrap_or("");
 
     match (method, rest) {
         (Method::Get, "" | "/") => {

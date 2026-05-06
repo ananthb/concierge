@@ -71,7 +71,7 @@ pub async fn handle_data_deletion(mut req: Request, env: Env, method: Method) ->
         .unwrap_or_default();
 
     let response = serde_json::json!({
-        "url": format!("{}/admin/settings", base_url),
+        "url": format!("{}/dashboard/settings", base_url),
         "confirmation_code": confirmation_code
     });
 

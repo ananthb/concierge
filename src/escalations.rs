@@ -159,7 +159,7 @@ async fn dispatch_email(
     let from_addr = format!("noreply@{email_domain}");
 
     let channel_label = inbound_channel.as_str();
-    let messages_url = format!("{base_url}/admin/messages");
+    let messages_url = format!("{base_url}/dashboard/messages");
     let text = format!(
         "Concierge has paused replying on a customer message that needs you.\n\n\
          Channel: {channel_label}\n\

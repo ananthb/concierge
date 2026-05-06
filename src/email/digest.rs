@@ -5,7 +5,7 @@
 //!    customer never sees a stale reply, and the tenant isn't charged.
 //! 2. Lists tenants with undigested pending approvals, checks each tenant's
 //!    `DigestCadence` against the current hour:minute, and emails the
-//!    tenant a digest with deep links into `/admin/approvals`.
+//!    tenant a digest with deep links into `/dashboard/approvals`.
 //!
 //! The email is a notification with deep links: tenants click through to
 //! the web page to actually approve. Reply-to-approve is out of scope.
@@ -175,7 +175,7 @@ fn build_digest_email(
   <div><strong>From {sender}</strong> via {channel} &middot; {reason}</div>
   <div style="color:#777;font-size:13px;margin:4px 0">{preview}</div>
   <div style="font-family:monospace;font-size:13px;white-space:pre-wrap;margin:6px 0">{draft}</div>
-  <a href="{base_url}/admin/approvals/{id}" style="display:inline-block;padding:8px 14px;background:#5865F2;color:#fff;border-radius:4px;text-decoration:none">Review draft</a>
+  <a href="{base_url}/dashboard/approvals/{id}" style="display:inline-block;padding:8px 14px;background:#5865F2;color:#fff;border-radius:4px;text-decoration:none">Review draft</a>
 </li>"#,
                 sender = html_escape(&r.sender),
                 channel = r.channel.label(),
@@ -193,7 +193,7 @@ fn build_digest_email(
 <h1 style="font-size:22px;margin:0 0 16px">{count} reply draft{plural} waiting</h1>
 <p style="color:#555">These AI replies paused for your review. Click through to approve, edit, or reject.</p>
 <ol style="padding-left:20px">{html_items}</ol>
-<p style="color:#999;font-size:12px;margin-top:32px">You're getting this because email approvals are turned on for your tenant. <a href="{base_url}/admin/wizard/notifications">Change cadence</a>.</p>
+<p style="color:#999;font-size:12px;margin-top:32px">You're getting this because email approvals are turned on for your tenant. <a href="{base_url}/dashboard/wizard/notifications">Change cadence</a>.</p>
 </body></html>"#,
         count = count,
         plural = plural,
@@ -203,7 +203,7 @@ fn build_digest_email(
         .iter()
         .map(|r| {
             format!(
-                "- From {sender} via {channel} ({reason})\n  {preview}\n  Draft: {draft}\n  Review: {base_url}/admin/approvals/{id}\n",
+                "- From {sender} via {channel} ({reason})\n  {preview}\n  Draft: {draft}\n  Review: {base_url}/dashboard/approvals/{id}\n",
                 sender = r.sender,
                 channel = r.channel.label(),
                 reason = queue_reason_label(r.queue_reason),
@@ -215,7 +215,7 @@ fn build_digest_email(
         })
         .collect();
     let text = format!(
-        "{count} reply draft{plural} waiting for review.\n\n{text_items}\nChange cadence: {base_url}/admin/wizard/notifications\n",
+        "{count} reply draft{plural} waiting for review.\n\n{text_items}\nChange cadence: {base_url}/dashboard/wizard/notifications\n",
         count = count,
         plural = plural,
     );
