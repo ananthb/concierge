@@ -1203,18 +1203,26 @@ pub fn notifications_html(
       <div class="eyebrow mb-12">{card_eyebrow} <span class="text-warn">{required_mark}</span></div>
       <p class="muted mb-14 fs-14">{card_lead}</p>
       <div class="admin-grid" role="group" aria-label="{card_eyebrow}">
-        <label class="admin-card" :class="approval.discord ? 'selected' : ''" style="min-height:auto;cursor:pointer">
-          <input type="hidden" name="approval_discord" value="false">
-          <input type="checkbox" name="approval_discord" value="true" class="hidden" x-model="approval.discord">
+        <div class="admin-card" :class="approval.discord ? 'selected' : ''"
+             role="checkbox" :aria-checked="approval.discord ? 'true' : 'false'" tabindex="0"
+             @click="approval.discord = !approval.discord"
+             @keydown.space.prevent="approval.discord = !approval.discord"
+             @keydown.enter.prevent="approval.discord = !approval.discord"
+             style="min-height:auto;cursor:pointer">
+          <input type="hidden" name="approval_discord" :value="approval.discord ? 'true' : 'false'">
           <div class="row gap-12">
             <div class="admin-mark icon-chip">{discord_icon}</div>
             <div><div class="fw-600">{discord_lbl}</div>
             <div class="mono muted fs-11">{discord_sub}</div></div>
           </div>
-        </label>
-        <label class="admin-card" :class="approval.email ? 'selected' : ''" style="min-height:auto;cursor:pointer">
-          <input type="hidden" name="approval_email" value="false">
-          <input type="checkbox" name="approval_email" value="true" class="hidden" x-model="approval.email">
+        </div>
+        <div class="admin-card" :class="approval.email ? 'selected' : ''"
+             role="checkbox" :aria-checked="approval.email ? 'true' : 'false'" tabindex="0"
+             @click="if (!$event.target.closest('.freq-row')) approval.email = !approval.email"
+             @keydown.space.prevent="approval.email = !approval.email"
+             @keydown.enter.prevent="approval.email = !approval.email"
+             style="min-height:auto;cursor:pointer">
+          <input type="hidden" name="approval_email" :value="approval.email ? 'true' : 'false'">
           <div class="row gap-12">
             <div class="admin-mark icon-chip">{mail_icon}</div>
             <div><div class="fw-600">{email_lbl}</div>
@@ -1225,7 +1233,7 @@ pub fn notifications_html(
             <label for="wiz-approval-cadence" class="sr-only">{cadence_prefix}</label>
             <select id="wiz-approval-cadence" class="select fs-13" name="approval_cadence" style="width:auto;padding:6px 10px">{approval_freq_html}</select>
           </div>
-        </label>
+        </div>
       </div>
       <div class="card-soft p-14 mt-12" x-show="approval.discord && !{dc_installed_js}" x-cloak :aria-hidden="!(approval.discord && !{dc_installed_js})">
         <div class="row gap-12">
