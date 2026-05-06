@@ -118,7 +118,6 @@ pub fn billing_overview_with_addresses_html(
 
     let content = format!(
         r##"<div class="page-pad">
-  <p><a href="{base_url}/dashboard">&larr; Back to Dashboard</a></p>
   <div class="eyebrow">Billing</div>
   <h2 class="display-sm m-0 mt-4 mb-16">AI reply credits</h2>
   {address_card}
@@ -146,7 +145,6 @@ pub fn billing_overview_with_addresses_html(
 
   {slider}
 </div>"##,
-        base_url = base_url,
         total = summary.total,
         total_class = total_class,
         purchased = summary.purchased,
