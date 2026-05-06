@@ -54,6 +54,7 @@ pub async fn handle_admin(req: Request, env: Env, path: &str, method: Method) ->
             &google_client_id,
             &meta_app_id,
             &onboarding.conversation,
+            onboarding.default_wait_seconds,
             &locale,
         ));
     }
@@ -263,6 +264,14 @@ async fn save_conversation_settings(
         }
     };
 
+    let wait_seconds_raw = match parse_optional_u32(&form, "default_wait_seconds") {
+        Ok(v) => v,
+        Err(()) => {
+            return error_toast("Wait must be a whole number of seconds.");
+        }
+    };
+    let default_wait_seconds = wait_seconds_raw.unwrap_or(0).min(30);
+
     if let Some(v) = idle_gap_mins {
         if !(5..=1440).contains(&v) {
             return error_toast(&t(locale, "admin-settings-conversation-error-idle-bounds"));
@@ -309,7 +318,9 @@ async fn save_conversation_settings(
         handoff_cooldown_mins,
         max_history_messages,
     };
+    state.default_wait_seconds = default_wait_seconds;
     crate::storage::save_onboarding(kv, tenant_id, &state).await?;
+    propagate_wait_seconds(kv, tenant_id, default_wait_seconds).await?;
 
     Response::from_html(format!(
         "<div class=\"success\">{}</div>",
@@ -322,4 +333,48 @@ fn error_toast(message: &str) -> Result<Response> {
         "<div class=\"error\">{}</div>",
         crate::helpers::html_escape(message)
     ))
+}
+
+/// Push the new wait into every connected channel's reply config so the
+/// settings card is the single source of truth for "how long do we wait
+/// before replying" — channels added later inherit this via onboarding.
+async fn propagate_wait_seconds(
+    kv: &kv::KvStore,
+    tenant_id: &str,
+    wait_seconds: u32,
+) -> Result<()> {
+    let now = crate::helpers::now_iso();
+
+    for mut acct in list_whatsapp_accounts(kv, tenant_id).await? {
+        if acct.auto_reply.wait_seconds != wait_seconds {
+            acct.auto_reply.wait_seconds = wait_seconds;
+            acct.updated_at = now.clone();
+            save_whatsapp_account(kv, &acct).await?;
+        }
+    }
+
+    for mut acct in list_instagram_accounts(kv, tenant_id).await? {
+        if acct.auto_reply.wait_seconds != wait_seconds {
+            acct.auto_reply.wait_seconds = wait_seconds;
+            acct.updated_at = now.clone();
+            save_instagram_account(kv, &acct).await?;
+        }
+    }
+
+    for mut addr in get_email_addresses(kv, tenant_id).await? {
+        if addr.auto_reply.wait_seconds != wait_seconds {
+            addr.auto_reply.wait_seconds = wait_seconds;
+            addr.updated_at = now.clone();
+            save_email_address(kv, tenant_id, &addr).await?;
+        }
+    }
+
+    if let Some(mut dc) = get_discord_config_by_tenant(kv, tenant_id).await? {
+        if dc.auto_reply.wait_seconds != wait_seconds {
+            dc.auto_reply.wait_seconds = wait_seconds;
+            save_discord_config(kv, &dc).await?;
+        }
+    }
+
+    Ok(())
 }

@@ -278,13 +278,6 @@ pub async fn handle_wizard(
                 safety: PersonaSafety::default(),
             };
 
-            if let Some(n) = form.get("default_wait_seconds").and_then(|v| {
-                v.as_i64()
-                    .or_else(|| v.as_str().and_then(|s| s.parse().ok()))
-            }) {
-                state.default_wait_seconds = (n as u32).min(30);
-            }
-
             // Apply the archetype's bundled default rules to every channel
             // account this tenant has already connected. (New connections
             // pick up the same defaults via channel handler creation paths.)
@@ -400,13 +393,7 @@ async fn render_step(
         OnboardingStep::Replies => {
             let db = env.d1("DB")?;
             let archetypes = crate::storage::list_archetypes(&db, true).await?;
-            Response::from_html(replies_html(
-                &state.persona,
-                &archetypes,
-                state.default_wait_seconds,
-                base_url,
-                locale,
-            ))
+            Response::from_html(replies_html(&state.persona, &archetypes, base_url, locale))
         }
 
         OnboardingStep::Launch => {

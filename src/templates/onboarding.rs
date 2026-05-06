@@ -1289,7 +1289,6 @@ pub fn notifications_html(
 pub fn replies_html(
     persona: &PersonaConfig,
     archetypes: &[crate::types::Archetype],
-    default_wait_seconds: u32,
     base_url: &str,
     locale: &crate::locale::Locale,
 ) -> String {
@@ -1369,21 +1368,6 @@ pub fn replies_html(
                 aria-labelledby="wiz-handoff-label">{handoff_value}</textarea>
     </div>
 
-    <div class="card p-22 mb-16">
-      <div class="eyebrow mb-8" id="wiz-wait-label">{wait_eyebrow}</div>
-      <p class="muted fs-13 m-0 mb-12">{wait_lead}</p>
-      <div class="row gap-12">
-        <input type="range" min="0" max="30" step="1" name="default_wait_seconds"
-               x-model.number="waitSeconds"
-               class="flex-1"
-               aria-labelledby="wiz-wait-label"
-               style="accent-color:var(--accent)">
-        <div class="mono ta-right" style="min-width:80px">
-          <span x-text="waitSeconds === 0 ? '{instant}' : waitSeconds + 's'"></span>
-        </div>
-      </div>
-    </div>
-
     <div class="between mt-32">
       <button type="button" class="btn ghost" hx-post="{base_url}/dashboard/wizard/goto" hx-vals='{{"to":"notifications"}}' hx-target="body" hx-swap="innerHTML">{back}</button>
       <button type="submit" class="btn primary" :disabled="!preset">{cont}</button>
@@ -1408,18 +1392,11 @@ pub fn replies_html(
         handoff_lead = t(locale, "wizard-replies-handoff-lead"),
         handoff_placeholder = html_escape(&t(locale, "wizard-replies-handoff-placeholder")),
         handoff_value = html_escape(&current_handoff),
-        wait_eyebrow = t(locale, "wizard-replies-wait-eyebrow"),
-        wait_lead = t(locale, "wizard-replies-wait-lead"),
-        instant = t(locale, "wizard-replies-wait-instant"),
         back = t(locale, "wizard-back"),
         cont = t(locale, "wizard-replies-continue"),
     );
 
-    let x_data = format!(
-        "{{ preset: '{}', waitSeconds: {} }}",
-        js_attr_escape(current_slug),
-        default_wait_seconds,
-    );
+    let x_data = format!("{{ preset: '{}' }}", js_attr_escape(current_slug));
     let progress_expr = "(preset ? 1.0 : 0.0)";
 
     wizard_shell(

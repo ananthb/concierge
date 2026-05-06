@@ -227,7 +227,12 @@ btn?.addEventListener('click', async () => {{
 /// (HTMX json-enc) PUT to `/dashboard/settings/conversation`; the
 /// response is an inline fragment (success/error toast) swapped into
 /// the per-card toast div.
-fn conversation_settings_card(base_url: &str, cfg: &ConversationConfig, locale: &Locale) -> String {
+fn conversation_settings_card(
+    base_url: &str,
+    cfg: &ConversationConfig,
+    default_wait_seconds: u32,
+    locale: &Locale,
+) -> String {
     let h2 = t(locale, "admin-settings-conversation-h2");
     let lead = t(locale, "admin-settings-conversation-lead");
     let idle_label = t(locale, "admin-settings-conversation-idle-label");
@@ -257,6 +262,7 @@ fn conversation_settings_card(base_url: &str, cfg: &ConversationConfig, locale: 
         .max_history_messages
         .map(|v| v.to_string())
         .unwrap_or_default();
+    let wait_value = default_wait_seconds.to_string();
 
     format!(
         r#"<div class="card p-22" hx-ext="json-enc">
@@ -299,6 +305,17 @@ fn conversation_settings_card(base_url: &str, cfg: &ConversationConfig, locale: 
                             <span class="muted fs-13">{default_prefix} {default_history}</span>
                         </div>
                         <span class="muted fs-13">{history_help}</span>
+                    </label>
+                    <label class="stack gap-4">
+                        <span><strong>Wait before replying</strong></span>
+                        <div class="row gap-8" style="align-items:center">
+                            <input class="input" type="number" name="default_wait_seconds"
+                                   inputmode="numeric" min="0" max="30"
+                                   value="{wait_value}"
+                                   style="width:8rem">
+                            <span class="muted">seconds</span>
+                        </div>
+                        <span class="muted fs-13">Lets a customer finish typing before the AI replies. 0 = instant.</span>
                     </label>
                     <div>
                         <button type="submit" class="btn sm">{save}</button>
@@ -437,6 +454,7 @@ pub fn admin_settings_html(
     google_client_id: &str,
     meta_app_id: &str,
     conversation: &ConversationConfig,
+    default_wait_seconds: u32,
     locale: &Locale,
 ) -> String {
     let has_google = !tenant.email.is_empty();
@@ -515,7 +533,8 @@ pub fn admin_settings_html(
         }
     };
 
-    let conversation_section = conversation_settings_card(base_url, conversation, locale);
+    let conversation_section =
+        conversation_settings_card(base_url, conversation, default_wait_seconds, locale);
 
     let content = format!(
         "<div class=\"page-pad\">
@@ -1530,7 +1549,8 @@ mod conversation_card_tests {
     #[test]
     fn empty_config_shows_default_placeholders_and_blank_values() {
         let cfg = ConversationConfig::default();
-        let html = conversation_settings_card("https://example.test", &cfg, &Locale::default_inr());
+        let html =
+            conversation_settings_card("https://example.test", &cfg, 5, &Locale::default_inr());
 
         // Form posts to the right endpoint with the right swap target.
         assert!(
@@ -1577,7 +1597,8 @@ mod conversation_card_tests {
             handoff_cooldown_mins: Some(45),
             max_history_messages: Some(12),
         };
-        let html = conversation_settings_card("https://example.test", &cfg, &Locale::default_inr());
+        let html =
+            conversation_settings_card("https://example.test", &cfg, 5, &Locale::default_inr());
 
         assert!(html.contains(r#"name="idle_gap_mins""#) && html.contains(r#"value="120""#));
         assert!(html.contains(r#"name="handoff_cooldown_mins""#) && html.contains(r#"value="45""#));
@@ -1585,13 +1606,23 @@ mod conversation_card_tests {
     }
 
     #[test]
-    fn aria_live_toast_div_is_present_for_inline_save_feedback() {
-        // The PUT handler returns a fragment that HTMX swaps into
-        // this div. Without it, success/error messages would land on
-        // a fresh page load instead of inline.
+    fn wait_seconds_input_is_present_with_current_value() {
         let html = conversation_settings_card(
             "https://example.test",
             &ConversationConfig::default(),
+            7,
+            &Locale::default_inr(),
+        );
+        assert!(html.contains(r#"name="default_wait_seconds""#));
+        assert!(html.contains(r#"value="7""#));
+    }
+
+    #[test]
+    fn aria_live_toast_div_is_present_for_inline_save_feedback() {
+        let html = conversation_settings_card(
+            "https://example.test",
+            &ConversationConfig::default(),
+            5,
             &Locale::default_inr(),
         );
         assert!(
