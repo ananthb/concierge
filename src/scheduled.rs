@@ -12,9 +12,9 @@ pub const CRON_DIGEST_SWEEP: &str = "*/15 * * * *";
 /// Daily Instagram long-lived-token refresh. Same wrangler/workflow contract.
 pub const CRON_INSTAGRAM_REFRESH: &str = "0 6 * * *";
 
-/// Hourly scheduled-grant processor. Picks rows from `scheduled_grants`
-/// whose next_run_at has passed and credits the targeted tenants.
-pub const CRON_SCHEDULED_GRANTS: &str = "0 * * * *";
+/// Hourly tick. Re-rolls demo personas when the operator-configured
+/// regen cadence has elapsed; cheap when not due (one KV read).
+pub const CRON_HOURLY_TICK: &str = "0 * * * *";
 
 pub async fn handle_scheduled(event: ScheduledEvent, env: Env, _ctx: ScheduleContext) {
     let cron = event.cron();
@@ -31,13 +31,7 @@ pub async fn handle_scheduled(event: ScheduledEvent, env: Env, _ctx: ScheduleCon
                 console_log!("Instagram token refresh error: {:?}", e);
             }
         }
-        CRON_SCHEDULED_GRANTS => {
-            if let Err(e) = process_scheduled_grants(&env).await {
-                console_log!("Scheduled-grants processor error: {:?}", e);
-            }
-            // Piggyback on the hourly tick: if the demo regen cadence
-            // has elapsed since the last roll, refresh the stored
-            // personas. Cheap when not due (one KV read).
+        CRON_HOURLY_TICK => {
             if let Err(e) = roll_demo_personas_if_due(&env).await {
                 console_log!("Demo persona regen error: {:?}", e);
             }
@@ -46,68 +40,6 @@ pub async fn handle_scheduled(event: ScheduledEvent, env: Env, _ctx: ScheduleCon
     }
 
     console_log!("Scheduled job completed: {cron}");
-}
-
-/// Process every `scheduled_grants` row whose next_run_at has elapsed.
-/// For each row: grant credits to the configured audience, log an audit
-/// row per beneficiary, advance next_run_at by the cadence.
-async fn process_scheduled_grants(env: &Env) -> Result<()> {
-    let db = env.d1("DB")?;
-    let now = crate::helpers::now_iso();
-    let due = list_due_scheduled_grants(&db, &now).await?;
-    if due.is_empty() {
-        return Ok(());
-    }
-    console_log!("Processing {} due scheduled grant(s)", due.len());
-
-    for g in due {
-        // Recurring grants always target every tenant.
-        let tenant_ids = list_tenants(&db)
-            .await?
-            .into_iter()
-            .map(|t| t.id)
-            .collect::<Vec<_>>();
-
-        let mut granted_to = 0u32;
-        for tid in &tenant_ids {
-            let res = if g.expires_in_days <= 0 {
-                crate::billing::grant_purchased(&db, tid, g.credits).await
-            } else {
-                crate::billing::grant_with_expiry(&db, tid, g.credits, g.expires_in_days).await
-            };
-            match res {
-                Ok(_) => granted_to += 1,
-                Err(e) => {
-                    console_log!("Scheduled grant {}: tenant {tid} grant failed: {e:?}", g.id)
-                }
-            }
-        }
-
-        let next = crate::billing::cadence::next_run_after(&now, g.cadence);
-        record_scheduled_grant_run(&db, &g.id, &now, &next).await?;
-        let details = serde_json::json!({
-            "credits": g.credits,
-            "expires_in_days": g.expires_in_days,
-            "tenant_count": granted_to,
-            "next_run_at": next,
-        });
-        // System actor for cron-driven audit entries.
-        crate::management::audit::log_action(
-            &db,
-            "system:cron",
-            "scheduled_grant_run",
-            "billing",
-            Some(&g.id),
-            Some(&details),
-        )
-        .await?;
-        console_log!(
-            "Scheduled grant {}: granted {granted_to} tenant(s) {credits} credit(s); next run {next}",
-            g.id,
-            credits = g.credits,
-        );
-    }
-    Ok(())
 }
 
 /// Re-roll the stored demo personas when:

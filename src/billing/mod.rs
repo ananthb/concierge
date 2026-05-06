@@ -1,15 +1,13 @@
 //! Billing: reply credit tracking with expiry + Razorpay payments.
 //!
 //! Credits are stored as a ledger of entries, each with an optional expiry.
-//! - Purchased credits never expire.
-//! - Management grants (and recurring credit grants) expire after a
-//!   configurable period (or never, when `expires_in_days = 0`).
+//! Purchased credits never expire; operator-issued grants can expire after
+//! a configurable period (or never, when `expires_in_days = 0`).
 //!
 //! Deduction happens BEFORE send (optimistic). If send fails,
 //! credits are restored. This prevents double-spend races.
 //! Soonest-expiring credits are consumed first.
 
-pub mod cadence;
 pub mod razorpay;
 pub mod webhook;
 
@@ -19,16 +17,11 @@ use crate::helpers::{days_from_now, now_iso};
 use crate::storage;
 use crate::types::{CreditEntry, CreditSource, TenantBilling};
 
-// Slider bounds for the credit purchase flow. These are pure UI knobs,
-// not pricing. Keeping them as Rust constants because they don't make
-// sense to edit at runtime from /manage.
-pub const MIN_CREDITS: i64 = 500;
-pub const MAX_CREDITS: i64 = 1_000_000;
-
-// Per-currency pricing, the per-tenant free monthly credit grant, and
-// the reply-email pack size all live in the `pricing_config` table.
-// `storage::PricingConfig::default()` mirrors the SQL DEFAULT clauses
-// so tests and host-side callers can reference the same numbers.
+// Hard ceiling for the credit-purchase slider, used as a sanity bound on
+// the operator-tunable max in `pricing_config`. Operators can set
+// `pricing_config.max_credits` lower; this ceiling prevents accidental
+// overflow on the calculate_total multiplication.
+pub const MAX_CREDITS_CEILING: i64 = 10_000_000;
 
 /// Total price in the smallest currency unit (paise / cents) for a given credit amount.
 pub fn calculate_total(credits: i64, milli_price: i64) -> i64 {

@@ -1443,6 +1443,8 @@ pub fn launch_html(
     milli_price: i64,
     verified: bool,
     verification_amount: i64,
+    min_credits: i64,
+    max_credits: i64,
 ) -> String {
     let email_rows: String = email_addresses
         .iter()
@@ -1485,6 +1487,8 @@ pub fn launch_html(
                 return_to: "/admin/wizard/launch",
             },
             milli_price,
+            min_credits,
+            max_credits,
         ),
         note = t(locale, "wizard-launch-credits-note"),
     );
@@ -1617,6 +1621,8 @@ pub fn pricing_html(
             cta_label: &signin_label,
         },
         milli_price,
+        cfg.min_credits,
+        cfg.max_credits,
     );
     let per_reply = match locale.currency {
         Currency::Usd => format!("${:.3}", milli_price as f64 / 100_000.0),
@@ -1723,6 +1729,8 @@ mod pricing_tests {
         use crate::storage::PricingConcept::*;
         let mut p = crate::storage::Pricing {
             email_pack_size: pack,
+            min_credits: 1_000,
+            max_credits: 1_000_000,
             amounts: std::collections::BTreeMap::new(),
         };
         // INR side as overridden by the caller.
@@ -1784,7 +1792,17 @@ mod pricing_tests {
     #[test]
     fn launch_html_unverified_shows_verify_cta_and_disables_finish() {
         let l = crate::locale::Locale::default_inr();
-        let html = launch_html(&[], "example.com", &l, "https://x.test", 25_000, false, 100);
+        let html = launch_html(
+            &[],
+            "example.com",
+            &l,
+            "https://x.test",
+            25_000,
+            false,
+            100,
+            1_000,
+            1_000_000,
+        );
         // Verify card emits the Razorpay-bound POST and the verify
         // copy + amount.
         assert!(
@@ -1806,7 +1824,17 @@ mod pricing_tests {
     #[test]
     fn launch_html_verified_enables_finish_and_hides_verify_card() {
         let l = crate::locale::Locale::default_inr();
-        let html = launch_html(&[], "example.com", &l, "https://x.test", 25_000, true, 100);
+        let html = launch_html(
+            &[],
+            "example.com",
+            &l,
+            "https://x.test",
+            25_000,
+            true,
+            100,
+            1_000,
+            1_000_000,
+        );
         assert!(
             !html.contains("/admin/billing/verification"),
             "verify form should be hidden when verified"

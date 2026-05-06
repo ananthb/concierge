@@ -1,4 +1,5 @@
-//! Management billing: pricing settings and recurring credit grants.
+//! Management billing: pricing settings (per-currency rates, email pack
+//! size, credit-purchase bounds).
 
 use worker::*;
 
@@ -26,25 +27,21 @@ pub async fn handle_billing(
     let locale = crate::locale::Locale::from_request(&req);
 
     match (method, parts.as_slice()) {
-        // Billing overview: pricing form + recurring grants.
         (Method::Get, []) => {
             let cfg = storage::get_pricing(db).await;
-            let scheduled = storage::list_scheduled_grants(db).await.unwrap_or_default();
-
             Response::from_html(tmpl::billing_overview_html(
                 actor_email,
                 base_url,
                 &locale,
                 &cfg,
-                &scheduled,
-                None,
             ))
         }
 
         // Update pricing settings. Form posts a flat dict whose keys are
-        // either `email_pack_size` or `<concept>__<currency>` (e.g.
-        // `unit_price_milli__INR`). We walk the config + every known
-        // currency × concept and upsert anything that's positive.
+        // either `email_pack_size`, `min_credits`, `max_credits`, or
+        // `<concept>__<currency>` (e.g. `unit_price_milli__INR`). We walk
+        // the config + every known currency × concept and upsert anything
+        // that's positive.
         (Method::Post, ["settings"]) => {
             let form: serde_json::Value = req.json().await?;
             let pick = |key: &str| -> Option<i64> {
@@ -53,15 +50,37 @@ pub async fn handle_billing(
                     .or_else(|| v.as_str().and_then(|s| s.parse::<i64>().ok()))
             };
 
-            // Currency-agnostic settings.
-            if let Some(n) = pick("email_pack_size") {
-                if n <= 0 {
-                    return Response::from_html(
-                        r#"<div class="error">Invalid value for email_pack_size: must be a positive integer.</div>"#.to_string(),
-                    );
-                }
-                storage::update_pricing_config(db, n).await?;
+            // Currency-agnostic settings. Existing snapshot drives the
+            // defaults so a single-cell post doesn't clobber the other
+            // two values when the form only carried one of them.
+            let cfg_before = storage::get_pricing(db).await;
+            let pack_size = pick("email_pack_size").unwrap_or(cfg_before.email_pack_size);
+            let min_credits = pick("min_credits").unwrap_or(cfg_before.min_credits);
+            let max_credits = pick("max_credits").unwrap_or(cfg_before.max_credits);
+
+            if pack_size <= 0 {
+                return Response::from_html(
+                    r#"<div class="error">Addresses per pack must be positive.</div>"#.to_string(),
+                );
             }
+            if min_credits < 1 {
+                return Response::from_html(
+                    r#"<div class="error">Minimum credits must be at least 1.</div>"#.to_string(),
+                );
+            }
+            if max_credits < min_credits {
+                return Response::from_html(
+                    r#"<div class="error">Maximum credits must be greater than or equal to the minimum.</div>"#
+                        .to_string(),
+                );
+            }
+            if max_credits > crate::billing::MAX_CREDITS_CEILING {
+                return Response::from_html(format!(
+                    r#"<div class="error">Maximum credits cannot exceed {}.</div>"#,
+                    crate::billing::MAX_CREDITS_CEILING
+                ));
+            }
+            storage::update_pricing_config(db, pack_size, min_credits, max_credits).await?;
 
             // Per-(concept, currency) cells. We accept any currency code
             // the form sends, so adding a currency client-side just works.
@@ -122,148 +141,15 @@ pub async fn handle_billing(
                 None,
             )
             .await?;
-            rerender_with_msg(
-                db,
+            let cfg = storage::get_pricing(db).await;
+            Response::from_html(tmpl::billing_overview_html(
                 actor_email,
                 base_url,
                 &locale,
-                Some(&format!(
-                    r#"<div class="success">Removed currency {}.</div>"#,
-                    crate::helpers::html_escape(&code)
-                )),
-            )
-            .await
-        }
-
-        // Create a scheduled credit grant. Always applies to every tenant.
-        (Method::Post, ["schedule"]) => {
-            let form: serde_json::Value = req.json().await?;
-            let cadence_wire = form.get("cadence").and_then(|v| v.as_str()).unwrap_or("");
-            let cadence = match crate::types::GrantCadence::from_wire(cadence_wire) {
-                Some(c) => c,
-                None => {
-                    return rerender_with_msg(
-                        db,
-                        actor_email,
-                        base_url,
-                        &locale,
-                        Some(&format!(
-                            "<div class=\"error\">Unknown cadence \"{}\"</div>",
-                            crate::helpers::html_escape(cadence_wire)
-                        )),
-                    )
-                    .await
-                }
-            };
-            let credits = form
-                .get("credits")
-                .and_then(|v| {
-                    v.as_str()
-                        .and_then(|s| s.parse::<i64>().ok())
-                        .or_else(|| v.as_i64())
-                })
-                .unwrap_or(0);
-            if credits <= 0 {
-                return rerender_with_msg(
-                    db,
-                    actor_email,
-                    base_url,
-                    &locale,
-                    Some(r#"<div class="error">Credits must be positive.</div>"#),
-                )
-                .await;
-            }
-            let expires_in_days = form
-                .get("expires_in_days")
-                .and_then(|v| {
-                    v.as_str()
-                        .and_then(|s| s.parse::<i64>().ok())
-                        .or_else(|| v.as_i64())
-                })
-                .unwrap_or(0);
-
-            let now = crate::helpers::now_iso();
-            let next_run_at = crate::billing::cadence::next_run_after(&now, cadence);
-            let g = crate::types::ScheduledGrant {
-                id: crate::helpers::generate_id(),
-                cadence,
-                credits,
-                expires_in_days,
-                last_run_at: None,
-                next_run_at,
-                active: true,
-                created_at: now.clone(),
-                updated_at: now,
-            };
-            storage::insert_scheduled_grant(db, &g).await?;
-            audit::log_action(
-                db,
-                actor_email,
-                "schedule_grant",
-                "billing",
-                Some(&g.id),
-                Some(&serde_json::json!({
-                    "cadence": g.cadence.as_wire(),
-                    "credits": g.credits,
-                    "expires_in_days": g.expires_in_days,
-                })),
-            )
-            .await?;
-
-            rerender_with_msg(
-                db,
-                actor_email,
-                base_url,
-                &locale,
-                Some(r#"<div class="success">Scheduled grant added.</div>"#),
-            )
-            .await
-        }
-
-        // Remove a scheduled grant.
-        (Method::Delete, ["schedule", id]) => {
-            storage::delete_scheduled_grant(db, id).await?;
-            audit::log_action(
-                db,
-                actor_email,
-                "schedule_grant_remove",
-                "billing",
-                Some(id),
-                None,
-            )
-            .await?;
-            rerender_with_msg(
-                db,
-                actor_email,
-                base_url,
-                &locale,
-                Some(r#"<div class="success">Scheduled grant removed.</div>"#),
-            )
-            .await
+                &cfg,
+            ))
         }
 
         _ => Response::error("Not Found", 404),
     }
-}
-
-/// Re-render the /manage/billing page with an inline message rendered into
-/// the schedule form's toast slot. Used by the schedule POST/DELETE handlers
-/// so the operator sees validation errors and success notes in context.
-async fn rerender_with_msg(
-    db: &D1Database,
-    actor_email: &str,
-    base_url: &str,
-    locale: &crate::locale::Locale,
-    msg: Option<&str>,
-) -> Result<Response> {
-    let cfg = storage::get_pricing(db).await;
-    let scheduled = storage::list_scheduled_grants(db).await.unwrap_or_default();
-    Response::from_html(tmpl::billing_overview_html(
-        actor_email,
-        base_url,
-        locale,
-        &cfg,
-        &scheduled,
-        msg,
-    ))
 }

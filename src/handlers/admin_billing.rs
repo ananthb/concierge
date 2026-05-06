@@ -52,6 +52,8 @@ pub async fn handle_billing_admin(
                 milli_price,
                 address_price,
                 cfg.email_pack_size,
+                cfg.min_credits,
+                cfg.max_credits,
             ))
         }
 
@@ -66,10 +68,11 @@ pub async fn handle_billing_admin(
                         .or_else(|| v.as_i64().map(|n| n.to_string()))
                 })
                 .unwrap_or_default();
+            let cfg = storage::get_pricing(&db).await;
             let credits = credits_raw
                 .parse::<i64>()
-                .unwrap_or(billing::MIN_CREDITS)
-                .clamp(billing::MIN_CREDITS, billing::MAX_CREDITS);
+                .unwrap_or(cfg.min_credits)
+                .clamp(cfg.min_credits, cfg.max_credits);
 
             // Accept a return_to path (used by the wizard to send users back
             // to /admin/wizard/launch after payment). Restrict to same-origin
@@ -87,9 +90,7 @@ pub async fn handle_billing_admin(
             let locale = crate::locale::Locale::from_tenant(&tenant.locale, Some(tenant.currency));
             let currency = locale.currency.as_str();
 
-            let cfg = storage::get_pricing(&db).await;
             let milli_price = cfg.unit_price_milli(locale.currency.as_str());
-
             let amount = billing::calculate_total(credits, milli_price);
 
             let key_id = env.secret("RAZORPAY_KEY_ID")?.to_string();

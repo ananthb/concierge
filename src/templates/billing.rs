@@ -65,6 +65,8 @@ pub fn billing_overview_with_addresses_html(
     milli_price: i64,
     address_price: i64,
     email_pack_size: i64,
+    min_credits: i64,
+    max_credits: i64,
 ) -> String {
     let summary = summarize(billing);
 
@@ -89,6 +91,8 @@ pub fn billing_overview_with_addresses_html(
             return_to: "/admin/billing",
         },
         milli_price,
+        min_credits,
+        max_credits,
     );
 
     let address_price_label = format_money(address_price, locale);

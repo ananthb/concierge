@@ -104,8 +104,8 @@ ENVIRONMENT = "production"
 #                    digest emails to tenants whose cadence is due, expire
 #                    stale rows past 24h.
 #   "0 6 * * *"    — daily Instagram token refresh.
-#   "0 * * * *"    — hourly scheduled-grants processor: run every row in
-#                    scheduled_grants whose next_run_at has elapsed.
+#   "0 * * * *"    — hourly tick: re-roll demo personas when the operator
+#                    cadence has elapsed.
 # scheduled.rs dispatches on event.cron().
 # ============================================================================
 [triggers]

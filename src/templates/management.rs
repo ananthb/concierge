@@ -904,8 +904,6 @@ fn audit_action_options(selected: &str) -> String {
         ("delete_tenant", "Deleted tenant"),
         ("update_pricing", "Updated pricing"),
         ("delete_pricing_currency", "Removed currency"),
-        ("schedule_grant", "Scheduled grant"),
-        ("schedule_grant_remove", "Removed scheduled grant"),
         ("edit_demo_config", "Edited demo config"),
     ];
     OPTIONS
@@ -993,8 +991,6 @@ fn audit_action_chip(action: &str) -> String {
         "delete_tenant" => ("Deleted tenant", "error"),
         "update_pricing" => ("Updated pricing", ""),
         "delete_pricing_currency" => ("Removed currency", "error"),
-        "schedule_grant" => ("Scheduled grant", "ok"),
-        "schedule_grant_remove" => ("Removed scheduled grant", "error"),
         "edit_demo_config" => ("Edited demo config", ""),
         other => return format!(r#"<span class="chip mono">{}</span>"#, html_escape(other)),
     };
@@ -1067,96 +1063,19 @@ fn audit_resource_cell(base_url: &str, kind: &str, id: &str) -> String {
     )
 }
 
-fn scheduled_grants_table(scheduled: &[crate::types::ScheduledGrant], base_url: &str) -> String {
-    if scheduled.is_empty() {
-        return empty_state(
-            "No scheduled grants yet",
-            "Add a recurring grant below to automatically credit every tenant on a calendar cadence.",
-            None,
-        );
-    }
-
-    let rows: String = scheduled
-        .iter()
-        .map(|g| {
-            let expiry = if g.expires_in_days <= 0 {
-                "never".to_string()
-            } else {
-                format!("{}d", g.expires_in_days)
-            };
-            let last_run = g.last_run_at.as_deref().unwrap_or("–");
-            let active = if g.active { "active" } else { "off" };
-            format!(
-                r##"<tr>
-  <td>{cadence}</td>
-  <td class="ta-right mono">{credits}</td>
-  <td class="mono fs-12">{expiry}</td>
-  <td class="mono fs-11">{last_run}</td>
-  <td class="mono fs-11">{next_run}</td>
-  <td><span class="chip">{active}</span></td>
-  <td>
-    <form hx-delete="{base_url}/manage/billing/schedule/{id}" hx-target="body" hx-swap="innerHTML" hx-confirm="Remove this scheduled grant?">
-      <button class="btn ghost sm danger" type="submit">Remove</button>
-    </form>
-  </td>
-</tr>"##,
-                cadence = html_escape(g.cadence.label()),
-                credits = g.credits,
-                expiry = expiry,
-                last_run = html_escape(last_run.get(..16).unwrap_or(last_run)),
-                next_run = html_escape(g.next_run_at.get(..16).unwrap_or(&g.next_run_at)),
-                active = active,
-                base_url = base_url,
-                id = html_escape(&g.id),
-            )
-        })
-        .collect();
-
-    format!(
-        r##"<div class="card no-pad" style="overflow-x:auto">
-            <table class="manage-table fs-13">
-              <thead>
-                <tr>
-                  <th>Cadence</th>
-                  <th class="ta-right">Credits</th>
-                  <th>Expiry</th>
-                  <th>Last run</th>
-                  <th>Next run</th>
-                  <th>Status</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>{rows}</tbody>
-            </table>
-          </div>"##,
-        rows = rows,
-    )
-}
-
 pub fn billing_overview_html(
     actor_email: &str,
     base_url: &str,
     locale: &Locale,
     cfg: &crate::storage::Pricing,
-    scheduled: &[crate::types::ScheduledGrant],
-    schedule_form_msg: Option<&str>,
 ) -> String {
     let pricing_table = pricing_form_table(cfg, base_url);
-    let scheduled_rows = scheduled_grants_table(scheduled, base_url);
-    let schedule_msg = schedule_form_msg.unwrap_or("");
 
-    let header = manage_header("Billing", "Pricing & grants", None, None, "");
+    let header = manage_header("Billing", "Pricing", None, None, "");
     let content = format!(
         r##"<div class="page-pad">
   {header}
 
-  <!-- Pricing card has two destructive in-page actions (Remove
-       currency column, Add currency) that swap the whole body — if
-       the operator has typed into a price cell and clicks one, those
-       edits vanish. The x-data wrapper here flips `dirty` on any
-       nested @input and re-disables the destructive actions until
-       Save pricing succeeds. The `htmx:after-request` listener clears
-       dirty when the /settings POST returns successfully. -->
   <div class="card p-22 mb-16"
        x-data="{{ dirty: false }}"
        @input.capture="dirty = true"
@@ -1166,11 +1085,21 @@ pub fn billing_overview_html(
     <form hx-post="{base_url}/manage/billing/settings" hx-target="{hash}toast-region" hx-swap="afterbegin" hx-ext="json-enc">
       {pricing_table}
 
-      <div class="row gap-12 wrap mb-12 mt-16">
-        <label class="flex-1" style="min-width:240px">
-          <div class="eyebrow mb-4">Addresses per reply-email pack</div>
+      <div class="row gap-12 wrap mb-12 mt-16" style="align-items:flex-end">
+        <label class="stack" style="min-width:200px">
+          <span class="eyebrow lbl">Addresses per reply-email pack</span>
           <input class="input mono" name="email_pack_size" type="number" min="1" required value="{email_pack_size}">
-          <div class="muted fs-11 mt-4">currency-independent · tenants receive this many addresses per active pack</div>
+          <span class="muted fs-11 mt-4">tenants receive this many addresses per active pack</span>
+        </label>
+        <label class="stack" style="min-width:200px">
+          <span class="eyebrow lbl">Minimum credits per purchase</span>
+          <input class="input mono" name="min_credits" type="number" min="1" required value="{min_credits}">
+          <span class="muted fs-11 mt-4">slider lower bound; smallest purchase a tenant can make</span>
+        </label>
+        <label class="stack" style="min-width:200px">
+          <span class="eyebrow lbl">Maximum credits per purchase</span>
+          <input class="input mono" name="max_credits" type="number" min="1" max="{max_credits_ceiling}" required value="{max_credits}">
+          <span class="muted fs-11 mt-4">hard upper bound across slider + custom input</span>
         </label>
       </div>
 
@@ -1180,48 +1109,15 @@ pub fn billing_overview_html(
       </div>
     </form>
   </div>
-
-  <div class="card p-22 mb-16">
-    <h3 class="mb-8">Recurring credit grants</h3>
-    <p class="muted mb-12">Automated grants that fire on a calendar cadence and apply to every tenant. Use these in place of a baked-in monthly free allowance.</p>
-    {scheduled_rows}
-    <div id="schedule-toast">{schedule_msg}</div>
-    <form hx-post="{base_url}/manage/billing/schedule" hx-target="body" hx-swap="innerHTML" hx-ext="json-enc" class="mt-12">
-      <div class="row gap-12 wrap mb-12" style="align-items:flex-end">
-        <label style="min-width:220px">
-          <div class="eyebrow lbl">Cadence</div>
-          <select class="select" name="cadence" required>
-            <option value="monthly_first">1st of every month</option>
-            <option value="weekly_mon">Every Monday</option>
-            <option value="weekly_tue">Every Tuesday</option>
-            <option value="weekly_wed">Every Wednesday</option>
-            <option value="weekly_thu">Every Thursday</option>
-            <option value="weekly_fri">Every Friday</option>
-            <option value="weekly_sat">Every Saturday</option>
-            <option value="weekly_sun">Every Sunday</option>
-            <option value="daily">Every day at 00:00 UTC</option>
-          </select>
-        </label>
-        <label class="stack">
-          <span class="eyebrow lbl">Credits</span>
-          <input class="input mono w-input-xs" name="credits" type="number" min="1" required placeholder="e.g. 50">
-        </label>
-        <label class="stack">
-          <span class="eyebrow lbl">Expires in (days, 0 = never)</span>
-          <input class="input mono w-input-sm" name="expires_in_days" type="number" min="0" value="0" required>
-        </label>
-        <button class="btn sm" type="submit">Add scheduled grant</button>
-      </div>
-    </form>
-  </div>
 </div>"##,
         header = header,
         base_url = base_url,
         hash = HASH,
         pricing_table = pricing_table,
         email_pack_size = cfg.email_pack_size,
-        scheduled_rows = scheduled_rows,
-        schedule_msg = schedule_msg,
+        min_credits = cfg.min_credits,
+        max_credits = cfg.max_credits,
+        max_credits_ceiling = crate::billing::MAX_CREDITS_CEILING,
     );
 
     manage_shell(

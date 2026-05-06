@@ -428,6 +428,8 @@ async fn render_step(
                 milli_price,
                 tenant.verified_at.is_some(),
                 verify_amount,
+                cfg.min_credits,
+                cfg.max_credits,
             ))
         }
     }

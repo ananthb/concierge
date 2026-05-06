@@ -1,17 +1,17 @@
 //! Credit-purchase slider: used on /pricing, /admin/billing, and the wizard
 //! launch step so the buying experience is identical everywhere.
 //!
-//! Flat per-reply rate. Slider runs `MIN_CREDITS`..`SLIDER_MAX` step 100.
-//! Past the right edge, a "Custom" toggle swaps in a number input that
-//! accepts integers between `SLIDER_MAX` and `MAX_CREDITS`. Live price
-//! preview is computed in Alpine on the client.
+//! Bounds (`min_credits` / `max_credits`) come from `pricing_config` so
+//! operators can tune them from /manage/billing without a code deploy.
+//! The slider runs `min..SLIDER_MAX`; past the right edge a "Custom"
+//! toggle swaps in a number input that accepts integers up to `max`.
 
-use crate::billing::{MAX_CREDITS, MIN_CREDITS};
 use crate::helpers::{format_count, format_money};
 use crate::locale::{Currency, Locale};
 
-/// Upper bound of the slider. Past this, the "choose your own amount" box
-/// takes over; its minimum is this value, its maximum is `MAX_CREDITS`.
+/// Cap for the dragged slider; beyond this the operator switches to the
+/// custom number input. Pure UI knob; the real upper limit is the
+/// operator-configured `pricing_config.max_credits`.
 pub const SLIDER_MAX: i64 = 10_000;
 
 /// Variant of the slider: controls the bottom action area.
@@ -31,6 +31,8 @@ pub fn slider_html(
     base_url: &str,
     mode: SliderMode<'_>,
     milli_price: i64,
+    min_credits: i64,
+    max_credits: i64,
 ) -> String {
     // Per-reply price label and the JS expression for live total. INR uses
     // `toLocaleString('en-IN')` for lakh/crore grouping; USD does standard
@@ -60,8 +62,14 @@ pub fn slider_html(
     };
     let symbol = locale.currency.symbol();
     let count_locale = locale.langid.to_string(); // "en-IN" / "en-US"
-                                                  // Initial slider step value seeded server-side to match minimum.
-    let initial = MIN_CREDITS.max(500); // start at a friendlier default
+    let initial = min_credits;
+    // The slider's right edge is the smaller of SLIDER_MAX and the
+    // operator-configured ceiling — when an operator drops the cap to
+    // 5,000 we don't want the slider extending past it.
+    let slider_top = SLIDER_MAX.min(max_credits).max(min_credits);
+    // The "custom" path picks up where the slider ends and runs to the
+    // operator-set ceiling.
+    let custom_min = slider_top;
 
     let action_html = match mode {
         SliderMode::Buy { return_to } => format!(
@@ -85,6 +93,42 @@ pub fn slider_html(
         ),
     };
 
+    // Hide the "Need more?" / custom path when the operator-configured
+    // ceiling already fits inside the slider.
+    let show_custom = max_credits > slider_top;
+
+    let custom_link = if show_custom {
+        format!(
+            r##"<span><a href="#" class="muted" @click.prevent="custom = true; if (credits < {custom_min}) credits = {custom_min}">Need more?</a></span>"##,
+            custom_min = custom_min,
+        )
+    } else {
+        String::new()
+    };
+
+    let custom_pane = if show_custom {
+        format!(
+            r##"<div x-show="custom" x-cloak>
+    <input type="number" min="{custom_min}" max="{max}" step="1"
+           x-model.number="credits"
+           @input="credits = Math.max({custom_min}, Math.min({max}, parseInt($el.value) || {custom_min}))"
+           class="input mono"
+           placeholder="How many replies?">
+    <div class="between mt-4 mono muted fs-11">
+      <span>min {custom_min_display}, max {max_display}</span>
+      <span><a href="#" class="muted" @click.prevent="custom = false; if (credits > {slider_top}) credits = {slider_top}">Use the slider</a></span>
+    </div>
+  </div>"##,
+            custom_min = custom_min,
+            max = max_credits,
+            custom_min_display = format_count(custom_min, locale),
+            max_display = format_count(max_credits, locale),
+            slider_top = slider_top,
+        )
+    } else {
+        String::new()
+    };
+
     format!(
         r##"<div x-data="{{ credits: {initial}, custom: false, countLocale: '{count_locale}' }}" class="card p-22">
   <div class="between mb-12">
@@ -99,28 +143,18 @@ pub fn slider_html(
   </div>
 
   <div x-show="!custom" x-cloak>
-    <input type="range" min="{min}" max="{slider_max}" step="100"
+    <input type="range" min="{min}" max="{slider_top}" step="100"
            x-model.number="credits"
            class="w-full"
            style="accent-color:var(--accent)">
     <div class="between mt-4 mono muted fs-11">
       <span>{min_price}</span>
-      <span><a href="#" class="muted" @click.prevent="custom = true; if (credits < {custom_min}) credits = {custom_min}">Need more?</a></span>
-      <span>{slider_max_price}</span>
+      {custom_link}
+      <span>{slider_top_price}</span>
     </div>
   </div>
 
-  <div x-show="custom" x-cloak>
-    <input type="number" min="{custom_min}" max="{max}" step="1"
-           x-model.number="credits"
-           @input="credits = Math.max({custom_min}, Math.min({max}, parseInt($el.value) || {custom_min}))"
-           class="input mono"
-           placeholder="How many replies?">
-    <div class="between mt-4 mono muted fs-11">
-      <span>min {custom_min_display}, max {max_display}</span>
-      <span><a href="#" class="muted" @click.prevent="custom = false; if (credits > {slider_max}) credits = {slider_max}">Use the slider</a></span>
-    </div>
-  </div>
+  {custom_pane}
 
   <div class="ta-center mt-16 fs-14">
     Total: <strong>{symbol}<span x-text="{price_js}"></span></strong>
@@ -131,16 +165,14 @@ pub fn slider_html(
         initial = initial,
         per_reply_label = per_reply_label,
         symbol = symbol,
-        min = MIN_CREDITS,
-        slider_max = SLIDER_MAX,
-        custom_min = SLIDER_MAX,
-        custom_min_display = format_count(SLIDER_MAX, locale),
-        max = MAX_CREDITS,
-        max_display = format_count(MAX_CREDITS, locale),
-        min_price = price_for(MIN_CREDITS, locale, milli_price),
-        slider_max_price = price_for(SLIDER_MAX, locale, milli_price),
+        min = min_credits,
+        slider_top = slider_top,
+        min_price = price_for(min_credits, locale, milli_price),
+        slider_top_price = price_for(slider_top, locale, milli_price),
         price_js = price_js,
         count_locale = count_locale,
+        custom_link = custom_link,
+        custom_pane = custom_pane,
         action_html = action_html,
     )
 }

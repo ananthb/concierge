@@ -176,6 +176,10 @@ CREATE TABLE IF NOT EXISTS pricing_config (
     -- Reply-email subscription pack size — addresses granted per pack
     -- purchase. Currency-independent; the price lives in pricing_amount.
     email_pack_size INTEGER NOT NULL DEFAULT 5,
+    -- Bounds for the credit-purchase slider on /pricing and the in-app
+    -- billing card. Operator-tunable from /manage/billing.
+    min_credits INTEGER NOT NULL DEFAULT 1000,
+    max_credits INTEGER NOT NULL DEFAULT 1000000,
     updated_at TEXT DEFAULT (datetime('now'))
 );
 INSERT OR IGNORE INTO pricing_config (id) VALUES (1);
@@ -206,27 +210,6 @@ INSERT OR IGNORE INTO pricing_amount (concept, currency_code, amount) VALUES
     ('address_price',       'USD', 100),    -- $1/pack/month
     ('verification_amount', 'INR', 100),    -- ₹1
     ('verification_amount', 'USD', 100);    -- $1
-
--- Scheduled credit grants. The scheduled-grants cron picks every row where
--- next_run_at <= now AND active = 1, grants `credits` to every tenant,
--- then advances next_run_at by the cadence.
---
--- cadence is one of: daily, weekly_<dow>, monthly_first
---   weekly_<dow> uses lowercase 3-letter day codes: mon, tue, wed, thu, fri, sat, sun.
--- expires_in_days controls the granted-credit expiry (0 = never expires).
-CREATE TABLE IF NOT EXISTS scheduled_grants (
-    id TEXT PRIMARY KEY,
-    cadence TEXT NOT NULL,
-    credits INTEGER NOT NULL CHECK (credits > 0),
-    expires_in_days INTEGER NOT NULL DEFAULT 0,
-    last_run_at TEXT,
-    next_run_at TEXT NOT NULL,
-    active INTEGER NOT NULL DEFAULT 1,
-    created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now'))
-);
-CREATE INDEX IF NOT EXISTS idx_sg_due
-    ON scheduled_grants(active, next_run_at);
 
 -- Archetype catalog. Curated by management at /manage/archetypes, listed by
 -- the public demo's persona picker, and referenced by a tenant's persona

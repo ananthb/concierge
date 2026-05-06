@@ -1537,6 +1537,8 @@ impl PricingConcept {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Pricing {
     pub email_pack_size: i64,
+    pub min_credits: i64,
+    pub max_credits: i64,
     pub amounts: std::collections::BTreeMap<(PricingConcept, String), i64>,
 }
 
@@ -1553,6 +1555,8 @@ impl Default for Pricing {
         amounts.insert((PricingConcept::VerificationAmount, "USD".into()), 100);
         Self {
             email_pack_size: 5,
+            min_credits: 1_000,
+            max_credits: 1_000_000,
             amounts,
         }
     }
@@ -1604,12 +1608,20 @@ pub async fn get_pricing(db: &D1Database) -> Pricing {
 
     // Currency-agnostic singleton.
     if let Ok(Some(row)) = db
-        .prepare("SELECT email_pack_size FROM pricing_config WHERE id = 1")
+        .prepare(
+            "SELECT email_pack_size, min_credits, max_credits FROM pricing_config WHERE id = 1",
+        )
         .first::<serde_json::Value>(None)
         .await
     {
         if let Some(n) = row.get("email_pack_size").and_then(|v| v.as_i64()) {
             p.email_pack_size = n;
+        }
+        if let Some(n) = row.get("min_credits").and_then(|v| v.as_i64()) {
+            p.min_credits = n;
+        }
+        if let Some(n) = row.get("max_credits").and_then(|v| v.as_i64()) {
+            p.max_credits = n;
         }
     }
 
@@ -1672,141 +1684,26 @@ pub async fn delete_pricing_currency(db: &D1Database, currency_code: &str) -> Re
     Ok(())
 }
 
-/// Persist the currency-agnostic settings (just `email_pack_size` for now).
-pub async fn update_pricing_config(db: &D1Database, email_pack_size: i64) -> Result<()> {
+/// Persist the currency-agnostic settings.
+pub async fn update_pricing_config(
+    db: &D1Database,
+    email_pack_size: i64,
+    min_credits: i64,
+    max_credits: i64,
+) -> Result<()> {
     db.prepare(
         "UPDATE pricing_config SET \
            email_pack_size = ?, \
+           min_credits = ?, \
+           max_credits = ?, \
            updated_at = datetime('now') \
          WHERE id = 1",
     )
-    .bind(&[JsValue::from_f64(email_pack_size as f64)])?
-    .run()
-    .await?;
-    Ok(())
-}
-
-// ============================================================================
-// Scheduled grants
-// ============================================================================
-
-fn parse_scheduled_grant(row: &serde_json::Value) -> Option<crate::types::ScheduledGrant> {
-    use crate::types::{GrantCadence, ScheduledGrant};
-
-    let id = row.get("id")?.as_str()?.to_string();
-    let cadence_wire = row.get("cadence")?.as_str()?;
-    let cadence = GrantCadence::from_wire(cadence_wire)?;
-    let credits = row.get("credits")?.as_i64()?;
-    let expires_in_days = row
-        .get("expires_in_days")
-        .and_then(|v| v.as_i64())
-        .unwrap_or(0);
-    let last_run_at = row
-        .get("last_run_at")
-        .and_then(|v| v.as_str())
-        .map(|s| s.to_string());
-    let next_run_at = row.get("next_run_at")?.as_str()?.to_string();
-    let active = row
-        .get("active")
-        .and_then(|v| v.as_i64())
-        .map(|n| n != 0)
-        .unwrap_or(true);
-    let created_at = row
-        .get("created_at")
-        .and_then(|v| v.as_str())
-        .unwrap_or("")
-        .to_string();
-    let updated_at = row
-        .get("updated_at")
-        .and_then(|v| v.as_str())
-        .unwrap_or("")
-        .to_string();
-    Some(ScheduledGrant {
-        id,
-        cadence,
-        credits,
-        expires_in_days,
-        last_run_at,
-        next_run_at,
-        active,
-        created_at,
-        updated_at,
-    })
-}
-
-pub async fn list_scheduled_grants(db: &D1Database) -> Result<Vec<crate::types::ScheduledGrant>> {
-    let res = db
-        .prepare("SELECT * FROM scheduled_grants ORDER BY created_at DESC")
-        .all()
-        .await?;
-    let rows: Vec<serde_json::Value> = res.results()?;
-    Ok(rows.iter().filter_map(parse_scheduled_grant).collect())
-}
-
-pub async fn list_due_scheduled_grants(
-    db: &D1Database,
-    now_iso: &str,
-) -> Result<Vec<crate::types::ScheduledGrant>> {
-    let res = db
-        .prepare(
-            "SELECT * FROM scheduled_grants \
-             WHERE active = 1 AND next_run_at <= ? \
-             ORDER BY next_run_at ASC",
-        )
-        .bind(&[now_iso.into()])?
-        .all()
-        .await?;
-    let rows: Vec<serde_json::Value> = res.results()?;
-    Ok(rows.iter().filter_map(parse_scheduled_grant).collect())
-}
-
-pub async fn insert_scheduled_grant(
-    db: &D1Database,
-    g: &crate::types::ScheduledGrant,
-) -> Result<()> {
-    db.prepare(
-        "INSERT INTO scheduled_grants \
-         (id, cadence, credits, expires_in_days, \
-          last_run_at, next_run_at, active, created_at, updated_at) \
-         VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))",
-    )
     .bind(&[
-        g.id.as_str().into(),
-        g.cadence.as_wire().as_str().into(),
-        wasm_bindgen::JsValue::from_f64(g.credits as f64),
-        wasm_bindgen::JsValue::from_f64(g.expires_in_days as f64),
-        g.last_run_at
-            .as_deref()
-            .map(wasm_bindgen::JsValue::from_str)
-            .unwrap_or(wasm_bindgen::JsValue::null()),
-        g.next_run_at.as_str().into(),
-        wasm_bindgen::JsValue::from_f64(if g.active { 1.0 } else { 0.0 }),
+        JsValue::from_f64(email_pack_size as f64),
+        JsValue::from_f64(min_credits as f64),
+        JsValue::from_f64(max_credits as f64),
     ])?
-    .run()
-    .await?;
-    Ok(())
-}
-
-pub async fn delete_scheduled_grant(db: &D1Database, id: &str) -> Result<()> {
-    db.prepare("DELETE FROM scheduled_grants WHERE id = ?")
-        .bind(&[id.into()])?
-        .run()
-        .await?;
-    Ok(())
-}
-
-pub async fn record_scheduled_grant_run(
-    db: &D1Database,
-    id: &str,
-    last_run_at: &str,
-    next_run_at: &str,
-) -> Result<()> {
-    db.prepare(
-        "UPDATE scheduled_grants \
-         SET last_run_at = ?, next_run_at = ?, updated_at = datetime('now') \
-         WHERE id = ?",
-    )
-    .bind(&[last_run_at.into(), next_run_at.into(), id.into()])?
     .run()
     .await?;
     Ok(())
