@@ -27,7 +27,6 @@ footer-privacy = Privacy Policy
 app-nav-overview = Overview
 app-nav-approvals = Approvals
 app-nav-channels = Channels
-app-nav-email = Email Routing
 app-nav-billing = Billing
 app-nav-settings = Settings
 app-nav-aria-label = Admin sections
@@ -212,9 +211,7 @@ wizard-launch-verify-cta = Verify with Razorpay
 wizard-launch-verify-refund = refunded automatically
 
 # Admin: shared bits.
-admin-back = ← Back
 admin-save = Save
-admin-cancel = Cancel
 admin-delete = Delete
 admin-remove = Remove
 admin-edit = Edit
@@ -270,14 +267,6 @@ admin-settings-delete-confirm = Are you sure? This will permanently delete your 
 
 # Admin: dashboard overview.
 admin-dashboard-title = Dashboard - Concierge
-admin-side-channels = Connected channels
-admin-side-empty-prefix = No channels connected yet.
-admin-side-empty-link = Add one
-admin-side-email-row-name = Email Routing
-admin-side-email-row-cta = Configure rules
-admin-side-quick-links = Quick links
-admin-side-lead-forms-prefix = Lead Forms
-admin-side-email-log = Email Log
 admin-dashboard-eyebrow = Overview
 admin-dashboard-headline = Your concierge is on duty.
 admin-dashboard-stat-whatsapp = WhatsApp
@@ -295,11 +284,6 @@ admin-dashboard-risk-banner-headline = AI replies now pause for review when need
 admin-dashboard-risk-banner-body = If an AI draft mentions money or makes a commitment, we'll queue it for your approval before sending. You can change this per rule.
 admin-dashboard-risk-banner-dismiss = Got it
 
-# Admin: WhatsApp + Instagram accessible labels.
-admin-icon-instagram = Instagram
-admin-icon-whatsapp = WhatsApp
-admin-icon-email = Email
-
 # Admin: WhatsApp account list.
 admin-wa-list-title = WhatsApp Accounts - Concierge
 admin-wa-list-h1 = WhatsApp Accounts
@@ -307,7 +291,6 @@ admin-wa-list-add = + Connect WhatsApp Number
 admin-wa-list-th-name = Name
 admin-wa-list-th-phone = Phone
 admin-wa-list-th-auto = Auto-Reply
-admin-wa-list-empty = No WhatsApp accounts configured.
 admin-wa-list-empty-headline = No WhatsApp numbers connected yet
 admin-wa-list-empty-sub = Connect a number to start handling customer messages here.
 admin-wa-list-empty-cta = Connect WhatsApp
@@ -350,7 +333,6 @@ admin-ig-list-add = + Connect Account
 admin-ig-list-th-username = Username
 admin-ig-list-th-status = Status
 admin-ig-list-th-auto = Auto-Reply
-admin-ig-list-empty = No Instagram accounts connected.
 admin-ig-list-empty-headline = No Instagram accounts linked yet
 admin-ig-list-empty-sub = Link an Instagram Business account to reply to DMs from here.
 admin-ig-list-empty-cta = Connect Instagram
@@ -374,11 +356,9 @@ admin-ig-edit-wait-help = 0 = reply immediately. Higher values let customers sen
 admin-lf-list-title = Lead Forms - Concierge
 admin-lf-list-h1 = Lead Forms
 admin-lf-list-add = + New Form
-admin-lf-list-back = ← Back to Dashboard
 admin-lf-list-th-name = Name
 admin-lf-list-th-slug = Slug
 admin-lf-list-th-status = Status
-admin-lf-list-empty = No lead forms created.
 admin-lf-list-empty-headline = No lead forms yet
 admin-lf-list-empty-sub = Build a hosted form to capture qualified leads — share the link or embed it on your site.
 admin-lf-list-empty-cta = Create a lead form
@@ -506,9 +486,6 @@ wizard-replies-goal-url-placeholder = https://example.com/book
 wizard-replies-handoff-eyebrow = When should we call you in?
 wizard-replies-handoff-lead = One condition per line. The AI will stop and notify you on these. Optional, but at least one is recommended.
 wizard-replies-handoff-placeholder = refund or complaint &#10; the customer is upset &#10; order is over ₹5000
-wizard-replies-wait-eyebrow = Wait before replying
-wizard-replies-wait-lead = If a customer sends a few messages in a row, hold off until they pause so the AI sees the whole burst at once. Default applies to every channel; override per account in Settings.
-wizard-replies-wait-instant = instant
 wizard-replies-continue = Continue →
 
 # Admin email dashboard.
@@ -528,7 +505,6 @@ admin-email-recipients-suffix = recipient(s)
 admin-email-row-edit = Edit
 admin-email-row-delete = Delete
 admin-email-delete-confirm = Delete this address? Inbound mail will be rejected.
-admin-email-empty = No email addresses yet. Pick a name below: you can use it like <code>name@domain</code> from the moment you save.
 admin-email-empty-headline = No reply addresses yet
 admin-email-empty-sub = Pick a name below — you can start using it like name@domain the moment you save.
 admin-email-quota-warn-prefix = You've used your
@@ -563,7 +539,6 @@ admin-email-recipients-lead = Add Cc or Bcc addresses to keep your team in the l
 admin-email-recipients-th-address = Address
 admin-email-recipients-th-kind = Kind
 admin-email-recipients-th-status = Status
-admin-email-recipients-empty = No notification recipients.
 admin-email-recipients-cc = Cc
 admin-email-recipients-bcc = Bcc
 admin-email-recipients-status-owner = Owner
@@ -571,10 +546,7 @@ admin-email-recipients-status-verified = Verified
 admin-email-recipients-status-pending = Pending
 admin-email-recipients-remove = Remove
 admin-email-recipients-remove-confirm = Remove this recipient?
-admin-email-recipients-add-h3 = Add a recipient
 admin-email-recipients-add-placeholder = team@example.com
-admin-email-recipients-add-kind-cc = Cc
-admin-email-recipients-add-kind-bcc = Bcc
 admin-email-recipients-add-cta = Send verification email
 
 # Email verification result page.
@@ -588,20 +560,16 @@ admin-persona-back = ← Dashboard
 admin-persona-h1 = Persona
 admin-persona-lead = The persona is your AI assistant's voice. Every AI-generated reply uses this prompt as its system prompt.
 admin-persona-mode-eyebrow = Mode
-admin-persona-mode-preset = Preset
 admin-persona-mode-builder = Builder
 admin-persona-mode-custom = Custom prompt
-admin-persona-preset-lead = Pick one of the curated personas. The prompt and a starter set of reply rules will be applied.
 admin-persona-builder-lead = Fill in the fields and we'll compose the prompt for you. Switch to Custom mode if you want to write the whole thing yourself.
 admin-persona-label-biz-type = Type of business
 admin-persona-label-city = City (optional)
-admin-persona-label-tone = Tone
 admin-persona-label-never = Never (one boundary)
 admin-persona-label-catch-phrases = Catch-phrases (one per line, max 5)
 admin-persona-label-off-topics = Off-topic subjects (one per line, max 10)
 admin-persona-placeholder-biz-type = florist, hair salon, cafe...
 admin-persona-placeholder-city = Chennai, Berlin...
-admin-persona-placeholder-tone = warm and friendly, concise and professional...
 admin-persona-placeholder-never = quote prices, promise dates...
 admin-persona-placeholder-catch-phrases = One catch-phrase per line
 admin-persona-placeholder-off-topics = politics, medical advice, refunds...
