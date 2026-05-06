@@ -28,10 +28,14 @@ pub fn calculate_total(credits: i64, milli_price: i64) -> i64 {
     (credits * milli_price + 500) / 1000
 }
 
-/// Try to deduct one reply credit. Returns true if credit was available
-/// and deducted. Returns false if out of credits.
-/// Must be called BEFORE sending the reply.
-pub async fn try_deduct(db: &D1Database, tenant_id: &str) -> Result<bool> {
+/// Try to deduct one reply credit before sending. Returns whether the
+/// caller should proceed with the send.
+///
+/// `metered` reflects the tenant's plan: when `true` (paid), an empty
+/// balance returns `false` and the reply is skipped. When `false` (free
+/// / complimentary), we still bump `replies_used` and consume from any
+/// existing balance, but always return `true` so the reply ships.
+pub async fn try_deduct(db: &D1Database, tenant_id: &str, metered: bool) -> Result<bool> {
     let mut billing = storage::get_tenant_billing(db, tenant_id).await?;
     prune_expired(&mut billing);
     sort_credits(&mut billing);
@@ -45,7 +49,7 @@ pub async fn try_deduct(db: &D1Database, tenant_id: &str) -> Result<bool> {
         }
     }
 
-    if !deducted {
+    if !deducted && metered {
         storage::save_tenant_billing(db, tenant_id, &billing).await?;
         return Ok(false);
     }

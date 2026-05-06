@@ -344,7 +344,7 @@ pub async fn handle_wizard(
         // (the webhook + verify handler flip the flag).
         "complete" => {
             let tenant = get_tenant(&db, tenant_id).await?.unwrap_or_default();
-            if tenant.verified_at.is_none() {
+            if tenant.plan.is_metered() && tenant.verified_at.is_none() {
                 return Response::from_html(
                     r#"<div class="error">Verify your account before finishing setup.</div>"#
                         .to_string(),
@@ -455,6 +455,7 @@ async fn render_step(
                 verify_amount,
                 cfg.min_credits,
                 cfg.max_credits,
+                tenant.plan.is_metered(),
             ))
         }
     }

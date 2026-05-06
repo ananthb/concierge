@@ -55,6 +55,7 @@ pub async fn handle_billing_admin(
                 cfg.min_credits,
                 cfg.max_credits,
                 tenant.currency,
+                tenant.plan.is_metered(),
             ))
         }
 
@@ -108,6 +109,9 @@ pub async fn handle_billing_admin(
             let tenant = storage::get_tenant(&db, tenant_id)
                 .await?
                 .unwrap_or_default();
+            if !tenant.plan.is_metered() {
+                return Response::error("Complimentary accounts cannot purchase credits", 400);
+            }
             let locale = crate::locale::Locale::from_tenant(&tenant.locale, Some(tenant.currency));
             let currency = locale.currency.as_str();
 
@@ -144,6 +148,9 @@ pub async fn handle_billing_admin(
             let tenant = storage::get_tenant(&db, tenant_id)
                 .await?
                 .unwrap_or_default();
+            if !tenant.plan.is_metered() {
+                return Response::error("Complimentary accounts skip verification", 400);
+            }
             let locale = crate::locale::Locale::from_tenant(&tenant.locale, Some(tenant.currency));
             let currency = locale.currency.as_str();
 

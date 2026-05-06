@@ -1419,6 +1419,7 @@ pub fn launch_html(
     verification_amount: i64,
     min_credits: i64,
     max_credits: i64,
+    metered: bool,
 ) -> String {
     let email_rows: String = email_addresses
         .iter()
@@ -1449,25 +1450,42 @@ pub fn launch_html(
         )
     };
 
-    let credits_section = format!(
-        r#"<div class="mb-16">
+    let credits_section = if metered {
+        format!(
+            r#"<div class="mb-16">
   {slider}
   <p class="muted ta-center mt-8 fs-12">{note}</p>
 </div>"#,
-        slider = crate::templates::credit_slider::slider_html(
-            locale,
-            base_url,
-            crate::templates::credit_slider::SliderMode::Buy {
-                return_to: "/wizard/launch",
-            },
-            milli_price,
-            min_credits,
-            max_credits,
-        ),
-        note = t(locale, "wizard-launch-credits-note"),
-    );
+            slider = crate::templates::credit_slider::slider_html(
+                locale,
+                base_url,
+                crate::templates::credit_slider::SliderMode::Buy {
+                    return_to: "/wizard/launch",
+                },
+                milli_price,
+                min_credits,
+                max_credits,
+            ),
+            note = t(locale, "wizard-launch-credits-note"),
+        )
+    } else {
+        String::new()
+    };
 
-    let status_card = if verified {
+    let status_card = if !metered {
+        // Free / complimentary: skip the verification charge entirely.
+        // Operator vouched for them by flipping the plan.
+        r#"<div class="card p-22" style="border-color:var(--ok);background:linear-gradient(135deg,var(--paper),#E8F0DE)">
+    <div class="row gap-12">
+      <span class="dot ok"></span>
+      <div>
+        <div class="fw-600">Complimentary account</div>
+        <p class="muted fs-14 m-0 mt-4">No verification charge. Replies are free while we have you on the house.</p>
+      </div>
+    </div>
+  </div>"#
+            .to_string()
+    } else if verified {
         format!(
             r#"<div class="card p-22" style="border-color:var(--ok);background:linear-gradient(135deg,var(--paper),#E8F0DE)">
     <div class="row gap-12">
@@ -1507,7 +1525,7 @@ pub fn launch_html(
         )
     };
 
-    let finish_attrs = if verified {
+    let finish_attrs = if !metered || verified {
         ""
     } else {
         " disabled aria-disabled=\"true\" title=\"Verify your account first\""
@@ -1776,6 +1794,7 @@ mod pricing_tests {
             100,
             1_000,
             1_000_000,
+            true,
         );
         // Verify card emits the Razorpay-bound POST and the verify
         // copy + amount.
@@ -1808,6 +1827,7 @@ mod pricing_tests {
             100,
             1_000,
             1_000_000,
+            true,
         );
         assert!(
             !html.contains("/dashboard/billing/verification"),
@@ -1821,6 +1841,39 @@ mod pricing_tests {
         assert!(
             !html.contains("/wizard/complete\" hx-target=\"body\" disabled"),
             "finish should not be disabled when verified"
+        );
+    }
+
+    #[test]
+    fn launch_html_free_plan_skips_verify_and_credits() {
+        let l = crate::locale::Locale::default_inr();
+        let html = launch_html(
+            &[],
+            "example.com",
+            &l,
+            "https://x.test",
+            25_000,
+            false,
+            100,
+            1_000,
+            1_000_000,
+            false,
+        );
+        assert!(
+            !html.contains("/dashboard/billing/verification"),
+            "free plan must hide the verify form"
+        );
+        assert!(
+            !html.contains("/dashboard/billing/checkout"),
+            "free plan must hide the credit slider"
+        );
+        assert!(
+            html.contains("Complimentary account"),
+            "free plan should render the comp status card"
+        );
+        assert!(
+            !html.contains("/wizard/complete\" hx-target=\"body\" disabled"),
+            "finish button should be enabled for free plan even when unverified"
         );
     }
 

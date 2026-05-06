@@ -69,6 +69,7 @@ pub fn billing_overview_with_addresses_html(
     min_credits: i64,
     max_credits: i64,
     tenant_currency: crate::locale::Currency,
+    metered: bool,
 ) -> String {
     let summary = summarize(billing);
 
@@ -86,18 +87,34 @@ pub fn billing_overview_with_addresses_html(
         String::new()
     };
 
-    let slider = slider_html(
-        locale,
-        base_url,
-        SliderMode::Buy {
-            return_to: "/dashboard/billing",
-        },
-        milli_price,
-        min_credits,
-        max_credits,
-    );
+    let slider = if metered {
+        slider_html(
+            locale,
+            base_url,
+            SliderMode::Buy {
+                return_to: "/dashboard/billing",
+            },
+            milli_price,
+            min_credits,
+            max_credits,
+        )
+    } else {
+        String::new()
+    };
 
     let address_price_label = format_money(address_price, locale);
+    let address_action = if metered {
+        format!(
+            r##"<form hx-post="{base_url}/dashboard/billing/address" hx-target="body" hx-swap="innerHTML">
+                    <button class="btn primary" type="submit">Add a pack ({pack_size} for {address_price_label}/mo)</button>
+                </form>"##,
+            address_price_label = address_price_label,
+            pack_size = email_pack_size,
+            base_url = base_url,
+        )
+    } else {
+        r#"<span class="muted fs-13">Operator-managed</span>"#.to_string()
+    };
     let address_card = format!(
         r##"<div class="card p-18 mb-24">
             <div class="between">
@@ -106,22 +123,71 @@ pub fn billing_overview_with_addresses_html(
                     <div class="stat-n serif">{addresses_used} / {address_quota}</div>
                     <div class="mono muted fs-11">addresses used / quota</div>
                 </div>
-                <form hx-post="{base_url}/dashboard/billing/address" hx-target="body" hx-swap="innerHTML">
-                    <button class="btn primary" type="submit">Add a pack ({pack_size} for {address_price_label}/mo)</button>
-                </form>
+                {address_action}
             </div>
         </div>"##,
         addresses_used = addresses_used,
         address_quota = address_quota,
-        address_price_label = address_price_label,
-        pack_size = email_pack_size,
-        base_url = base_url,
+        address_action = address_action,
     );
+
+    let comp_banner = if metered {
+        String::new()
+    } else {
+        r##"<div class="card p-18 mb-24" style="border-color:var(--ok);background:linear-gradient(135deg,var(--paper),#E8F0DE)">
+            <div class="row gap-12">
+                <span class="dot ok"></span>
+                <div>
+                    <div class="fw-600">Complimentary account</div>
+                    <p class="muted fs-13 m-0 mt-4">Replies are on the house. Usage below is for your visibility — no charges apply.</p>
+                </div>
+            </div>
+        </div>"##
+            .to_string()
+    };
+    let currency_card = if metered {
+        format!(
+            r##"<div class="card p-22 mt-16" hx-ext="json-enc">
+    <h2 class="m-0 mb-8">{currency_h2}</h2>
+    <p class="muted mb-12">{currency_lead}</p>
+    <form hx-put="{base_url}/dashboard/billing/currency" hx-target="{hash}currency-toast" hx-swap="innerHTML">
+      <div class="row gap-12">
+        <select class="select" name="currency" style="width:auto">
+          <option value="INR"{inr_sel}>{inr_label}</option>
+          <option value="USD"{usd_sel}>{usd_label}</option>
+        </select>
+        <button type="submit" class="btn sm">{save}</button>
+      </div>
+    </form>
+    <div id="currency-toast" class="mt-8" role="status" aria-live="polite" aria-atomic="true"></div>
+  </div>"##,
+            base_url = base_url,
+            hash = crate::templates::HASH,
+            inr_sel = if tenant_currency == Currency::Inr {
+                " selected"
+            } else {
+                ""
+            },
+            usd_sel = if tenant_currency == Currency::Usd {
+                " selected"
+            } else {
+                ""
+            },
+            currency_h2 = t(locale, "admin-settings-currency-h2"),
+            currency_lead = t(locale, "admin-settings-currency-lead"),
+            inr_label = t(locale, "admin-settings-currency-inr"),
+            usd_label = t(locale, "admin-settings-currency-usd"),
+            save = t(locale, "admin-save"),
+        )
+    } else {
+        String::new()
+    };
 
     let content = format!(
         r##"<div class="page-pad">
   <div class="eyebrow">Billing</div>
   <h2 class="display-sm m-0 mt-4 mb-16">AI reply credits</h2>
+  {comp_banner}
   {address_card}
 
   <div class="stats-grid mb-24">
@@ -147,38 +213,8 @@ pub fn billing_overview_with_addresses_html(
 
   {slider}
 
-  <div class="card p-22 mt-16" hx-ext="json-enc">
-    <h2 class="m-0 mb-8">{currency_h2}</h2>
-    <p class="muted mb-12">{currency_lead}</p>
-    <form hx-put="{base_url}/dashboard/billing/currency" hx-target="{hash}currency-toast" hx-swap="innerHTML">
-      <div class="row gap-12">
-        <select class="select" name="currency" style="width:auto">
-          <option value="INR"{inr_sel}>{inr_label}</option>
-          <option value="USD"{usd_sel}>{usd_label}</option>
-        </select>
-        <button type="submit" class="btn sm">{save}</button>
-      </div>
-    </form>
-    <div id="currency-toast" class="mt-8" role="status" aria-live="polite" aria-atomic="true"></div>
-  </div>
+  {currency_card}
 </div>"##,
-        base_url = base_url,
-        hash = crate::templates::HASH,
-        inr_sel = if tenant_currency == Currency::Inr {
-            " selected"
-        } else {
-            ""
-        },
-        usd_sel = if tenant_currency == Currency::Usd {
-            " selected"
-        } else {
-            ""
-        },
-        currency_h2 = t(locale, "admin-settings-currency-h2"),
-        currency_lead = t(locale, "admin-settings-currency-lead"),
-        inr_label = t(locale, "admin-settings-currency-inr"),
-        usd_label = t(locale, "admin-settings-currency-usd"),
-        save = t(locale, "admin-save"),
         total = summary.total,
         total_class = total_class,
         purchased = summary.purchased,
@@ -187,6 +223,8 @@ pub fn billing_overview_with_addresses_html(
         used = billing.replies_used,
         slider = slider,
         address_card = address_card,
+        comp_banner = comp_banner,
+        currency_card = currency_card,
     );
 
     let page = app_shell(&content, "Billing", base_url, locale);

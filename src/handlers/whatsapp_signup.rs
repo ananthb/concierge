@@ -212,7 +212,7 @@ pub async fn handle_whatsapp_signup(
                     email: fb_email,
                     name: fb_name,
                     facebook_id: Some(fb_id),
-                    plan: crate::types::Plan::Free,
+                    plan: crate::types::Plan::Paid,
                     locale: signup_locale.langid.to_string(),
                     currency: signup_locale.currency,
                     email_address_extras_purchased: 0,

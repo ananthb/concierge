@@ -12,42 +12,46 @@ use crate::locale::Currency;
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, Default, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum Plan {
-    #[default]
+    /// Complimentary account: usage is tracked (replies_used increments,
+    /// dashboards still show a balance) but the credit gate is skipped
+    /// and Razorpay CTAs are hidden. Operators flip selected tenants to
+    /// Free from the management panel.
     Free,
-    Starter,
-    Pro,
-    Business,
+    /// Standard pay-per-credit account.
+    #[default]
+    Paid,
 }
 
 impl Plan {
-    pub const ALL: &'static [Plan] = &[Plan::Free, Plan::Starter, Plan::Pro, Plan::Business];
+    pub const ALL: &'static [Plan] = &[Plan::Free, Plan::Paid];
 
     pub fn as_str(self) -> &'static str {
         match self {
             Plan::Free => "free",
-            Plan::Starter => "starter",
-            Plan::Pro => "pro",
-            Plan::Business => "business",
+            Plan::Paid => "paid",
         }
     }
 
     pub fn label(self) -> &'static str {
         match self {
             Plan::Free => "Free",
-            Plan::Starter => "Starter",
-            Plan::Pro => "Pro",
-            Plan::Business => "Business",
+            Plan::Paid => "Paid",
         }
     }
 
     pub fn from_wire(s: &str) -> Option<Self> {
         match s {
             "free" => Some(Plan::Free),
-            "starter" => Some(Plan::Starter),
-            "pro" => Some(Plan::Pro),
-            "business" => Some(Plan::Business),
+            "paid" => Some(Plan::Paid),
             _ => None,
         }
+    }
+
+    /// Whether the credit balance gates outbound replies. Free accounts
+    /// still consume credits when present, but never get blocked when
+    /// the balance hits zero.
+    pub fn is_metered(self) -> bool {
+        matches!(self, Plan::Paid)
     }
 }
 
@@ -1035,7 +1039,14 @@ mod enum_tests {
     #[test]
     fn plan_from_wire_rejects_unknown() {
         assert_eq!(Plan::from_wire("free"), Some(Plan::Free));
+        assert_eq!(Plan::from_wire("paid"), Some(Plan::Paid));
         assert_eq!(Plan::from_wire("enterprise"), None);
+    }
+
+    #[test]
+    fn plan_is_metered_only_for_paid() {
+        assert!(Plan::Paid.is_metered());
+        assert!(!Plan::Free.is_metered());
     }
 }
 

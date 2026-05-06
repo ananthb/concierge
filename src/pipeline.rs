@@ -336,9 +336,15 @@ async fn handle_auto_reply(
         return Ok(());
     }
 
-    if is_ai && !billing::try_deduct(db, &msg.tenant_id).await? {
-        console_log!("Tenant {} out of AI-reply credits, skipping", msg.tenant_id);
-        return Ok(());
+    if is_ai {
+        let metered = crate::storage::get_tenant(db, &msg.tenant_id)
+            .await?
+            .map(|t| t.plan.is_metered())
+            .unwrap_or(true);
+        if !billing::try_deduct(db, &msg.tenant_id, metered).await? {
+            console_log!("Tenant {} out of AI-reply credits, skipping", msg.tenant_id);
+            return Ok(());
+        }
     }
 
     // Build the chat history we'll hand to the model: prior turns
