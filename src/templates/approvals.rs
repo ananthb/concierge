@@ -96,7 +96,7 @@ pub fn approval_row_html(row: &PendingApproval) -> String {
 
   <div x-show="!editing">
     <pre class="mono fs-13 m-0 mb-12" style="white-space:pre-wrap">{draft}</pre>
-    <div class="row gap-8">
+    <div class="row gap-8 approval-actions">
       <button class="btn primary"
         hx-post="/dashboard/approvals/{id}/approve"
         hx-target="{HASH}approval-{id}"
@@ -113,7 +113,7 @@ pub fn approval_row_html(row: &PendingApproval) -> String {
 
   <div x-show="editing" x-cloak hx-ext="json-enc">
     <textarea class="textarea" name="draft" rows="5" maxlength="2000" x-model="draft"></textarea>
-    <div class="row gap-8 mt-8">
+    <div class="row gap-8 mt-8 approval-actions">
       <button class="btn primary" type="button"
         hx-post="/dashboard/approvals/{id}/edit"
         hx-vals='js:{{draft: document.querySelector("#approval-{id} textarea").value}}'

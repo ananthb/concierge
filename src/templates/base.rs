@@ -18,6 +18,13 @@ pub const CSS: &str = r##"
   --f-display: "Instrument Serif", Georgia, serif;
   --f-body: "Inter", system-ui, -apple-system, sans-serif;
   --f-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  --page-pad: 28px; --card-pad: 22px; --stat-n: 32px; --tap-min: 44px;
+}
+/* Density step-down at the phone/large-phone band. Rules that opt in
+   to these tokens (see .page, .card uses below) tighten automatically;
+   anything still using literal padding stays put. */
+@media (max-width:720px) {
+  :root { --page-pad: 16px; --card-pad: 16px; --stat-n: 26px; }
 }
 * { box-sizing: border-box; }
 html, body { margin:0; padding:0; background:var(--cream); color:var(--ink);
@@ -91,13 +98,23 @@ a { color:var(--accent); }
 .row { display:flex; align-items:center; }
 .between { display:flex; align-items:center; justify-content:space-between; }
 .stack { display:flex; flex-direction:column; }
+/* Inline-style replacement: a wrapping flex row whose children flex to
+   ~220px wide before wrapping, then take a full row each on phones.
+   Replaces ad-hoc `style="min-width:200px"` patterns in management
+   forms. Children opt out of full-width wrapping with `.form-row-fit`. */
+.form-row { display:flex; flex-wrap:wrap; gap:12px; align-items:flex-end; }
+.form-row > * { flex:1 1 220px; min-width:0; }
+.form-row > .form-row-fit { flex:0 0 auto; }
+@media (max-width:720px) {
+  .form-row > * { flex:1 1 100%; }
+}
 .gap-4{gap:4px} .gap-6{gap:6px} .gap-8{gap:8px} .gap-12{gap:12px}
 .gap-16{gap:16px} .gap-20{gap:20px} .gap-24{gap:24px}
 
 /* Utility atoms: used instead of inline style attributes. */
 .p-12{padding:12px} .p-14{padding:14px} .p-16{padding:16px} .p-18{padding:18px}
 .p-20{padding:20px} .p-22{padding:22px} .p-24{padding:24px} .p-28{padding:28px}
-.page-pad{padding:24px 28px}
+.page-pad{padding:24px var(--page-pad)}
 .mt-4{margin-top:4px} .mt-6{margin-top:6px} .mt-8{margin-top:8px}
 .mt-12{margin-top:12px} .mt-14{margin-top:14px} .mt-16{margin-top:16px}
 .mt-22{margin-top:22px} .mt-24{margin-top:24px} .mt-32{margin-top:32px} .mt-36{margin-top:36px}
@@ -197,6 +214,27 @@ th, td {
   text-align: left;
   border-bottom: 1px solid var(--hair);
   white-space: nowrap;
+}
+/* Card-list fallback for tables that read row-by-row (tenants, audit,
+   archetypes). Opt in by adding `table-stack` to the wrapping
+   `.table-wrap`; each <td> needs a `data-label="…"` so the column name
+   shows alongside the value once the header collapses. Above 720px the
+   original table layout is unchanged. */
+@media (max-width:720px) {
+  .table-wrap.table-stack { overflow-x:visible; }
+  .table-stack table, .table-stack thead, .table-stack tbody,
+  .table-stack tr, .table-stack td { display:block; width:auto; }
+  .table-stack thead { position:absolute; left:-9999px; top:auto; }
+  .table-stack tr { border:1px solid var(--hair); border-radius:10px;
+    padding:10px 12px; margin-bottom:8px; background:var(--paper); }
+  .table-stack td { display:flex; justify-content:space-between;
+    gap:12px; padding:6px 0; border:0; white-space:normal;
+    word-break:break-word; min-width:0; }
+  .table-stack td::before { content:attr(data-label);
+    font-weight:600; color:var(--ink-2);
+    font-size:11px; letter-spacing:.04em; text-transform:uppercase;
+    flex:none; }
+  .table-stack td:not([data-label])::before { content:""; display:none; }
 }
 th {
   background: var(--cream-2);
@@ -408,14 +446,14 @@ dialog.manage-confirm .confirm-actions { display:flex; gap:10px;
 .brand .serif { font-family:var(--f-display); font-size:24px; }
 
 /* Dashboard grid */
-.dash-grid { display:grid; grid-template-columns:300px 1fr; gap:24px; padding:24px 28px; }
+.dash-grid { display:grid; grid-template-columns:300px 1fr; gap:24px; padding:24px var(--page-pad); }
 @media(max-width:900px){.dash-grid{grid-template-columns:1fr}}
 .side-list { display:flex; flex-direction:column; gap:10px; margin-top:10px; }
 .side-row { display:flex; align-items:center; gap:10px; padding:8px 10px; border-radius:10px; background:var(--cream-2); }
 .side-row > *:nth-child(2) { flex:1; font-size:13px; }
 .stat-row { display:flex; align-items:baseline; gap:10px; padding:8px 0; border-bottom:1px dashed var(--hair); }
 .stat-row:last-child { border-bottom:0; }
-.stat-n { font-size:32px; color:var(--ink); }
+.stat-n { font-size:var(--stat-n); color:var(--ink); }
 .display-sm { font-family:var(--f-display); font-size:26px; letter-spacing:-0.01em; margin:0; }
 .display-md { font-family:var(--f-display); font-size:clamp(34px,4.2vw,52px); line-height:1.05; letter-spacing:-0.02em; margin:8px 0 4px; }
 .lead { color:var(--ink-2); max-width:640px; margin:0 0 22px; font-size:16px; }
@@ -755,8 +793,18 @@ table tr.audit-detail > td { padding:0; background:var(--paper);
   .top-right { gap:8px; }
   .top-right .mono { display:none; }
   .app-top { padding:12px 16px; gap:12px; flex-wrap:wrap; }
-  .app-nav { gap:10px; overflow-x:auto; -webkit-overflow-scrolling:touch; flex-wrap:nowrap; white-space:nowrap; }
-  .app-nav a { font-size:13px; flex-shrink:0; }
+  /* Horizontal scroll for the dashboard/manage tab strip: scroll-snap so
+     swipes land on a tab edge, and a soft right-side fade tells the
+     reader more tabs sit off-screen. The mask falls back gracefully —
+     browsers without mask-image just lose the gradient. */
+  .app-nav { gap:10px; overflow-x:auto; -webkit-overflow-scrolling:touch;
+    flex-wrap:nowrap; white-space:nowrap;
+    scroll-snap-type:x proximity; scrollbar-width:none;
+    -webkit-mask-image:linear-gradient(to right, #000 calc(100% - 24px), transparent);
+    mask-image:linear-gradient(to right, #000 calc(100% - 24px), transparent); }
+  .app-nav::-webkit-scrollbar { display:none; }
+  .app-nav a { font-size:13px; flex-shrink:0; scroll-snap-align:start;
+    padding:10px 4px; border-bottom-width:3px; }
   .channels-grid { grid-template-columns:1fr; }
   .admin-grid { grid-template-columns:1fr; }
   .admin-card { min-height:auto; }
@@ -765,6 +813,21 @@ table tr.audit-detail > td { padding:0; background:var(--paper);
   .banner { padding:14px 16px; flex-direction:column; gap:10px; text-align:center; }
   .terminal { padding:14px; font-size:12px; min-height:auto; }
   .term-row { grid-template-columns:1fr; gap:2px; }
+  /* Tap-target floors for fingers: dense secondary controls clear 32–36px
+     on mobile so a pinky doesn't miss them. Site-header .btn.sm keeps its
+     compact padding above (line tightened for nav-density) but inherits
+     this min-height; the header still clears under the 80px ceiling
+     layout.spec.ts asserts. */
+  .btn.sm { min-height:36px; }
+  .row-expand { min-width:32px; min-height:32px; padding:6px 8px; }
+  .acct-pop a { padding:12px 14px; }
+  /* Approvals queue: stack the action buttons full-width and push each
+     to the 48px tap-floor so a thumb can't miss Approve/Reject. The
+     metadata `.row` above the actions is a separate node (no
+     `.approval-actions`) so it keeps wrapping inline. */
+  .approval-actions { flex-direction:column; align-items:stretch; }
+  .approval-actions > .btn { width:100%; min-height:48px;
+    justify-content:center; }
 }
 @media(max-width:480px){
   .rail-labels span:not(.active):not(.done) { display:none; }
