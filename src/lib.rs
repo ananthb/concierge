@@ -410,10 +410,6 @@ async fn handle_request(req: Request, env: Env) -> Result<Response> {
     if path == "/demo/chat" && method == Method::Post {
         return handlers::handle_demo_chat(req, env).await;
     }
-    // Demo persona picker. D1 catalog filtered to Approved.
-    if path == "/demo/personas" && method == Method::Get {
-        return handlers::handle_demo_personas(req, env).await;
-    }
 
     // Instagram OAuth routes
     if path.starts_with("/instagram/") {
@@ -450,17 +446,12 @@ async fn handle_request(req: Request, env: Env) -> Result<Response> {
         }
         let locale = locale::Locale::from_request(&req);
         let demo_cfg = storage::get_demo_config(&kv).await.unwrap_or_default();
-        // Preload: when the stored personas blob is populated, embed
-        // its body directly in the welcome page so the chat factory's
-        // `init()` skips the round-trip to /demo/personas. Empty/absent
-        // store falls back to the client-side fetch (which itself
-        // regenerates on miss).
-        let prefetched_personas = if demo_cfg.enabled {
-            storage::get_stored_demo_personas(&kv)
-                .await
-                .ok()
-                .flatten()
-                .and_then(|stored| serde_json::to_string(&stored.response).ok())
+        // Server is the only source of personas: when demo is enabled,
+        // resolve the catalog here (cache → cold-miss regen → empty
+        // fallback) and embed it inline. The chat factory reads only
+        // from that block — it never fetches.
+        let personas_json = if demo_cfg.enabled {
+            Some(handlers::demo_personas_list::resolve_personas_json(&env).await)
         } else {
             None
         };
@@ -470,7 +461,7 @@ async fn handle_request(req: Request, env: Env) -> Result<Response> {
             demo_cfg.enabled,
             demo_cfg.max_user_turns,
             demo_cfg.idle_timeout_secs,
-            prefetched_personas.as_deref(),
+            personas_json.as_deref(),
         ));
     }
 

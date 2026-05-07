@@ -47,10 +47,12 @@ test('brand link returns home', async ({ page }) => {
   await expect(brand).toHaveAttribute('href', '/');
 });
 
-// Stub catalog payload reused by every demo-chat spec — `/demo/personas`
-// reads from D1, but the dev test server doesn't run migrations, so we
-// fulfill the route with a fixed list. The Concierge prompt body is
-// what the View-prompt panel asserts against.
+// The demo personas catalog is server-resolved and embedded inline in
+// `<script id="demo-personas-data" type="application/json">`. Tests
+// rewrite that block on the fly so the chat factory sees a stable list
+// (the dev_bypass would otherwise show its own fixture personas like
+// "Aurelia Tea Co."). The Concierge prompt body is what the View-prompt
+// panel asserts against.
 const CONCIERGE_DEMO_PROMPT =
   'Voice: Concierge talking about itself. WhatsApp Business, Instagram, Discord, email.';
 const STUB_PERSONAS_PAYLOAD = {
@@ -80,31 +82,14 @@ const STUB_PERSONAS_PAYLOAD = {
   ],
 };
 async function stubDemoPersonas(page: any) {
-  // Cold-cache path: the chat factory falls through to a fetch when
-  // the server didn't embed an inline preload. Intercept it.
-  await page.route('**/demo/personas', (route: any) =>
-    route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify(STUB_PERSONAS_PAYLOAD),
-    }),
-  );
-  // Warm-cache path: the welcome handler embeds a `<script id="demo-
-  // personas-data" type="application/json">…</script>` block once
-  // its persona cache primes, and the chat factory reads that inline
-  // synchronously while the document parses — before any observer or
-  // MutationObserver microtask can land. After the suite's first GET
-  // to / warms the cache, every subsequent demo-chat test would see
-  // the dev_bypass fixtures (Aurelia Tea Co., …) instead of our stub.
-  // Strip the inline block from the HTML response so the chat factory
-  // falls through to the fetch path, which the route above handles.
+  const payload = JSON.stringify(STUB_PERSONAS_PAYLOAD);
   await page.route('http://localhost:8787/', async (route: any) => {
     const resp = await route.fetch();
     const headers = resp.headers();
-    let body = await resp.text();
-    body = body.replace(
-      /<script id="demo-personas-data"[\s\S]*?<\/script>/g,
-      '',
+    const original = await resp.text();
+    const body = original.replace(
+      /(<script id="demo-personas-data"[^>]*>)[\s\S]*?(<\/script>)/,
+      `$1${payload}$2`,
     );
     await route.fulfill({
       status: resp.status(),

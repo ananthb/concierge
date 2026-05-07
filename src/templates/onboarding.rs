@@ -148,9 +148,9 @@ pub fn welcome_html(
 
     let chat_error = t(locale, "demo-chat-error");
     let chat_rate_limited = t(locale, "demo-chat-rate-limited");
-    // Personas are no longer embedded in the page; the chat factory
-    // fetches `/demo/personas` on first open. That endpoint reads the
-    // D1 catalog and returns only Approved rows.
+    // Personas are embedded server-side in `<script id="demo-personas-
+    // data">` (see the welcome handler). The chat factory reads only
+    // from that block — no network round-trip on modal open.
     let chat_script = HERO_CHAT_JS
         .replace("__PREAMBLE__", &js_string_for_html(crate::prompt::PREAMBLE))
         .replace(
@@ -236,23 +236,20 @@ pub fn welcome_html(
         )
     };
 
-    // Preload: when the demo is enabled and the personas cache is warm,
-    // embed the cached JSON blob in a non-executing `<script
-    // type="application/json">` block. The chat factory's `init()` reads
-    // it instead of calling /demo/personas, eliminating the round-trip
-    // wait between clicking the demo button and seeing personas.
-    //
-    // The nonce is required by our strict CSP `script-src 'nonce-…'` —
-    // even non-executing JSON-typed <script>s match the directive, so
-    // omitting the nonce trips csp.spec.ts.
+    // Persona catalog: the welcome handler resolves it server-side and
+    // hands us the JSON blob (`Some(_)` iff demo is enabled). We embed
+    // it in a non-executing `<script type="application/json">` block;
+    // the chat factory reads only from there. The nonce is required by
+    // our strict CSP `script-src 'nonce-…'` — even JSON-typed <script>s
+    // match the directive, so omitting the nonce trips csp.spec.ts.
     let preloaded_personas_block = match prefetched_personas_json {
-        Some(json) if demo_enabled => format!(
+        Some(json) => format!(
             r#"<script id="demo-personas-data" type="application/json" nonce="__CSP_NONCE__">{}</script>"#,
             // Defang any literal `</script` so a stray sequence in the
             // JSON can't break out of the script tag.
             json.replace("</", "<\\/")
         ),
-        _ => String::new(),
+        None => String::new(),
     };
 
     let content = format!(
@@ -550,28 +547,22 @@ const HERO_CHAT_JS: &str = r##"<script nonce="__CSP_NONCE__">
   const findPersona = (slug, personas) =>
     personas.find((p) => p.slug === slug) || personas[0] || null;
 
-  // Personas preload. Three-tier strategy:
-  //   1. Server-embedded blob (#demo-personas-data) — zero round-trip,
-  //      used when the welcome handler found a warm cache.
-  //   2. Eager fetch kicked off here at script-evaluation time so the
-  //      request is in flight before Alpine even boots, and certainly
-  //      before the user can click into the modal. init() awaits it.
-  //   3. Fallback empty list if both the embedded blob and the eager
-  //      fetch fail.
+  // Personas: server-only. The welcome handler resolves the catalog
+  // (cache → cold-miss regen → empty fallback) and embeds it in the
+  // #demo-personas-data JSON island below. The client never fetches —
+  // anything missing here means demo is disabled or the server hit an
+  // unrecoverable error, and the picker shows the operator-side
+  // "no personas available" state.
   const personasReady = (() => {
     const inline = document.getElementById('demo-personas-data');
-    if (inline && inline.textContent) {
-      try {
-        const parsed = JSON.parse(inline.textContent);
-        if (parsed && Array.isArray(parsed.personas)) {
-          return Promise.resolve(parsed.personas);
-        }
-      } catch (_) { /* fall through to fetch */ }
-    }
-    return fetch('/demo/personas')
-      .then((r) => (r.ok ? r.json() : { personas: [] }))
-      .then((d) => (d && Array.isArray(d.personas) ? d.personas : []))
-      .catch(() => []);
+    if (!inline || !inline.textContent) return Promise.resolve([]);
+    try {
+      const parsed = JSON.parse(inline.textContent);
+      if (parsed && Array.isArray(parsed.personas)) {
+        return Promise.resolve(parsed.personas);
+      }
+    } catch (_) { /* malformed; treat as empty */ }
+    return Promise.resolve([]);
   })();
   // Demo session is intentionally short. After this many user turns
   // the input form is replaced with the sign-up CTA; the visitor has

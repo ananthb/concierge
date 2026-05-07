@@ -1,9 +1,10 @@
 //! `/manage/demo`: operator controls for the public homepage demo.
 //!
-//! Three settings live on this page: an `enabled` toggle (gates
-//! `/demo/personas`, `/demo/chat`, and the homepage entry point), a
-//! regeneration cadence in minutes (how often the cron tick re-rolls
-//! the stored persona blob), and the system prompt the generator uses.
+//! Three settings live on this page: an `enabled` toggle (gates the
+//! homepage demo entry point, the inline persona preload, and
+//! `/demo/chat`), a regeneration cadence in minutes (how often the
+//! cron tick re-rolls the stored persona blob), and the system prompt
+//! the generator uses.
 //!
 //! The prompt edit flow is preview-gated: a save only persists the new
 //! prompt when the operator has just previewed it and the model

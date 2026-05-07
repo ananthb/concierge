@@ -320,7 +320,8 @@ pub const DEFAULT_DEMO_MAX_USER_TURNS: u32 = 3;
 
 /// Operator-controlled demo settings. Stored as a singleton KV row
 /// under `DEMO_CONFIG_KEY`. `enabled=false` hides the homepage entry
-/// point and turns `/demo/personas` + `/demo/chat` into noops.
+/// point: the welcome page skips the inline persona preload and
+/// `/demo/chat` returns an empty list instead of running the model.
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
 pub struct DemoConfig {
     pub enabled: bool,

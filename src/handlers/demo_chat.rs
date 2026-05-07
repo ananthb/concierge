@@ -222,10 +222,11 @@ pub async fn handle_demo_chat(mut req: Request, env: Env) -> Result<Response> {
     let wrapped_prompt = if parsed.handoff {
         crate::prompt::wrap(crate::prompt::HOLDING_PATTERN_MIDDLE)
     } else {
-        // For demo purposes, we need a PersonaBuilder with fictional details.
-        // The /demo/personas endpoint provides these (cached). If they hit
-        // /demo/chat directly with a slug, we just use empty defaults for
-        // the builder and the archetype's voice.
+        // For demo purposes, we need a PersonaBuilder with fictional
+        // details. The welcome page embeds the resolved catalog inline
+        // (the rolled cache, kept warm by the cron). If a client POSTs
+        // /demo/chat with a slug directly (no inline preload visited),
+        // fall back to empty defaults for the builder + archetype voice.
         let persona_middle =
             crate::personas::generate(&crate::types::PersonaBuilder::default(), &row.voice_prompt);
         let demo_middle = crate::prompt::compose_demo_middle(&persona_middle);
