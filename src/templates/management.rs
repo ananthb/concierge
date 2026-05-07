@@ -322,10 +322,10 @@ pub fn tenants_table_html(tenants: &[Tenant], base_url: &str) -> String {
         .map(|t| {
             format!(
                 r##"<tr>
-  <td><a href="{base_url}/manage/tenants/{id}"><strong>{email}</strong></a></td>
-  <td class="muted">{name}</td>
-  <td><span class="chip">{plan}</span></td>
-  <td class="mono muted fs-11">{created}</td>
+  <td data-label="Email"><a href="{base_url}/manage/tenants/{id}"><strong>{email}</strong></a></td>
+  <td data-label="Name" class="muted">{name}</td>
+  <td data-label="Plan"><span class="chip">{plan}</span></td>
+  <td data-label="Created" class="mono muted fs-11">{created}</td>
   <td><button class="btn ghost sm danger" hx-delete="{base_url}/manage/tenants/{id}" hx-confirm="Delete tenant {email} and ALL their data?" hx-target="closest tr" hx-swap="outerHTML">Delete</button></td>
 </tr>"##,
                 base_url = base_url,
@@ -346,7 +346,7 @@ pub fn tenants_table_html(tenants: &[Tenant], base_url: &str) -> String {
         )
     } else {
         format!(
-            r##"<div class="table-wrap"><table>
+            r##"<div class="table-wrap table-stack"><table>
   <thead><tr><th scope="col">Email</th><th scope="col">Name</th><th scope="col">Plan</th><th scope="col">Created</th><th></th></tr></thead>
   <tbody>{rows}</tbody>
 </table></div>"##,
@@ -519,7 +519,7 @@ pub fn tenant_detail_html(
       </div>
     </form>
   </div>
-  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px">
+  <div class="form-row">
     <div class="card p-16">
       <div class="eyebrow">WhatsApp ({wa_count})</div>
       <div class="side-list">{wa_list}</div>
@@ -704,7 +704,7 @@ pub fn audit_table_html(
         // expandable detail <tr> share an Alpine x-data scope. The
         // OOB "Load older" swap appends new <tbody>s to #audit-rows.
         format!(
-            r##"<div class="table-wrap"><table id="audit-rows">
+            r##"<div class="table-wrap table-stack"><table id="audit-rows">
   <thead><tr><th scope="col">Time</th><th scope="col">Actor</th><th scope="col">Action</th><th scope="col">Resource</th><th></th></tr></thead>
   {rows}
 </table></div>"##,
@@ -776,10 +776,10 @@ fn audit_rows_inner(log: &[serde_json::Value], base_url: &str, oob: bool) -> Str
             format!(
                 r##"<tbody{oob_attr} x-data="{{ open: false }}">
   <tr>
-    <td class="mono muted fs-11">{created}</td>
-    <td class="fs-13">{actor}</td>
-    <td>{action_cell}</td>
-    <td>{resource_cell}</td>
+    <td data-label="Time" class="mono muted fs-11">{created}</td>
+    <td data-label="Actor" class="fs-13">{actor}</td>
+    <td data-label="Action">{action_cell}</td>
+    <td data-label="Resource">{resource_cell}</td>
     <td><button type="button" class="row-expand" :class="{{ open: open }}" @click="open = !open" :aria-expanded="open" aria-label="Toggle details">▾</button></td>
   </tr>
   <tr class="audit-detail" x-show="open" x-cloak>
@@ -1079,18 +1079,18 @@ pub fn billing_overview_html(
     <form hx-post="{base_url}/manage/billing/settings" hx-target="{hash}toast-region" hx-swap="afterbegin" hx-ext="json-enc">
       {pricing_table}
 
-      <div class="row gap-12 wrap mb-12 mt-16" style="align-items:flex-end">
-        <label class="stack" style="min-width:200px">
+      <div class="form-row mb-12 mt-16">
+        <label class="stack">
           <span class="eyebrow lbl">Addresses per reply-email pack</span>
           <input class="input mono" name="email_pack_size" type="number" min="1" required value="{email_pack_size}">
           <span class="muted fs-11 mt-4">tenants receive this many addresses per active pack</span>
         </label>
-        <label class="stack" style="min-width:200px">
+        <label class="stack">
           <span class="eyebrow lbl">Minimum credits per purchase</span>
           <input class="input mono" name="min_credits" type="number" min="1" required value="{min_credits}">
           <span class="muted fs-11 mt-4">slider lower bound; smallest purchase a tenant can make</span>
         </label>
-        <label class="stack" style="min-width:200px">
+        <label class="stack">
           <span class="eyebrow lbl">Maximum credits per purchase</span>
           <input class="input mono" name="max_credits" type="number" min="1" max="{max_credits_ceiling}" required value="{max_credits}">
           <span class="muted fs-11 mt-4">hard upper bound across slider + custom input</span>
@@ -1266,15 +1266,15 @@ fn add_currency_form(base_url: &str, existing: &[String]) -> String {
         .collect();
 
     format!(
-        r##"<div x-data="{{ currency: '' }}" class="row gap-12 mt-12 wrap" style="align-items:flex-end">
-  <label style="min-width:260px">
+        r##"<div x-data="{{ currency: '' }}" class="form-row mt-12">
+  <label>
     <div class="eyebrow mb-4">Add currency</div>
     <select class="input" x-model="currency">
       <option value="">Pick a currency…</option>
       {options}
     </select>
   </label>
-  <form hx-post="{base_url}/manage/billing/settings" hx-target="body" hx-swap="innerHTML" hx-ext="json-enc"
+  <form class="form-row-fit" hx-post="{base_url}/manage/billing/settings" hx-target="body" hx-swap="innerHTML" hx-ext="json-enc"
         x-show="currency">
     <input type="hidden" name="__currencies" :value="JSON.stringify([currency])">
     {seed_inputs}
@@ -1380,11 +1380,11 @@ pub fn archetypes_table_html(rows: &[crate::types::Archetype], base_url: &str) -
                 .unwrap_or_default();
             format!(
                 r##"<tr>
-  <td><a href="{base_url}/manage/archetypes/{slug}"><strong>{slug}</strong></a></td>
-  <td>{label}</td>
-  <td class="muted fs-13">{description}</td>
-  <td>{status}</td>
-  <td class="mono muted fs-11">{updated}</td>
+  <td data-label="Slug"><a href="{base_url}/manage/archetypes/{slug}"><strong>{slug}</strong></a></td>
+  <td data-label="Label">{label}</td>
+  <td data-label="Description" class="muted fs-13">{description}</td>
+  <td data-label="Safety">{status}</td>
+  <td data-label="Updated" class="mono muted fs-11">{updated}</td>
   <td><a class="btn ghost sm" href="{base_url}/manage/archetypes/{slug}">Edit</a></td>
 </tr>"##,
                 base_url = base_url,
@@ -1405,7 +1405,7 @@ pub fn archetypes_table_html(rows: &[crate::types::Archetype], base_url: &str) -
         )
     } else {
         format!(
-            r##"<div class="table-wrap"><table>
+            r##"<div class="table-wrap table-stack"><table>
   <thead><tr><th scope="col">Slug</th><th scope="col">Label</th><th scope="col">Description</th><th scope="col">Safety</th><th scope="col">Updated</th><th></th></tr></thead>
   <tbody>{rows}</tbody>
 </table></div>"##,
