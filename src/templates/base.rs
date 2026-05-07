@@ -393,7 +393,17 @@ dialog.manage-confirm .confirm-msg { color:var(--ink); font-size:15px;
 dialog.manage-confirm .confirm-actions { display:flex; gap:10px;
   justify-content:flex-end; flex-wrap:wrap; }
 .avatar { width:30px; height:30px; border-radius:50%; background:var(--plum); color:#fff;
-  display:flex; align-items:center; justify-content:center; font-size:13px; }
+  display:inline-flex; align-items:center; justify-content:center; font-size:13px;
+  border:0; cursor:pointer; padding:0; }
+.avatar:hover { background:var(--ink); }
+.avatar:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+.acct-menu { position:relative; }
+.acct-pop { position:absolute; right:0; top:calc(100% + 8px); min-width:180px;
+  background:var(--paper); border:1px solid var(--hair); border-radius:var(--r-md);
+  box-shadow:var(--shadow-2); padding:6px; z-index:50; display:flex; flex-direction:column; }
+.acct-pop a { display:block; padding:8px 12px; border-radius:8px; color:var(--ink);
+  text-decoration:none; font-size:14px; }
+.acct-pop a:hover, .acct-pop a:focus-visible { background:var(--cream-2); outline:none; }
 .brand { display:flex; align-items:center; gap:10px; font-size:20px; letter-spacing:-0.01em; }
 .brand .serif { font-family:var(--f-display); font-size:24px; }
 
@@ -1174,12 +1184,13 @@ pub fn app_shell(content: &str, active_nav: &str, base_url: &str, locale: &Local
     // Each entry: (active_key, FTL key, href).
     // active_key matches the `active_nav` arg (kept as English for stable
     // cross-locale routing; callers don't have to translate it too).
-    let nav_items: [(&str, &str, &str); 5] = [
+    // Account-level entries (Settings, Sign out) live in the avatar
+    // dropdown on the right — they're per-user, not per-feature.
+    let nav_items: [(&str, &str, &str); 4] = [
         ("Overview", "app-nav-overview", "/dashboard"),
         ("Approvals", "app-nav-approvals", "/dashboard/approvals"),
         ("Channels", "app-nav-channels", "/dashboard/channels"),
         ("Billing", "app-nav-billing", "/dashboard/billing"),
-        ("Settings", "app-nav-settings", "/dashboard/settings"),
     ];
 
     let nav: String = nav_items
@@ -1193,25 +1204,37 @@ pub fn app_shell(content: &str, active_nav: &str, base_url: &str, locale: &Local
 
     let nav_aria = t(locale, "app-nav-aria-label");
     let status = t(locale, "app-nav-status-live");
-    let logout_aria = t(locale, "app-nav-logout-aria");
+    let menu_aria = t(locale, "app-account-menu-aria");
+    let menu_settings = t(locale, "app-account-menu-settings");
+    let menu_signout = t(locale, "app-account-menu-signout");
 
     format!(
-        r#"<div class="app">
+        r##"<div class="app">
   <header class="app-top">
     {brand}
     <nav class="app-nav" aria-label="{nav_aria}">{nav}</nav>
     <div class="row gap-12">
       <span class="chip ok">{status}</span>
-      <a href="{base_url}/auth/logout" class="avatar" aria-label="{logout_aria}">X</a>
+      <div class="acct-menu" x-data="{{ open: false }}" @keydown.escape.window="open=false" @click.outside="open=false">
+        <button type="button" class="avatar" @click="open=!open" :aria-expanded="open" aria-haspopup="menu" aria-label="{menu_aria}">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="8" r="3.4" stroke="currentColor" stroke-width="1.6"/><path d="M5 19c1.6-3 4.2-4.5 7-4.5s5.4 1.5 7 4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+        </button>
+        <div class="acct-pop" x-show="open" x-cloak x-transition.opacity role="menu" aria-label="{menu_aria}">
+          <a href="{base_url}/dashboard/settings" role="menuitem">{menu_settings}</a>
+          <a href="{base_url}/auth/logout" role="menuitem">{menu_signout}</a>
+        </div>
+      </div>
     </div>
   </header>
   {content}
-</div>"#,
+</div>"##,
         brand = brand_mark(),
         nav = nav,
         nav_aria = html_escape(&nav_aria),
         status = html_escape(&status),
-        logout_aria = html_escape(&logout_aria),
+        menu_aria = html_escape(&menu_aria),
+        menu_settings = html_escape(&menu_settings),
+        menu_signout = html_escape(&menu_signout),
         base_url = base_url,
         content = content,
     )

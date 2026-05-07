@@ -45,7 +45,7 @@ pub fn install_cta_html(from: &str, base_url: &str, locale: &Locale) -> String {
         cta = t(locale, "admin-discord-install-cta"),
     );
 
-    let page = app_shell(&content, "Settings", base_url, locale);
+    let page = app_shell(&content, "Channels", base_url, locale);
     base_html(&t(locale, "admin-discord-install-title"), &page, locale)
 }
 
@@ -236,7 +236,7 @@ pub fn manage_html(
         save = t(locale, "admin-discord-save"),
     );
 
-    let page = app_shell(&content, "Settings", base_url, locale);
+    let page = app_shell(&content, "Channels", base_url, locale);
     base_html(&t(locale, "admin-discord-manage-title"), &page, locale)
 }
 

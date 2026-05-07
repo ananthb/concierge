@@ -28,11 +28,12 @@ app-nav-overview = Overview
 app-nav-approvals = Approvals
 app-nav-channels = Channels
 app-nav-billing = Billing
-app-nav-settings = Settings
 app-nav-aria-label = Admin sections
 app-nav-skip-link = Skip to main content
 app-nav-status-live = live
-app-nav-logout-aria = Sign out
+app-account-menu-aria = Account menu
+app-account-menu-settings = Account
+app-account-menu-signout = Sign out
 
 # Maintenance fallback page.
 maintenance-title = Concierge is offline
@@ -231,8 +232,8 @@ admin-login-back = ← Back
 admin-login-title = Sign In - Concierge
 
 # Admin: settings page.
-admin-settings-title = Settings - Concierge
-admin-settings-h1 = Settings
+admin-settings-title = Account - Concierge
+admin-settings-h1 = Account
 admin-settings-linked-h2 = Linked Accounts
 admin-settings-linked-lead = Sign-in providers connected to your account.
 admin-settings-linked-region = Linked accounts
