@@ -60,7 +60,7 @@ welcome-headline-2 = Hi. I'll write back to <br>every <em>DM, WhatsApp &amp; ema
 welcome-headline-3 = Hello. I'll handle <br>every <em>DM, WhatsApp &amp; email</em> <br>while you run the shop.
 welcome-headline-4 = Hi. I'm on <br>every <em>DM, WhatsApp &amp; email</em>, <br>day, night, and weekends.
 welcome-headline-5 = Hello. I'll cover <br>every <em>DM, WhatsApp &amp; email</em> <br>so nobody waits on you.
-welcome-lead = Concierge is an automated customer-messaging service for small businesses. Connect your channels, set a tone, and I'll auto-reply across WhatsApp, Instagram, Discord, and email. Prepaid credits, no tiers, no contracts.
+welcome-lead = Concierge is an automated customer-messaging service for small businesses. Connect your channels, set a tone, and I'll auto-reply across WhatsApp, Instagram, Discord, and email. Just prepaid credits, no subscriptions.
 welcome-cta-primary = Get started →
 welcome-cta-secondary = See features
 
@@ -96,7 +96,7 @@ demo-chat-cta-body = Set up Concierge for your own business in five minutes.
 demo-chat-cta-button = Get started →
 
 # Features page (/features).
-features-meta-description = Concierge auto-replies on WhatsApp, Instagram, Discord, and email. AI replies { $inr } / { $usd }, prepaid credits, no contracts; static replies don't consume credits. 5-minute setup. Open source.
+features-meta-description = Concierge auto-replies on WhatsApp, Instagram, Discord, and email. AI replies { $inr } / { $usd }, prepaid credits, no subscriptions; static replies don't consume credits. 5-minute setup. Open source.
 features-og-title = Concierge Features
 features-headline = One assistant. Every channel.
 features-lead = Concierge replies for you on WhatsApp, Instagram, Discord, and email: instantly, in your voice, and only when it should.
@@ -122,7 +122,7 @@ features-card-voice-body = Set tone, biz type, and things the AI must never do. 
 features-card-injection-eyebrow = Prompt-injection screening
 features-card-injection-body = Inbound text is scanned before it reaches the model. Suspicious messages are skipped, not auto-replied.
 features-card-pay-eyebrow = Pay only for AI
-features-card-pay-body = AI replies cost { $inr } / { $usd } each — prepaid credits, no tiers, no contracts. Static auto-replies you author yourself don't consume credits.
+features-card-pay-body = AI replies cost { $inr } / { $usd } each. Just prepaid credits, no subscriptions. Static auto-replies you author yourself don't consume credits.
 features-more-heading = More that just works
 features-card-leads-eyebrow = Lead capture
 features-card-leads-body = Embed a phone-number form on any page. Submissions trigger an instant WhatsApp message.
@@ -138,12 +138,12 @@ features-cta-primary = Get started →
 features-cta-secondary = See pricing
 
 # Pricing page (/pricing).
-pricing-meta-description = Simple, prepaid pricing for Concierge. { $inr } / { $usd } per AI reply, no tiers, no contracts. Reply-email subscription: { $pack_size } addresses for { $addr_inr } / { $addr_usd } per month.
+pricing-meta-description = Simple, prepaid pricing for Concierge. { $inr } / { $usd } per AI reply, no subscriptions. Reply-email subscription: { $pack_size } addresses for { $addr_inr } / { $addr_usd } per month.
 pricing-og-title = Concierge Pricing
 pricing-headline-prefix = per AI reply. Static auto-replies don't consume credits.
 pricing-currency-inr-label = Indian rupees
 pricing-currency-usd-label = US dollars
-pricing-lead = Prepaid credits, no subscriptions. Top up any amount whenever you need — no tiers, no contracts, no auto-renewals.
+pricing-lead = Just prepaid credits. No subscriptions. Top up any amount whenever you need.
 pricing-credits-eyebrow = What costs a credit?
 pricing-credits-li-1 = <strong>AI auto-replies</strong> on WhatsApp, Instagram, email, or Discord: <strong>1 credit each.</strong>
 pricing-credits-li-2 = <strong>Static auto-replies</strong> (canned text you wrote yourself): no credits consumed.
