@@ -244,11 +244,11 @@ fn health_panel_html(report: &crate::handlers::health::HealthReport) -> String {
                 Status::Error => r#"<span class="dot error"></span>"#,
             };
             format!(
-                r#"<div class="rt-row" style="grid-template-columns:auto 1.2fr 2fr">
-  <div>{dot}</div>
-  <div class="fw-600">{name}</div>
-  <div class="muted fs-13">{detail}</div>
-</div>"#,
+                r#"<tr>
+  <td style="width:24px">{dot}</td>
+  <td class="fw-600">{name}</td>
+  <td class="muted fs-13">{detail}</td>
+</tr>"#,
                 dot = dot,
                 name = html_escape(&c.name),
                 detail = html_escape(&c.detail),
@@ -264,7 +264,7 @@ fn health_panel_html(report: &crate::handlers::health::HealthReport) -> String {
     </div>
     {chip}
   </div>
-  <div>{rows}</div>
+  <div class="table-wrap"><table><tbody>{rows}</tbody></table></div>
 </div>"##,
         chip = overall_chip,
         ts = html_escape(&report.generated_at),
@@ -321,15 +321,13 @@ pub fn tenants_table_html(tenants: &[Tenant], base_url: &str) -> String {
         .iter()
         .map(|t| {
             format!(
-                r##"<div class="rt-row" style="grid-template-columns:1fr 1fr 0.6fr 0.5fr 80px">
-  <div><a href="{base_url}/manage/tenants/{id}"><strong>{email}</strong></a></div>
-  <div class="muted">{name}</div>
-  <div><span class="chip">{plan}</span></div>
-  <div class="mono muted fs-11">{created}</div>
-  <div>
-    <button class="btn ghost sm danger" hx-delete="{base_url}/manage/tenants/{id}" hx-confirm="Delete tenant {email} and ALL their data?" hx-target="closest .rt-row" hx-swap="outerHTML">Delete</button>
-  </div>
-</div>"##,
+                r##"<tr>
+  <td><a href="{base_url}/manage/tenants/{id}"><strong>{email}</strong></a></td>
+  <td class="muted">{name}</td>
+  <td><span class="chip">{plan}</span></td>
+  <td class="mono muted fs-11">{created}</td>
+  <td><button class="btn ghost sm danger" hx-delete="{base_url}/manage/tenants/{id}" hx-confirm="Delete tenant {email} and ALL their data?" hx-target="closest tr" hx-swap="outerHTML">Delete</button></td>
+</tr>"##,
                 base_url = base_url,
                 id = html_escape(&t.id),
                 email = html_escape(&t.email),
@@ -348,9 +346,10 @@ pub fn tenants_table_html(tenants: &[Tenant], base_url: &str) -> String {
         )
     } else {
         format!(
-            r##"<div class="rt-head" style="grid-template-columns:1fr 1fr 0.6fr 0.5fr 80px">
-  <div>Email</div><div>Name</div><div>Plan</div><div>Created</div><div></div>
-</div>{rows}"##,
+            r##"<div class="table-wrap"><table>
+  <thead><tr><th scope="col">Email</th><th scope="col">Name</th><th scope="col">Plan</th><th scope="col">Created</th><th></th></tr></thead>
+  <tbody>{rows}</tbody>
+</table></div>"##,
             rows = rows,
         )
     };
@@ -402,7 +401,7 @@ fn render_recent_activity_card(recent: &[serde_json::Value], base_url: &str) -> 
     <span class="muted fs-12">by {actor}</span>
     <button type="button" class="row-expand ml-auto" :class="{{ open: open }}" @click="open = !open" :aria-expanded="open" aria-label="Toggle details">▾</button>
   </div>
-  <div class="rt-detail" x-show="open" x-cloak>{details}</div>
+  <div class="expand-pane" x-show="open" x-cloak>{details}</div>
 </div>"##,
                     created = html_escape(created.get(..19).unwrap_or(created)),
                     chip = chip,
@@ -701,12 +700,14 @@ pub fn audit_table_html(
             None,
         )
     } else {
-        let grid_cols = "0.8fr 1fr 0.7fr 1.4fr 32px";
+        // Each entry renders as its own <tbody> so the row + the
+        // expandable detail <tr> share an Alpine x-data scope. The
+        // OOB "Load older" swap appends new <tbody>s to #audit-rows.
         format!(
-            r##"<div class="rt-head" style="grid-template-columns:{grid_cols}">
-  <div>Time</div><div>Actor</div><div>Action</div><div>Resource</div><div></div>
-</div><div id="audit-rows">{rows}</div>"##,
-            grid_cols = grid_cols,
+            r##"<div class="table-wrap"><table id="audit-rows">
+  <thead><tr><th scope="col">Time</th><th scope="col">Actor</th><th scope="col">Action</th><th scope="col">Resource</th><th></th></tr></thead>
+  {rows}
+</table></div>"##,
             rows = rows,
         )
     };
@@ -729,7 +730,22 @@ pub fn audit_table_html(
 /// the initial paint and by `audit_page_fragment_html` for "Load
 /// older" appends.
 fn audit_rows_html(log: &[serde_json::Value], base_url: &str) -> String {
-    let grid_cols = "0.8fr 1fr 0.7fr 1.4fr 32px";
+    audit_rows_inner(log, base_url, false)
+}
+
+/// Out-of-band variant: each <tbody> carries an hx-swap-oob attribute so
+/// the "Load older" fragment can append multiple tbodies directly to
+/// <table id="audit-rows"> (a wrapping <div> isn't valid table markup).
+fn audit_rows_oob_html(log: &[serde_json::Value], base_url: &str) -> String {
+    audit_rows_inner(log, base_url, true)
+}
+
+fn audit_rows_inner(log: &[serde_json::Value], base_url: &str, oob: bool) -> String {
+    let oob_attr = if oob {
+        r#" hx-swap-oob="beforeend:#audit-rows""#
+    } else {
+        ""
+    };
     log.iter()
         .map(|entry| {
             let actor = entry
@@ -754,24 +770,23 @@ fn audit_rows_html(log: &[serde_json::Value], base_url: &str) -> String {
             let resource_cell = audit_resource_cell(base_url, resource_type, resource_id);
             let details_pretty = audit_details_pretty(entry.get("details"));
 
-            // Each row is wrapped in an Alpine x-data block whose
-            // `open` flag toggles the inline detail pane below it.
-            // The wrap itself doesn't lay out — the rt-row + rt-detail
-            // siblings stack inside the card on their own.
+            // One <tbody> per entry: the data row + the expandable
+            // detail row share an Alpine `open` flag scoped here.
+            // Multiple <tbody>s inside one <table> are valid HTML.
             format!(
-                r##"<div x-data="{{ open: false }}">
-  <div class="rt-row" :class="{{ expanded: open }}" style="grid-template-columns:{grid_cols}">
-    <div class="mono muted fs-11">{created}</div>
-    <div class="fs-13">{actor}</div>
-    <div>{action_cell}</div>
-    <div>{resource_cell}</div>
-    <div>
-      <button type="button" class="row-expand" :class="{{ open: open }}" @click="open = !open" :aria-expanded="open" aria-label="Toggle details">▾</button>
-    </div>
-  </div>
-  <div class="rt-detail" x-show="open" x-cloak>{details}</div>
-</div>"##,
-                grid_cols = grid_cols,
+                r##"<tbody{oob_attr} x-data="{{ open: false }}">
+  <tr>
+    <td class="mono muted fs-11">{created}</td>
+    <td class="fs-13">{actor}</td>
+    <td>{action_cell}</td>
+    <td>{resource_cell}</td>
+    <td><button type="button" class="row-expand" :class="{{ open: open }}" @click="open = !open" :aria-expanded="open" aria-label="Toggle details">▾</button></td>
+  </tr>
+  <tr class="audit-detail" x-show="open" x-cloak>
+    <td colspan="5"><div class="expand-pane">{details}</div></td>
+  </tr>
+</tbody>"##,
+                oob_attr = oob_attr,
                 created = html_escape(created.get(..19).unwrap_or(created)),
                 actor = html_escape(actor),
                 action_cell = action_cell,
@@ -838,11 +853,11 @@ pub fn audit_page_fragment_html(
     has_more: bool,
     base_url: &str,
 ) -> String {
-    let rows = audit_rows_html(log, base_url);
+    let rows = audit_rows_oob_html(log, base_url);
     let next_button =
         audit_load_more_button(log, actor_q, action_q, resource_q, has_more, base_url);
     format!(
-        r##"<div hx-swap-oob="beforeend:#audit-rows">{rows}</div>
+        r##"{rows}
 {next_button}"##,
         rows = rows,
         next_button = next_button,
@@ -927,8 +942,10 @@ fn audit_details_pretty(details: Option<&serde_json::Value>) -> String {
             let pretty = serde_json::to_string_pretty(&v).unwrap_or_else(|_| v.to_string());
             format!("<pre>{}</pre>", html_escape(&pretty))
         }
-        None => r#"<p class="rt-detail-empty">No additional details recorded for this action.</p>"#
-            .to_string(),
+        None => {
+            r#"<p class="expand-pane-empty">No additional details recorded for this action.</p>"#
+                .to_string()
+        }
     }
 }
 
@@ -1362,14 +1379,14 @@ pub fn archetypes_table_html(rows: &[crate::types::Archetype], base_url: &str) -
                 .map(|s| s.get(..10).unwrap_or(s).to_string())
                 .unwrap_or_default();
             format!(
-                r##"<div class="rt-row" style="grid-template-columns:0.7fr 0.7fr 1.4fr 0.6fr 0.5fr 80px">
-  <div><a href="{base_url}/manage/archetypes/{slug}"><strong>{slug}</strong></a></div>
-  <div>{label}</div>
-  <div class="muted fs-13">{description}</div>
-  <div>{status}</div>
-  <div class="mono muted fs-11">{updated}</div>
-  <div><a class="btn ghost sm" href="{base_url}/manage/archetypes/{slug}">Edit</a></div>
-</div>"##,
+                r##"<tr>
+  <td><a href="{base_url}/manage/archetypes/{slug}"><strong>{slug}</strong></a></td>
+  <td>{label}</td>
+  <td class="muted fs-13">{description}</td>
+  <td>{status}</td>
+  <td class="mono muted fs-11">{updated}</td>
+  <td><a class="btn ghost sm" href="{base_url}/manage/archetypes/{slug}">Edit</a></td>
+</tr>"##,
                 base_url = base_url,
                 slug = html_escape(&r.slug),
                 label = html_escape(&r.label),
@@ -1388,9 +1405,10 @@ pub fn archetypes_table_html(rows: &[crate::types::Archetype], base_url: &str) -
         )
     } else {
         format!(
-            r##"<div class="rt-head" style="grid-template-columns:0.7fr 0.7fr 1.4fr 0.6fr 0.5fr 80px">
-  <div>Slug</div><div>Label</div><div>Description</div><div>Safety</div><div>Updated</div><div></div>
-</div>{rows}"##,
+            r##"<div class="table-wrap"><table>
+  <thead><tr><th scope="col">Slug</th><th scope="col">Label</th><th scope="col">Description</th><th scope="col">Safety</th><th scope="col">Updated</th><th></th></tr></thead>
+  <tbody>{rows}</tbody>
+</table></div>"##,
             rows = row_html,
         )
     };

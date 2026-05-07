@@ -477,42 +477,36 @@ dialog.manage-confirm .confirm-actions { display:flex; gap:10px;
 .mini-ava { width:22px; height:22px; border-radius:50%; flex-shrink:0; }
 .mini-body { flex:1; font-size:13px; }
 
-/* Rules table */
-.rt-head, .rt-row { display:grid; grid-template-columns:1.4fr 1fr 1fr 1fr 0.6fr 0.5fr 80px;
-  gap:12px; padding:12px 20px; align-items:center; border-bottom:1px solid var(--hair); font-size:13px; }
-.rt-head { background:var(--cream-2); font-family:var(--f-mono); font-size:11px;
-  letter-spacing:.18em; text-transform:uppercase; color:var(--muted); }
-.rt-row.disabled { opacity:0.5; }
-.rt-row.expanded { background:rgba(232,106,44,.04); }
-.rt-foot { padding:12px 20px; background:var(--cream-2); }
-
 /* Recent-activity list shown on tenant detail. Tighter than the
    audit table — each row is one line with an inline chevron and an
    on-demand details pane below. */
 .recent-list { display:flex; flex-direction:column; }
 .recent-row { padding:10px 0; border-top:1px solid var(--hair); }
 .recent-row:first-child { border-top:none; padding-top:0; }
-.recent-row .rt-detail { margin-top:8px; padding:10px 12px;
-  border-top:none; border-bottom:none; border-radius:8px;
-  background:var(--cream-2); }
+.recent-row .expand-pane { margin-top:8px; padding:10px 12px;
+  border-radius:8px; background:var(--cream-2); }
 
-/* Expandable detail row used by the audit table. The wrap is just a
-   grouping element (no layout) — the row + body stack as siblings
-   inside the card. */
-.rt-detail { padding:12px 20px 16px; background:var(--paper);
-  border-bottom:1px solid var(--hair); border-top:1px dashed var(--hair-2); }
-.rt-detail pre { margin:0; padding:10px 12px; background:var(--cream-2);
+/* Expand-pane: shared body for the audit-table detail row and the
+   recent-activity inline expander. Visual is identical so JSON dumps
+   look the same wherever they show up. */
+.expand-pane { padding:12px 20px 16px; background:var(--paper);
+  border-top:1px dashed var(--hair-2); }
+.expand-pane pre { margin:0; padding:10px 12px; background:var(--cream-2);
   border-radius:8px; font-family:var(--f-mono); font-size:12px;
   line-height:1.55; color:var(--ink-2); white-space:pre-wrap;
   word-break:break-word; max-height:320px; overflow:auto; }
-.rt-detail .rt-detail-empty { color:var(--muted); font-size:12px;
+.expand-pane-empty { color:var(--muted); font-size:12px;
   font-family:var(--f-mono); }
-.rt-row .row-expand { background:none; border:1px solid transparent;
+.row-expand { background:none; border:1px solid transparent;
   border-radius:6px; cursor:pointer; padding:2px 6px;
   color:var(--muted); font-size:14px; line-height:1;
   transition:transform .15s ease, color .15s ease, background .15s ease; }
-.rt-row .row-expand:hover { color:var(--ink); background:rgba(27,24,20,.04); }
-.rt-row .row-expand.open { transform:rotate(180deg); color:var(--ink); }
+.row-expand:hover { color:var(--ink); background:rgba(27,24,20,.04); }
+.row-expand.open { transform:rotate(180deg); color:var(--ink); }
+/* Audit detail <tr>: the colspan'd cell carries the expand-pane.
+   No grid; rely on table layout. */
+table tr.audit-detail > td { padding:0; background:var(--paper);
+  border-bottom:1px solid var(--hair); }
 
 /* Welcome form */
 .welcome { display:grid; grid-template-columns:minmax(0,1fr) 380px; gap:60px; align-items:center; }
@@ -688,15 +682,6 @@ dialog.manage-confirm .confirm-actions { display:flex; gap:10px;
   text-align:center; transform:rotate(-12deg); background:rgba(232,106,44,.05);
   letter-spacing:.12em; line-height:1.2; }
 
-/* Replies table */
-.replies-card { padding:0; overflow:hidden; }
-.replies-head, .replies-row { display:grid; grid-template-columns:1fr 2fr 80px; gap:12px;
-  padding:14px 20px; align-items:center; border-bottom:1px solid var(--hair); }
-.replies-head { background:var(--cream-2); font-family:var(--f-mono); font-size:11px;
-  letter-spacing:.18em; color:var(--muted); text-transform:uppercase; }
-.replies-row:last-of-type { border-bottom:0; }
-.replies-add { padding:14px; background:var(--cream-2); }
-
 /* Terminal */
 .terminal { background:#0F0D0B; color:#D9D0BD; border-radius:16px; padding:20px;
   font-family:var(--f-mono); font-size:13px; line-height:1.7; min-height:380px;
@@ -777,8 +762,6 @@ dialog.manage-confirm .confirm-actions { display:flex; gap:10px;
   .admin-card { min-height:auto; }
   .between { flex-wrap:wrap; gap:12px; }
   .dash-grid { padding:16px; }
-  .rt-head, .rt-row { grid-template-columns:1fr; gap:4px; padding:10px 14px; }
-  .replies-head, .replies-row { grid-template-columns:1fr; gap:4px; padding:10px 14px; }
   .banner { padding:14px 16px; flex-direction:column; gap:10px; text-align:center; }
   .terminal { padding:14px; font-size:12px; min-height:auto; }
   .term-row { grid-template-columns:1fr; gap:2px; }
