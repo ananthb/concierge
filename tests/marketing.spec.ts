@@ -53,39 +53,66 @@ test('brand link returns home', async ({ page }) => {
 // what the View-prompt panel asserts against.
 const CONCIERGE_DEMO_PROMPT =
   'Voice: Concierge talking about itself. WhatsApp Business, Instagram, Discord, email.';
+const STUB_PERSONAS_PAYLOAD = {
+  personas: [
+    {
+      slug: 'concierge',
+      label: 'Concierge',
+      description: 'Talks about Concierge.',
+      greeting: "Hi! I'm Concierge.",
+      prompt: CONCIERGE_DEMO_PROMPT,
+    },
+    {
+      slug: 'friendly_florist',
+      label: 'Friendly Florist',
+      description: 'Florist voice.',
+      greeting: 'Hi there! Welcome to the shop.',
+      business: {
+        name: 'Petals & Stems',
+        business_type: 'florist',
+        city: 'Mumbai',
+        hours: 'Tue–Sun 9am–7pm',
+        goal: 'book a delivery slot',
+        goal_url: '/book',
+      },
+      prompt: 'Business: Petals & Stems, a florist.',
+    },
+  ],
+};
 async function stubDemoPersonas(page: any) {
+  // Cold-cache path: the chat factory falls through to a fetch when
+  // the server didn't embed an inline preload. Intercept it.
   await page.route('**/demo/personas', (route: any) =>
     route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify({
-        personas: [
-          {
-            slug: 'concierge',
-            label: 'Concierge',
-            description: 'Talks about Concierge.',
-            greeting: "Hi! I'm Concierge.",
-            prompt: CONCIERGE_DEMO_PROMPT,
-          },
-          {
-            slug: 'friendly_florist',
-            label: 'Friendly Florist',
-            description: 'Florist voice.',
-            greeting: 'Hi there! Welcome to the shop.',
-            business: {
-              name: 'Petals & Stems',
-              business_type: 'florist',
-              city: 'Mumbai',
-              hours: 'Tue–Sun 9am–7pm',
-              goal: 'book a delivery slot',
-              goal_url: '/book',
-            },
-            prompt: 'Business: Petals & Stems, a florist.',
-          },
-        ],
-      }),
+      body: JSON.stringify(STUB_PERSONAS_PAYLOAD),
     }),
   );
+  // Warm-cache path: the welcome handler embeds a `<script id="demo-
+  // personas-data" type="application/json">…</script>` block once
+  // its persona cache primes, and the chat factory reads that inline
+  // synchronously while the document parses — before any observer or
+  // MutationObserver microtask can land. After the suite's first GET
+  // to / warms the cache, every subsequent demo-chat test would see
+  // the dev_bypass fixtures (Aurelia Tea Co., …) instead of our stub.
+  // Strip the inline block from the HTML response so the chat factory
+  // falls through to the fetch path, which the route above handles.
+  await page.route('http://localhost:8787/', async (route: any) => {
+    const resp = await route.fetch();
+    const headers = resp.headers();
+    let body = await resp.text();
+    body = body.replace(
+      /<script id="demo-personas-data"[\s\S]*?<\/script>/g,
+      '',
+    );
+    await route.fulfill({
+      status: resp.status(),
+      headers,
+      contentType: headers['content-type'] ?? 'text/html; charset=utf-8',
+      body,
+    });
+  });
 }
 
 test('demo-chat modal opens, posts to /demo/chat, renders assistant reply', async ({ page }) => {

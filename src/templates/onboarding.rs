@@ -241,9 +241,13 @@ pub fn welcome_html(
     // type="application/json">` block. The chat factory's `init()` reads
     // it instead of calling /demo/personas, eliminating the round-trip
     // wait between clicking the demo button and seeing personas.
+    //
+    // The nonce is required by our strict CSP `script-src 'nonce-…'` —
+    // even non-executing JSON-typed <script>s match the directive, so
+    // omitting the nonce trips csp.spec.ts.
     let preloaded_personas_block = match prefetched_personas_json {
         Some(json) if demo_enabled => format!(
-            r#"<script id="demo-personas-data" type="application/json">{}</script>"#,
+            r#"<script id="demo-personas-data" type="application/json" nonce="__CSP_NONCE__">{}</script>"#,
             // Defang any literal `</script` so a stray sequence in the
             // JSON can't break out of the script tag.
             json.replace("</", "<\\/")
