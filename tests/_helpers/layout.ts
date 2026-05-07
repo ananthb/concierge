@@ -2,6 +2,11 @@ import type { Page } from '@playwright/test';
 
 export type LayoutIssues = string[];
 
+export type TapTargetOptions = {
+  /** Minimum dimension (px) below which a target is reported. iOS HIG: 44, Material: 48. */
+  min?: number;
+};
+
 /**
  * In-page layout sanity check, used by `layout.spec.ts` and (for
  * fail-fast diagnostics) by `visual.spec.ts`. Three independent
@@ -82,4 +87,55 @@ export async function checkLayout(page: Page, viewportWidth: number): Promise<La
     }
     return issues;
   }, viewportWidth);
+}
+
+/**
+ * Tap-target audit. Walks every visible <button>, <a>, [role="button"],
+ * and `.btn` and reports any whose rendered box is below `min` px in
+ * either dimension. iOS HIG calls for 44, Material for 48 — we default
+ * to 40 so tests catch genuinely missed targets without flagging the
+ * borderline ones (`.btn.sm` lands at 36 by design).
+ *
+ * Opt out individual elements with `data-no-tap-check` (decorative
+ * inline anchors, in-table chevrons that are part of a wider tap
+ * zone, etc.). Returns an empty array on success.
+ */
+export async function checkTapTargets(
+  page: Page,
+  opts: TapTargetOptions = {},
+): Promise<LayoutIssues> {
+  const min = opts.min ?? 40;
+  return await page.evaluate((minPx: number) => {
+    const issues: string[] = [];
+    const sel = 'button, a, [role="button"], .btn';
+    const seen = new Set<Element>();
+    for (const el of Array.from(document.querySelectorAll(sel))) {
+      if (seen.has(el)) continue;
+      seen.add(el);
+      if ((el as HTMLElement).dataset.noTapCheck != null) continue;
+      const cs = getComputedStyle(el);
+      if (cs.display === 'none' || cs.visibility === 'hidden' || cs.pointerEvents === 'none') continue;
+      const r = el.getBoundingClientRect();
+      if (r.width === 0 && r.height === 0) continue;
+      // Skip targets clipped off the visible page entirely (skip-link
+      // anchored at left:-9999px, sr-only, etc.).
+      if (r.right < 0 || r.bottom < 0) continue;
+      if (r.width >= minPx && r.height >= minPx) continue;
+      const tag = el.tagName.toLowerCase();
+      const cls =
+        el.className && typeof el.className === 'string'
+          ? '.' + el.className.trim().split(/\s+/).slice(0, 3).join('.')
+          : '';
+      const id = (el as HTMLElement).id ? '#' + (el as HTMLElement).id : '';
+      const label = (el.textContent || (el as HTMLElement).getAttribute('aria-label') || '')
+        .trim()
+        .replace(/\s+/g, ' ')
+        .slice(0, 40);
+      issues.push(
+        `${tag}${id}${cls} is ${r.width.toFixed(0)}x${r.height.toFixed(0)} (min ${minPx}) text="${label}"`,
+      );
+      if (issues.length >= 8) break;
+    }
+    return issues;
+  }, min);
 }

@@ -246,8 +246,8 @@ fn health_panel_html(report: &crate::handlers::health::HealthReport) -> String {
             format!(
                 r#"<tr>
   <td style="width:24px">{dot}</td>
-  <td class="fw-600">{name}</td>
-  <td class="muted fs-13">{detail}</td>
+  <td data-label="Service" class="fw-600">{name}</td>
+  <td data-label="Status" class="muted fs-13">{detail}</td>
 </tr>"#,
                 dot = dot,
                 name = html_escape(&c.name),
@@ -264,7 +264,7 @@ fn health_panel_html(report: &crate::handlers::health::HealthReport) -> String {
     </div>
     {chip}
   </div>
-  <div class="table-wrap"><table><tbody>{rows}</tbody></table></div>
+  <div class="table-wrap table-stack"><table><tbody>{rows}</tbody></table></div>
 </div>"##,
         chip = overall_chip,
         ts = html_escape(&report.generated_at),

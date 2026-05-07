@@ -39,7 +39,11 @@ export default defineConfig({
     {
       name: 'desktop',
       use: { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 800 } },
-      testIgnore: /visual\.spec\.ts/,
+      // The mobile-density sweep is keyed off mobile-specific media
+      // breakpoints (table-stack, tap-target floors, --page-pad token),
+      // so running it on desktop would just assert against the wrong
+      // computed values.
+      testIgnore: [/visual\.spec\.ts/, /mobile-density\.spec\.ts/],
     },
     {
       name: 'mobile',

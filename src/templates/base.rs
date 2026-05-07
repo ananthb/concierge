@@ -259,7 +259,7 @@ code {
 .app { min-height:100vh; }
 .app-top { display:flex; align-items:center; gap:28px; padding:16px 28px;
   border-bottom:1px solid var(--hair); background:rgba(251,247,238,0.92); backdrop-filter:blur(10px);
-  position:sticky; top:0; z-index:20; }
+  position:sticky; top:0; z-index:20; flex-wrap:wrap; row-gap:8px; }
 .app-nav { display:flex; gap:18px; flex:1; }
 .app-nav a { text-decoration:none; color:var(--muted); font-size:14px; padding:8px 2px;
   border-bottom:2px solid transparent; }
@@ -771,6 +771,19 @@ table tr.audit-detail > td { padding:0; background:var(--paper);
   .site-header .nav-ext { display:none; }
 }
 
+/* Admin shell at large-phone / small-tablet widths. The public
+   site-header is roomier (.site-header has more breathing room and
+   different content), so its mobile reflow stays at <=600. The
+   /manage and /dashboard top bars cram an actor email + signout link
+   onto the same row as nav, so they need the wrap-to-multiline
+   reflow earlier — at the consolidated 720 breakpoint. The narrower
+   <=600 rules below still win where both apply. */
+@media(max-width:720px){
+  .app-top { padding:12px 16px; gap:12px; flex-wrap:wrap; }
+  .app-actor { flex-wrap:wrap; }
+  .app-actor .actor-email { max-width:none; flex:1 1 auto; min-width:0; }
+}
+
 /* Mobile */
 @media(max-width:600px){
   .site-header { padding:14px 16px; gap:12px; flex-wrap:wrap; }
@@ -821,6 +834,7 @@ table tr.audit-detail > td { padding:0; background:var(--paper);
   .btn.sm { min-height:36px; }
   .row-expand { min-width:32px; min-height:32px; padding:6px 8px; }
   .acct-pop a { padding:12px 14px; }
+  .app-actor a.signout { padding:8px 14px; font-size:13px; }
   /* Approvals queue: stack the action buttons full-width and push each
      to the 48px tap-floor so a thumb can't miss Approve/Reject. The
      metadata `.row` above the actions is a separate node (no
