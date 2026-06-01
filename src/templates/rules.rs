@@ -149,7 +149,7 @@ fn rule_row_html(
     let delete_label = t(locale, "admin-rules-row-delete");
     let delete_confirm = html_escape(&t(locale, "admin-rules-row-delete-confirm"));
     format!(
-        r##"<div class="rule-row" id="rule-{id}" style="display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:center;padding:14px 18px;border-bottom:1px solid var(--border)">
+        r##"<div class="rule-row" id="rule-{id}">
   <div class="row gap-2">{up_btn}{down_btn}</div>
   <div>
     <div class="row gap-8" style="align-items:center;flex-wrap:wrap">

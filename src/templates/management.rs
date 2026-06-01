@@ -1214,7 +1214,7 @@ fn pricing_form_table(cfg: &crate::storage::Pricing, base_url: &str) -> String {
         .collect();
 
     format!(
-        r##"<div class="card no-pad" style="overflow-x:auto">
+        r##"<div class="card p-0" style="overflow-x:auto">
   <table class="manage-table fs-13" style="width:100%">
     <thead><tr><th></th>{header_cells}</tr></thead>
     <tbody>{body_rows}</tbody>

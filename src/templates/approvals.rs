@@ -79,8 +79,7 @@ pub fn approval_row_html(row: &PendingApproval) -> String {
     let created = html_escape(short_date(&row.created_at));
 
     format!(
-        r##"<div class="approval-row" id="approval-{id}" x-data="{{ editing: false, draft: '' }}"
-  style="padding:18px;border-bottom:1px solid var(--border)">
+        r##"<div class="approval-row" id="approval-{id}" x-data="{{ editing: false, draft: '' }}">
   <div class="row gap-8 mb-4" style="align-items:center;flex-wrap:wrap">
     <strong>{sender}</strong>
     <span class="chip">{channel}</span>

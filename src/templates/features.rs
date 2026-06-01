@@ -44,7 +44,7 @@ pub fn features_html(locale: &Locale, cfg: &crate::storage::Pricing) -> String {
   </div>
 
   <h2 class="mt-32 mb-12">{how_h}</h2>
-  <div class="channels-grid">
+  <div class="steps-grid">
     <div class="card p-22">
       <div class="eyebrow">{s1_eyebrow}</div>
       <p class="m-0 mt-8">{s1_body}</p>

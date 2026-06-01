@@ -137,7 +137,7 @@ pub fn slider_html(
       <p class="muted m-0 mt-4 fs-13">{per_reply_label} per AI reply.</p>
     </div>
     <div class="ta-right">
-      <div class="serif" style="font-size:34px;line-height:1"><span x-text="credits.toLocaleString(countLocale)"></span></div>
+      <div class="stat-n serif"><span x-text="credits.toLocaleString(countLocale)"></span></div>
       <div class="mono muted fs-11">replies</div>
     </div>
   </div>

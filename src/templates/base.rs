@@ -52,12 +52,21 @@ a { color:var(--accent); }
 .btn.primary:hover { background:var(--accent-2); border-color:var(--accent-2); }
 .btn.ghost { background:transparent; color:var(--ink); border-color:var(--hair-2); }
 .btn.ghost:hover { background:rgba(27,24,20,.05); }
-.btn.brand-google { background:#fff; color:#1f1f1f; border-color:#dadce0; }
-.btn.brand-google:hover { background:#f8f9fa; border-color:#dadce0; }
-.btn.brand-facebook { background:#1877F2; color:#fff; border-color:#1877F2; }
-.btn.brand-facebook:hover { background:#166fe5; border-color:#166fe5; }
-.btn.brand-whatsapp { background:#25D366; color:#fff; border-color:#25D366; }
-.btn.brand-whatsapp:hover { background:#1ebe5a; border-color:#1ebe5a; }
+/* Public-nav "you are here" state on a ghost button. Filled cream with
+   an ink border distinguishes the active page from inactive ghosts
+   without competing with the accent-colored Sign-in CTA. */
+.btn.ghost.is-active { background:var(--cream-2); border-color:var(--ink-2); color:var(--ink); }
+.btn.ghost.is-active:hover { background:var(--cream-2); }
+/* Third-party auth buttons. Ghost-styled on the cream page so they
+   don't read as three competing primary CTAs; hover fills with the
+   brand color for unambiguous identification on tap/hover. SVG icons
+   use `currentColor` (set in admin.rs) so they flip with the text. */
+.btn.brand-google { background:transparent; color:var(--ink); border-color:var(--hair-2); }
+.btn.brand-google:hover { background:#fff; border-color:#dadce0; }
+.btn.brand-facebook { background:transparent; color:#1877F2; border-color:#1877F2; }
+.btn.brand-facebook:hover { background:#1877F2; color:#fff; border-color:#1877F2; }
+.btn.brand-whatsapp { background:transparent; color:#128C7E; border-color:#128C7E; }
+.btn.brand-whatsapp:hover { background:#25D366; color:#fff; border-color:#25D366; }
 .btn.sm { padding:6px 12px; font-size:13px; }
 .btn.lg { padding:14px 22px; font-size:15px; }
 .btn.icon { padding:8px; }
@@ -112,6 +121,7 @@ a { color:var(--accent); }
 .gap-16{gap:16px} .gap-20{gap:20px} .gap-24{gap:24px}
 
 /* Utility atoms: used instead of inline style attributes. */
+.p-0{padding:0}
 .p-12{padding:12px} .p-14{padding:14px} .p-16{padding:16px} .p-18{padding:18px}
 .p-20{padding:20px} .p-22{padding:22px} .p-24{padding:24px} .p-28{padding:28px}
 .page-pad{padding:24px var(--page-pad)}
@@ -120,7 +130,7 @@ a { color:var(--accent); }
 .mt-22{margin-top:22px} .mt-24{margin-top:24px} .mt-32{margin-top:32px} .mt-36{margin-top:36px}
 .mb-4{margin-bottom:4px} .mb-6{margin-bottom:6px} .mb-8{margin-bottom:8px}
 .mb-12{margin-bottom:12px} .mb-14{margin-bottom:14px} .mb-16{margin-bottom:16px}
-.mb-24{margin-bottom:24px}
+.mb-24{margin-bottom:24px} .mb-32{margin-bottom:32px}
 .m-0{margin:0}
 .ml-auto{margin-left:auto}
 .fs-10{font-size:10px} .fs-11{font-size:11px} .fs-12{font-size:12px}
@@ -139,6 +149,16 @@ a.card.link-reset:focus-visible { outline:none; border-color:var(--accent); box-
 .inline{display:inline} .block{display:block} .hidden{display:none}
 .sr-only{position:absolute!important;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 .skip-link{position:absolute;left:-9999px;top:8px;z-index:9999;padding:8px 14px;background:var(--ink);color:var(--cream);border-radius:8px;text-decoration:none;font-size:13px}
+/* Auth/login shell: a tight centered column. Generous top margin on
+   desktop, tightened on mobile so the page doesn't float halfway
+   down a phone viewport with all the actual controls cut off. */
+.auth-shell{max-width:360px;margin:64px auto 32px;padding:0 16px;text-align:center}
+@media(max-width:600px){.auth-shell{margin-top:32px}}
+/* Dev-only login shortcut card. Dashed border + cream-2 fill signals
+   "this isn't a real prod control" without yelling. */
+.dev-login-card{text-align:left;background:var(--cream-2);border-style:dashed}
+.dev-login-row{align-items:center}
+.dev-login-row .input{min-width:180px}
 .skip-link:focus,.skip-link:focus-visible{left:8px}
 .app-main{display:contents}
 .w-full{width:100%}
@@ -149,6 +169,22 @@ a.card.link-reset:focus-visible { outline:none; border-color:var(--accent); box-
 .card-accent{border-color:var(--accent);background:linear-gradient(135deg,var(--paper),var(--accent-soft))}
 .card-soft{background:linear-gradient(135deg,var(--paper),#FFF4E6)}
 .stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:16px}
+/* 2-column form grid that collapses to one column at the phone /
+   large-phone breakpoint. Replaces ad-hoc inline `grid-template-
+   columns:1fr 1fr` patterns in form templates. Pair with `.gap-12`
+   or `.gap-16` for the row gap. */
+.form-grid-2{display:grid;grid-template-columns:1fr 1fr}
+@media(max-width:720px){.form-grid-2{grid-template-columns:1fr}}
+/* Stacked-list row used by /manage/rules and /dashboard/approvals:
+   reorder/identity column, expandable label column, actions column.
+   Stacks vertically on phones so action buttons don't get crammed
+   against the right edge. */
+.rule-row,.approval-row{padding:14px 18px;border-bottom:1px solid var(--hair)}
+.rule-row{display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:center}
+@media(max-width:720px){
+  .rule-row{grid-template-columns:1fr;gap:8px;padding:12px 14px}
+  .approval-row{padding:14px}
+}
 .icon-chip{width:40px;height:40px;border-radius:10px}
 
 .muted { color:var(--muted); }
@@ -453,7 +489,7 @@ dialog.manage-confirm .confirm-actions { display:flex; gap:10px;
 .side-row > *:nth-child(2) { flex:1; font-size:13px; }
 .stat-row { display:flex; align-items:baseline; gap:10px; padding:8px 0; border-bottom:1px dashed var(--hair); }
 .stat-row:last-child { border-bottom:0; }
-.stat-n { font-size:var(--stat-n); color:var(--ink); }
+.stat-n { font-size:var(--stat-n); line-height:1; color:var(--ink); }
 .display-sm { font-family:var(--f-display); font-size:26px; letter-spacing:-0.01em; margin:0; }
 .display-md { font-family:var(--f-display); font-size:clamp(34px,4.2vw,52px); line-height:1.05; letter-spacing:-0.02em; margin:8px 0 4px; }
 .lead { color:var(--ink-2); max-width:560px; margin:0 0 22px; font-size:18px; line-height:1.55; }
@@ -481,6 +517,26 @@ dialog.manage-confirm .confirm-actions { display:flex; gap:10px;
 
 /* Channels grid */
 .channels-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); gap:16px; }
+/* "How it works" step grid on /features. CSS counter renders a giant
+   serif italic numeral in the corner of each card so the section
+   reads as a sequenced flow rather than another grid of cards.
+   Falls back to the regular layout on browsers without counter
+   support (functionally identical to .channels-grid). */
+.steps-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:16px; counter-reset:step; }
+.steps-grid > .card { position:relative; counter-increment:step; overflow:hidden; }
+.steps-grid > .card::before {
+  content:counter(step);
+  position:absolute; top:-18px; right:6px;
+  font-family:var(--f-display); font-style:italic;
+  font-size:110px; line-height:1; color:var(--accent);
+  opacity:.12; pointer-events:none; user-select:none;
+}
+.steps-grid > .card > * { position:relative; z-index:1; }
+/* /pricing two-column on desktop: slider takes 60%, the "what costs a
+   credit?" bullets take 40%. Stacks at 900px so the slider gets the
+   full width on tablets and phones. */
+.pricing-row { display:grid; grid-template-columns:1fr; gap:24px; margin:24px 0; }
+@media(min-width:900px){.pricing-row{grid-template-columns:3fr 2fr; align-items:start}}
 .channel { background:var(--paper); border:1px solid var(--hair); border-radius:var(--r-lg);
   padding:22px; position:relative; overflow:hidden;
   display:flex; flex-direction:column; gap:12px; min-height:220px;
@@ -491,10 +547,6 @@ dialog.manage-confirm .confirm-actions { display:flex; gap:10px;
   display:flex; align-items:center; justify-content:center; }
 .channel-name { font-weight:600; font-size:16px; }
 .channel-body { flex:1; color:var(--ink-2); font-size:14px; }
-.ribbon { position:absolute; top:14px; right:-38px; transform:rotate(34deg);
-  background:var(--sage); color:#fff; font-family:var(--f-mono); font-size:10px;
-  letter-spacing:.2em; padding:4px 40px; text-transform:uppercase;
-  box-shadow:0 2px 8px rgba(110,138,92,.3); }
 .note { margin-top:26px; padding:16px 18px; background:var(--cream-2);
   border:1px dashed var(--hair-2); border-radius:var(--r-md); display:flex; gap:12px; align-items:center; }
 .note-icon { font-size:22px; }
@@ -660,6 +712,27 @@ table tr.audit-detail > td { padding:0; background:var(--paper);
 .chat-thinking { align-self:flex-start; color:var(--muted); font-size:13px; font-style:italic; padding:0 6px; }
 .chat-error { color:var(--accent-2); font-size:13px; padding:4px 2px 0; }
 .fineprint { margin-top:18px; color:var(--muted); font-size:12px; }
+
+/* Bottom-sheet modal: dim overlay + a card pinned to the bottom edge.
+   Overlay padding follows --page-pad so it tightens on mobile like
+   page shells; card padding follows --card-pad. The max-height uses
+   100dvh so landscape phones don't clip the chat scroll region (80vh
+   on a 375h viewport leaves 300px, which doesn't fit the persona
+   picker + form + reply feed). */
+.modal-overlay { position:fixed; inset:0; z-index:1000;
+  background:rgba(0,0,0,.4); display:flex;
+  align-items:flex-end; justify-content:center;
+  padding:var(--page-pad); }
+.modal-card { background:var(--paper); border:1px solid var(--hair);
+  border-radius:var(--r-lg); box-shadow:var(--shadow-2);
+  max-width:560px; width:100%;
+  display:flex; flex-direction:column;
+  padding:var(--card-pad);
+  max-height:min(80vh, calc(100dvh - 80px));
+  margin-bottom:max(var(--page-pad), env(safe-area-inset-bottom)); }
+.modal-close { width:36px; height:36px; padding:0;
+  display:inline-flex; align-items:center; justify-content:center;
+  font-size:22px; line-height:1; }
 
 /* Hero phone notification stack: a modern phone-shaped card sitting in
    the welcome aside. Status bar across the top, a short feed of
@@ -907,12 +980,12 @@ pub fn brand_mark() -> String {
 /// architecture/dev docs, not user-facing help).
 pub fn public_nav_html(active: &str, locale: &Locale) -> String {
     let item = |slug: &str, label: &str, href: &str| -> String {
-        let cls = if slug == active {
-            "btn sm primary"
+        let (cls, aria_current) = if slug == active {
+            ("btn ghost sm is-active", r#" aria-current="page""#)
         } else {
-            "btn ghost sm"
+            ("btn ghost sm", "")
         };
-        format!(r#"<a href="{href}" class="{cls}">{label}</a>"#)
+        format!(r#"<a href="{href}" class="{cls}"{aria_current}>{label}</a>"#)
     };
     let features = item("features", &t(locale, "nav-features"), "/features");
     let pricing = item("pricing", &t(locale, "nav-pricing"), "/pricing");

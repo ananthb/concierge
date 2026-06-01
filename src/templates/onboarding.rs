@@ -342,18 +342,17 @@ pub fn welcome_html(
     </div>
   </aside>
 </section>
-<div x-show="open" x-cloak
+<div x-show="open" x-cloak class="modal-overlay"
   role="dialog" aria-modal="true" aria-labelledby="demo-chat-modal-title"
   x-trap.noscroll.inert="open"
-  @keydown.escape.window="open = false"
-  style="position:fixed;inset:0;background:rgba(0,0,0,0.4);display:flex;align-items:flex-end;justify-content:center;z-index:1000;padding:20px">
-  <div class="card" style="max-width:560px;width:100%;display:flex;flex-direction:column;padding:18px 22px 16px;max-height:80vh;margin-bottom:max(20px,env(safe-area-inset-bottom))">
+  @keydown.escape.window="open = false">
+  <div class="modal-card">
     <div class="between mb-8">
       <div>
-        <h2 id="demo-chat-modal-title" class="display-sm" style="margin:0">{chat_title}</h2>
-        <p class="muted fs-13" style="margin:2px 0 0" x-text="currentPersona.slug === 'concierge' ? '{chat_subtitle_concierge}' : '{chat_subtitle}'"></p>
+        <h2 id="demo-chat-modal-title" class="display-sm m-0">{chat_title}</h2>
+        <p class="muted fs-13 m-0 mt-4" x-text="currentPersona.slug === 'concierge' ? '{chat_subtitle_concierge}' : '{chat_subtitle}'"></p>
       </div>
-      <button type="button" class="btn icon ghost" @click="open = false" aria-label="{chat_close}" style="padding:4px 10px;font-size:18px;line-height:1">&times;</button>
+      <button type="button" class="btn ghost modal-close" @click="open = false" aria-label="{chat_close}">&times;</button>
     </div>
     <div class="chat-controls">
       <label class="chat-persona-label">
@@ -829,7 +828,7 @@ pub fn basics_html(
   <p class="lead">{lead}</p>
   <form hx-post="{base_url}/wizard/basics" hx-target="body" hx-swap="innerHTML">
     <div class="card p-24">
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+      <div class="form-grid-2 gap-16">
         <div>
           <label for="biz-name" class="eyebrow lbl">{lbl_name} <span class="text-warn" aria-hidden="true">*</span></label>
           <input id="biz-name" class="input" name="name" value="{name}" placeholder="{ph_name}" required aria-required="true" x-model="name">
@@ -847,7 +846,7 @@ pub fn basics_html(
           <select id="biz-type" class="select" name="business_type" required aria-required="true" x-model="bizType">{biz_type_html}</select>
         </div>
       </div>
-      <div class="mt-16" x-show="bizType &amp;&amp; bizType !== 'unregistered'" x-cloak :aria-hidden="!(bizType &amp;&amp; bizType !== 'unregistered')" style="grid-template-columns:1fr 1fr;gap:16px;display:grid">
+      <div class="form-grid-2 gap-16 mt-16" x-show="bizType &amp;&amp; bizType !== 'unregistered'" x-cloak :aria-hidden="!(bizType &amp;&amp; bizType !== 'unregistered')">
         <div>
           <label for="biz-pan" class="eyebrow lbl">{lbl_pan}</label>
           <input id="biz-pan" class="input" name="pan" value="{pan}" placeholder="{ph_pan}" style="text-transform:uppercase">
@@ -1113,11 +1112,10 @@ pub fn channel_card_html(p: &ChannelCardProps, locale: &crate::locale::Locale) -
     if p.connected {
         format!(
             r#"<div class="channel is-connected">
-  <div class="ribbon">{connected_lbl}</div>
   <div class="channel-head">
     <div class="channel-mark">{icon}</div>
     <div><div class="channel-name">{name}</div></div>
-    <span class="dot ok ml-auto"></span>
+    <span class="chip ok ml-auto">{connected_lbl}</span>
   </div>
   <div class="channel-body">
     <div class="mono text-ok fs-12">&#x25CF; {active_lbl}</div>
@@ -1397,7 +1395,7 @@ pub fn replies_html(
   <p class="lead">{lead_prefix} <a href="{base_url}/dashboard/persona">{lead_link}</a> {lead_suffix}</p>
 
   <form hx-post="{base_url}/wizard/replies/save" hx-target="body" hx-swap="innerHTML">
-    <div style="display:grid;gap:12px;grid-template-columns:1fr 1fr;margin-bottom:24px" role="radiogroup" aria-labelledby="replies-preset-label">
+    <div class="form-grid-2 gap-12 mb-24" role="radiogroup" aria-labelledby="replies-preset-label">
       <span id="replies-preset-label" class="sr-only">{headline}</span>
       {preset_cards}
     </div>
@@ -1679,8 +1677,12 @@ pub fn pricing_html(
     };
     let address_price_label = format_money(address_price, &locale);
     let (inr_cls, usd_cls) = match locale.currency {
-        Currency::Usd => ("btn ghost sm", "btn sm"),
-        Currency::Inr => ("btn sm", "btn ghost sm"),
+        Currency::Usd => ("btn ghost sm", "btn ghost sm is-active"),
+        Currency::Inr => ("btn ghost sm is-active", "btn ghost sm"),
+    };
+    let (inr_current, usd_current) = match locale.currency {
+        Currency::Usd => ("", r#" aria-current="true""#),
+        Currency::Inr => (r#" aria-current="true""#, ""),
     };
 
     let nav = super::base::public_nav_html("pricing", &locale);
@@ -1692,29 +1694,31 @@ pub fn pricing_html(
   <div class="between">
     <h1 class="m-0">{per_reply} {headline_suffix}</h1>
     <div class="row gap-8" role="group" aria-label="Display currency">
-      <a href="/pricing?c=inr" class="{inr_cls}" title="{inr_label}" aria-label="{inr_label}">&#x20B9;</a>
-      <a href="/pricing?c=usd" class="{usd_cls}" title="{usd_label}" aria-label="{usd_label}">$</a>
+      <span class="eyebrow" aria-hidden="true">Currency</span>
+      <a href="/pricing?c=inr" class="{inr_cls}" title="{inr_label}" aria-label="{inr_label}"{inr_current}>&#x20B9;</a>
+      <a href="/pricing?c=usd" class="{usd_cls}" title="{usd_label}" aria-label="{usd_label}"{usd_current}>$</a>
     </div>
   </div>
   <p class="muted">{lead}</p>
 
-  <div style="margin:24px 0">{slider}</div>
-
-  <div class="card p-18">
-    <div class="eyebrow mb-8">{credits_eyebrow}</div>
-    <ul class="muted m-0">
-      <li>{credits_li_1}</li>
-      <li>{credits_li_2}</li>
-      <li>{credits_li_3}</li>
-    </ul>
+  <div class="pricing-row">
+    <div>{slider}</div>
+    <div class="card p-18">
+      <div class="eyebrow mb-8">{credits_eyebrow}</div>
+      <ul class="muted m-0">
+        <li>{credits_li_1}</li>
+        <li>{credits_li_2}</li>
+        <li>{credits_li_3}</li>
+      </ul>
+    </div>
   </div>
 
-  <h2 style="margin-top:2rem">{email_h}</h2>
+  <h2 class="mt-32">{email_h}</h2>
   <p class="muted">{email_body}</p>
 
-  <div class="card p-18" style="margin:24px 0">
+  <div class="card p-18 mt-24 mb-24">
     <p class="m-0">{quota_prefix} <strong>{address_price}</strong> {quota_suffix}</p>
-    <p class="muted" style="margin:8px 0 0">{billing_note}</p>
+    <p class="muted m-0 mt-8">{billing_note}</p>
   </div>
 </article>"##,
         nav = nav,
@@ -1740,6 +1744,8 @@ pub fn pricing_html(
         slider = slider,
         inr_cls = inr_cls,
         usd_cls = usd_cls,
+        inr_current = inr_current,
+        usd_current = usd_current,
     );
 
     let meta_inr = format!("₹{:.2}", milli_paise as f64 / 100_000.0);

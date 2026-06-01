@@ -37,8 +37,8 @@ pub fn auth_login_html(
     // Google = white button + multicolor G; Facebook = blue button + white f;
     // WhatsApp = green button + white speech-bubble.
     let google_svg = r##"<svg width="18" height="18" viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844a4.14 4.14 0 01-1.796 2.716v2.259h2.908c1.702-1.567 2.684-3.875 2.684-6.615z" fill="#4285F4"/><path d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 009 18z" fill="#34A853"/><path d="M3.964 10.71A5.41 5.41 0 013.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 000 9c0 1.452.348 2.827.957 4.042l3.007-2.332z" fill="#FBBC05"/><path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 00.957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58z" fill="#EA4335"/></svg>"##;
-    let fb_svg = r##"<svg width="18" height="18" viewBox="0 0 24 24" fill="#fff" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M13.397 20.997v-8.196h2.765l.411-3.209h-3.176V7.548c0-.926.258-1.56 1.587-1.56h1.684V3.127A22.336 22.336 0 0 0 14.201 3c-2.444 0-4.122 1.492-4.122 4.231v2.355H7.332v3.209h2.753v8.202h3.312z"/></svg>"##;
-    let wa_svg = r##"<svg width="18" height="18" viewBox="0 0 24 24" fill="#fff" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 0 1-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 0 1-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 0 1 2.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0 0 12.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 0 0 5.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 0 0-3.48-8.413z"/></svg>"##;
+    let fb_svg = r##"<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M13.397 20.997v-8.196h2.765l.411-3.209h-3.176V7.548c0-.926.258-1.56 1.587-1.56h1.684V3.127A22.336 22.336 0 0 0 14.201 3c-2.444 0-4.122 1.492-4.122 4.231v2.355H7.332v3.209h2.753v8.202h3.312z"/></svg>"##;
+    let wa_svg = r##"<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 0 1-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 0 1-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 0 1 2.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0 0 12.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 0 0 5.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 0 0-3.48-8.413z"/></svg>"##;
 
     let google_label = t(locale, "admin-login-google");
     let fb_label = t(locale, "admin-login-facebook-continue");
@@ -175,19 +175,16 @@ btn?.addEventListener('click', async () => {{
     // which requires `CF_ACCESS_AUD` empty + `MANAGE_BYPASS_EMAIL`
     // set; production deploys always set the former).
     let dev_login = if dev_login_enabled {
-        r##"<form method="post" action="/auth/dev-login"
-             class="card p-18 mt-24"
-             style="text-align:left;background:var(--cream-2);border-style:dashed">
+        r##"<form method="post" action="/auth/dev-login" class="card p-18 mt-24 dev-login-card">
   <div class="eyebrow mb-8">Dev login</div>
   <p class="muted fs-12 m-0 mb-12">
     Local-dev shortcut. Mints a tenant session for the supplied email
     without going through real OAuth. Visible because the bypass is
     active; never reachable in production.
   </p>
-  <div class="row gap-8 wrap" style="align-items:center">
+  <div class="row gap-8 wrap dev-login-row">
     <input class="input flex-1" type="email" name="email"
-           placeholder="dev@local.test" value="dev@local.test"
-           style="min-width:180px">
+           placeholder="dev@local.test" value="dev@local.test">
     <button type="submit" class="btn sm">Sign in</button>
   </div>
 </form>"##
@@ -196,10 +193,10 @@ btn?.addEventListener('click', async () => {{
     };
 
     let content = format!(
-        r#"<div class="ta-center" style="max-width:360px;margin:4rem auto;padding:0 1rem">
-    <div style="margin-bottom:2rem">{logo}
-    <div class="serif mt-8" style="font-size:28px">Concierge</div></div>
-    <p class="muted" style="margin-bottom:2rem">{tagline}</p>
+        r#"<div class="auth-shell">
+    <div class="mb-24">{logo}
+    <div class="display-sm mt-8">Concierge</div></div>
+    <p class="muted mb-24">{tagline}</p>
     <div id="wa-signup-error" class="text-warn mb-12" role="alert" aria-live="assertive"></div>
     <div class="stack gap-12">
       {buttons}
@@ -699,7 +696,7 @@ pub fn admin_dashboard_html(
         <h3 class="display-sm m-0 mt-4">{headline}</h3>
       </div>
     </div>
-    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px">
+    <div class="stats-grid">
       <a href="{base_url}/dashboard/channels" class="card p-16 ta-center link-reset">
         <div class="stat-n serif">{wa_count}</div>
         <div class="mono muted fs-11">{stat_wa}</div>

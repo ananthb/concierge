@@ -87,10 +87,10 @@ pub fn persona_admin_html(
       <div x-show="mode === 'builder'" x-cloak :aria-hidden="mode !== 'builder'">
         <p class="muted fs-13 mb-12">{builder_lead}</p>
         <div class="eyebrow lbl mb-6">{lbl_archetype}</div>
-        <div style="display:grid;gap:10px;grid-template-columns:1fr 1fr">
+        <div class="form-grid-2 gap-12">
           {archetype_options}
         </div>
-        <div class="mt-12" style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div class="form-grid-2 gap-12 mt-12">
           <div>
             <label for="persona-biz-name" class="eyebrow lbl">{lbl_biz_name}</label>
             <input id="persona-biz-name" class="input" name="biz_name" x-model="builder.biz_name" placeholder="{ph_biz_name}" required>
@@ -108,7 +108,7 @@ pub fn persona_admin_html(
             <input id="persona-never" class="input" name="never" x-model="builder.never" placeholder="{ph_never}">
           </div>
         </div>
-        <div class="mt-12" style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div class="form-grid-2 gap-12 mt-12">
           <div>
             <label for="persona-goal" class="eyebrow lbl">{lbl_goal}</label>
             <input id="persona-goal" class="input" name="goal" x-model="builder.goal" maxlength="120" placeholder="{ph_goal}">
