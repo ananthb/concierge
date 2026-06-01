@@ -710,6 +710,40 @@ table tr.audit-detail > td { padding:0; background:var(--paper);
 .phone-foot { display:flex; justify-content:space-between;
   padding:2px 8px 0; font-family:var(--f-mono); font-size:10px;
   letter-spacing:.12em; text-transform:uppercase; color:var(--muted); }
+/* Fake "compose" row at the bottom of the phone: a real <button>
+   styled to look like a messaging app's input bar + send icon. The
+   whole row opens the demo modal — it's the primary visible CTA into
+   the demo (the hero headline carries a quiet, redundant click target
+   for sighted users; AT users get the headline's aria-describedby and
+   this button's aria-label). */
+.phone-compose { display:flex; align-items:center; gap:8px;
+  width:100%; margin-top:6px; padding:6px 4px 2px;
+  background:transparent; border:0; cursor:pointer;
+  font-family:inherit; color:inherit;
+  border-radius:14px; outline:none;
+  transition:background .2s ease; }
+.phone-compose-input { flex:1; min-width:0; padding:9px 14px;
+  background:var(--cream); border:1px solid var(--hair);
+  border-radius:999px; color:var(--muted); font-size:13px;
+  text-align:left; line-height:1.3;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  transition:border-color .2s ease, color .2s ease, background .2s ease; }
+.phone-compose-send { flex:none; width:36px; height:36px;
+  border-radius:50%; background:var(--accent); color:#fff;
+  display:flex; align-items:center; justify-content:center;
+  transition:background .2s ease, transform .2s ease; }
+.phone-compose:hover .phone-compose-input,
+.phone-compose:focus-visible .phone-compose-input {
+  background:#fff; border-color:var(--accent); color:var(--ink); }
+.phone-compose:hover .phone-compose-send,
+.phone-compose:focus-visible .phone-compose-send {
+  background:var(--accent-2); transform:scale(1.06); }
+.phone-compose:focus-visible {
+  outline:2px solid var(--accent); outline-offset:3px; }
+@media (prefers-reduced-motion: reduce) {
+  .phone-compose:hover .phone-compose-send,
+  .phone-compose:focus-visible .phone-compose-send { transform:none; }
+}
 
 /* Terminal */
 .terminal { background:#0F0D0B; color:#D9D0BD; border-radius:16px; padding:20px;

@@ -203,12 +203,14 @@ pub fn welcome_html(
     let chat_cta_body = html_escape(&t(locale, "demo-chat-cta-body"));
     let chat_cta_button = html_escape(&t(locale, "demo-chat-cta-button"));
 
-    // The hero headline is a click target into the demo modal when the
-    // demo is enabled. When the operator has disabled the demo, drop
-    // the click handlers, the `hero-clickable` class (which carries the
-    // hover effect), and the screen-reader hint span.
+    // Two affordances open the demo modal when it's enabled: the hero
+    // headline (a quiet, redundant click target) and a "compose" row at
+    // the bottom of the phone illustration (the primary, visible CTA).
+    // When the operator has disabled the demo, both lose their click
+    // handlers, the aside becomes pure illustration again, and the
+    // screen-reader hint span is dropped.
     let initial_headline = &variants[0];
-    let (hero_headline, hero_hint) = if demo_enabled {
+    let (hero_headline, hero_hint, aside_aria, compose_row) = if demo_enabled {
         (
             format!(
                 r#"<h1 class="display hero-clickable" id="hero-headline"
@@ -219,9 +221,30 @@ pub fn welcome_html(
                 headline = initial_headline,
             ),
             // Screen-reader-only hint: keeps the aria-describedby target
-            // alive for AT users even though the visible pill is gone.
+            // on the headline alive for AT users. The compose button
+            // below carries the visible cue for sighted users.
             format!(
                 r#"<span id="demo-chat-hint-text" class="sr-only">{chat_hint}</span>"#,
+                chat_hint = chat_hint,
+            ),
+            // Aside is interactive now (contains the compose button),
+            // so it can't be aria-hidden as a whole. The decorative
+            // notifications/status-bar/footer carry their own
+            // aria-hidden so AT only surfaces the compose button.
+            "",
+            format!(
+                r#"<button type="button" class="phone-compose" aria-label="{chat_hint}"
+          @click="open = true">
+        <span class="phone-compose-input" aria-hidden="true">{chat_hint}</span>
+        <span class="phone-compose-send" aria-hidden="true">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none"
+               stroke="currentColor" stroke-width="1.6"
+               stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14.5 1.5 L1.5 7.5 L7 9 L9 14.5 Z"/>
+            <path d="M14.5 1.5 L7 9"/>
+          </svg>
+        </span>
+      </button>"#,
                 chat_hint = chat_hint,
             ),
         )
@@ -231,6 +254,9 @@ pub fn welcome_html(
                 r#"<h1 class="display" id="hero-headline">{headline}<span class="hero-caret" aria-hidden="true"></span></h1>"#,
                 headline = initial_headline,
             ),
+            String::new(),
+            // Demo disabled: aside is illustration-only, hide it from AT.
+            r#" aria-hidden="true""#,
             String::new(),
         )
     };
@@ -265,18 +291,18 @@ pub fn welcome_html(
       <a href="/features" class="btn ghost lg">{cta_secondary}</a>
     </div>
   </div>
-  <aside class="hero-phone" aria-hidden="true">
+  <aside class="hero-phone"{aside_aria}>
     <div class="phone-frame">
-      <div class="phone-bar">
+      <div class="phone-bar" aria-hidden="true">
         <span>9:47</span>
         <span class="phone-bar-dots"><i></i><i></i><i></i></span>
       </div>
-      <div class="phone-header">
+      <div class="phone-header" aria-hidden="true">
         <span class="eyebrow">Tue &middot; 12 handled</span>
       </div>
-      <ul class="phone-feed">
+      <ul class="phone-feed" aria-hidden="true">
         <li class="phone-notif">
-          <span class="phone-channel ch-wa" aria-hidden="true">WA</span>
+          <span class="phone-channel ch-wa">WA</span>
           <div>
             <div class="phone-meta"><b>Sarah</b><span>now</span></div>
             <p class="phone-msg">can I move my booking?</p>
@@ -284,7 +310,7 @@ pub fn welcome_html(
           </div>
         </li>
         <li class="phone-notif">
-          <span class="phone-channel ch-ig" aria-hidden="true">IG</span>
+          <span class="phone-channel ch-ig">IG</span>
           <div>
             <div class="phone-meta"><b>@leo_03</b><span>1m</span></div>
             <p class="phone-msg">hi what time u open</p>
@@ -292,7 +318,7 @@ pub fn welcome_html(
           </div>
         </li>
         <li class="phone-notif">
-          <span class="phone-channel ch-dc" aria-hidden="true">DC</span>
+          <span class="phone-channel ch-dc">DC</span>
           <div>
             <div class="phone-meta"><b>#orders</b><span>4m</span></div>
             <p class="phone-msg">invoice #8821?</p>
@@ -300,7 +326,7 @@ pub fn welcome_html(
           </div>
         </li>
         <li class="phone-notif">
-          <span class="phone-channel ch-em" aria-hidden="true">@</span>
+          <span class="phone-channel ch-em">@</span>
           <div>
             <div class="phone-meta"><b>orders@</b><span>9m</span></div>
             <p class="phone-msg">refund request, order {hash}412</p>
@@ -308,10 +334,11 @@ pub fn welcome_html(
           </div>
         </li>
       </ul>
-      <div class="phone-foot">
+      <div class="phone-foot" aria-hidden="true">
         <span>0 sent to you</span>
         <span>All caught up</span>
       </div>
+      {compose_row}
     </div>
   </aside>
 </section>
@@ -428,6 +455,8 @@ pub fn welcome_html(
         eyebrow = t(locale, "welcome-eyebrow"),
         hero_headline = hero_headline,
         hero_hint = hero_hint,
+        aside_aria = aside_aria,
+        compose_row = compose_row,
         preloaded_personas_block = preloaded_personas_block,
         lead = t(locale, "welcome-lead"),
         cta_primary = t(locale, "welcome-cta-primary"),
