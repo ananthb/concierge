@@ -206,7 +206,7 @@ pub fn welcome_html(
     // The hero headline is a click target into the demo modal when the
     // demo is enabled. When the operator has disabled the demo, drop
     // the click handlers, the `hero-clickable` class (which carries the
-    // hover effect), and the floating chat hint.
+    // hover effect), and the screen-reader hint span.
     let initial_headline = &variants[0];
     let (hero_headline, hero_hint) = if demo_enabled {
         (
@@ -218,11 +218,10 @@ pub fn welcome_html(
           @keydown.space.prevent="open = true">{headline}<span class="hero-caret" aria-hidden="true"></span></h1>"#,
                 headline = initial_headline,
             ),
+            // Screen-reader-only hint: keeps the aria-describedby target
+            // alive for AT users even though the visible pill is gone.
             format!(
-                r#"<button type="button" id="demo-chat-hint-text" class="hero-hint" @click="open = true">
-        <span class="hero-hint-arrow" aria-hidden="true">↑</span>
-        <span class="hero-hint-text">{chat_hint}</span>
-      </button>"#,
+                r#"<span id="demo-chat-hint-text" class="sr-only">{chat_hint}</span>"#,
                 chat_hint = chat_hint,
             ),
         )
@@ -258,28 +257,62 @@ pub fn welcome_html(
 <section class="page welcome">
   <div class="welcome-left">
     <div class="eyebrow">{eyebrow}</div>
-    <div class="hero-hint-anchor">
-      {hero_headline}
-      {hero_hint}
-    </div>
+    {hero_headline}
+    {hero_hint}
     <p class="lead">{lead}</p>
     <div class="row gap-12 wrap mt-16">
       <a href="/auth/login" class="btn primary lg">{cta_primary}</a>
       <a href="/features" class="btn ghost lg">{cta_secondary}</a>
     </div>
   </div>
-  <aside class="postcard" aria-hidden="true">
-    <div class="postcard-card">
-      <div class="postcard-head"><span class="mono muted">LOG &middot; TUE 09:47</span><span class="dot ok"></span></div>
-      <div class="log-row"><span class="log-a">IG &nbsp;@leo</span><span class="log-b">hi what time u open</span></div>
-      <div class="log-row"><span class="log-a">&rarr; &nbsp;concierge</span><span class="log-b">We're open 9-7 today! Walk-ins welcome</span></div>
-      <div class="log-row"><span class="log-a">WA &nbsp;+61 431...</span><span class="log-b">can i move my booking</span></div>
-      <div class="log-row"><span class="log-a">&rarr; &nbsp;concierge</span><span class="log-b">Yes - what day works better for you?</span></div>
-      <div class="log-row"><span class="log-a">&nbsp;&#x2709; &nbsp;orders@</span><span class="log-b">invoice {hash}8821</span></div>
-      <div class="log-row"><span class="log-a">&rarr; &nbsp;discord</span><span class="log-b">forwarded &middot; silent</span></div>
-      <div class="mono muted fs-10" style="margin-top:10px;letter-spacing:.18em">142 handled today &middot; 0 sent to you</div>
+  <aside class="hero-phone" aria-hidden="true">
+    <div class="phone-frame">
+      <div class="phone-bar">
+        <span>9:47</span>
+        <span class="phone-bar-dots"><i></i><i></i><i></i></span>
+      </div>
+      <div class="phone-header">
+        <span class="eyebrow">Tue &middot; 12 handled</span>
+      </div>
+      <ul class="phone-feed">
+        <li class="phone-notif">
+          <span class="phone-channel ch-wa" aria-hidden="true">WA</span>
+          <div>
+            <div class="phone-meta"><b>Sarah</b><span>now</span></div>
+            <p class="phone-msg">can I move my booking?</p>
+            <span class="phone-tag ok">Replied</span>
+          </div>
+        </li>
+        <li class="phone-notif">
+          <span class="phone-channel ch-ig" aria-hidden="true">IG</span>
+          <div>
+            <div class="phone-meta"><b>@leo_03</b><span>1m</span></div>
+            <p class="phone-msg">hi what time u open</p>
+            <span class="phone-tag ok">Replied</span>
+          </div>
+        </li>
+        <li class="phone-notif">
+          <span class="phone-channel ch-dc" aria-hidden="true">DC</span>
+          <div>
+            <div class="phone-meta"><b>#orders</b><span>4m</span></div>
+            <p class="phone-msg">invoice #8821?</p>
+            <span class="phone-tag fwd">Forwarded</span>
+          </div>
+        </li>
+        <li class="phone-notif">
+          <span class="phone-channel ch-em" aria-hidden="true">@</span>
+          <div>
+            <div class="phone-meta"><b>orders@</b><span>9m</span></div>
+            <p class="phone-msg">refund request, order {hash}412</p>
+            <span class="phone-tag ok">Replied</span>
+          </div>
+        </li>
+      </ul>
+      <div class="phone-foot">
+        <span>0 sent to you</span>
+        <span>That was easy</span>
+      </div>
     </div>
-    <div class="stamp">ON<br>DUTY<br>24/7</div>
   </aside>
 </section>
 <div x-show="open" x-cloak

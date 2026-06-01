@@ -11,7 +11,7 @@ import { join } from 'node:path';
  *
  * Each public page captures a desktop and a mobile shot; mobile uses
  * `fullPage: true` so layout breakage further down the scroll
- * (footer, hero postcard) is visible without manual scrolling.
+ * (footer, hero phone stack) is visible without manual scrolling.
  *
  * `process.cwd()` is the repo root — Playwright always invokes specs
  * from there, and avoiding `import.meta.url` keeps esbuild's CJS

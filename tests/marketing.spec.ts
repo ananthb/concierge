@@ -115,7 +115,7 @@ test('demo-chat modal opens, posts to /demo/chat, renders assistant reply', asyn
   });
 
   await page.goto('/');
-  await page.locator('#demo-chat-hint-text').click();
+  await page.locator('#hero-headline').click();
 
   const dialog = page.getByRole('dialog', { name: /live demo/i });
   await expect(dialog).toBeVisible();
@@ -149,7 +149,7 @@ test('demo-chat persona picker swaps greeting and persona slug on the wire', asy
   });
 
   await page.goto('/');
-  await page.locator('#demo-chat-hint-text').click();
+  await page.locator('#hero-headline').click();
   const dialog = page.getByRole('dialog', { name: /live demo/i });
   await expect(dialog).toBeVisible();
 
@@ -175,7 +175,7 @@ test('demo-chat persona picker swaps greeting and persona slug on the wire', asy
 test('demo-chat view-prompt toggle reveals the active persona prompt', async ({ page }) => {
   await stubDemoPersonas(page);
   await page.goto('/');
-  await page.locator('#demo-chat-hint-text').click();
+  await page.locator('#hero-headline').click();
   const dialog = page.getByRole('dialog', { name: /live demo/i });
 
   const toggle = dialog.getByRole('button', { name: /view system prompt/i });
@@ -211,14 +211,14 @@ test('clicking the hero headline also opens the chat modal', async ({ page }) =>
   await expect(dialog).toBeVisible();
 });
 
-test('hero hint informs users the headline is clickable', async ({ page }) => {
+test('hero headline carries an accessible hint that it opens the demo', async ({ page }) => {
   await page.goto('/');
-  // The hint text is in the DOM as an aria-describedby target so screen
-  // readers see it; sighted users get the tooltip via the initial pulse
-  // and on hover.
+  // The visible pill is gone, but the same hint text lives on as a
+  // screen-reader-only span linked from aria-describedby. AT users get
+  // the description; sighted users discover the affordance via hover.
   const headline = page.locator('#hero-headline');
   await expect(headline).toHaveAttribute('aria-describedby', 'demo-chat-hint-text');
-  await expect(page.locator('#demo-chat-hint-text')).toContainText(/click to try the live demo/i);
+  await expect(page.locator('#demo-chat-hint-text')).toHaveText(/click to try the live demo/i);
 });
 
 test('demo-chat shows the rate-limit message on 429', async ({ page }) => {
@@ -232,7 +232,7 @@ test('demo-chat shows the rate-limit message on 429', async ({ page }) => {
   );
 
   await page.goto('/');
-  await page.locator('#demo-chat-hint-text').click();
+  await page.locator('#hero-headline').click();
   const dialog = page.getByRole('dialog', { name: /live demo/i });
   await dialog.getByRole('textbox').fill('hello?');
   await dialog.getByRole('button', { name: 'Send' }).click();
@@ -242,7 +242,7 @@ test('demo-chat shows the rate-limit message on 429', async ({ page }) => {
 test('demo-chat shows business goal row in card', async ({ page }) => {
   await stubDemoPersonas(page);
   await page.goto('/');
-  await page.locator('#demo-chat-hint-text').click();
+  await page.locator('#hero-headline').click();
   const dialog = page.getByRole('dialog', { name: /live demo/i });
   // Switch to a builder persona so the business card renders.
   const select = dialog.locator('[data-testid="demo-chat-persona"]');
@@ -290,7 +290,7 @@ test('demo-chat flips into holding pattern when server returns handoff:true', as
   });
 
   await page.goto('/');
-  await page.locator('#demo-chat-hint-text').click();
+  await page.locator('#hero-headline').click();
   const dialog = page.getByRole('dialog', { name: /live demo/i });
   // Switch to florist so we're not on Concierge (handoff applies to
   // builder personas in real use; the demo accepts it on any).

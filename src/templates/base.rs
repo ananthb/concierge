@@ -456,7 +456,7 @@ dialog.manage-confirm .confirm-actions { display:flex; gap:10px;
 .stat-n { font-size:var(--stat-n); color:var(--ink); }
 .display-sm { font-family:var(--f-display); font-size:26px; letter-spacing:-0.01em; margin:0; }
 .display-md { font-family:var(--f-display); font-size:clamp(34px,4.2vw,52px); line-height:1.05; letter-spacing:-0.02em; margin:8px 0 4px; }
-.lead { color:var(--ink-2); max-width:640px; margin:0 0 22px; font-size:16px; }
+.lead { color:var(--ink-2); max-width:560px; margin:0 0 22px; font-size:18px; line-height:1.55; }
 .section-label { display:flex; align-items:center; gap:10px; margin-bottom:4px; }
 
 /* Wizard */
@@ -547,11 +547,11 @@ table tr.audit-detail > td { padding:0; background:var(--paper);
   border-bottom:1px solid var(--hair); }
 
 /* Welcome form */
-.welcome { display:grid; grid-template-columns:minmax(0,1fr) 380px; gap:60px; align-items:center; }
-@media(max-width:900px){.welcome{grid-template-columns:1fr;gap:32px}.postcard-card{transform:none}}
+.welcome { display:grid; grid-template-columns:minmax(0,1fr) 360px; gap:60px; align-items:center; }
+@media(max-width:900px){.welcome{grid-template-columns:1fr;gap:32px}}
 .welcome-form { display:flex; gap:10px; flex-wrap:wrap; margin-top:22px; }
 .welcome-form .input { max-width:240px; }
-.display { font-family:var(--f-display); font-size:clamp(44px,6vw,82px); line-height:1.02; letter-spacing:-0.02em; margin:0 0 16px; }
+.display { font-family:var(--f-display); font-size:clamp(40px,4.5vw,60px); line-height:1.06; letter-spacing:-0.02em; margin:0 0 16px; }
 .display em { color:var(--accent); font-style:italic; }
 .hero-caret { display:inline-block; width:0.06em; height:0.86em; margin-left:0.04em; vertical-align:-0.08em; background:currentColor; animation:hero-caret-blink 0.85s steps(2,jump-none) infinite; }
 @keyframes hero-caret-blink { 0%,49%{opacity:1} 50%,100%{opacity:0} }
@@ -563,45 +563,6 @@ table tr.audit-detail > td { padding:0; background:var(--paper);
 .hero-clickable { cursor:pointer; transition:color .2s ease; outline:none; border-radius:6px; }
 .hero-clickable:hover, .hero-clickable:focus-visible { color:var(--accent-2); }
 .hero-clickable:focus-visible { outline:2px solid var(--accent); outline-offset:6px; }
-.hero-hint-anchor { position:relative; }
-.hero-hint {
-  display:inline-flex; align-items:center; gap:6px;
-  background:var(--ink); color:var(--cream);
-  border:1px solid var(--ink); border-radius:999px;
-  padding:6px 14px; margin:-2px 0 16px;
-  font-family:var(--f-body); font-size:13px; font-weight:500;
-  letter-spacing:0; cursor:pointer; outline:none;
-  box-shadow:0 1px 0 rgba(27,24,20,.06);
-  transition:transform .2s ease, background .2s ease, border-color .2s ease, box-shadow .2s ease, color .2s ease;
-}
-.hero-hint:hover, .hero-hint:focus-visible,
-.hero-clickable:hover ~ .hero-hint,
-.hero-clickable:focus-visible ~ .hero-hint {
-  transform:translateY(-3px) scale(1.05);
-  background:var(--accent); border-color:var(--accent); color:#fff;
-  box-shadow:0 10px 22px rgba(232,106,44,.28), 0 2px 0 rgba(200,84,28,.5);
-}
-.hero-hint:active { transform:translateY(-1px) scale(1.02); }
-.hero-hint-arrow { display:inline-block; line-height:1; transform:translateY(0); transition:transform .2s ease; }
-.hero-hint:hover .hero-hint-arrow,
-.hero-hint:focus-visible .hero-hint-arrow,
-.hero-clickable:hover ~ .hero-hint .hero-hint-arrow,
-.hero-clickable:focus-visible ~ .hero-hint .hero-hint-arrow {
-  animation:hero-hint-bounce .8s ease-in-out infinite;
-}
-@keyframes hero-hint-bounce {
-  0%, 100% { transform:translateY(0); }
-  50%      { transform:translateY(-4px); }
-}
-@media (prefers-reduced-motion: reduce) {
-  .hero-hint, .hero-hint:hover, .hero-hint:focus-visible,
-  .hero-clickable:hover ~ .hero-hint,
-  .hero-clickable:focus-visible ~ .hero-hint { transform:none; }
-  .hero-hint:hover .hero-hint-arrow,
-  .hero-hint:focus-visible .hero-hint-arrow,
-  .hero-clickable:hover ~ .hero-hint .hero-hint-arrow,
-  .hero-clickable:focus-visible ~ .hero-hint .hero-hint-arrow { animation:none; }
-}
 
 /* Live-demo chat modal (welcome page). */
 .chat-controls { display:flex; align-items:flex-end; gap:10px; margin:0 0 6px; flex-wrap:wrap; }
@@ -700,25 +661,55 @@ table tr.audit-detail > td { padding:0; background:var(--paper);
 .chat-error { color:var(--accent-2); font-size:13px; padding:4px 2px 0; }
 .fineprint { margin-top:18px; color:var(--muted); font-size:12px; }
 
-/* Postcard */
-.postcard { position:relative; }
-.postcard-card { position:relative; padding:22px; background:var(--paper);
-  border:1px solid var(--hair); border-radius:var(--r-lg);
-  box-shadow:var(--shadow-2); transform:rotate(1.5deg);
-  font-family:var(--f-mono); font-size:12px; }
-.postcard-head { display:flex; justify-content:space-between; align-items:center;
-  padding-bottom:10px; border-bottom:1px dashed var(--hair-2); color:var(--muted); letter-spacing:.2em; }
-.log-row { display:grid; grid-template-columns:120px 1fr; gap:8px; padding:6px 0;
-  border-bottom:1px dashed var(--hair); }
-.log-row:last-child { border-bottom:0; }
-.log-a { color:var(--accent-2); }
-.log-b { color:var(--ink-2); }
-.stamp { position:absolute; top:-12px; right:8px; width:84px; height:84px;
-  border:2px solid var(--accent); border-radius:50%;
+/* Hero phone notification stack: a modern phone-shaped card sitting in
+   the welcome aside. Status bar across the top, a short feed of
+   inbound messages from each channel below, each with a sender,
+   one-line snippet, and a handled-state tag. Replaces the older
+   paper-postcard illustration. */
+.hero-phone { position:relative; display:flex; justify-content:center; }
+.phone-frame { width:100%; max-width:340px; padding:14px 14px 12px;
+  background:#fff; border:1px solid var(--hair); border-radius:28px;
+  box-shadow:var(--shadow-2);
+  display:flex; flex-direction:column; gap:12px; }
+.phone-bar { display:flex; justify-content:space-between; align-items:center;
+  padding:0 8px 2px; font-family:var(--f-mono); font-size:11px;
+  color:var(--ink-2); letter-spacing:.04em; }
+.phone-bar-dots { display:inline-flex; gap:4px; align-items:center; }
+.phone-bar-dots i { display:inline-block; width:4px; height:4px;
+  border-radius:50%; background:var(--ink-2); }
+.phone-header { padding:0 8px 8px; border-bottom:1px solid var(--hair); }
+.phone-feed { list-style:none; margin:0; padding:0;
+  display:flex; flex-direction:column; gap:8px; }
+.phone-notif { display:grid; grid-template-columns:36px 1fr; gap:12px;
+  padding:10px 12px; background:var(--cream);
+  border:1px solid var(--hair); border-radius:14px; }
+.phone-channel { width:36px; height:36px; border-radius:10px;
   display:flex; align-items:center; justify-content:center;
-  color:var(--accent); font-family:var(--f-mono); font-size:10px;
-  text-align:center; transform:rotate(-12deg); background:rgba(232,106,44,.05);
-  letter-spacing:.12em; line-height:1.2; }
+  color:#fff; font-family:var(--f-mono); font-size:11px; font-weight:600;
+  letter-spacing:.04em; }
+.phone-channel.ch-wa { background:#25D366; }
+.phone-channel.ch-ig { background:linear-gradient(135deg,#f09433,#dc2743 50%,#bc1888); }
+.phone-channel.ch-dc { background:#5865F2; }
+.phone-channel.ch-em { background:var(--ink-2); font-size:14px; }
+.phone-meta { display:flex; justify-content:space-between;
+  align-items:baseline; gap:8px; font-size:13px; }
+.phone-meta b { color:var(--ink); font-weight:600; }
+.phone-meta span { color:var(--muted); font-family:var(--f-mono);
+  font-size:11px; }
+.phone-msg { margin:2px 0 6px; color:var(--ink-2); font-size:13px;
+  line-height:1.4; white-space:nowrap; overflow:hidden;
+  text-overflow:ellipsis; }
+.phone-tag { display:inline-flex; align-items:center; gap:5px;
+  font-family:var(--f-mono); font-size:10px; letter-spacing:.12em;
+  text-transform:uppercase; color:var(--muted); }
+.phone-tag::before { display:inline-block; line-height:1; }
+.phone-tag.ok { color:var(--ok); }
+.phone-tag.ok::before { content:"\2713"; font-size:11px; }
+.phone-tag.fwd { color:var(--accent-2); }
+.phone-tag.fwd::before { content:"\2192"; font-size:11px; }
+.phone-foot { display:flex; justify-content:space-between;
+  padding:2px 8px 0; font-family:var(--f-mono); font-size:10px;
+  letter-spacing:.12em; text-transform:uppercase; color:var(--muted); }
 
 /* Terminal */
 .terminal { background:#0F0D0B; color:#D9D0BD; border-radius:16px; padding:20px;
