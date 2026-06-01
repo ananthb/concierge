@@ -310,7 +310,7 @@ pub fn welcome_html(
       </ul>
       <div class="phone-foot">
         <span>0 sent to you</span>
-        <span>That was easy</span>
+        <span>All caught up</span>
       </div>
     </div>
   </aside>
