@@ -43,7 +43,7 @@ pub async fn handle_tenants(
             let tenants = search_tenants(db, &query).await?;
             let is_htmx = req.headers().get("HX-Request").ok().flatten().is_some();
             if is_htmx {
-                Response::from_html(tmpl::tenants_table_html(&tenants, base_url))
+                Response::from_html(tmpl::tenants_table_html(&tenants, &query, base_url))
             } else {
                 Response::from_html(tmpl::tenants_list_html(
                     &tenants,

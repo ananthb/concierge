@@ -76,6 +76,11 @@ a { color:var(--accent); }
 .btn.danger.solid { background:var(--danger); color:#fff; border-color:var(--danger); }
 .btn.danger.solid:hover { background:var(--danger-2); border-color:var(--danger-2); }
 .card { background:var(--paper); border:1px solid var(--hair); border-radius:var(--r-lg); box-shadow:var(--shadow-1); }
+/* Card-as-list-container: zero padding so child rows extend to the
+   edges, with `overflow:hidden` so the rounded corners clip the
+   first/last rows. Replaces the repeated `card p-0 style="overflow:hidden"`
+   pattern. */
+.card.card-list { padding:0; overflow:hidden; }
 .input, .textarea, .select { width:100%; padding:10px 12px; background:#fff;
   border:1px solid var(--hair-2); border-radius:var(--r-sm);
   font-family:var(--f-body); font-size:14px; color:var(--ink); outline:none;
@@ -139,7 +144,8 @@ a { color:var(--accent); }
 .ta-center{text-align:center} .ta-right{text-align:right}
 .flex-1{flex:1}
 .wrap{flex-wrap:wrap}
-.jc-center{justify-content:center}
+.jc-center{justify-content:center} .jc-end{justify-content:flex-end}
+.ai-end{align-items:flex-end} .ai-start{align-items:flex-start} .ai-baseline{align-items:baseline}
 .link-reset{text-decoration:none;color:inherit}
 /* Cards used as links: hint they're clickable on hover/focus. */
 a.card.link-reset { display:block; transition:border-color .12s ease, box-shadow .12s ease, transform .12s ease; }
@@ -162,6 +168,9 @@ a.card.link-reset:focus-visible { outline:none; border-color:var(--accent); box-
 .skip-link:focus,.skip-link:focus-visible{left:8px}
 .app-main{display:contents}
 .w-full{width:100%}
+.col-dot{width:24px}
+.w-stamp{min-width:140px}
+.with-divider-top{border-top:1px solid var(--hair);padding-top:16px}
 .text-warn{color:var(--warn)} .text-ok{color:var(--ok)}
 .lbl{display:block;margin-bottom:6px}
 .card-warn{border-color:var(--warn)}
@@ -259,7 +268,7 @@ th, td {
 @media (max-width:720px) {
   .table-wrap.table-stack { overflow-x:visible; }
   .table-stack table, .table-stack thead, .table-stack tbody,
-  .table-stack tr, .table-stack td { display:block; width:auto; }
+  .table-stack tr, .table-stack td, .table-stack th { display:block; width:auto; }
   .table-stack thead { position:absolute; left:-9999px; top:auto; }
   .table-stack tr { border:1px solid var(--hair); border-radius:10px;
     padding:10px 12px; margin-bottom:8px; background:var(--paper); }
@@ -271,6 +280,13 @@ th, td {
     font-size:11px; letter-spacing:.04em; text-transform:uppercase;
     flex:none; }
   .table-stack td:not([data-label])::before { content:""; display:none; }
+  /* Row-leading heading cell: pattern used by editable tables where
+     each row is a labeled record (e.g. the /manage/billing pricing
+     editor). Renders the cell as a full-width card title with a
+     hairline divider instead of the flex justify-between row used
+     for value cells. */
+  .table-stack .row-heading { display:block; padding:0 0 8px; margin-bottom:8px;
+    border-bottom:1px solid var(--hair); text-align:left; }
 }
 th {
   background: var(--cream-2);

@@ -50,7 +50,7 @@ pub fn rules_list_html(
   <p class="muted mb-16">{lead}</p>
 
   <h2 class="display-xs mb-8">{routing_h2}</h2>
-  <div class="card p-0 mb-12" style="overflow:hidden">
+  <div class="card card-list mb-12">
     {rule_rows}{empty_note}
   </div>
   <div class="row gap-8 mb-24">

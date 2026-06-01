@@ -65,7 +65,7 @@ fn approvals_list_inner_html(rows: &[PendingApproval]) -> String {
     }
 
     let rendered: String = rows.iter().map(approval_row_html).collect();
-    format!(r##"<div class="card p-0" style="overflow:hidden">{rendered}</div>"##)
+    format!(r##"<div class="card card-list">{rendered}</div>"##)
 }
 
 pub fn approval_row_html(row: &PendingApproval) -> String {

@@ -200,14 +200,18 @@ pub fn dashboard_html(
         "",
     );
     // KPI placeholders for MRR and Active are deliberately omitted until
-    // their data sources land. The single Tenants tile keeps the
-    // dashboard honest about what it actually knows today.
+    // their data sources land. The single Tenants tile pairs with a
+    // short blurb so the dashboard row doesn't read as an orphan tile
+    // floating in white space.
     let content = format!(
         r##"<div class="page-pad">
   {header}
-  <div class="card p-18 mb-16" style="max-width:240px">
-    <div class="stat-n serif">{tenant_count}</div>
-    <div class="mono muted fs-11">Tenants</div>
+  <div class="card p-18 mb-16 between wrap gap-16">
+    <div>
+      <div class="stat-n serif">{tenant_count}</div>
+      <div class="mono muted fs-11">Tenants</div>
+    </div>
+    <p class="muted fs-13 m-0">MRR and active-tenant KPIs land here once their data sources are wired up.</p>
   </div>
 
   {health_panel}
@@ -245,7 +249,7 @@ fn health_panel_html(report: &crate::handlers::health::HealthReport) -> String {
             };
             format!(
                 r#"<tr>
-  <td style="width:24px">{dot}</td>
+  <td class="col-dot">{dot}</td>
   <td data-label="Service" class="fw-600">{name}</td>
   <td data-label="Status" class="muted fs-13">{detail}</td>
 </tr>"#,
@@ -256,7 +260,7 @@ fn health_panel_html(report: &crate::handlers::health::HealthReport) -> String {
         })
         .collect();
     format!(
-        r##"<div class="card" style="padding:0;overflow:hidden">
+        r##"<div class="card card-list">
   <div class="between p-18">
     <div>
       <div class="eyebrow">Connection status</div>
@@ -279,13 +283,13 @@ pub fn tenants_list_html(
     base_url: &str,
     locale: &Locale,
 ) -> String {
-    let table = tenants_table_html(tenants, base_url);
+    let table = tenants_table_html(tenants, query, base_url);
     let header = manage_header("All tenants", "Tenants", None, None, "");
 
     let content = format!(
         r##"<div class="page-pad">
   {header}
-  <div class="row gap-12 mb-12 wrap" style="align-items:center">
+  <div class="row gap-12 mb-12 wrap">
     <input
       class="input w-input-lg" type="search" name="q" value="{q}"
       placeholder="Search by email or name…"
@@ -316,7 +320,7 @@ pub fn tenants_list_html(
 
 /// Render just the `<div id="tenants-table">` portion of the tenants
 /// list. Used both for the full page and for the HTMX search swap.
-pub fn tenants_table_html(tenants: &[Tenant], base_url: &str) -> String {
+pub fn tenants_table_html(tenants: &[Tenant], query: &str, base_url: &str) -> String {
     let rows: String = tenants
         .iter()
         .map(|t| {
@@ -339,11 +343,19 @@ pub fn tenants_table_html(tenants: &[Tenant], base_url: &str) -> String {
         .collect();
 
     let body = if tenants.is_empty() {
-        empty_state(
-            "No tenants match",
-            "Try a different search, or clear the box to see every tenant.",
-            None,
-        )
+        if query.is_empty() {
+            empty_state(
+                "No tenants yet",
+                "Tenants are created automatically the first time someone signs in via OAuth. This list will populate once that happens.",
+                None,
+            )
+        } else {
+            empty_state(
+                "No tenants match",
+                "Try a different search, or clear the box to see every tenant.",
+                None,
+            )
+        }
     } else {
         format!(
             r##"<div class="table-wrap table-stack"><table>
@@ -363,7 +375,7 @@ pub fn tenants_table_html(tenants: &[Tenant], base_url: &str) -> String {
     format!(
         r##"<div id="tenants-table">
   {count_line}
-  <div class="card" style="padding:0;overflow:hidden">{body}</div>
+  <div class="card card-list">{body}</div>
 </div>"##,
         count_line = count_line,
         body = body,
@@ -395,8 +407,8 @@ fn render_recent_activity_card(recent: &[serde_json::Value], base_url: &str) -> 
                 let details_pretty = audit_details_pretty(entry.get("details"));
                 format!(
                     r##"<div x-data="{{ open: false }}" class="recent-row">
-  <div class="row gap-12 wrap" style="align-items:center">
-    <span class="mono muted fs-11" style="min-width:140px">{created}</span>
+  <div class="row gap-12 wrap">
+    <span class="mono muted fs-11 w-stamp">{created}</span>
     {chip}
     <span class="muted fs-12">by {actor}</span>
     <button type="button" class="row-expand ml-auto" :class="{{ open: open }}" @click="open = !open" :aria-expanded="open" aria-label="Toggle details">▾</button>
@@ -417,7 +429,7 @@ fn render_recent_activity_card(recent: &[serde_json::Value], base_url: &str) -> 
     );
     format!(
         r##"<div class="card p-18 mt-16">
-  <div class="between mb-12 wrap" style="gap:12px">
+  <div class="between mb-12 wrap" class="gap-12">
     <h3 class="m-0">Recent activity</h3>
     {view_all}
   </div>
@@ -540,7 +552,7 @@ pub fn tenant_detail_html(
        segmented toggle so the switch is immediate and the
        balance/quota line tracks the active mode. -->
   <div class="card p-18 mt-16" x-data="{{ kind: 'replies' }}">
-    <div class="between mb-12 wrap" style="gap:12px">
+    <div class="between mb-12 wrap" class="gap-12">
       <h3 class="m-0">Grant credits</h3>
       <div class="seg-tabs" role="tablist" aria-label="Grant type">
         <button type="button" role="tab" :aria-selected="kind === 'replies'" :class="kind === 'replies' ? 'active' : ''" @click="kind = 'replies'">Replies</button>
@@ -552,7 +564,7 @@ pub fn tenant_detail_html(
     <p class="muted mb-12" x-show="kind === 'addresses'" x-cloak>Add to this tenant's reply-email quota. Current quota: <strong>{quota}</strong> address(es).</p>
 
     <form x-show="kind === 'replies'" hx-post="{base_url}/manage/tenants/{id}/grant-replies" hx-target="{hash}toast-region" hx-swap="afterbegin" hx-ext="json-enc">
-      <div class="row gap-12 wrap" style="align-items:flex-end">
+      <div class="row gap-12 wrap ai-end">
         <label class="stack">
           <span class="eyebrow lbl">Replies</span>
           <input class="input mono w-input-sm" name="replies" type="number" min="1" required placeholder="e.g. 100">
@@ -566,7 +578,7 @@ pub fn tenant_detail_html(
     </form>
 
     <form x-show="kind === 'addresses'" x-cloak hx-post="{base_url}/manage/tenants/{id}/grant-addresses" hx-target="{hash}toast-region" hx-swap="afterbegin" hx-ext="json-enc">
-      <div class="row gap-12 wrap" style="align-items:flex-end">
+      <div class="row gap-12 wrap ai-end">
         <label class="stack">
           <span class="eyebrow lbl">Address slots</span>
           <input class="input mono w-input-sm" name="addresses" type="number" min="1" required placeholder="e.g. 5">
@@ -639,7 +651,7 @@ pub fn audit_html(
     let content = format!(
         r##"<div class="page-pad">
   {header}
-  <div class="row gap-12 mb-12 wrap" style="align-items:flex-end"
+  <div class="row gap-12 mb-12 wrap ai-end"
        hx-get="{base_url}/manage/audit"
        hx-trigger="input changed delay:200ms from:input[name='actor'], change from:select"
        hx-target="{hash}audit-table" hx-swap="outerHTML"
@@ -657,7 +669,10 @@ pub fn audit_html(
       <span class="eyebrow lbl">Resource</span>
       <select class="select w-input-sm" name="resource_type">{resource_options}</select>
     </label>
-    <a class="btn ghost sm" href="{base_url}/manage/audit">Reset</a>
+    <div class="stack">
+      <span class="eyebrow lbl" aria-hidden="true">&nbsp;</span>
+      <a class="btn ghost" href="{base_url}/manage/audit">Reset</a>
+    </div>
   </div>
   {table}
 </div>"##,
@@ -717,7 +732,7 @@ pub fn audit_table_html(
     format!(
         r##"<div id="audit-table">
   <div class="muted fs-12 mb-8" id="audit-count">{n} {label}</div>
-  <div class="card" style="padding:0;overflow:hidden">{body}</div>
+  <div class="card card-list">{body}</div>
   {load_more}
 </div>"##,
         n = log.len(),
@@ -1051,7 +1066,7 @@ fn audit_resource_cell(base_url: &str, kind: &str, id: &str) -> String {
         ),
     };
     format!(
-        r#"<div class="row gap-8" style="align-items:center">{body}{copy}</div>"#,
+        r#"<div class="row gap-8">{body}{copy}</div>"#,
         body = body,
         copy = copy_btn,
     )
@@ -1097,7 +1112,7 @@ pub fn billing_overview_html(
         </label>
       </div>
 
-      <div class="row gap-12 mt-12 wrap" style="align-items:center">
+      <div class="row gap-12 mt-12 wrap">
         <button class="btn sm" type="submit">Save pricing</button>
         <span class="muted fs-12" x-show="dirty" x-cloak>Unsaved changes — save before removing or adding a currency.</span>
       </div>
@@ -1147,7 +1162,7 @@ fn pricing_form_table(cfg: &crate::storage::Pricing, base_url: &str) -> String {
             );
             format!(
                 r##"<th class="ta-right">
-  <div class="row gap-8" style="justify-content:flex-end;align-items:center">
+  <div class="row gap-8 jc-end">
     <span class="mono">{symbol} {code}</span>{remove}
   </div>
   <div class="muted fs-11">{name}</div>
@@ -1185,8 +1200,9 @@ fn pricing_form_table(cfg: &crate::storage::Pricing, base_url: &str) -> String {
                     // reach the wire. Invalid values still get the
                     // :invalid border so the operator sees
                     // immediately that the field is wrong.
+                    let info = currency_info(code);
                     format!(
-                        r##"<td><input class="input mono w-input-sm cell-save" name="{name}" type="number" min="1" max="9999999999" step="1" required value="{value}"
+                        r##"<td data-label="{symbol} {code}"><input class="input mono w-input-sm cell-save" name="{name}" type="number" min="1" max="9999999999" step="1" required value="{value}"
                                        hx-post="{base_url}/manage/billing/settings"
                                        hx-trigger="change[target.checkValidity()]"
                                        hx-target="#toast-region" hx-swap="afterbegin"
@@ -1195,12 +1211,14 @@ fn pricing_form_table(cfg: &crate::storage::Pricing, base_url: &str) -> String {
                         base_url = base_url,
                         name = format!("{}__{}", concept.as_wire(), code),
                         value = value,
+                        symbol = html_escape(&info.symbol),
+                        code = html_escape(code),
                     )
                 })
                 .collect();
             format!(
                 r##"<tr>
-  <th class="ta-left" style="font-weight:600">
+  <th scope="row" class="ta-left row-heading fw-600">
     <div>{label}</div>
     <div class="muted fs-11">{unit}</div>
   </th>
@@ -1214,8 +1232,8 @@ fn pricing_form_table(cfg: &crate::storage::Pricing, base_url: &str) -> String {
         .collect();
 
     format!(
-        r##"<div class="card p-0" style="overflow-x:auto">
-  <table class="manage-table fs-13" style="width:100%">
+        r##"<div class="table-wrap table-stack card card-list">
+  <table class="manage-table fs-13 w-full">
     <thead><tr><th></th>{header_cells}</tr></thead>
     <tbody>{body_rows}</tbody>
   </table>
@@ -1336,7 +1354,7 @@ pub fn archetypes_list_html(
     let content = format!(
         r##"<div class="page-pad">
   {header}
-  <div class="row gap-12 mb-12 wrap" style="align-items:center">
+  <div class="row gap-12 mb-12 wrap">
     <input
       class="input w-input-lg" type="search" name="q" value="{q}"
       placeholder="Search by slug, label, or description…"
@@ -1422,7 +1440,7 @@ pub fn archetypes_table_html(rows: &[crate::types::Archetype], base_url: &str) -
     format!(
         r##"<div id="archetypes-table">
   {count_line}
-  <div class="card" style="padding:0;overflow:hidden">{body}</div>
+  <div class="card card-list">{body}</div>
 </div>"##,
         count_line = count_line,
         body = body,
@@ -1492,7 +1510,7 @@ pub fn archetype_edit_html(
         _ => "Awaiting classifier".to_string(),
     };
     let header_right = format!(
-        r#"<div class="row gap-8" style="align-items:center">{chip}<span class="fs-12 muted">{detail}</span></div>"#,
+        r#"<div class="row gap-8">{chip}<span class="fs-12 muted">{detail}</span></div>"#,
         chip = safety_chip,
         detail = safety_detail,
     );
@@ -1636,7 +1654,7 @@ pub fn archetype_edit_html(
         </div>
       </section>
 
-      <div class="between pt-16 mt-24" style="border-top:1px solid var(--hair)">
+      <div class="between mt-24 with-divider-top">
         <div>{delete_button}</div>
         <button type="submit" class="btn primary">Save archetype</button>
       </div>
@@ -1731,7 +1749,7 @@ pub fn demo_config_html(
     let toggle_card = format!(
         r##"<div class="card p-22 mb-16">
     <form hx-post="{base_url}/manage/demo/toggle" hx-ext="json-enc" hx-target="body" hx-swap="innerHTML" hx-trigger="change from:#demo-enabled">
-      <div class="row gap-12" style="align-items:center">
+      <div class="row gap-12">
         <input id="demo-enabled" type="checkbox" name="enabled" value="true"{enabled_checked}>
         <label for="demo-enabled" class="fw-600">Demo enabled</label>
         <span class="muted fs-13">When off: homepage hides the chat button.</span>
@@ -1801,25 +1819,25 @@ pub fn demo_config_html(
       <section class="form-section">
         <p class="section-eyebrow">Timing</p>
         <p class="section-help">How often the persona blob refreshes, and how long a homepage visitor can chat before the sign-up CTA takes over the input.</p>
-        <div class="row gap-12 mb-12 wrap" style="align-items:center">
+        <div class="row gap-12 mb-12 wrap">
           <label for="demo-cadence" class="fw-600">Regenerate every</label>
           <input id="demo-cadence" class="input mono w-input-xs" type="number" name="regeneration_cadence_mins" min="0" max="10080" value="{cadence}">
           <span class="muted fs-13">minutes (0 = manual only).</span>
         </div>
-        <div class="row gap-12 mb-12 wrap" style="align-items:center">
+        <div class="row gap-12 mb-12 wrap">
           <label for="demo-turns" class="fw-600">User turns per session</label>
           <input id="demo-turns" class="input mono w-input-xs" type="number" name="max_user_turns" min="1" max="20" value="{max_user_turns}">
           <span class="muted fs-13">replaces the chat input with the sign-up CTA after this many user messages.</span>
         </div>
-        <div class="row gap-12 wrap" style="align-items:center">
+        <div class="row gap-12 wrap">
           <label for="demo-idle" class="fw-600">Idle timeout</label>
           <input id="demo-idle" class="input mono w-input-xs" type="number" name="idle_timeout_secs" min="5" max="600" value="{idle_timeout_secs}">
-          <span class="muted fs-13">seconds — restarts on every keystroke; fires the CTA when the visitor stops typing.</span>
+          <span class="muted fs-13">seconds; restarts on every keystroke; fires the CTA when the visitor stops typing.</span>
         </div>
       </section>
 
       <section class="form-section">
-        <div class="between wrap mb-4" style="gap:12px;align-items:flex-start">
+        <div class="between wrap mb-4 gap-12 ai-start">
           <div>
             <p class="section-eyebrow">Prompt &amp; personas</p>
             <p class="section-help m-0">{stored_meta}</p>
@@ -1833,7 +1851,7 @@ pub fn demo_config_html(
                     @input="promptDirty = true; previewOk = false">{prompt_value}</textarea>
         </div>
 
-        <div class="row gap-8 mt-12 wrap" style="align-items:center">
+        <div class="row gap-8 mt-12 wrap">
           <button type="button" class="btn ghost sm"
                   hx-post="{base_url}/manage/demo/preview"
                   hx-include="[name='persona_generation_prompt']"
@@ -1868,7 +1886,7 @@ pub fn demo_config_html(
              we copy into #demo-display the moment Preview/Re-roll is
              clicked, so the operator sees shimmer placeholders
              instead of the stale persona list while the AI runs. -->
-        <div id="demo-display" class="mt-16" style="border-top:1px solid var(--hair);padding-top:16px"
+        <div id="demo-display" class="mt-16 with-divider-top"
              @htmx:after-swap="previewOk = !!document.querySelector('#demo-display .preview-ok')">
           {stored_block}
         </div>
@@ -1943,7 +1961,7 @@ fn stored_personas_card(stored: &crate::storage::StoredDemoPersonas) -> String {
             };
             format!(
                 r##"<div class="card p-14 mb-8">
-  <div class="row gap-8 mb-6" style="align-items:baseline">
+  <div class="row gap-8 mb-6 ai-baseline">
     <span class="chip">{slug}</span>
     <strong>{name}</strong>
     <span class="muted fs-13">{biz_type}{sep}{city}</span>
@@ -2013,7 +2031,7 @@ pub fn demo_preview_success_html(
             };
             format!(
                 r##"<div class="card p-14 mb-8">
-  <div class="row gap-8 mb-6" style="align-items:baseline">
+  <div class="row gap-8 mb-6 ai-baseline">
     <span class="chip">{slug}</span>
     <strong>{name}</strong>
     <span class="muted fs-13">{biz_type}{biz_type_sep}{city}</span>

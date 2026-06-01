@@ -75,7 +75,7 @@ pub fn email_dashboard_html(
         )
     } else {
         format!(
-            r#"<div class="card p-0" style="overflow:hidden">
+            r#"<div class="card card-list">
                 <table>
                     <caption class="sr-only">{caption}</caption>
                     <thead><tr><th scope="col">{th_address}</th><th scope="col">{th_auto}</th><th scope="col">{th_notify}</th><th scope="col"><span class="sr-only">{th_actions}</span></th></tr></thead>
@@ -289,7 +289,7 @@ pub fn email_address_html(
         .collect();
 
     let recipients_section = format!(
-        r##"<div class="card p-0" style="overflow:hidden">
+        r##"<div class="card card-list">
             <table>
                 <caption class="sr-only">{caption}</caption>
                 <thead><tr><th scope="col">{th_addr}</th><th scope="col">{th_kind}</th><th scope="col">{th_status}</th><th scope="col"><span class="sr-only">{th_actions}</span></th></tr></thead>
