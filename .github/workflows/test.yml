@@ -30,12 +30,13 @@ jobs:
       - uses: actions/checkout@v4
 
       # Nix gets us pinned versions of Rust + worker-build + wrangler so
-      # the wasm build behaves identically to the Garnix devShell.
+      # the wasm build behaves identically to the local devShell.
       - uses: DeterminateSystems/nix-installer-action@main
+
+      - uses: cachix/cachix-action@v17
         with:
-          extra-conf: |
-            extra-substituters = https://cache.garnix.io
-            extra-trusted-public-keys = cache.garnix.io:CTFPyKSLcx5RMJKfLo5EEPUObbA78b0YQ2DTCJXqr9g=
+          name: ananthb
+          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
 
       - name: Cache cargo build
         uses: actions/cache@v4
