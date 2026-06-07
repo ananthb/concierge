@@ -119,8 +119,13 @@ a { color:var(--accent); }
 .form-row { display:flex; flex-wrap:wrap; gap:12px; align-items:flex-end; }
 .form-row > * { flex:1 1 220px; min-width:0; }
 .form-row > .form-row-fit { flex:0 0 auto; }
+/* Tight variant: children take their natural width on desktop instead
+   of stretching to fill the row. Use for rows of small number-pickers
+   that look stranded when expanded to ~33% column width each. */
+.form-row.form-row-tight > * { flex:0 1 auto; max-width:260px; }
 @media (max-width:720px) {
   .form-row > * { flex:1 1 100%; }
+  .form-row.form-row-tight > * { flex:1 1 100%; max-width:none; }
 }
 .gap-4{gap:4px} .gap-6{gap:6px} .gap-8{gap:8px} .gap-12{gap:12px}
 .gap-16{gap:16px} .gap-20{gap:20px} .gap-24{gap:24px}
@@ -751,6 +756,23 @@ table tr.audit-detail > td { padding:0; background:var(--paper);
 .prompt-preview + .prompt-preview { margin-top:6px; }
 .prompt-preview-fixed { background:rgba(245,239,228,.06); border-left:3px solid rgba(245,239,228,.18); opacity:.8; }
 .prompt-preview-middle { background:rgba(245,239,228,.10); border-left:3px solid var(--accent); }
+/* Read-only "what gets appended to your text" peek shown directly under
+   the editable area on the persona admin page. Lives on the light card
+   background, so it picks up cream tones (vs. the dark prompt-preview
+   pane below which mirrors the visitor demo's terminal aesthetic). */
+.postamble-peek { background:var(--cream-2); border:1px solid var(--hair);
+  border-left:3px solid var(--accent); border-radius:6px; padding:10px 12px; }
+.postamble-peek-body { margin:0; font-family:var(--f-mono); font-size:12px;
+  line-height:1.55; color:var(--ink-2); white-space:pre-wrap; word-break:break-word; }
+/* Pricing table on /manage/billing: caps the table at a comfortable
+   reading width so cells don't balloon into stretched columns when
+   only one or two currencies are configured. Overrides the global
+   `table { width:100% }` for this specific surface. */
+.pricing-table { max-width:880px; }
+.pricing-table table { width:auto; min-width:100%; }
+@media (max-width:720px) {
+  .pricing-table { max-width:none; }
+}
 /* Inside `.chat-scroll`. The wrapper handles overflow; this is just the
    bubble layout. */
 .chat-messages { flex:1 1 auto; min-height:80px; padding:8px 2px; display:flex; flex-direction:column; gap:10px; }

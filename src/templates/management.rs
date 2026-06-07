@@ -1112,20 +1112,20 @@ pub fn billing_overview_html(
     <form hx-post="{base_url}/manage/billing/settings" hx-target="{hash}toast-region" hx-swap="afterbegin" hx-ext="json-enc">
       {pricing_table}
 
-      <div class="form-row mb-12 mt-16">
+      <div class="form-row mb-12 mt-16 form-row-tight">
         <label class="stack">
           <span class="eyebrow lbl">Addresses per reply-email pack</span>
-          <input class="input mono" name="email_pack_size" type="number" min="1" required value="{email_pack_size}">
+          <input class="input mono w-input-sm" name="email_pack_size" type="number" min="1" required value="{email_pack_size}">
           <span class="muted fs-11 mt-4">tenants receive this many addresses per active pack</span>
         </label>
         <label class="stack">
           <span class="eyebrow lbl">Minimum credits per purchase</span>
-          <input class="input mono" name="min_credits" type="number" min="1" required value="{min_credits}">
+          <input class="input mono w-input-sm" name="min_credits" type="number" min="1" required value="{min_credits}">
           <span class="muted fs-11 mt-4">slider lower bound; smallest purchase a tenant can make</span>
         </label>
         <label class="stack">
           <span class="eyebrow lbl">Maximum credits per purchase</span>
-          <input class="input mono" name="max_credits" type="number" min="1" max="{max_credits_ceiling}" required value="{max_credits}">
+          <input class="input mono w-input-sm" name="max_credits" type="number" min="1" max="{max_credits_ceiling}" required value="{max_credits}">
           <span class="muted fs-11 mt-4">hard upper bound across slider + custom input</span>
         </label>
       </div>
@@ -1250,8 +1250,8 @@ fn pricing_form_table(cfg: &crate::storage::Pricing, base_url: &str) -> String {
         .collect();
 
     format!(
-        r##"<div class="table-wrap table-stack card card-list">
-  <table class="manage-table fs-13 w-full">
+        r##"<div class="table-wrap table-stack card card-list pricing-table">
+  <table class="manage-table fs-13">
     <thead><tr><th></th>{header_cells}</tr></thead>
     <tbody>{body_rows}</tbody>
   </table>
@@ -1302,16 +1302,16 @@ fn add_currency_form(base_url: &str, existing: &[String]) -> String {
         .collect();
 
     format!(
-        r##"<div x-data="{{ currency: '' }}" class="form-row mt-12">
-  <label>
-    <div class="eyebrow mb-4">Add currency</div>
-    <select class="input" x-model="currency">
+        r##"<div x-data="{{ currency: '' }}" class="row gap-12 mt-12 wrap ai-end">
+  <label class="stack">
+    <span class="eyebrow lbl">Add currency</span>
+    <select class="input w-input-md" x-model="currency">
       <option value="">Pick a currency…</option>
       {options}
     </select>
   </label>
-  <form class="form-row-fit" hx-post="{base_url}/manage/billing/settings" hx-target="body" hx-swap="innerHTML" hx-ext="json-enc"
-        x-show="currency">
+  <form hx-post="{base_url}/manage/billing/settings" hx-target="body" hx-swap="innerHTML" hx-ext="json-enc"
+        x-show="currency" x-cloak>
     <input type="hidden" name="__currencies" :value="JSON.stringify([currency])">
     {seed_inputs}
     <button class="btn sm" type="submit" :disabled="dirty" :title="dirty ? 'Save pricing first to add a currency' : ''">Add</button>
@@ -1363,7 +1363,7 @@ pub fn archetypes_list_html(
         "Archetype catalog",
         "Archetypes",
         None,
-        Some("Every save runs through the safety classifier; only Approved rows are visible in the demo and onboarding."),
+        Some("An archetype is a reusable voice preset that seeds the live demo's sample-business personas and the onboarding wizard's preset cards. Every save runs through the safety classifier; only Approved rows are visible in the demo and onboarding."),
         &new_btn,
     );
 
@@ -1861,7 +1861,7 @@ pub fn demo_config_html(
             <p class="section-help m-0">{stored_meta}</p>
           </div>
         </div>
-        <p class="section-help">The prompt is sent as the system message to the LLM with each archetype's label + description as the user message. The model must reply with a JSON array of objects, one per archetype in the same order. Each object: <code>name</code>, <code>business_type</code>, <code>city</code>, <code>hours</code>, <code>goal</code>, <code>goal_url</code>. Leave blank to restore the default.</p>
+        <p class="section-help">The prompt is sent as the system message to the LLM with each <a href="{base_url}/manage/archetypes">approved archetype</a>'s label + description as the user message — edit the catalog there to change which voices the demo generates. The model must reply with a JSON array of objects, one per archetype in the same order. Each object: <code>name</code>, <code>business_type</code>, <code>city</code>, <code>hours</code>, <code>goal</code>, <code>goal_url</code>. Leave blank to restore the default.</p>
         <div>
           <label for="demo-prompt" class="eyebrow lbl">Persona generation prompt</label>
           <textarea id="demo-prompt" class="textarea mono" name="persona_generation_prompt" rows="6"

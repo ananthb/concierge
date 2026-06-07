@@ -142,6 +142,17 @@ pub fn persona_admin_html(
         <p class="muted fs-12 mt-4"><span x-text="customPrompt.length"></span> / 2000</p>
       </div>
 
+      <!-- Postamble peek: shows the safety wrapper that gets appended
+           after the editable area on every send, in BOTH modes. The
+           dark preview card below still renders the full assembled
+           prompt; this inline block exists so the operator doesn't
+           have to scroll-and-context-switch to see "what gets added
+           to my text". Read-only — no input element, just <pre>. -->
+      <div class="postamble-peek mt-12">
+        <div class="eyebrow mb-6">{postamble_inline_label}</div>
+        <pre class="postamble-peek-body">{postamble}</pre>
+      </div>
+
       <div class="row gap-8 mt-16" style="justify-content:flex-end">
         <button type="submit" class="btn primary">{save}</button>
       </div>
@@ -200,6 +211,7 @@ pub fn persona_admin_html(
         envelope_note = html_escape(&t(locale, "admin-persona-envelope-note")),
         preamble_label = html_escape(&t(locale, "admin-prompt-preamble-label")),
         postamble_label = html_escape(&t(locale, "admin-prompt-postamble-label")),
+        postamble_inline_label = "Appended after your text — house rules (always applied)",
         preamble = html_escape(crate::prompt::PREAMBLE),
         postamble = html_escape(crate::prompt::POSTAMBLE),
         refresh = t(locale, "admin-persona-preview-refresh"),
