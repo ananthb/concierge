@@ -3,7 +3,11 @@ main = "worker-shim.mjs"
 compatibility_date = "2024-01-01"
 
 [build]
-command = "worker-build --release"
+# Wraps `worker-build --release` with a rustup + cargo bootstrap
+# for envs without a Rust toolchain on PATH (e.g. Cloudflare Workers
+# Builds, which runs `wrangler versions upload` directly without
+# going through the `npm run deploy` script).
+command = "./scripts/build-worker.sh"
 
 # ============================================================================
 # D1 Database for messages and submissions.
