@@ -127,14 +127,6 @@ pub fn t_args(locale: &Locale, key: &str, args: &[(&str, &str)]) -> String {
     translator().t(locale, key, Some(&fa))
 }
 
-/// Asserts that the canonical bundle has a key for every supplied id.
-/// Used by the build-time integration test in `templates::base` to fail
-/// the build when a `t(..)` reference points at a missing FTL key.
-#[cfg(test)]
-pub fn canonical_has_key(key: &str) -> bool {
-    translator().canonical().get_message(key).is_some()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
