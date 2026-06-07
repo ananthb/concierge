@@ -1,0 +1,21 @@
+:root {
+  --cream: #F5EFE4; --cream-2: #EFE7D6; --paper: #FBF7EE;
+  --ink: #1B1814; --ink-2: #3A332B; --muted: #5E5246;
+  --hair: #D9CEB8; --hair-2: #C7BA9E;
+  --accent: #E86A2C; --accent-2: #C8541C; --accent-soft: #F9D9C2;
+  --sage: #6E8A5C; --plum: #6B3E5C; --sky: #3A6B8A; --butter: #E8C66A;
+  --ok: #3E7F4A; --warn: #C46B1A; --danger: #B23A2A; --danger-2: #8E2C1F; --danger-soft: #F6DDD5;
+  --r-sm: 8px; --r-md: 12px; --r-lg: 20px; --r-xl: 28px;
+  --shadow-1: 0 1px 0 rgba(27,24,20,.04), 0 2px 6px rgba(27,24,20,.04);
+  --shadow-2: 0 2px 0 rgba(27,24,20,.04), 0 12px 28px rgba(27,24,20,.08);
+  --f-display: "Instrument Serif", Georgia, serif;
+  --f-body: "Inter", system-ui, -apple-system, sans-serif;
+  --f-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  --page-pad: 28px; --card-pad: 22px; --stat-n: 32px; --tap-min: 44px;
+}
+/* Density step-down at the phone/large-phone band. Rules that opt in
+   to these tokens (see .page, .card uses below) tighten automatically;
+   anything still using literal padding stays put. */
+@media (max-width:720px) {
+  :root { --page-pad: 16px; --card-pad: 16px; --stat-n: 26px; }
+}
