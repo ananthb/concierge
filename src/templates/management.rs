@@ -242,20 +242,34 @@ fn health_panel_html(report: &crate::handlers::health::HealthReport) -> String {
         .checks
         .iter()
         .map(|c| {
-            let dot = match c.status {
-                Status::Ok => r#"<span class="dot ok"></span>"#,
-                Status::Warn => r#"<span class="dot warn"></span>"#,
-                Status::Error => r#"<span class="dot error"></span>"#,
+            let (dot_class, row_class) = match c.status {
+                Status::Ok => ("ok", ""),
+                Status::Warn => ("warn", "row-warn"),
+                Status::Error => ("error", "row-error"),
+            };
+            // Doc link only for non-Ok rows we can actually point
+            // somewhere useful for — keeps OK rows quiet and doesn't
+            // imply help we don't have.
+            let docs_link = if matches!(c.status, Status::Ok) {
+                String::new()
+            } else {
+                health_doc_link_html(&c.name)
             };
             format!(
-                r#"<tr>
-  <td class="col-dot">{dot}</td>
+                r#"<tr class="{row_class}">
   <td data-label="Service" class="fw-600">{name}</td>
-  <td data-label="Status" class="muted fs-13">{detail}</td>
+  <td data-label="Status">
+    <span class="health-status">
+      <span class="dot {dot_class}"></span>
+      <span class="muted fs-13">{detail}</span>{docs_link}
+    </span>
+  </td>
 </tr>"#,
-                dot = dot,
+                row_class = row_class,
+                dot_class = dot_class,
                 name = html_escape(&c.name),
                 detail = html_escape(&c.detail),
+                docs_link = docs_link,
             )
         })
         .collect();
@@ -273,6 +287,28 @@ fn health_panel_html(report: &crate::handlers::health::HealthReport) -> String {
         chip = overall_chip,
         ts = html_escape(&report.generated_at),
         rows = rows,
+    )
+}
+
+/// Map a health-check service name to its public docs page. The names
+/// are stable strings produced by `handlers::health::run_checks`; if
+/// they change, update the match arms here too. Returns "" when there
+/// isn't a relevant page (the row then renders without a Docs link).
+fn health_doc_link_html(name: &str) -> String {
+    const BASE: &str = "https://ananthb.github.io/concierge";
+    let page = match name {
+        "Discord" | "Discord bot reachable" => "discord.html",
+        "Meta (WhatsApp + Instagram)" => "whatsapp.html",
+        "Razorpay" => "billing.html",
+        "Google OAuth" | "Encryption key" => "configuration.html",
+        "EMAIL binding" => "email-routing.html",
+        "D1 (DB binding)" | "KV (KV binding)" | "AI binding" | "REPLY_BUFFER binding" => {
+            "deployment.html"
+        }
+        _ => return String::new(),
+    };
+    format!(
+        r##" <a class="health-docs" href="{BASE}/{page}" target="_blank" rel="noopener">Docs &#x2197;</a>"##
     )
 }
 

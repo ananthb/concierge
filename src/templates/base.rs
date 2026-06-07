@@ -168,8 +168,33 @@ a.card.link-reset:focus-visible { outline:none; border-color:var(--accent); box-
 .skip-link:focus,.skip-link:focus-visible{left:8px}
 .app-main{display:contents}
 .w-full{width:100%}
-.col-dot{width:24px}
 .w-stamp{min-width:140px}
+/* Connection-status rows on /manage. The dot sits inline with the
+   status text so the indicator reads as part of the status, not as a
+   separate column. Error/warn rows get a soft tint to make problems
+   easy to spot at a glance; the Docs pill links to the public page
+   covering that integration when one exists. */
+.health-status { display:inline-flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.health-status .dot { flex:none; }
+.health-docs { color:var(--ink-2); text-decoration:none; font-size:11px;
+  font-weight:600; letter-spacing:.04em; text-transform:uppercase;
+  padding:4px 10px; border-radius:999px; background:var(--cream-2);
+  border:1px solid var(--hair); white-space:nowrap;
+  display:inline-flex; align-items:center; }
+.health-docs:hover { background:var(--paper); border-color:var(--hair-2); color:var(--ink); }
+tr.row-error { background:var(--danger-soft); }
+tr.row-error td { border-bottom-color:#E0A097; }
+tr.row-warn { background:#FCE8D5; }
+tr.row-warn td { border-bottom-color:#E9BC8D; }
+@media (max-width:720px) {
+  .table-stack tr.row-error { background:var(--danger-soft); border-color:#E0A097; }
+  .table-stack tr.row-warn { background:#FCE8D5; border-color:#E9BC8D; }
+}
+/* Mobile tap-target floor: matches the 36px rule the layout suite
+   enforces on .btn.sm so the Docs pill stays comfortably pressable. */
+@media (max-width:600px) {
+  .health-docs { min-height:36px; padding:6px 14px; font-size:12px; }
+}
 .with-divider-top{border-top:1px solid var(--hair);padding-top:16px}
 .text-warn{color:var(--warn)} .text-ok{color:var(--ok)}
 .lbl{display:block;margin-bottom:6px}
