@@ -11,6 +11,15 @@ command = "worker-build --release"
 # `database_id` for the fork. For local `wrangler deploy`, replace the ID
 # with one from `wrangler d1 create`.
 # ============================================================================
+# ============================================================================
+# Static assets served directly by Cloudflare's edge. CSS and any other
+# static files under public/ are returned without invoking the Worker.
+# The Worker still owns /, /dashboard, /api/*, etc. — wrangler only
+# short-circuits requests whose path matches a file in public/.
+# ============================================================================
+[assets]
+directory = "./public"
+
 [[d1_databases]]
 binding = "DB"
 database_name = "concierge"

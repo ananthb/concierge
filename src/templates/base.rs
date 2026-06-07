@@ -1,10 +1,29 @@
 //! Base HTML wrappers: new cream/paper design system
 
+use std::sync::OnceLock;
+
+use base64::Engine;
+use sha2::{Digest, Sha384};
+
 use crate::helpers::html_escape;
 use crate::i18n::t;
 use crate::locale::Locale;
 
-pub const CSS: &str = include_str!("base.css");
+// CSS is served as a static asset by Cloudflare (see `[assets]` in
+// wrangler.toml). The bytes are still compiled in so we can derive an
+// SRI hash without a build script; the binary doesn't ship them to the
+// browser. Replace with build.rs codegen once we have more than a few
+// modules.
+const BASE_CSS_BYTES: &[u8] = include_bytes!("../../public/css/base.css");
+
+fn base_css_sri() -> &'static str {
+    static CACHED: OnceLock<String> = OnceLock::new();
+    CACHED.get_or_init(|| {
+        let digest = Sha384::digest(BASE_CSS_BYTES);
+        let b64 = base64::engine::general_purpose::STANDARD.encode(digest);
+        format!("sha384-{b64}")
+    })
+}
 
 /// Logo inline SVG for use in templates. Always rendered next to a textual
 /// brand name, so it's marked decorative for assistive tech.
@@ -294,7 +313,7 @@ pub fn base_html_with_meta(title: &str, content: &str, meta: &PageMeta, locale: 
 <script src="https://unpkg.com/htmx-ext-sse@2.2.2/sse.js" crossorigin="anonymous"></script>
 <script src="https://unpkg.com/@alpinejs/focus@3.14.3/dist/cdn.min.js" defer></script>
 <script src="https://unpkg.com/alpinejs@3.14.3/dist/cdn.min.js" defer></script>
-<style nonce="__CSP_NONCE__">{css}</style>
+<link rel="stylesheet" href="/css/base.css" integrity="{css_sri}" nonce="__CSP_NONCE__">
 </head>
 <body data-i18n-copy-default="{copy_default}" data-i18n-copy-copied="{copy_copied}" data-i18n-htmx-error="{htmx_error}">
 <a href="#main" class="skip-link">{skip_link}</a>
@@ -359,7 +378,7 @@ document.addEventListener('htmx:configRequest', (e) => {{
         copy_copied = html_escape(&copy_copied),
         htmx_error = html_escape(&htmx_error),
         content = content,
-        css = CSS,
+        css_sri = base_css_sri(),
         footer = footer(locale),
     )
 }
