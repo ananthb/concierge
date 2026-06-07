@@ -50,6 +50,16 @@ writeFileSync(
     'GOOGLE_OAUTH_CLIENT_ID=screenshot-stub.apps.googleusercontent.com',
     'GOOGLE_OAUTH_CLIENT_SECRET=screenshot-stub',
     'META_APP_ID=000000000000000',
+    // The login page now gates the Facebook + WhatsApp buttons on the
+    // full set of secrets the corresponding callbacks actually need
+    // (see `health::FacebookLogin` / `health::WhatsAppSignup`). Stub
+    // every one so /auth/login renders all three brand buttons and the
+    // auth-login.spec assertions pass. None of these stubs work against
+    // real Meta endpoints — they only need to be non-empty.
+    'META_APP_SECRET=screenshot-stub',
+    'WHATSAPP_ACCESS_TOKEN=screenshot-stub',
+    'WHATSAPP_WABA_ID=000000000000000',
+    'WHATSAPP_SIGNUP_CONFIG_ID=000000000000000',
     `PUBLIC_BASE_URL=http://localhost:${PORT}`,
     // Dev bypass for the management panel and AI bindings — see
     // `crate::dev_bypass`. Active iff CF_ACCESS_AUD is empty (it

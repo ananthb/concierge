@@ -54,14 +54,33 @@ pub async fn handle_auth(req: Request, env: Env, path: &str, method: Method) -> 
                 .map(|v| v.to_string())
                 .unwrap_or_default();
 
+            // Gate the Facebook + WhatsApp buttons on every secret their
+            // callbacks actually need. The previous "META_APP_ID set?"
+            // check was too lax — META_APP_SECRET / WHATSAPP_ACCESS_TOKEN
+            // / WABA_ID can each be missing and the click flow then 500s
+            // (Facebook) or dead-ends in the WhatsApp signup callback.
+            // `Component::ready` reads the same Requirement list the
+            // /manage health panel reports against, so the two surfaces
+            // can never disagree.
+            use crate::handlers::health::Component;
+            let fb_enabled = crate::handlers::health::FacebookLogin.ready(&env);
+            let wa_enabled = crate::handlers::health::WhatsAppSignup.ready(&env);
+
             // CSRF nonce for the public WhatsApp Embedded Signup flow. Stored
             // in KV with a distinct prefix so it can't be confused with the
             // admin-side `wa_signup_state:` keys (which carry a tenant_id).
-            let wa_state = generate_token()?;
-            kv.put(&format!("wa_pubsignup_state:{}", wa_state), "1")?
-                .expiration_ttl(600)
-                .execute()
-                .await?;
+            // Skip the write entirely when the button is hidden — no point
+            // burning KV writes for a flow that can't run.
+            let wa_state = if wa_enabled {
+                let state = generate_token()?;
+                kv.put(&format!("wa_pubsignup_state:{}", state), "1")?
+                    .expiration_ttl(600)
+                    .execute()
+                    .await?;
+                state
+            } else {
+                String::new()
+            };
 
             let last_provider = get_cookie(&req, "last_provider");
             let dev_login_enabled = crate::dev_bypass::active(&env);
@@ -71,6 +90,8 @@ pub async fn handle_auth(req: Request, env: Env, path: &str, method: Method) -> 
                 &meta_app_id,
                 &wa_config_id,
                 &wa_state,
+                fb_enabled,
+                wa_enabled,
                 last_provider.as_deref(),
                 dev_login_enabled,
                 &locale,

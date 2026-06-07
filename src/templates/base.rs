@@ -222,9 +222,16 @@ tr.row-warn td { border-bottom-color:#E9BC8D; }
 .icon-chip{width:40px;height:40px;border-radius:10px}
 
 .muted { color:var(--muted); }
-.success { background:#E8F0DE; color:#3E5A26; padding:1rem; border-radius:var(--r-sm); margin-bottom:1rem; animation: fadeOut 3s ease 2s forwards; }
+/* Banner-style success/error toasts used by management forms and the
+   copy-to-clipboard helper. Scoped to `div.*` so they don't bleed into
+   smaller `.error` / `.success` modifiers on other elements (e.g.
+   `<span class="dot error">` on /manage's connection-status panel,
+   which only wants the dot colour from `.dot.error`, not 1rem of
+   padding). All current consumers render `<div class="error">…</div>`
+   / `<div class="success">…</div>`. */
+div.success { background:#E8F0DE; color:#3E5A26; padding:1rem; border-radius:var(--r-sm); margin-bottom:1rem; animation: fadeOut 3s ease 2s forwards; }
 @keyframes fadeOut { to { opacity: 0; height: 0; padding: 0; margin: 0; overflow: hidden; } }
-.error { background:#FCE8D5; color:#8A4B14; padding:1rem; border-radius:var(--r-sm); margin-bottom:1rem; }
+div.error { background:#FCE8D5; color:#8A4B14; padding:1rem; border-radius:var(--r-sm); margin-bottom:1rem; }
 .toggle { position:relative; display:inline-block; width:34px; height:20px; }
 .toggle input { opacity:0; width:0; height:0; }
 .toggle span { position:absolute; inset:0; cursor:pointer; background:var(--hair-2); border-radius:999px; transition:background .2s ease; }

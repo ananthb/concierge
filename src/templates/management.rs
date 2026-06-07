@@ -249,11 +249,15 @@ fn health_panel_html(report: &crate::handlers::health::HealthReport) -> String {
             };
             // Doc link only for non-Ok rows we can actually point
             // somewhere useful for — keeps OK rows quiet and doesn't
-            // imply help we don't have.
-            let docs_link = if matches!(c.status, Status::Ok) {
-                String::new()
-            } else {
-                health_doc_link_html(&c.name)
+            // imply help we don't have. Each component declares its
+            // own docs URL on the Component trait, so this row doesn't
+            // need to know about specific service names.
+            let docs_link = match (&c.status, &c.docs_url) {
+                (Status::Ok, _) | (_, None) => String::new(),
+                (_, Some(url)) => format!(
+                    r##" <a class="health-docs" href="{url}" target="_blank" rel="noopener">Docs &#x2197;</a>"##,
+                    url = html_escape(url),
+                ),
             };
             format!(
                 r#"<tr class="{row_class}">
@@ -287,28 +291,6 @@ fn health_panel_html(report: &crate::handlers::health::HealthReport) -> String {
         chip = overall_chip,
         ts = html_escape(&report.generated_at),
         rows = rows,
-    )
-}
-
-/// Map a health-check service name to its public docs page. The names
-/// are stable strings produced by `handlers::health::run_checks`; if
-/// they change, update the match arms here too. Returns "" when there
-/// isn't a relevant page (the row then renders without a Docs link).
-fn health_doc_link_html(name: &str) -> String {
-    const BASE: &str = "https://ananthb.github.io/concierge";
-    let page = match name {
-        "Discord" | "Discord bot reachable" => "discord.html",
-        "Meta (WhatsApp + Instagram)" => "whatsapp.html",
-        "Razorpay" => "billing.html",
-        "Google OAuth" | "Encryption key" => "configuration.html",
-        "EMAIL binding" => "email-routing.html",
-        "D1 (DB binding)" | "KV (KV binding)" | "AI binding" | "REPLY_BUFFER binding" => {
-            "deployment.html"
-        }
-        _ => return String::new(),
-    };
-    format!(
-        r##" <a class="health-docs" href="{BASE}/{page}" target="_blank" rel="noopener">Docs &#x2197;</a>"##
     )
 }
 

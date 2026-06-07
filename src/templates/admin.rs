@@ -14,6 +14,8 @@ pub fn auth_login_html(
     meta_app_id: &str,
     wa_config_id: &str,
     wa_state: &str,
+    fb_enabled: bool,
+    wa_enabled: bool,
     last_provider: Option<&str>,
     dev_login_enabled: bool,
     locale: &Locale,
@@ -48,20 +50,26 @@ pub fn auth_login_html(
         r#"<a href="{google_url}" class="btn brand-google lg w-full jc-center">{google_svg} {google_label}</a>"#,
         google_url = html_escape(&google_url),
     );
-    let fb_btn = format!(
-        r#"<a href="{fb_url}" class="btn brand-facebook lg w-full jc-center">{fb_svg} {fb_label}</a>"#,
-        fb_url = html_escape(&fb_url),
-    );
-    // WhatsApp button is JS-driven (Meta Embedded Signup). If the page lacks
-    // the Meta app id, omit the button rather than render a dud. The click
-    // handler is wired via addEventListener in the module script below.
-    // No inline onclick, so the module keeps its handler closures private.
-    let wa_btn = if meta_app_id.is_empty() {
-        String::new()
+    // Facebook + WhatsApp buttons are gated on the operator having every
+    // secret the corresponding callback needs (see
+    // `health::FacebookLogin` / `health::WhatsAppSignup` requirements).
+    // The handler hands us pre-computed bools so the same readiness
+    // logic that powers /manage's health table also decides what shows
+    // up here — visitors never see a button that 500s on click.
+    let fb_btn = if fb_enabled {
+        format!(
+            r#"<a href="{fb_url}" class="btn brand-facebook lg w-full jc-center">{fb_svg} {fb_label}</a>"#,
+            fb_url = html_escape(&fb_url),
+        )
     } else {
+        String::new()
+    };
+    let wa_btn = if wa_enabled {
         format!(
             r#"<button type="button" id="wa-signup-btn" class="btn brand-whatsapp lg w-full jc-center">{wa_svg} {wa_label}</button>"#,
         )
+    } else {
+        String::new()
     };
 
     // Order buttons so the user's last-used provider is on top, but every
@@ -74,7 +82,10 @@ pub fn auth_login_html(
 
     let wa_error = t(locale, "admin-login-whatsapp-error");
     let wa_connecting = t(locale, "admin-login-whatsapp-connecting");
-    let wa_script = if meta_app_id.is_empty() {
+    // Mirror the button gate: don't inject the Meta SDK or our handler
+    // if the WhatsApp signup flow isn't fully configured. Avoids loading
+    // a third-party script for a flow the visitor can't even start.
+    let wa_script = if !wa_enabled {
         String::new()
     } else {
         format!(
