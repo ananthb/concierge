@@ -1,0 +1,52 @@
+name: Nix flake update
+
+# Refresh flake.lock weekly so the devShell + worker-build toolchain
+# don't drift far behind nixpkgs. Matches dependabot's Monday 06:00
+# Asia/Kolkata cadence (00:30 UTC).
+
+on:
+  schedule:
+    - cron: '30 0 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: DeterminateSystems/nix-installer-action@main
+        with:
+          extra-conf: |
+            extra-substituters = https://cache.garnix.io
+            extra-trusted-public-keys = cache.garnix.io:CTFPyKSLcx5RMJKfLo5EEPUObbA78b0YQ2DTCJXqr9g=
+
+      - name: Update flake inputs
+        run: nix flake update --commit-lock-file
+
+      - name: Verify devShell still evaluates
+        run: nix develop --command true
+
+      - uses: peter-evans/create-pull-request@v7
+        with:
+          # Reuse the commit `nix flake update` just produced; the
+          # action only opens a PR, it doesn't author a fresh commit.
+          branch: chore/flake-update
+          delete-branch: true
+          title: "chore(deps): nix flake update"
+          body: |
+            Weekly `nix flake update` run. Inputs refreshed; `nix develop` still evaluates on the runner.
+
+            See `flake.lock` diff for what moved.
+          labels: |
+            dependencies
+            nix

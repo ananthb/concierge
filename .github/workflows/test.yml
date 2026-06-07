@@ -4,7 +4,22 @@ on:
   push:
     branches: [main]
   pull_request:
+    paths-ignore:
+      - 'doc/**'
+      - '**/*.md'
+      - 'README.md'
+      - '.github/dependabot.yml'
   workflow_dispatch:
+
+# Least-privilege default. The playwright job only reads the repo.
+permissions:
+  contents: read
+
+# Cancel in-flight runs on the same ref when a newer commit arrives;
+# never cancel main (push) runs.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   playwright:

@@ -1,0 +1,73 @@
+# Dependabot config for concierge.
+# Nix flake inputs aren't covered (no dependabot ecosystem for nix);
+# .github/workflows/flake-update.yml runs `nix flake update` weekly to
+# refresh those on the same cadence as the bumps below.
+
+version: 2
+updates:
+  # Rust crate dependencies.
+  - package-ecosystem: cargo
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Asia/Kolkata
+    open-pull-requests-limit: 10
+    commit-message:
+      prefix: "chore(deps)"
+      include: scope
+    labels:
+      - dependencies
+      - rust
+    groups:
+      # Patch + minor bumps land in one weekly PR so review fatigue stays
+      # low. Major updates still get their own PRs.
+      cargo-minor-patch:
+        update-types:
+          - minor
+          - patch
+
+  # Node tooling — Playwright + Wrangler. Playwright bumps catch browser
+  # engine churn; Wrangler bumps keep the [assets] binding and worker
+  # runtime in lockstep with what Cloudflare deploys.
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Asia/Kolkata
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(deps)"
+      include: scope
+    labels:
+      - dependencies
+      - javascript
+    groups:
+      npm-minor-patch:
+        update-types:
+          - minor
+          - patch
+
+  # Pinned action SHAs / versions in workflow files.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Asia/Kolkata
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(ci)"
+      include: scope
+    labels:
+      - dependencies
+      - github-actions
+    groups:
+      actions-minor-patch:
+        update-types:
+          - minor
+          - patch

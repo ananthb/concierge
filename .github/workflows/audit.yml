@@ -1,0 +1,64 @@
+name: Security audit
+
+# Catches RustSec advisories against Cargo.lock and npm advisories
+# against package-lock.json. Dependabot opens PRs for available bumps;
+# this complements that by flagging vulnerabilities that don't have a
+# fix yet (yanked crates, embargoed CVEs).
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'Cargo.lock'
+      - 'package-lock.json'
+      - '.github/workflows/audit.yml'
+  pull_request:
+    paths:
+      - 'Cargo.lock'
+      - 'package-lock.json'
+      - '.github/workflows/audit.yml'
+  schedule:
+    # Tuesday 06:00 Asia/Kolkata = 00:30 UTC. One day after dependabot
+    # so any auto-bumps that close advisories don't trigger noise here.
+    - cron: '30 0 * * 2'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  cargo:
+    name: cargo audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      # Lets rustsec/audit-check post a sticky-comment summary on PRs
+      # and turn advisory hits into a check annotation on push.
+      issues: write
+      checks: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: rustsec/audit-check@v2.0.0
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+  npm:
+    name: npm audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      # Concierge has only devDependencies in package.json, but
+      # Playwright and Wrangler pull a deep tree, so cap audit
+      # severity to keep low-level transitive noise out of CI.
+      - run: npm audit --audit-level=moderate
