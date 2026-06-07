@@ -367,7 +367,7 @@ pub fn welcome_html(
             <option :value="personaSlug" x-text="personasLoaded ? '(no personas available)' : 'Loading…'"></option>
           </template>
           <template x-for="p in personas" :key="p.slug">
-            <option :value="p.slug" x-text="p.label"></option>
+            <option :value="p.slug" x-text="p.business && p.business.name ? p.business.name : p.label"></option>
           </template>
         </select>
       </label>
