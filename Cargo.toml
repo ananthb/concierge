@@ -39,6 +39,10 @@ fluent-syntax = "0.11"
 # lakh grouping). Pure-Rust wasm-clean dep.
 rusty-money = "0.4"
 
+[build-dependencies]
+sha2 = "0.10"
+base64 = "0.22"
+
 [profile.release]
 opt-level = "s"
 lto = true

@@ -1,0 +1,98 @@
+
+/* The two external nav buttons (Docs ↑ / Open source ↑) get hidden well
+   before the 600px mobile breakpoint: with all five buttons on one row,
+   the header crams to two lines anywhere in the 600–720px band, which
+   reads as a broken header. They're duplicated in the footer, so the
+   information isn't lost. */
+@media(max-width:760px){
+  .site-header .nav-ext { display:none; }
+}
+
+/* Admin shell at large-phone / small-tablet widths. The public
+   site-header is roomier (.site-header has more breathing room and
+   different content), so its mobile reflow stays at <=600. The
+   /manage and /dashboard top bars cram an actor email + signout link
+   onto the same row as nav, so they need the wrap-to-multiline
+   reflow earlier — at the consolidated 720 breakpoint. The narrower
+   <=600 rules below still win where both apply. */
+@media(max-width:720px){
+  .app-top { padding:12px 16px; gap:12px; flex-wrap:wrap; }
+  .app-actor { flex-wrap:wrap; }
+  .app-actor .actor-email { max-width:none; flex:1 1 auto; min-width:0; }
+}
+
+/* Mobile */
+@media(max-width:600px){
+  .site-header { padding:14px 16px; gap:12px; flex-wrap:wrap; }
+  .site-header .brand { gap:8px; font-size:18px; }
+  .site-header .brand .serif { font-size:20px; }
+  .site-header .site-nav { gap:6px; flex-wrap:wrap; justify-content:flex-end; }
+  .site-header .site-nav .btn.sm { padding:5px 10px; font-size:12px; }
+  .site-footer { padding:18px 16px; line-height:1.9; }
+  .page { padding:24px 16px 40px; }
+  .display { font-size:clamp(32px,8vw,44px); margin:0 0 12px; }
+  .display br { display:none; }
+  .display-md { font-size:clamp(26px,6vw,34px); }
+  .lead { font-size:15px; margin:0 0 16px; }
+  .welcome-form { flex-direction:column; }
+  .welcome-form .input { max-width:100%; }
+  .welcome-form .btn { width:100%; justify-content:center; }
+  .fineprint { display:flex; flex-direction:column; gap:4px; }
+  .top { padding:12px 16px; gap:12px; }
+  .top .rail-wrap { visibility:hidden; height:0; overflow:hidden; }
+  .top-right { gap:8px; }
+  .top-right .mono { display:none; }
+  .app-top { padding:12px 16px; gap:12px; flex-wrap:wrap; }
+  /* Horizontal scroll for the dashboard/manage tab strip: scroll-snap so
+     swipes land on a tab edge, and a soft right-side fade tells the
+     reader more tabs sit off-screen. The mask falls back gracefully —
+     browsers without mask-image just lose the gradient. */
+  .app-nav { gap:10px; overflow-x:auto; -webkit-overflow-scrolling:touch;
+    flex-wrap:nowrap; white-space:nowrap;
+    scroll-snap-type:x proximity; scrollbar-width:none;
+    -webkit-mask-image:linear-gradient(to right, #000 calc(100% - 24px), transparent);
+    mask-image:linear-gradient(to right, #000 calc(100% - 24px), transparent); }
+  .app-nav::-webkit-scrollbar { display:none; }
+  .app-nav a { font-size:13px; flex-shrink:0; scroll-snap-align:start;
+    padding:10px 4px; border-bottom-width:3px; }
+  .channels-grid { grid-template-columns:1fr; }
+  .admin-grid { grid-template-columns:1fr; }
+  .admin-card { min-height:auto; }
+  .between { flex-wrap:wrap; gap:12px; }
+  .dash-grid { padding:16px; }
+  .banner { padding:14px 16px; flex-direction:column; gap:10px; text-align:center; }
+  .terminal { padding:14px; font-size:12px; min-height:auto; }
+  .term-row { grid-template-columns:1fr; gap:2px; }
+  /* Tap-target floors for fingers: dense secondary controls clear 32–36px
+     on mobile so a pinky doesn't miss them. Site-header .btn.sm keeps its
+     compact padding above (line tightened for nav-density) but inherits
+     this min-height; the header still clears under the 80px ceiling
+     layout.spec.ts asserts. */
+  .btn.sm { min-height:36px; }
+  .row-expand { min-width:32px; min-height:32px; padding:6px 8px; }
+  .acct-pop a { padding:12px 14px; }
+  .app-actor a.signout { padding:8px 14px; font-size:13px; }
+  /* Approvals queue: stack the action buttons full-width and push each
+     to the 48px tap-floor so a thumb can't miss Approve/Reject. The
+     metadata `.row` above the actions is a separate node (no
+     `.approval-actions`) so it keeps wrapping inline. */
+  .approval-actions { flex-direction:column; align-items:stretch; }
+  .approval-actions > .btn { width:100%; min-height:48px;
+    justify-content:center; }
+}
+@media(max-width:480px){
+  .rail-labels span:not(.active):not(.done) { display:none; }
+}
+/* iPhone SE / 320–360px sliver: the brand + 3 buttons still don't fit
+   one row at default sizing, so squeeze the whole top bar harder. */
+@media(max-width:360px){
+  .site-header { gap:8px; padding:12px 12px; }
+  .site-header .brand .serif { font-size:18px; }
+  .site-header .site-nav { gap:4px; }
+  .site-header .site-nav .btn.sm { padding:4px 8px; font-size:11px; }
+}
+
+/* Scrollbars */
+::-webkit-scrollbar { width:10px; height:10px; }
+::-webkit-scrollbar-thumb { background:var(--hair-2); border-radius:999px; }
+::-webkit-scrollbar-track { background:transparent; }

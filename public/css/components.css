@@ -1,158 +1,3 @@
-:root {
-  --cream: #F5EFE4; --cream-2: #EFE7D6; --paper: #FBF7EE;
-  --ink: #1B1814; --ink-2: #3A332B; --muted: #5E5246;
-  --hair: #D9CEB8; --hair-2: #C7BA9E;
-  --accent: #E86A2C; --accent-2: #C8541C; --accent-soft: #F9D9C2;
-  --sage: #6E8A5C; --plum: #6B3E5C; --sky: #3A6B8A; --butter: #E8C66A;
-  --ok: #3E7F4A; --warn: #C46B1A; --danger: #B23A2A; --danger-2: #8E2C1F; --danger-soft: #F6DDD5;
-  --r-sm: 8px; --r-md: 12px; --r-lg: 20px; --r-xl: 28px;
-  --shadow-1: 0 1px 0 rgba(27,24,20,.04), 0 2px 6px rgba(27,24,20,.04);
-  --shadow-2: 0 2px 0 rgba(27,24,20,.04), 0 12px 28px rgba(27,24,20,.08);
-  --f-display: "Instrument Serif", Georgia, serif;
-  --f-body: "Inter", system-ui, -apple-system, sans-serif;
-  --f-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
-  --page-pad: 28px; --card-pad: 22px; --stat-n: 32px; --tap-min: 44px;
-}
-/* Density step-down at the phone/large-phone band. Rules that opt in
-   to these tokens (see .page, .card uses below) tighten automatically;
-   anything still using literal padding stays put. */
-@media (max-width:720px) {
-  :root { --page-pad: 16px; --card-pad: 16px; --stat-n: 26px; }
-}
-* { box-sizing: border-box; }
-html, body { margin:0; padding:0; background:var(--cream); color:var(--ink);
-  font-family:var(--f-body); font-size:15px; line-height:1.5;
-  -webkit-font-smoothing:antialiased; }
-body::before { content:""; position:fixed; inset:0; pointer-events:none; z-index:1; opacity:.35;
-  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.1  0 0 0 0 0.09  0 0 0 0 0.07  0 0 0 .05 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
-  mix-blend-mode:multiply; }
-.app-root { position:relative; z-index:2; min-height:100vh; display:flex; flex-direction:column; }
-.app-root > :last-child { margin-top:auto; }
-.site-header, .site-footer { flex:none; padding:18px 28px; border-color:var(--hair); }
-.site-footer { border-top:1px solid var(--hair); text-align:center; color:var(--muted); font-size:13px; }
-.mono { font-family:var(--f-mono); letter-spacing:.02em; }
-.serif { font-family:var(--f-display); }
-.eyebrow { font-family:var(--f-mono); font-size:11px; letter-spacing:.18em; text-transform:uppercase; color:var(--muted); }
-a { color:var(--accent); }
-.btn { display:inline-flex; align-items:center; gap:8px; padding:10px 16px; border-radius:999px;
-  border:1px solid var(--ink); background:var(--ink); color:var(--cream);
-  font-family:var(--f-body); font-weight:500; font-size:14px; cursor:pointer; text-decoration:none;
-  transition:transform .15s ease, background .15s ease, color .15s ease, border-color .15s ease; }
-.btn:hover { transform:translateY(-1px); }
-.btn:active { transform:translateY(0); }
-.btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.btn.primary { background:var(--accent); color:#fff; border-color:var(--accent); }
-.btn.primary:hover { background:var(--accent-2); border-color:var(--accent-2); }
-.btn.ghost { background:transparent; color:var(--ink); border-color:var(--hair-2); }
-.btn.ghost:hover { background:rgba(27,24,20,.05); }
-/* Public-nav "you are here" state on a ghost button. Filled cream with
-   an ink border distinguishes the active page from inactive ghosts
-   without competing with the accent-colored Sign-in CTA. */
-.btn.ghost.is-active { background:var(--cream-2); border-color:var(--ink-2); color:var(--ink); }
-.btn.ghost.is-active:hover { background:var(--cream-2); }
-/* Third-party auth buttons. Ghost-styled on the cream page so they
-   don't read as three competing primary CTAs; hover fills with the
-   brand color for unambiguous identification on tap/hover. SVG icons
-   use `currentColor` (set in admin.rs) so they flip with the text. */
-.btn.brand-google { background:transparent; color:var(--ink); border-color:var(--hair-2); }
-.btn.brand-google:hover { background:#fff; border-color:#dadce0; }
-.btn.brand-facebook { background:transparent; color:#1877F2; border-color:#1877F2; }
-.btn.brand-facebook:hover { background:#1877F2; color:#fff; border-color:#1877F2; }
-.btn.brand-whatsapp { background:transparent; color:#128C7E; border-color:#128C7E; }
-.btn.brand-whatsapp:hover { background:#25D366; color:#fff; border-color:#25D366; }
-.btn.sm { padding:6px 12px; font-size:13px; }
-.btn.lg { padding:14px 22px; font-size:15px; }
-.btn.icon { padding:8px; }
-.btn:disabled { opacity:.45; cursor:not-allowed; transform:none; }
-.btn.danger { background:transparent; color:var(--danger); border-color:var(--danger); }
-.btn.danger:hover { background:var(--danger-soft); }
-.btn.danger.solid { background:var(--danger); color:#fff; border-color:var(--danger); }
-.btn.danger.solid:hover { background:var(--danger-2); border-color:var(--danger-2); }
-.card { background:var(--paper); border:1px solid var(--hair); border-radius:var(--r-lg); box-shadow:var(--shadow-1); }
-/* Card-as-list-container: zero padding so child rows extend to the
-   edges, with `overflow:hidden` so the rounded corners clip the
-   first/last rows. Replaces the repeated `card p-0 style="overflow:hidden"`
-   pattern. */
-.card.card-list { padding:0; overflow:hidden; }
-.input, .textarea, .select { width:100%; padding:10px 12px; background:#fff;
-  border:1px solid var(--hair-2); border-radius:var(--r-sm);
-  font-family:var(--f-body); font-size:14px; color:var(--ink); outline:none;
-  transition:border-color .15s ease, box-shadow .15s ease; }
-.input:focus, .textarea:focus, .select:focus { border-color:var(--accent); box-shadow:0 0 0 4px var(--accent-soft); }
-.textarea { resize:vertical; min-height:90px; font-family:var(--f-mono); }
-/* Strip the native browser dropdown caret and replace it with a
-   hand-drawn SVG chevron so every <select class="select"> across
-   management + admin shows the same caret in the same spot. The
-   `:not([multiple])` carve-out leaves multi-line list pickers (e.g.
-   the Discord channel selector) on their default rendering. */
-.select:not([multiple]) {
-  appearance:none; -webkit-appearance:none; -moz-appearance:none;
-  padding-right:36px;
-  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8' fill='none'><path d='M1 1.5L6 6.5L11 1.5' stroke='%231B1814' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/></svg>");
-  background-repeat:no-repeat;
-  background-position:right 12px center;
-}
-.chip { display:inline-flex; align-items:center; gap:6px; padding:4px 10px;
-  border-radius:999px; background:var(--cream-2); border:1px solid var(--hair); font-size:12px; color:var(--ink-2); }
-.chip.ok { background:#E8F0DE; border-color:#B5C99B; color:#3E5A26; }
-.chip.warn { background:#FCE8D5; border-color:#E9BC8D; color:#8A4B14; }
-.chip.error { background:var(--danger-soft); border-color:#E0A097; color:var(--danger-2); }
-.dot { width:8px; height:8px; border-radius:50%; background:var(--muted); display:inline-block; }
-.dot.ok { background:var(--ok); box-shadow:0 0 0 3px rgba(62,127,74,.18); }
-.dot.warn { background:var(--warn); box-shadow:0 0 0 3px rgba(196,107,26,.18); }
-.dot.error { background:var(--danger); box-shadow:0 0 0 3px rgba(178,58,42,.18); }
-.hr { height:1px; background:var(--hair); border:0; margin:16px 0; }
-.row { display:flex; align-items:center; }
-.between { display:flex; align-items:center; justify-content:space-between; }
-.stack { display:flex; flex-direction:column; }
-/* Inline-style replacement: a wrapping flex row whose children flex to
-   ~220px wide before wrapping, then take a full row each on phones.
-   Replaces ad-hoc `style="min-width:200px"` patterns in management
-   forms. Children opt out of full-width wrapping with `.form-row-fit`. */
-.form-row { display:flex; flex-wrap:wrap; gap:12px; align-items:flex-end; }
-.form-row > * { flex:1 1 220px; min-width:0; }
-.form-row > .form-row-fit { flex:0 0 auto; }
-/* Tight variant: children take their natural width on desktop instead
-   of stretching to fill the row. Use for rows of small number-pickers
-   that look stranded when expanded to ~33% column width each. */
-.form-row.form-row-tight > * { flex:0 1 auto; max-width:260px; }
-@media (max-width:720px) {
-  .form-row > * { flex:1 1 100%; }
-  .form-row.form-row-tight > * { flex:1 1 100%; max-width:none; }
-}
-.gap-4{gap:4px} .gap-6{gap:6px} .gap-8{gap:8px} .gap-12{gap:12px}
-.gap-16{gap:16px} .gap-20{gap:20px} .gap-24{gap:24px}
-
-/* Utility atoms: used instead of inline style attributes. */
-.p-0{padding:0}
-.p-12{padding:12px} .p-14{padding:14px} .p-16{padding:16px} .p-18{padding:18px}
-.p-20{padding:20px} .p-22{padding:22px} .p-24{padding:24px} .p-28{padding:28px}
-.page-pad{padding:24px var(--page-pad)}
-.mt-4{margin-top:4px} .mt-6{margin-top:6px} .mt-8{margin-top:8px}
-.mt-12{margin-top:12px} .mt-14{margin-top:14px} .mt-16{margin-top:16px}
-.mt-22{margin-top:22px} .mt-24{margin-top:24px} .mt-32{margin-top:32px} .mt-36{margin-top:36px}
-.mb-4{margin-bottom:4px} .mb-6{margin-bottom:6px} .mb-8{margin-bottom:8px}
-.mb-12{margin-bottom:12px} .mb-14{margin-bottom:14px} .mb-16{margin-bottom:16px}
-.mb-24{margin-bottom:24px} .mb-32{margin-bottom:32px}
-.m-0{margin:0}
-.ml-auto{margin-left:auto}
-.fs-10{font-size:10px} .fs-11{font-size:11px} .fs-12{font-size:12px}
-.fs-13{font-size:13px} .fs-14{font-size:14px}
-.fw-600{font-weight:600}
-.ta-center{text-align:center} .ta-right{text-align:right}
-.flex-1{flex:1}
-.wrap{flex-wrap:wrap}
-.jc-center{justify-content:center} .jc-end{justify-content:flex-end}
-.ai-end{align-items:flex-end} .ai-start{align-items:flex-start} .ai-baseline{align-items:baseline}
-.link-reset{text-decoration:none;color:inherit}
-/* Cards used as links: hint they're clickable on hover/focus. */
-a.card.link-reset { display:block; transition:border-color .12s ease, box-shadow .12s ease, transform .12s ease; }
-a.card.link-reset:hover { border-color:var(--accent); box-shadow:var(--shadow-2); transform:translateY(-1px); }
-a.card.link-reset:focus-visible { outline:none; border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft); }
-[x-cloak]{display:none!important}
-.inline{display:inline} .block{display:block} .hidden{display:none}
-.sr-only{position:absolute!important;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
-.skip-link{position:absolute;left:-9999px;top:8px;z-index:9999;padding:8px 14px;background:var(--ink);color:var(--cream);border-radius:8px;text-decoration:none;font-size:13px}
 /* Auth/login shell: a tight centered column. Generous top margin on
    desktop, tightened on mobile so the page doesn't float halfway
    down a phone viewport with all the actual controls cut off. */
@@ -164,9 +9,6 @@ a.card.link-reset:focus-visible { outline:none; border-color:var(--accent); box-
 .dev-login-row{align-items:center}
 .dev-login-row .input{min-width:180px}
 .skip-link:focus,.skip-link:focus-visible{left:8px}
-.app-main{display:contents}
-.w-full{width:100%}
-.w-stamp{min-width:140px}
 /* Connection-status rows on /manage. The dot sits inline with the
    status text so the indicator reads as part of the status, not as a
    separate column. Error/warn rows get a soft tint to make problems
@@ -193,20 +35,6 @@ tr.row-warn td { border-bottom-color:#E9BC8D; }
 @media (max-width:600px) {
   .health-docs { min-height:36px; padding:6px 14px; font-size:12px; }
 }
-.with-divider-top{border-top:1px solid var(--hair);padding-top:16px}
-.text-warn{color:var(--warn)} .text-ok{color:var(--ok)}
-.lbl{display:block;margin-bottom:6px}
-.card-warn{border-color:var(--warn)}
-.card-ok{border-color:var(--ok);background:linear-gradient(135deg,var(--paper),#E8F0DE)}
-.card-accent{border-color:var(--accent);background:linear-gradient(135deg,var(--paper),var(--accent-soft))}
-.card-soft{background:linear-gradient(135deg,var(--paper),#FFF4E6)}
-.stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:16px}
-/* 2-column form grid that collapses to one column at the phone /
-   large-phone breakpoint. Replaces ad-hoc inline `grid-template-
-   columns:1fr 1fr` patterns in form templates. Pair with `.gap-12`
-   or `.gap-16` for the row gap. */
-.form-grid-2{display:grid;grid-template-columns:1fr 1fr}
-@media(max-width:720px){.form-grid-2{grid-template-columns:1fr}}
 /* Stacked-list row used by /manage/rules and /dashboard/approvals:
    reorder/identity column, expandable label column, actions column.
    Stacks vertically on phones so action buttons don't get crammed
@@ -217,9 +45,6 @@ tr.row-warn td { border-bottom-color:#E9BC8D; }
   .rule-row{grid-template-columns:1fr;gap:8px;padding:12px 14px}
   .approval-row{padding:14px}
 }
-.icon-chip{width:40px;height:40px;border-radius:10px}
-
-.muted { color:var(--muted); }
 /* Banner-style success/error toasts used by management forms and the
    copy-to-clipboard helper. Scoped to `div.*` so they don't bleed into
    smaller `.error` / `.success` modifiers on other elements (e.g.
@@ -230,54 +55,6 @@ tr.row-warn td { border-bottom-color:#E9BC8D; }
 div.success { background:#E8F0DE; color:#3E5A26; padding:1rem; border-radius:var(--r-sm); margin-bottom:1rem; animation: fadeOut 3s ease 2s forwards; }
 @keyframes fadeOut { to { opacity: 0; height: 0; padding: 0; margin: 0; overflow: hidden; } }
 div.error { background:#FCE8D5; color:#8A4B14; padding:1rem; border-radius:var(--r-sm); margin-bottom:1rem; }
-.toggle { position:relative; display:inline-block; width:34px; height:20px; }
-.toggle input { opacity:0; width:0; height:0; }
-.toggle span { position:absolute; inset:0; cursor:pointer; background:var(--hair-2); border-radius:999px; transition:background .2s ease; }
-.toggle span::before { content:''; position:absolute; left:2px; top:2px; width:16px; height:16px;
-  background:#fff; border-radius:50%; transition:transform .2s ease; }
-.toggle input:checked + span { background:var(--sage); }
-.toggle input:checked + span::before { transform:translateX(14px); }
-.indicator { display:none; width:10px; height:10px; border-radius:50%; background:currentColor; margin-left:6px; animation:pulse 1s infinite; }
-.htmx-request .indicator, .indicator.htmx-request { display:inline-block; }
-@keyframes fadeUp { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:none} }
-@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.35} }
-.fade-up { animation:fadeUp .4s ease both; }
-
-/* Form elements */
-.form-group { margin-bottom: 1.25rem; }
-.form-group label {
-  display: block;
-  margin-bottom: 0.35rem;
-  font-weight: 500;
-  font-size: 0.9rem;
-}
-.form-group input,
-.form-group select,
-.form-group textarea {
-  width: 100%;
-  padding: 0.6rem 0.75rem;
-  min-height: 44px;
-  border: 1px solid var(--hair-2);
-  border-radius: var(--r-sm);
-  font-size: 1rem;
-  font-family: inherit;
-  background: #fff;
-  color: var(--ink);
-  transition: border-color 0.15s, box-shadow 0.15s;
-}
-.form-group input:focus-visible,
-.form-group select:focus-visible,
-.form-group textarea:focus-visible {
-  outline: none;
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-soft);
-}
-.form-group input[type="color"] {
-  padding: 0.25rem;
-  height: 44px;
-  cursor: pointer;
-}
-
 /* Tables */
 .table-wrap {
   overflow-x: auto;
@@ -334,26 +111,6 @@ code {
   font-family: var(--f-mono);
   font-size: 0.85em;
 }
-
-/* App shell */
-.site-header { display:flex; align-items:center; gap:28px; padding:18px 28px;
-  border-bottom:1px solid var(--hair); background:var(--paper); }
-.app { min-height:100vh; }
-.app-top { display:flex; align-items:center; gap:28px; padding:16px 28px;
-  border-bottom:1px solid var(--hair); background:rgba(251,247,238,0.92); backdrop-filter:blur(10px);
-  position:sticky; top:0; z-index:20; flex-wrap:wrap; row-gap:8px; }
-.app-nav { display:flex; gap:18px; flex:1; }
-.app-nav a { text-decoration:none; color:var(--muted); font-size:14px; padding:8px 2px;
-  border-bottom:2px solid transparent; }
-.app-nav a.active { color:var(--ink); border-color:var(--accent); }
-.app-actor { display:flex; align-items:center; gap:10px; font-size:13px; color:var(--muted); }
-.app-actor .actor-email { font-family:var(--f-mono); color:var(--ink-2); font-size:12px;
-  max-width:220px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.app-actor a.signout { color:var(--muted); text-decoration:none; font-size:12px;
-  padding:4px 10px; border:1px solid var(--hair-2); border-radius:999px;
-  transition:color .15s ease, border-color .15s ease; }
-.app-actor a.signout:hover { color:var(--ink); border-color:var(--ink-2); }
-
 /* Management page header: eyebrow + title + optional back link + right slot */
 .manage-header { margin-bottom:20px; }
 .manage-header .back { display:inline-block; font-size:13px; color:var(--muted);
@@ -370,23 +127,6 @@ code {
 .empty-state .empty-headline { color:var(--ink-2); font-size:15px; font-weight:500; margin:0 0 4px; }
 .empty-state .empty-sub { color:var(--muted); font-size:13px; margin:0 auto; max-width:420px; }
 .empty-state .empty-cta { margin-top:14px; }
-
-/* Input width utilities — replaces inline style="max-width:160px" etc. */
-.w-input-xs { max-width:120px; }
-.w-input-sm { max-width:160px; }
-.w-input-md { max-width:200px; }
-.w-input-lg { max-width:260px; }
-
-/* Inputs that fail HTML5 validity (min, max, step, required, …) get
-   a danger border so the operator sees the value is unacceptable
-   before they tab away. Scoped to .input.cell-save so we don't tag
-   every form field the moment it's empty — :invalid would otherwise
-   light up cells the user just hasn't filled in yet. */
-.input.cell-save:invalid {
-  border-color:var(--danger);
-  box-shadow:0 0 0 4px var(--danger-soft);
-}
-
 /* Global toast region — fixed top-right, aria-live=polite, replaces
    per-form #toast / #grant-replies-toast / #pricing-toast etc. */
 .toast-region { position:fixed; top:80px; right:24px; z-index:50;
@@ -397,7 +137,6 @@ code {
 @media(max-width:600px) {
   .toast-region { top:auto; bottom:16px; left:16px; right:16px; max-width:none; }
 }
-
 /* Segmented tab control. Used to flip between modes inside a single
    card (e.g. tenant grant Replies/Addresses, billing schedule
    frequency/day). The "active" segment gets paper background; the
@@ -423,42 +162,6 @@ code {
   color:var(--accent-2); margin:0 0 4px; }
 .form-section .section-help { color:var(--muted); font-size:13px;
   margin:0 0 14px; max-width:560px; line-height:1.5; }
-
-/* Chip-input — Alpine component used to edit list-of-strings fields
-   (catch-phrases, off-topics, handoff conditions). The visible UI is a
-   row of removable chips plus an inline text input; a hidden textarea
-   carries the newline-joined value so the existing form handler keeps
-   working. */
-.chip-input { background:#fff; border:1px solid var(--hair-2);
-  border-radius:var(--r-sm); padding:8px; transition:border-color .15s ease, box-shadow .15s ease; }
-.chip-input:focus-within { border-color:var(--accent);
-  box-shadow:0 0 0 4px var(--accent-soft); }
-.chip-input .chips { display:flex; flex-wrap:wrap; gap:6px; }
-.chip-input .chips:not(:empty) { margin-bottom:6px; }
-.chip-input .chips .pill { display:inline-flex; align-items:center; gap:6px;
-  padding:4px 6px 4px 10px; background:var(--cream-2);
-  border:1px solid var(--hair); border-radius:999px;
-  font-size:13px; color:var(--ink-2); }
-.chip-input .chips .pill button { background:none; border:none;
-  color:var(--muted); cursor:pointer; padding:0 4px;
-  font-size:14px; line-height:1; border-radius:50%; }
-.chip-input .chips .pill button:hover { background:rgba(27,24,20,.08); color:var(--ink); }
-.chip-input .draft { width:100%; border:none; outline:none;
-  padding:6px 4px; font-family:var(--f-body); font-size:14px;
-  color:var(--ink); background:transparent; }
-.chip-input .draft::placeholder { color:var(--muted); }
-.chip-input .hint { color:var(--muted); font-size:11px;
-  margin-top:6px; padding-left:4px; }
-
-/* JSON-validation feedback for textareas. The error chip lives below
-   the textarea and shows the parser message inline. */
-.json-field { position:relative; }
-.json-field .json-error { color:var(--danger-2); font-size:12px;
-  margin-top:6px; font-family:var(--f-mono); white-space:pre-wrap;
-  word-break:break-word; }
-.json-field textarea.invalid { border-color:var(--danger);
-  box-shadow:0 0 0 4px var(--danger-soft); }
-
 /* Top-of-page progress bar — visible during any in-flight HTMX
    request, fixed across the management panel. The wiring (event
    listeners that toggle .visible) lives in `manage_shell`. */
@@ -524,43 +227,6 @@ dialog.manage-confirm .confirm-actions { display:flex; gap:10px;
 .acct-pop a { display:block; padding:8px 12px; border-radius:8px; color:var(--ink);
   text-decoration:none; font-size:14px; }
 .acct-pop a:hover, .acct-pop a:focus-visible { background:var(--cream-2); outline:none; }
-.brand { display:flex; align-items:center; gap:10px; font-size:20px; letter-spacing:-0.01em; }
-.brand .serif { font-family:var(--f-display); font-size:24px; }
-
-/* Dashboard grid */
-.dash-grid { display:grid; grid-template-columns:300px 1fr; gap:24px; padding:24px var(--page-pad); }
-@media(max-width:900px){.dash-grid{grid-template-columns:1fr}}
-.side-list { display:flex; flex-direction:column; gap:10px; margin-top:10px; }
-.side-row { display:flex; align-items:center; gap:10px; padding:8px 10px; border-radius:10px; background:var(--cream-2); }
-.side-row > *:nth-child(2) { flex:1; font-size:13px; }
-.stat-row { display:flex; align-items:baseline; gap:10px; padding:8px 0; border-bottom:1px dashed var(--hair); }
-.stat-row:last-child { border-bottom:0; }
-.stat-n { font-size:var(--stat-n); line-height:1; color:var(--ink); }
-.display-sm { font-family:var(--f-display); font-size:26px; letter-spacing:-0.01em; margin:0; }
-.display-md { font-family:var(--f-display); font-size:clamp(34px,4.2vw,52px); line-height:1.05; letter-spacing:-0.02em; margin:8px 0 4px; }
-.lead { color:var(--ink-2); max-width:560px; margin:0 0 22px; font-size:18px; line-height:1.55; }
-.section-label { display:flex; align-items:center; gap:10px; margin-bottom:4px; }
-
-/* Wizard */
-.wizard { display:flex; flex-direction:column; }
-.top { display:grid; grid-template-columns:auto 1fr auto; align-items:center; gap:28px;
-  padding:18px 28px; border-bottom:1px solid var(--hair);
-  background:rgba(251,247,238,0.88); backdrop-filter:blur(10px); position:sticky; top:0; z-index:10; }
-.top-right { display:flex; align-items:center; gap:12px; }
-.rail { display:flex; gap:8px; align-items:center; }
-.rail .seg { height:4px; flex:1; background:var(--hair); border-radius:999px; overflow:hidden; }
-.rail .seg .fill { display:block; height:100%; background:var(--ink); width:0; transition:width .4s ease; }
-.rail .seg.done .fill { width:100%; }
-.rail .seg.active .fill { background:var(--accent); width:8%; }
-.rail-wrap { max-width:520px; width:100%; }
-.rail-counter { text-align:right; margin-top:4px; font-size:10px; letter-spacing:.12em; }
-.rail-labels { display:flex; justify-content:space-between; margin-top:6px;
-  font-family:var(--f-mono); font-size:10px; color:var(--muted); letter-spacing:.12em; text-transform:uppercase; }
-.rail-labels .active { color:var(--accent-2); }
-.rail-labels .done { color:var(--ink-2); }
-.page { max-width:1120px; margin:0 auto; padding:54px 32px 64px; }
-.page.narrow { max-width:1040px; }
-
 /* Channels grid */
 .channels-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); gap:16px; }
 /* "How it works" step grid on /features. CSS counter renders a giant
@@ -922,101 +588,3 @@ table tr.audit-detail > td { padding:0; background:var(--paper);
 .is-loading .spinner.htmx-indicator { animation:spin .7s linear infinite; }
 .btn.is-loading { opacity:.7; pointer-events:none; }
 @keyframes spin { to { transform:rotate(360deg); } }
-
-/* The two external nav buttons (Docs ↑ / Open source ↑) get hidden well
-   before the 600px mobile breakpoint: with all five buttons on one row,
-   the header crams to two lines anywhere in the 600–720px band, which
-   reads as a broken header. They're duplicated in the footer, so the
-   information isn't lost. */
-@media(max-width:760px){
-  .site-header .nav-ext { display:none; }
-}
-
-/* Admin shell at large-phone / small-tablet widths. The public
-   site-header is roomier (.site-header has more breathing room and
-   different content), so its mobile reflow stays at <=600. The
-   /manage and /dashboard top bars cram an actor email + signout link
-   onto the same row as nav, so they need the wrap-to-multiline
-   reflow earlier — at the consolidated 720 breakpoint. The narrower
-   <=600 rules below still win where both apply. */
-@media(max-width:720px){
-  .app-top { padding:12px 16px; gap:12px; flex-wrap:wrap; }
-  .app-actor { flex-wrap:wrap; }
-  .app-actor .actor-email { max-width:none; flex:1 1 auto; min-width:0; }
-}
-
-/* Mobile */
-@media(max-width:600px){
-  .site-header { padding:14px 16px; gap:12px; flex-wrap:wrap; }
-  .site-header .brand { gap:8px; font-size:18px; }
-  .site-header .brand .serif { font-size:20px; }
-  .site-header .site-nav { gap:6px; flex-wrap:wrap; justify-content:flex-end; }
-  .site-header .site-nav .btn.sm { padding:5px 10px; font-size:12px; }
-  .site-footer { padding:18px 16px; line-height:1.9; }
-  .page { padding:24px 16px 40px; }
-  .display { font-size:clamp(32px,8vw,44px); margin:0 0 12px; }
-  .display br { display:none; }
-  .display-md { font-size:clamp(26px,6vw,34px); }
-  .lead { font-size:15px; margin:0 0 16px; }
-  .welcome-form { flex-direction:column; }
-  .welcome-form .input { max-width:100%; }
-  .welcome-form .btn { width:100%; justify-content:center; }
-  .fineprint { display:flex; flex-direction:column; gap:4px; }
-  .top { padding:12px 16px; gap:12px; }
-  .top .rail-wrap { visibility:hidden; height:0; overflow:hidden; }
-  .top-right { gap:8px; }
-  .top-right .mono { display:none; }
-  .app-top { padding:12px 16px; gap:12px; flex-wrap:wrap; }
-  /* Horizontal scroll for the dashboard/manage tab strip: scroll-snap so
-     swipes land on a tab edge, and a soft right-side fade tells the
-     reader more tabs sit off-screen. The mask falls back gracefully —
-     browsers without mask-image just lose the gradient. */
-  .app-nav { gap:10px; overflow-x:auto; -webkit-overflow-scrolling:touch;
-    flex-wrap:nowrap; white-space:nowrap;
-    scroll-snap-type:x proximity; scrollbar-width:none;
-    -webkit-mask-image:linear-gradient(to right, #000 calc(100% - 24px), transparent);
-    mask-image:linear-gradient(to right, #000 calc(100% - 24px), transparent); }
-  .app-nav::-webkit-scrollbar { display:none; }
-  .app-nav a { font-size:13px; flex-shrink:0; scroll-snap-align:start;
-    padding:10px 4px; border-bottom-width:3px; }
-  .channels-grid { grid-template-columns:1fr; }
-  .admin-grid { grid-template-columns:1fr; }
-  .admin-card { min-height:auto; }
-  .between { flex-wrap:wrap; gap:12px; }
-  .dash-grid { padding:16px; }
-  .banner { padding:14px 16px; flex-direction:column; gap:10px; text-align:center; }
-  .terminal { padding:14px; font-size:12px; min-height:auto; }
-  .term-row { grid-template-columns:1fr; gap:2px; }
-  /* Tap-target floors for fingers: dense secondary controls clear 32–36px
-     on mobile so a pinky doesn't miss them. Site-header .btn.sm keeps its
-     compact padding above (line tightened for nav-density) but inherits
-     this min-height; the header still clears under the 80px ceiling
-     layout.spec.ts asserts. */
-  .btn.sm { min-height:36px; }
-  .row-expand { min-width:32px; min-height:32px; padding:6px 8px; }
-  .acct-pop a { padding:12px 14px; }
-  .app-actor a.signout { padding:8px 14px; font-size:13px; }
-  /* Approvals queue: stack the action buttons full-width and push each
-     to the 48px tap-floor so a thumb can't miss Approve/Reject. The
-     metadata `.row` above the actions is a separate node (no
-     `.approval-actions`) so it keeps wrapping inline. */
-  .approval-actions { flex-direction:column; align-items:stretch; }
-  .approval-actions > .btn { width:100%; min-height:48px;
-    justify-content:center; }
-}
-@media(max-width:480px){
-  .rail-labels span:not(.active):not(.done) { display:none; }
-}
-/* iPhone SE / 320–360px sliver: the brand + 3 buttons still don't fit
-   one row at default sizing, so squeeze the whole top bar harder. */
-@media(max-width:360px){
-  .site-header { gap:8px; padding:12px 12px; }
-  .site-header .brand .serif { font-size:18px; }
-  .site-header .site-nav { gap:4px; }
-  .site-header .site-nav .btn.sm { padding:4px 8px; font-size:11px; }
-}
-
-/* Scrollbars */
-::-webkit-scrollbar { width:10px; height:10px; }
-::-webkit-scrollbar-thumb { background:var(--hair-2); border-radius:999px; }
-::-webkit-scrollbar-track { background:transparent; }
