@@ -47,23 +47,6 @@ CREATE INDEX IF NOT EXISTS idx_whatsapp_messages_account
 CREATE INDEX IF NOT EXISTS idx_whatsapp_messages_tenant
     ON whatsapp_messages(tenant_id, created_at);
 
--- Lead form submissions
-CREATE TABLE IF NOT EXISTS lead_form_submissions (
-    id TEXT PRIMARY KEY,
-    lead_form_id TEXT NOT NULL,
-    phone_number TEXT NOT NULL,
-    whatsapp_account_id TEXT NOT NULL,
-    message_sent TEXT NOT NULL,
-    reply_mode TEXT NOT NULL,
-    tenant_id TEXT NOT NULL,
-    created_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
-
-CREATE INDEX IF NOT EXISTS idx_lead_form_submissions_form
-    ON lead_form_submissions(lead_form_id, created_at);
-CREATE INDEX IF NOT EXISTS idx_lead_form_submissions_tenant
-    ON lead_form_submissions(tenant_id, created_at);
-
 -- Instagram messages
 CREATE TABLE IF NOT EXISTS instagram_messages (
     id TEXT PRIMARY KEY,

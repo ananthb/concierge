@@ -49,62 +49,15 @@ struct Message {
 // AI Response Generation
 // ============================================================================
 
-/// Generate an AI response using Cloudflare Workers AI
-pub async fn generate_response(
-    env: &Env,
-    system_prompt: &str,
-    fields_data: &serde_json::Map<String, serde_json::Value>,
-) -> Result<String> {
-    if crate::dev_bypass::active(env) {
-        return Ok(crate::dev_bypass::STUB_CHAT_REPLY.to_string());
-    }
-    let form_context: String = fields_data
-        .iter()
-        .map(|(key, value)| {
-            let val = match value {
-                serde_json::Value::String(s) => s.clone(),
-                _ => value.to_string(),
-            };
-            format!("{}: {}", key, val)
-        })
-        .collect::<Vec<_>>()
-        .join("\n");
-
-    let user_message = format!(
-        "Context:\n{}\n\nGenerate an appropriate response.",
-        form_context
-    );
-
-    let request = AiRequest {
-        messages: vec![
-            Message {
-                role: "system".to_string(),
-                content: system_prompt.to_string(),
-            },
-            Message {
-                role: "user".to_string(),
-                content: user_message,
-            },
-        ],
-        max_tokens: None,
-    };
-
-    let model = get_model(env);
-    run_ai_model(env, &model, &request).await
-}
-
-/// Generate a multi-turn chat reply. Distinct from `generate_response`,
-/// which packs a context map into a single user message. Here, the
-/// caller passes the actual `(role, content)` history and we forward
-/// it verbatim. Used by the public `/demo/chat` endpoint AND the main
+/// Generate a multi-turn chat reply. The caller passes the actual
+/// `(role, content)` history and we forward it verbatim. Used by the
+/// public `/demo/chat` endpoint AND the main
 /// pipeline (which hands over the conversation history stored on the
 /// `Session`).
 ///
-/// Shape mirrors `generate_response` exactly (no extra request fields)
-/// so it goes through the same Workers AI code path the lead form
-/// already exercises in production. Caller is expected to keep replies
-/// short via the system prompt; we don't pass `max_tokens` because
-/// some Workers AI model bindings reject unrecognized request keys.
+/// Caller is expected to keep replies short via the system prompt; we
+/// don't pass `max_tokens` because some Workers AI model bindings
+/// reject unrecognized request keys.
 ///
 /// Empty history is allowed but unusual: the model will see only the
 /// system prompt and have nothing to reply to. The pipeline always

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Concierge: multi-channel messaging for small businesses</title>
-<meta name="description" content="WhatsApp, Instagram, email, and Discord automation in one Cloudflare Worker. AI auto-replies, glob-pattern email rules, embeddable lead forms, prepaid credits.">
+<meta name="description" content="WhatsApp, Instagram, email, and Discord automation in one Cloudflare Worker. AI auto-replies, glob-pattern email rules, prepaid credits.">
 <meta name="theme-color" content="#e86a2c">
 <link rel="icon" type="image/svg+xml" href="https://concierge.calculon.tech/logo.svg">
 <link rel="stylesheet" href="docs.css">
@@ -57,14 +57,12 @@
         <li><a href="instagram.html"><span class="dot"></span>Instagram</a></li>
         <li><a href="email-routing.html"><span class="dot"></span>Email routing</a></li>
         <li><a href="discord.html"><span class="dot"></span>Discord relay</a></li>
-        <li><a href="lead-forms.html"><span class="dot"></span>Lead forms</a></li>
       </ul>
     </div>
 
     <div class="sidebar__group">
       <div class="sidebar__group-label">Operate</div>
       <ul class="sidebar__list">
-        <li><a href="embedding.html"><span class="dot"></span>Embedding</a></li>
         <li><a href="billing.html"><span class="dot"></span>Billing &amp; credits</a></li>
         <li><a href="management.html"><span class="dot"></span>Management panel</a></li>
         <li><a href="facebook-app-setup.html"><span class="dot"></span>Facebook app setup</a></li>
@@ -87,7 +85,7 @@
       <div class="page-eyebrow">Documentation</div>
       <h1 class="page-title">Multi&#8209;channel messaging for <em>small businesses</em>, in one Cloudflare Worker.</h1>
       <p class="page-lede">
-        Concierge connects WhatsApp, Instagram, catch&#8209;all email, and a unified Discord inbox. AI or static auto&#8209;replies, glob&#8209;pattern routing rules, embeddable lead capture, and prepaid credit billing. Self&#8209;host on Cloudflare or use the hosted service.
+        Concierge connects WhatsApp, Instagram, catch&#8209;all email, and a unified Discord inbox. AI or static auto&#8209;replies, glob&#8209;pattern routing rules, and prepaid credit billing. Self&#8209;host on Cloudflare or use the hosted service.
       </p>
 
       <div class="page-meta">
@@ -113,10 +111,6 @@
             <div class="pipeline__node">
               <span class="pipeline__node-dot em"></span>
               <span class="pipeline__node-text"><b>Email (catch&#8209;all)</b><span>email() handler</span></span>
-            </div>
-            <div class="pipeline__node">
-              <span class="pipeline__node-dot lf"></span>
-              <span class="pipeline__node-text"><b>Lead form</b><span>POST /lead/{slug}</span></span>
             </div>
           </div>
 
@@ -253,10 +247,6 @@
             <tr>
               <td><code>Slash commands</code></td>
               <td><code>/status</code>, <code>/domains</code>, <code>/rules</code> for managing your tenant from Discord.</td>
-            </tr>
-            <tr>
-              <td><code>Lead capture forms</code></td>
-              <td>Embeddable phone&#8209;number form. Submission triggers a WhatsApp send. One&#8209;line iframe.</td>
             </tr>
             <tr>
               <td><code>Onboarding wizard</code></td>

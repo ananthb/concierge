@@ -52,13 +52,11 @@
         <li><a href="instagram.html"><span class="dot"></span>Instagram</a></li>
         <li><a href="email-routing.html"><span class="dot"></span>Email routing</a></li>
         <li><a href="discord.html"><span class="dot"></span>Discord relay</a></li>
-        <li><a href="lead-forms.html"><span class="dot"></span>Lead forms</a></li>
       </ul>
     </div>
     <div class="sidebar__group">
       <div class="sidebar__group-label">Operate</div>
       <ul class="sidebar__list">
-        <li><a href="embedding.html"><span class="dot"></span>Embedding</a></li>
         <li><a href="billing.html"><span class="dot"></span>Billing &amp; credits</a></li>
         <li><a href="management.html"><span class="dot"></span>Management panel</a></li>
         <li><a href="facebook-app-setup.html"><span class="dot"></span>Facebook app setup</a></li>
@@ -198,20 +196,13 @@
   <li><strong>Email:</strong> approval-by-email digest sent at the tenant's configured cadence (default 15 min); links contain signed tokens for one-click approve/reject.</li>
 </ul>
 
-<h2>Lead capture forms</h2>
-<ul>
-  <li><strong>Storage:</strong> <code>LeadCaptureForm</code> in KV at <code>lead_form:{id}</code>, indexed by tenant.</li>
-  <li><strong>Rendering:</strong> <code>GET /lead/{id}/{slug}</code> serves an iframe-friendly HTML form; CSP and <code>allowed_origins</code> restrict where it embeds.</li>
-  <li><strong>Submission:</strong> <code>POST</code> to the same path validates the phone number and triggers a WhatsApp message via the configured account, then logs to <code>lead_form_submissions</code> in D1.</li>
-</ul>
-
 <h2>Storage layout</h2>
 
 <h3>D1 tables</h3>
 <ul>
   <li><code>tenants</code>: id, email (UNIQUE), facebook_id, plan, currency.</li>
   <li><code>messages</code>: unified inbound/outbound metadata (channel, direction, sender, recipient, action_taken, <code>conversation_id</code>). No body content. Indexed on tenant+time, channel+tenant+time, channel_account_id, and <code>conversation_id</code>+time so a conversation thread can be reconstructed for audit. AI flows stamp <code>conversation_id</code>; canned-only flows leave it NULL.</li>
-  <li><code>whatsapp_messages</code>, <code>instagram_messages</code>, <code>email_messages</code>, <code>email_metrics</code>, <code>lead_form_submissions</code>: channel-specific logs.</li>
+  <li><code>whatsapp_messages</code>, <code>instagram_messages</code>, <code>email_messages</code>, <code>email_metrics</code>: channel-specific logs.</li>
   <li><code>tenant_billing</code>: credit ledger as JSON (entries with optional expiry).</li>
   <li><code>payments</code>: Razorpay event log, kept for dispute and tax records.</li>
   <li><code>audit_log</code>: management-action history.</li>
@@ -221,7 +212,7 @@
 <h3>KV keys</h3>
 <ul>
   <li><code>session:*</code>, <code>csrf:*</code>: auth cookies (TTL 7d).</li>
-  <li><code>whatsapp:{id}</code>, <code>instagram:{id}</code>, <code>lead_form:{id}</code>: per-resource configs. Channel records embed their own <code>ReplyConfig</code> (rules + default rule + wait_seconds).</li>
+  <li><code>whatsapp:{id}</code>, <code>instagram:{id}</code>: per-resource configs. Channel records embed their own <code>ReplyConfig</code> (rules + default rule + wait_seconds).</li>
   <li><code>tenant:{tenant}:whatsapp:{id}</code> etc.: per-tenant indexes (empty values; existence is the index).</li>
   <li><code>wa_phone:*</code>, <code>ig_page:*</code>, <code>email_domain:*</code>: webhook → tenant reverse indexes.</li>
   <li><code>email_domains:{tenant}</code>, <code>email_rules:{tenant}:{domain}</code>, <code>email_reverse:*</code>: email config + alias mapping.</li>

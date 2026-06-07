@@ -1,9 +1,7 @@
 use wasm_bindgen::JsValue;
 use worker::*;
 
-use crate::types::{
-    CreditEntry, InstagramAccount, LeadCaptureForm, Tenant, TenantBilling, WhatsAppAccount,
-};
+use crate::types::{CreditEntry, InstagramAccount, Tenant, TenantBilling, WhatsAppAccount};
 
 // ============================================================================
 // Tenant D1 Operations
@@ -816,64 +814,6 @@ pub async fn get_instagram_account_by_page(
 }
 
 // ============================================================================
-// Lead Form KV Operations
-// ============================================================================
-
-pub async fn get_lead_form(kv: &kv::KvStore, id: &str) -> Result<Option<LeadCaptureForm>> {
-    kv.get(&format!("lead_form:{}", id))
-        .json::<LeadCaptureForm>()
-        .await
-        .map_err(|e| Error::from(e.to_string()))
-}
-
-pub async fn save_lead_form(kv: &kv::KvStore, form: &LeadCaptureForm) -> Result<()> {
-    kv.put(&format!("lead_form:{}", form.id), form)?
-        .execute()
-        .await?;
-    if !form.tenant_id.is_empty() {
-        kv.put(
-            &format!("tenant:{}:lead_form:{}", form.tenant_id, form.id),
-            "",
-        )?
-        .execute()
-        .await?;
-    }
-    Ok(())
-}
-
-pub async fn delete_lead_form(kv: &kv::KvStore, tenant_id: &str, id: &str) -> Result<()> {
-    kv.delete(&format!("lead_form:{}", id)).await?;
-    if !tenant_id.is_empty() {
-        kv.delete(&format!("tenant:{}:lead_form:{}", tenant_id, id))
-            .await?;
-    }
-    Ok(())
-}
-
-pub async fn list_lead_forms(kv: &kv::KvStore, tenant_id: &str) -> Result<Vec<LeadCaptureForm>> {
-    let prefix = format!("tenant:{}:lead_form:", tenant_id);
-    let list = kv
-        .list()
-        .prefix(prefix.clone())
-        .execute()
-        .await
-        .map_err(|e| Error::from(e.to_string()))?;
-
-    let mut forms = Vec::new();
-    for key in list.keys {
-        let form_id = key.name.strip_prefix(&prefix).unwrap_or("").to_string();
-        if form_id.is_empty() {
-            continue;
-        }
-        if let Some(form) = get_lead_form(kv, &form_id).await? {
-            forms.push(form);
-        }
-    }
-    forms.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
-    Ok(forms)
-}
-
-// ============================================================================
 // Delete All Tenant Data
 // ============================================================================
 
@@ -890,16 +830,9 @@ pub async fn delete_tenant_data(kv: &kv::KvStore, db: &D1Database, tenant_id: &s
         delete_instagram_account(kv, tenant_id, &account.id).await?;
     }
 
-    // Delete lead forms
-    let forms = list_lead_forms(kv, tenant_id).await?;
-    for form in &forms {
-        delete_lead_form(kv, tenant_id, &form.id).await?;
-    }
-
     // Delete D1 data: messages + billing. Payments and audit_log are kept for dispute and tax records.
     for table in &[
         "whatsapp_messages",
-        "lead_form_submissions",
         "instagram_messages",
         "email_messages",
         "email_metrics",
@@ -951,39 +884,6 @@ pub async fn delete_tenant_data(kv: &kv::KvStore, db: &D1Database, tenant_id: &s
         .run()
         .await?;
 
-    Ok(())
-}
-
-// ============================================================================
-// D1 Operations (Lead Form Submissions)
-// ============================================================================
-
-#[allow(clippy::too_many_arguments)]
-pub async fn save_lead_form_submission(
-    db: &D1Database,
-    id: &str,
-    lead_form_id: &str,
-    phone_number: &str,
-    whatsapp_account_id: &str,
-    message_sent: &str,
-    reply_mode: &str,
-    tenant_id: &str,
-) -> Result<()> {
-    let stmt = db.prepare(
-        "INSERT INTO lead_form_submissions (id, lead_form_id, phone_number, whatsapp_account_id, message_sent, reply_mode, tenant_id, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))",
-    );
-    stmt.bind(&[
-        id.into(),
-        lead_form_id.into(),
-        phone_number.into(),
-        whatsapp_account_id.into(),
-        message_sent.into(),
-        reply_mode.into(),
-        tenant_id.into(),
-    ])?
-    .run()
-    .await?;
     Ok(())
 }
 

@@ -648,7 +648,6 @@ fn demo_settings_html(tenant: &Tenant, base_url: &str, locale: &Locale) -> Strin
 pub fn admin_dashboard_html(
     whatsapp_accounts: &[WhatsAppAccount],
     instagram_accounts: &[InstagramAccount],
-    lead_forms: &[LeadCaptureForm],
     billing: &TenantBilling,
     email_addrs: &[EmailAddress],
     base_url: &str,
@@ -716,10 +715,6 @@ pub fn admin_dashboard_html(
         <div class="stat-n serif">{ig_count}</div>
         <div class="mono muted fs-11">{stat_ig}</div>
       </a>
-      <a href="{base_url}/dashboard/lead-forms" class="card p-16 ta-center link-reset">
-        <div class="stat-n serif">{lf_count}</div>
-        <div class="mono muted fs-11">{stat_lf}</div>
-      </a>
       <a href="{base_url}/dashboard/billing" class="card p-16 ta-center link-reset{credit_warn_cls}" style="{credit_warn_style}">
         <div class="stat-n serif">{credits}</div>
         <div class="mono muted fs-11">{stat_credits}</div>
@@ -741,7 +736,6 @@ pub fn admin_dashboard_html(
         suspended_banner = suspended_banner,
         wa_count = whatsapp_accounts.len(),
         ig_count = instagram_accounts.len(),
-        lf_count = lead_forms.len(),
         credits = billing.total_remaining(),
         credit_warn_cls = if billing.total_remaining() <= 10 {
             " card-warn"
@@ -766,7 +760,6 @@ pub fn admin_dashboard_html(
         headline = t(locale, "admin-dashboard-headline"),
         stat_wa = t(locale, "admin-dashboard-stat-whatsapp"),
         stat_ig = t(locale, "admin-dashboard-stat-instagram"),
-        stat_lf = t(locale, "admin-dashboard-stat-leads"),
         stat_credits = t(locale, "admin-dashboard-stat-credits"),
         email_eyebrow = t(locale, "admin-dashboard-email-eyebrow"),
     );
@@ -1252,264 +1245,6 @@ pub fn admin_instagram_edit_html(
 
     let page = super::base::app_shell(&content, "Channels", base_url, locale);
     base_html(&t(locale, "admin-ig-edit-title"), &page, locale)
-}
-
-pub fn admin_lead_forms_list_html(
-    forms: &[LeadCaptureForm],
-    base_url: &str,
-    locale: &Locale,
-) -> String {
-    let edit_label = t(locale, "admin-edit");
-    let delete_label = t(locale, "admin-delete");
-    let confirm = html_escape(&t(locale, "admin-lf-list-delete-confirm"));
-    let rows: String = forms
-        .iter()
-        .map(|f| {
-            let status = if f.enabled {
-                t(locale, "admin-active")
-            } else {
-                t(locale, "admin-disabled")
-            };
-            format!(
-                "<tr>
-                    <td><a href=\"{base_url}/dashboard/lead-forms/{id}\">{name}</a></td>
-                    <td><code>{slug}</code></td>
-                    <td>{status}</td>
-                    <td>
-                        <a href=\"{base_url}/dashboard/lead-forms/{id}\" class=\"btn sm\">{edit}</a>
-                        <button class=\"btn sm danger\"
-                                hx-delete=\"{base_url}/dashboard/lead-forms/{id}\"
-                                hx-confirm=\"{confirm}\"
-                                hx-target=\"closest tr\" hx-swap=\"outerHTML\">{del}</button>
-                    </td>
-                </tr>",
-                base_url = base_url,
-                id = html_escape(&f.id),
-                name = html_escape(&f.name),
-                slug = html_escape(&f.slug),
-                status = status,
-                edit = edit_label,
-                del = delete_label,
-                confirm = confirm,
-            )
-        })
-        .collect();
-
-    let body = if forms.is_empty() {
-        super::base::empty_state(
-            &t(locale, "admin-lf-list-empty-headline"),
-            &t(locale, "admin-lf-list-empty-sub"),
-            Some((
-                &format!("{base_url}/dashboard/lead-forms/new"),
-                &t(locale, "admin-lf-list-empty-cta"),
-            )),
-        )
-    } else {
-        format!(
-            "<div class=\"table-wrap\"><table>
-                <thead><tr><th scope=\"col\">{th_name}</th><th scope=\"col\">{th_slug}</th><th scope=\"col\">{th_status}</th><th></th></tr></thead>
-                <tbody>{rows}</tbody>
-            </table></div>",
-            rows = rows,
-            th_name = t(locale, "admin-lf-list-th-name"),
-            th_slug = t(locale, "admin-lf-list-th-slug"),
-            th_status = t(locale, "admin-lf-list-th-status"),
-        )
-    };
-
-    let content = format!(
-        "<div class=\"page-pad\">
-        <div class=\"between mb-16\">
-            <h1 class=\"display-sm m-0\">{h1}</h1>
-            <a href=\"{base_url}/dashboard/lead-forms/new\" class=\"btn\">{add}</a>
-        </div>
-        <div id=\"toast\" role=\"status\" aria-live=\"polite\" aria-atomic=\"true\"></div>
-        <div class=\"card p-22\">{body}</div>
-        </div>",
-        base_url = base_url,
-        body = body,
-        h1 = t(locale, "admin-lf-list-h1"),
-        add = t(locale, "admin-lf-list-add"),
-    );
-
-    let page = super::base::app_shell(&content, "Overview", base_url, locale);
-    base_html(&t(locale, "admin-lf-list-title"), &page, locale)
-}
-
-pub fn admin_lead_form_edit_html(
-    form: &LeadCaptureForm,
-    whatsapp_accounts: &[WhatsAppAccount],
-    base_url: &str,
-    locale: &Locale,
-) -> String {
-    let wa_options: String = whatsapp_accounts
-        .iter()
-        .map(|a| {
-            let sel = if a.id == form.whatsapp_account_id {
-                " selected"
-            } else {
-                ""
-            };
-            format!(
-                "<option value=\"{id}\"{sel}>{name} ({phone})</option>",
-                id = html_escape(&a.id),
-                sel = sel,
-                name = html_escape(&a.name),
-                phone = html_escape(&a.phone_number),
-            )
-        })
-        .collect();
-
-    let canned = matches!(form.reply, ReplyResponse::Canned { .. });
-    let mode_static_sel = if canned { " selected" } else { "" };
-    let mode_ai_sel = if !canned { " selected" } else { "" };
-    let reply_text = match &form.reply {
-        ReplyResponse::Canned { text } | ReplyResponse::Prompt { text } => text.as_str(),
-    };
-    let enabled_checked = if form.enabled { " checked" } else { "" };
-    let origins = form.allowed_origins.join("\n");
-
-    let embed_code = format!(
-        "&lt;iframe src=&quot;{base_url}/lead/{id}/{slug}&quot; width=&quot;400&quot; height=&quot;200&quot; frameborder=&quot;0&quot;&gt;&lt;/iframe&gt;",
-        base_url = html_escape(base_url),
-        id = html_escape(&form.id),
-        slug = html_escape(&form.slug),
-    );
-
-    let content = format!(
-        "<p><a href=\"{base_url}/dashboard/lead-forms\">{back}</a></p>
-        <h1>{h1}</h1>
-        <div id=\"toast\" role=\"status\" aria-live=\"polite\" aria-atomic=\"true\"></div>
-        <div class=\"card p-22\">
-            <form hx-put=\"{base_url}/dashboard/lead-forms/{id}\" hx-target=\"{hash}toast\" hx-swap=\"innerHTML\">
-                <div class=\"form-group\">
-                    <label for=\"lf-name\">{lbl_name}</label>
-                    <input type=\"text\" id=\"lf-name\" name=\"name\" value=\"{name}\" required aria-required=\"true\">
-                </div>
-                <div class=\"form-group\">
-                    <label><input type=\"checkbox\" name=\"enabled\" value=\"true\"{enabled_checked}> {lbl_enabled}</label>
-                </div>
-                <div class=\"form-group\">
-                    <label for=\"lf-wa\">{lbl_wa}</label>
-                    <select id=\"lf-wa\" name=\"whatsapp_account_id\" required aria-required=\"true\">{wa_options}</select>
-                </div>
-                <div class=\"form-group\">
-                    <label for=\"lf-reply-mode\">{lbl_reply_mode}</label>
-                    <select id=\"lf-reply-mode\" name=\"reply_mode\">
-                        <option value=\"canned\"{mode_static_sel}>{mode_static}</option>
-                        <option value=\"prompt\"{mode_ai_sel}>{mode_ai}</option>
-                    </select>
-                </div>
-                <div class=\"form-group\">
-                    <label for=\"lf-reply-prompt\">{lbl_reply_prompt}</label>
-                    <textarea id=\"lf-reply-prompt\" name=\"reply_prompt\" rows=\"3\">{reply_prompt}</textarea>
-                </div>
-                <h3 style=\"margin: 1rem 0 0.5rem;\">{h3_style}</h3>
-                <div class=\"form-group\">
-                    <label for=\"lf-color-primary\">{lbl_primary}</label>
-                    <input type=\"color\" id=\"lf-color-primary\" name=\"style_primary_color\" value=\"{s_primary}\">
-                </div>
-                <div class=\"form-group\">
-                    <label for=\"lf-color-text\">{lbl_text}</label>
-                    <input type=\"color\" id=\"lf-color-text\" name=\"style_text_color\" value=\"{s_text}\">
-                </div>
-                <div class=\"form-group\">
-                    <label for=\"lf-color-bg\">{lbl_bg}</label>
-                    <input type=\"color\" id=\"lf-color-bg\" name=\"style_background_color\" value=\"{s_bg}\">
-                </div>
-                <div class=\"form-group\">
-                    <label for=\"lf-radius\">{lbl_radius}</label>
-                    <input type=\"text\" id=\"lf-radius\" name=\"style_border_radius\" value=\"{s_radius}\">
-                </div>
-                <div class=\"form-group\">
-                    <label for=\"lf-button-text\">{lbl_button}</label>
-                    <input type=\"text\" id=\"lf-button-text\" name=\"style_button_text\" value=\"{s_button}\">
-                </div>
-                <div class=\"form-group\">
-                    <label for=\"lf-placeholder\">{lbl_placeholder}</label>
-                    <input type=\"text\" id=\"lf-placeholder\" name=\"style_placeholder_text\" value=\"{s_placeholder}\">
-                </div>
-                <div class=\"form-group\">
-                    <label for=\"lf-success\">{lbl_success}</label>
-                    <input type=\"text\" id=\"lf-success\" name=\"style_success_message\" value=\"{s_success}\">
-                </div>
-                <div class=\"form-group\">
-                    <label for=\"lf-custom-css\">{lbl_css}</label>
-                    <textarea id=\"lf-custom-css\" name=\"style_custom_css\" rows=\"3\">{s_css}</textarea>
-                </div>
-                <h3 style=\"margin: 1rem 0 0.5rem;\">{h3_origins}</h3>
-                <div class=\"form-group\">
-                    <label for=\"lf-origins\" class=\"sr-only\">{h3_origins}</label>
-                    <textarea id=\"lf-origins\" name=\"allowed_origins\" rows=\"3\" placeholder=\"{ph_origins}\">{origins}</textarea>
-                    <small class=\"muted\">{help_origins}</small>
-                </div>
-                <div style=\"display: flex; justify-content: flex-end;\">
-                    <button type=\"submit\" class=\"btn\">{save}</button>
-                </div>
-            </form>
-        </div>
-
-        <div class=\"card p-22\">
-            <h3>{embed_h3}</h3>
-            <p class=\"muted mb-8\">{embed_lead}</p>
-            <div class=\"row gap-8\">
-                <code class=\"block flex-1\" style=\"padding: 0.5rem; overflow-x: auto; white-space: nowrap;\">{embed_code}</code>
-                <button class=\"btn sm copy-btn\" data-copy-url=\"{embed_raw}\">{copy}</button>
-            </div>
-        </div>",
-        base_url = base_url,
-        id = html_escape(&form.id),
-        name = html_escape(&form.name),
-        enabled_checked = enabled_checked,
-        wa_options = wa_options,
-        mode_static_sel = mode_static_sel,
-        mode_ai_sel = mode_ai_sel,
-        reply_prompt = html_escape(reply_text),
-        s_primary = html_escape(&form.style.primary_color),
-        s_text = html_escape(&form.style.text_color),
-        s_bg = html_escape(&form.style.background_color),
-        s_radius = html_escape(&form.style.border_radius),
-        s_button = html_escape(&form.style.button_text),
-        s_placeholder = html_escape(&form.style.placeholder_text),
-        s_success = html_escape(&form.style.success_message),
-        s_css = html_escape(&form.style.custom_css),
-        origins = html_escape(&origins),
-        embed_code = embed_code,
-        embed_raw = format!(
-            "<iframe src=\"{base_url}/lead/{id}/{slug}\" width=\"400\" height=\"200\" frameborder=\"0\"></iframe>",
-            base_url = base_url,
-            id = form.id,
-            slug = form.slug,
-        ).replace('\'', "\\'"),
-        hash = HASH,
-        back = t(locale, "admin-lf-edit-back"),
-        h1 = t(locale, "admin-lf-edit-h1"),
-        lbl_name = t(locale, "admin-lf-edit-name"),
-        lbl_enabled = t(locale, "admin-lf-edit-enabled"),
-        lbl_wa = t(locale, "admin-lf-edit-wa-account"),
-        lbl_reply_mode = t(locale, "admin-lf-edit-reply-mode"),
-        mode_static = t(locale, "admin-lf-edit-reply-mode-static"),
-        mode_ai = t(locale, "admin-lf-edit-reply-mode-ai"),
-        lbl_reply_prompt = t(locale, "admin-lf-edit-reply-prompt"),
-        h3_style = t(locale, "admin-lf-edit-style-h3"),
-        lbl_primary = t(locale, "admin-lf-edit-style-primary"),
-        lbl_text = t(locale, "admin-lf-edit-style-text"),
-        lbl_bg = t(locale, "admin-lf-edit-style-bg"),
-        lbl_radius = t(locale, "admin-lf-edit-style-radius"),
-        lbl_button = t(locale, "admin-lf-edit-style-button"),
-        lbl_placeholder = t(locale, "admin-lf-edit-style-placeholder"),
-        lbl_success = t(locale, "admin-lf-edit-style-success"),
-        lbl_css = t(locale, "admin-lf-edit-style-css"),
-        h3_origins = t(locale, "admin-lf-edit-origins-h3"),
-        ph_origins = html_escape(&t(locale, "admin-lf-edit-origins-placeholder")),
-        help_origins = t(locale, "admin-lf-edit-origins-help"),
-        save = t(locale, "admin-lf-edit-save"),
-        embed_h3 = t(locale, "admin-lf-edit-embed-h3"),
-        embed_lead = t(locale, "admin-lf-edit-embed-lead"),
-        copy = t(locale, "admin-lf-edit-embed-copy"),
-    );
-
-    base_html(&t(locale, "admin-lf-edit-title"), &content, locale)
 }
 
 pub fn admin_success_html(message: &str) -> String {

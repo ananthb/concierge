@@ -127,7 +127,7 @@ pub fn stub_persona_businesses(archetype_count: usize) -> String {
     serde_json::Value::Array(entries).to_string()
 }
 
-/// Canned chat reply for `crate::ai::generate_response` when the
+/// Canned chat reply for `crate::ai::generate_chat_reply` when the
 /// bypass is active. Operators flipping the demo on without remote AI
 /// access still see a plausible reply instead of an error toast.
 pub const STUB_CHAT_REPLY: &str =

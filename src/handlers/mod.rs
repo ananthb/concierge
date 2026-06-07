@@ -5,7 +5,6 @@ mod admin_approvals;
 mod admin_billing;
 mod admin_email;
 mod admin_instagram;
-mod admin_lead_forms;
 mod admin_persona;
 pub mod admin_rules;
 mod admin_whatsapp;
@@ -17,7 +16,6 @@ pub mod discord_oauth;
 pub mod health;
 mod instagram_oauth;
 mod instagram_webhook;
-mod lead_form;
 pub mod onboarding;
 mod webhook;
 mod whatsapp_signup;
@@ -27,7 +25,6 @@ pub use auth::handle_auth;
 pub use data_deletion::handle_data_deletion;
 pub use demo_chat::handle_demo_chat;
 pub use instagram_oauth::handle_instagram;
-pub use lead_form::handle_lead_form;
 pub use onboarding::handle_wizard_top;
 pub use webhook::handle_webhook;
 pub use whatsapp_signup::handle_whatsapp_signup;
@@ -44,9 +41,4 @@ pub(crate) fn get_base_url(req: &Request) -> String {
         },
         Err(_) => String::from("https://localhost"),
     }
-}
-
-/// Extract Origin header from request
-pub(crate) fn get_origin(req: &Request) -> Option<String> {
-    req.headers().get("Origin").ok().flatten()
 }

@@ -372,53 +372,6 @@ pub struct InstagramAccount {
 }
 
 // ============================================================================
-// Lead Capture Form
-// ============================================================================
-
-#[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct LeadCaptureForm {
-    pub id: String,
-    pub tenant_id: String,
-    pub name: String,
-    pub slug: String,
-    pub whatsapp_account_id: String,
-    pub reply: ReplyResponse,
-    pub style: LeadFormStyle,
-    pub allowed_origins: Vec<String>,
-    pub enabled: bool,
-    pub created_at: String,
-    pub updated_at: String,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct LeadFormStyle {
-    pub primary_color: String,
-    pub text_color: String,
-    pub background_color: String,
-    pub border_radius: String,
-    pub button_text: String,
-    pub placeholder_text: String,
-    pub success_message: String,
-    #[serde(default)]
-    pub custom_css: String,
-}
-
-impl Default for LeadFormStyle {
-    fn default() -> Self {
-        Self {
-            primary_color: String::from("#F38020"),
-            text_color: String::from("#333333"),
-            background_color: String::from("#ffffff"),
-            border_radius: String::from("8px"),
-            button_text: String::from("Get in touch"),
-            placeholder_text: String::from("Your phone number"),
-            success_message: String::from("Thanks! We'll message you on WhatsApp shortly."),
-            custom_css: String::new(),
-        }
-    }
-}
-
-// ============================================================================
 // Instagram Token
 // ============================================================================
 
@@ -1401,14 +1354,6 @@ mod tests {
         };
         let s = serde_json::to_string(&prompt).unwrap();
         assert!(s.contains("\"kind\":\"prompt\""));
-    }
-
-    #[test]
-    fn test_lead_form_style_default() {
-        let style = LeadFormStyle::default();
-        assert_eq!(style.primary_color, "#F38020");
-        assert_eq!(style.button_text, "Get in touch");
-        assert!(style.custom_css.is_empty());
     }
 
     #[test]

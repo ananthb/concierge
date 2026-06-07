@@ -109,13 +109,6 @@ pub async fn handle_admin(req: Request, env: Env, path: &str, method: Method) ->
             .await;
     }
 
-    if path.starts_with("/dashboard/lead-forms") {
-        return super::admin_lead_forms::handle_lead_forms_admin(
-            req, env, path, &base_url, &tenant_id,
-        )
-        .await;
-    }
-
     if path.starts_with("/dashboard/instagram") {
         return super::admin_instagram::handle_instagram_admin(
             req, env, path, &base_url, &tenant_id,
@@ -169,7 +162,6 @@ pub async fn handle_admin(req: Request, env: Env, path: &str, method: Method) ->
 
         let whatsapp_accounts = list_whatsapp_accounts(&kv, &tenant_id).await?;
         let instagram_accounts = list_instagram_accounts(&kv, &tenant_id).await?;
-        let lead_forms = list_lead_forms(&kv, &tenant_id).await?;
         let email_addrs = crate::storage::get_email_addresses(&kv, &tenant_id).await?;
         let db = env.d1("DB")?;
         let mut billing = crate::storage::get_tenant_billing(&db, &tenant_id).await?;
@@ -178,7 +170,6 @@ pub async fn handle_admin(req: Request, env: Env, path: &str, method: Method) ->
         let mut resp = Response::from_html(admin_dashboard_html(
             &whatsapp_accounts,
             &instagram_accounts,
-            &lead_forms,
             &billing,
             &email_addrs,
             &base_url,

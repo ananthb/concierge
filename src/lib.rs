@@ -13,7 +13,7 @@
 //!
 //! ## Architecture
 //!
-//! - `types`: Core data structures (Tenant, WhatsAppAccount, InstagramAccount, LeadCaptureForm)
+//! - `types`: Core data structures (Tenant, WhatsAppAccount, InstagramAccount)
 //! - `storage`: Cloudflare KV and D1 operations
 //! - `ai`: Cloudflare Workers AI integration for auto-reply generation
 //! - `whatsapp`: Meta Graph API client for sending WhatsApp messages
@@ -399,11 +399,6 @@ async fn handle_request(req: Request, env: Env) -> Result<Response> {
     // Admin routes (session-protected)
     if path.starts_with("/dashboard") {
         return handlers::handle_admin(req, env, path, method).await;
-    }
-
-    // Lead capture form routes (public)
-    if path.starts_with("/lead/") {
-        return handlers::handle_lead_form(req, env, path, method).await;
     }
 
     // Public live-demo chat (anyone can hit this from the welcome page).
