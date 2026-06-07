@@ -834,8 +834,6 @@ pub async fn delete_tenant_data(kv: &kv::KvStore, db: &D1Database, tenant_id: &s
     for table in &[
         "whatsapp_messages",
         "instagram_messages",
-        "email_messages",
-        "email_metrics",
         "messages",
         "tenant_billing",
     ] {
