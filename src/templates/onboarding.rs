@@ -167,15 +167,6 @@ pub fn welcome_html(
 
     let chat_hint = html_escape(&t(locale, "demo-chat-hint"));
     let chat_title = html_escape(&t(locale, "demo-chat-title"));
-    // Subtitle has two variants: business-roleplay (default) vs.
-    // Concierge-direct. The Alpine factory picks per persona; we just
-    // ship both strings into the chat module so it can swap them.
-    // These end up inside Alpine `'…'` JS literals in an HTML attribute,
-    // so they need `js_attr_escape` (which renders `'` as `\'`), not
-    // `html_escape` (which would only entity-encode for HTML and leave
-    // a bare apostrophe to terminate the JS string).
-    let chat_subtitle = js_attr_escape(&t(locale, "demo-chat-subtitle"));
-    let chat_subtitle_concierge = js_attr_escape(&t(locale, "demo-chat-subtitle-concierge"));
     let chat_persona_label = html_escape(&t(locale, "demo-chat-persona-label"));
     let chat_roleplay_prefix = html_escape(&t(locale, "demo-chat-roleplay-prefix"));
     let chat_roleplay_suffix = html_escape(&t(locale, "demo-chat-roleplay-suffix"));
@@ -185,8 +176,6 @@ pub fn welcome_html(
     let chat_lbl_type = html_escape(&t(locale, "demo-chat-business-type"));
     let chat_lbl_goal = html_escape(&t(locale, "demo-chat-business-goal"));
     let chat_handoff_chip = html_escape(&t(locale, "demo-chat-handoff-chip"));
-    let chat_view_prompt = html_escape(&t(locale, "demo-chat-view-prompt"));
-    let chat_hide_prompt = html_escape(&t(locale, "demo-chat-hide-prompt"));
     let chat_prompt_heading = html_escape(&t(locale, "demo-chat-prompt-heading"));
     let chat_envelope_note = html_escape(&t(locale, "demo-chat-envelope-note"));
     // Same as the subtitles: these go inside an Alpine `'…'` literal in
@@ -202,51 +191,44 @@ pub fn welcome_html(
     let chat_cta_heading = html_escape(&t(locale, "demo-chat-cta-heading"));
     let chat_cta_body = html_escape(&t(locale, "demo-chat-cta-body"));
     let chat_cta_button = html_escape(&t(locale, "demo-chat-cta-button"));
+    // Copy for the redesigned demo: the phone itself is the live surface
+    // (the chat runs *inside* it), and a small "how this works" link in
+    // the activated phone opens the reference modal that carries the full
+    // system-prompt envelope and the explanatory blurb.
+    let chat_how_line = html_escape(&t(locale, "demo-chat-how-line"));
+    let chat_how_link = html_escape(&t(locale, "demo-chat-how-link"));
+    let chat_how_title = html_escape(&t(locale, "demo-chat-how-title"));
+    let chat_how_subtitle = html_escape(&t(locale, "demo-chat-how-subtitle"));
+    let chat_how_intro = html_escape(&t(locale, "demo-chat-how-intro"));
 
-    // Two affordances open the demo modal when it's enabled: the hero
-    // headline (a quiet, redundant click target) and a "compose" row at
-    // the bottom of the phone illustration (the primary, visible CTA).
-    // When the operator has disabled the demo, both lose their click
-    // handlers, the aside becomes pure illustration again, and the
-    // screen-reader hint span is dropped.
+    // The whole phone illustration is the demo's click target when it's
+    // enabled: tapping it (or the hero headline, a quiet redundant target)
+    // activates the in-phone chat. When the operator has disabled the
+    // demo, the aside is pure illustration — no click handlers, the aside
+    // is aria-hidden, and the screen-reader hint span is dropped.
     let initial_headline = &variants[0];
-    let (hero_headline, hero_hint, aside_aria, compose_row) = if demo_enabled {
+    let (hero_headline, hero_hint, aside_aria) = if demo_enabled {
         (
             format!(
                 r#"<h1 class="display hero-clickable" id="hero-headline"
           tabindex="0" aria-describedby="demo-chat-hint-text"
-          @click="open = true"
-          @keydown.enter.prevent="open = true"
-          @keydown.space.prevent="open = true">{headline}<span class="hero-caret" aria-hidden="true"></span></h1>"#,
+          @click="activate()"
+          @keydown.enter.prevent="activate()"
+          @keydown.space.prevent="activate()">{headline}<span class="hero-caret" aria-hidden="true"></span></h1>"#,
                 headline = initial_headline,
             ),
             // Screen-reader-only hint: keeps the aria-describedby target
-            // on the headline alive for AT users. The compose button
+            // on the headline alive for AT users. The phone idle screen
             // below carries the visible cue for sighted users.
             format!(
                 r#"<span id="demo-chat-hint-text" class="sr-only">{chat_hint}</span>"#,
                 chat_hint = chat_hint,
             ),
-            // Aside is interactive now (contains the compose button),
-            // so it can't be aria-hidden as a whole. The decorative
-            // notifications/status-bar/footer carry their own
-            // aria-hidden so AT only surfaces the compose button.
+            // Aside is interactive now (the idle phone screen is itself
+            // the activation button), so it can't be aria-hidden as a
+            // whole. The decorative status-bar/footer carry their own
+            // aria-hidden; the idle button carries the aria-label.
             "",
-            format!(
-                r#"<button type="button" class="phone-compose" aria-label="{chat_hint}"
-          @click="open = true">
-        <span class="phone-compose-input" aria-hidden="true">{chat_hint}</span>
-        <span class="phone-compose-send" aria-hidden="true">
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="none"
-               stroke="currentColor" stroke-width="1.6"
-               stroke-linecap="round" stroke-linejoin="round">
-            <path d="M14.5 1.5 L1.5 7.5 L7 9 L9 14.5 Z"/>
-            <path d="M14.5 1.5 L7 9"/>
-          </svg>
-        </span>
-      </button>"#,
-                chat_hint = chat_hint,
-            ),
         )
     } else {
         (
@@ -257,8 +239,156 @@ pub fn welcome_html(
             String::new(),
             // Demo disabled: aside is illustration-only, hide it from AT.
             r#" aria-hidden="true""#,
-            String::new(),
         )
+    };
+
+    // When the demo is live the whole idle phone screen is one big
+    // activation button (role=button so a <div> wrapping the decorative
+    // notification list stays valid HTML — a real <button> can't contain
+    // a <ul>). Disabled: no handlers, the aside's own aria-hidden covers
+    // it.
+    let idle_attrs = if demo_enabled {
+        format!(
+            r#" role="button" tabindex="0" aria-label="{chat_hint}"
+        @click="activate()"
+        @keydown.enter.prevent="activate()"
+        @keydown.space.prevent="activate()""#,
+            chat_hint = chat_hint,
+        )
+    } else {
+        String::new()
+    };
+
+    // The dim backdrop sits *outside* the phone frame: the active frame
+    // is `position:fixed` + `transform`, which would otherwise become the
+    // containing block for a fixed-position child and trap the backdrop
+    // inside the phone. Empty when the demo is disabled.
+    let phone_backdrop = if demo_enabled {
+        r#"<div class="phone-backdrop" x-show="activated" x-cloak x-transition.opacity
+        @click="deactivate()" aria-hidden="true"></div>"#
+    } else {
+        ""
+    };
+
+    // Visible "tap to try" cue at the bottom of the idle phone screen —
+    // the sighted-user equivalent of the headline's aria hint. Only
+    // meaningful when the demo is clickable, so it's dropped when the
+    // operator has disabled the demo.
+    let phone_try = if demo_enabled {
+        format!(
+            r#"<div class="phone-try" aria-hidden="true">
+          <span class="phone-try-label">{chat_hint}</span>
+          <span class="phone-try-go">&rarr;</span>
+        </div>"#,
+            chat_hint = chat_hint,
+        )
+    } else {
+        String::new()
+    };
+
+    // The in-phone demo screen, rendered *inside* the phone frame after
+    // the idle screen: the concierge "wipe" overlay that sweeps the
+    // notifications away on activation, then the chat surface itself
+    // (persona picker, transcript, composer, sign-up CTA). The frame
+    // flips to `.active` and the chat fades in once `activated` is set;
+    // the reference modal (full system prompt + "how it works") opens
+    // from the small link under the header. Empty when demo is disabled.
+    let phone_screen = if demo_enabled {
+        format!(
+            r#"<div class="phone-wipe" x-show="wiping" x-cloak aria-hidden="true"><span class="phone-wipe-mark">{logo}</span></div>
+        <div class="phone-chat" x-show="activated" x-cloak
+        role="dialog" aria-modal="true" aria-label="{chat_title}"
+        x-trap.noscroll.inert="activated && !open"
+        @keydown.escape.window="activated && (open ? (open = false) : deactivate())">
+        <div class="phone-chat-head">
+          <span class="phone-chat-dot" aria-hidden="true"></span>
+          <select class="select phone-persona" x-model="personaSlug" :disabled="!personas.length"
+            data-testid="demo-chat-persona" aria-label="{chat_persona_label}">
+            <template x-if="!personas.length">
+              <option :value="personaSlug" x-text="personasLoaded ? '(no personas available)' : 'Loading…'"></option>
+            </template>
+            <template x-for="p in personas" :key="p.slug">
+              <option :value="p.slug" x-text="p.business && p.business.name ? p.business.name : p.label"></option>
+            </template>
+          </select>
+          <button type="button" class="phone-x" @click="deactivate()" aria-label="{chat_close}">&times;</button>
+        </div>
+        <p class="phone-how">{chat_how_line}
+          <button type="button" class="linklike" @click="open = true" :disabled="!personas.length">{chat_how_link}</button>
+        </p>
+        <div class="chat-business-card phone-biz" x-show="currentPersona.slug !== 'concierge' && currentPersona.business" x-cloak>
+          <p class="roleplay">{chat_roleplay_prefix} <strong x-text="currentPersona.business && currentPersona.business.name"></strong>{chat_roleplay_suffix}</p>
+          <p class="biz-meta">
+            <span x-show="currentPersona.business && currentPersona.business.business_type"><b>{chat_lbl_type}</b><span x-text="currentPersona.business && currentPersona.business.business_type"></span></span>
+            <span x-show="currentPersona.business && currentPersona.business.city"><b>{chat_lbl_city}</b><span x-text="currentPersona.business && currentPersona.business.city"></span></span>
+            <span x-show="currentPersona.business && currentPersona.business.hours"><b>{chat_lbl_hours}</b><span x-text="currentPersona.business && currentPersona.business.hours"></span></span>
+            <span class="biz-goal" x-show="currentPersona.business && currentPersona.business.goal">
+              <b>{chat_lbl_goal}</b>
+              <span x-text="currentPersona.business && currentPersona.business.goal"></span>
+              <template x-if="currentPersona.business && currentPersona.business.goal_url">
+                <a class="biz-goal-link" :href="currentPersona.business.goal_url" x-text="currentPersona.business.goal_url" target="_blank" rel="noopener"></a>
+              </template>
+            </span>
+          </p>
+        </div>
+        <div class="chat-scroll phone-scroll" x-ref="msgs">
+          <div class="chat-messages">
+            <template x-for="(m, i) in messages" :key="i">
+              <div :class="'chat-msg ' + m.role" x-text="m.content"></div>
+            </template>
+            <div class="chat-thinking" x-show="sending">{chat_thinking}</div>
+          </div>
+        </div>
+        <div class="chat-handoff-chip phone-handoff" x-show="handoff" x-cloak>
+          <span class="chat-handoff-dot" aria-hidden="true"></span>{chat_handoff_chip}
+        </div>
+        <div class="chat-error" x-show="error" x-text="error"></div>
+        <form x-show="!showCta" @submit.prevent="send()" class="phone-form">
+          <textarea class="chat-input phone-input" x-model="input"
+            :placeholder="currentPersona.slug === 'concierge' ? '{chat_placeholder}' : ('{chat_placeholder_prefix} ' + currentPersona.label + ' {chat_placeholder_suffix}')"
+            :disabled="sending || !personas.length" x-ref="input" maxlength="300" rows="1"
+            @input="resetIdleTimer()"
+            @keydown.enter="if (!$event.shiftKey) {{ $event.preventDefault(); send(); }}"
+            autocomplete="off" autocorrect="off" autocapitalize="off"></textarea>
+          <button type="submit" class="btn primary phone-send" :disabled="sending || !input.trim() || !personas.length" aria-label="{chat_send}">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor"
+                 stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M14.5 1.5 L1.5 7.5 L7 9 L9 14.5 Z"/>
+              <path d="M14.5 1.5 L7 9"/>
+            </svg>
+          </button>
+        </form>
+        <div class="chat-cta phone-cta" x-show="showCta" x-cloak>
+          <div class="chat-cta-text">
+            <strong>{chat_cta_heading}</strong>
+            <span>{chat_cta_body}</span>
+          </div>
+          <a href="/auth/login" class="btn primary">{chat_cta_button}</a>
+        </div>
+      </div>"#,
+            chat_title = chat_title,
+            chat_persona_label = chat_persona_label,
+            chat_close = chat_close,
+            chat_how_line = chat_how_line,
+            chat_how_link = chat_how_link,
+            chat_roleplay_prefix = chat_roleplay_prefix,
+            chat_roleplay_suffix = chat_roleplay_suffix,
+            chat_lbl_type = chat_lbl_type,
+            chat_lbl_city = chat_lbl_city,
+            chat_lbl_hours = chat_lbl_hours,
+            chat_thinking = chat_thinking,
+            chat_handoff_chip = chat_handoff_chip,
+            chat_placeholder = chat_placeholder,
+            chat_placeholder_prefix = chat_placeholder_prefix,
+            chat_placeholder_suffix = chat_placeholder_suffix,
+            chat_send = chat_send,
+            chat_cta_heading = chat_cta_heading,
+            chat_cta_body = chat_cta_body,
+            chat_cta_button = chat_cta_button,
+            logo = super::base::LOGO_INLINE,
+        )
+    } else {
+        String::new()
     };
 
     // Persona catalog: the welcome handler resolves it server-side and
@@ -279,7 +409,7 @@ pub fn welcome_html(
 
     let content = format!(
         r#"{header}
-<div x-data="conciergeChat()" x-effect="window.__heroPaused = open">
+<div x-data="conciergeChat()" x-effect="window.__heroPaused = activated || open">
 <section class="page welcome">
   <div class="welcome-left">
     <div class="eyebrow">{eyebrow}</div>
@@ -291,57 +421,66 @@ pub fn welcome_html(
       <a href="/features" class="btn ghost lg">{cta_secondary}</a>
     </div>
   </div>
-  <aside class="hero-phone"{aside_aria}>
-    <div class="phone-frame">
-      <div class="phone-bar" aria-hidden="true">
-        <span>9:47</span>
-        <span class="phone-bar-dots"><i></i><i></i><i></i></span>
+  <aside class="hero-phone" :class="activated ? 'active' : ''"{aside_aria}>
+    {phone_backdrop}
+    <div class="phone-frame" :class="(activated ? 'active ' : '') + (wiping ? 'wiping' : '')">
+      <div class="phone-idle" x-show="!activated"{idle_attrs}>
+        <div class="phone-bar" aria-hidden="true">
+          <span>9:47</span>
+          <span class="phone-bar-dots"><i></i><i></i><i></i></span>
+        </div>
+        <div class="phone-header" aria-hidden="true">
+          <span class="eyebrow">Tue &middot; 12 handled</span>
+        </div>
+        <ul class="phone-feed" aria-hidden="true">
+          <li class="phone-notif">
+            <span class="phone-channel ch-wa">WA</span>
+            <div>
+              <div class="phone-meta"><b>Sarah</b><span>now</span></div>
+              <p class="phone-msg">can I move my booking?</p>
+              <span class="phone-tag ok">Replied</span>
+            </div>
+          </li>
+          <li class="phone-notif">
+            <span class="phone-channel ch-ig">IG</span>
+            <div>
+              <div class="phone-meta"><b>@leo_03</b><span>1m</span></div>
+              <p class="phone-msg">hi what time u open</p>
+              <span class="phone-tag ok">Replied</span>
+            </div>
+          </li>
+          <li class="phone-notif">
+            <span class="phone-channel ch-dc">DC</span>
+            <div>
+              <div class="phone-meta"><b>#orders</b><span>4m</span></div>
+              <p class="phone-msg">invoice #8821?</p>
+              <span class="phone-tag fwd">Forwarded</span>
+            </div>
+          </li>
+          <li class="phone-notif">
+            <span class="phone-channel ch-em">@</span>
+            <div>
+              <div class="phone-meta"><b>orders@</b><span>9m</span></div>
+              <p class="phone-msg">refund request, order {hash}412</p>
+              <span class="phone-tag ok">Replied</span>
+            </div>
+          </li>
+        </ul>
+        <div class="phone-foot" aria-hidden="true">
+          <span>0 sent to you</span>
+          <span>All caught up</span>
+        </div>
+        {phone_try}
       </div>
-      <div class="phone-header" aria-hidden="true">
-        <span class="eyebrow">Tue &middot; 12 handled</span>
-      </div>
-      <ul class="phone-feed" aria-hidden="true">
-        <li class="phone-notif">
-          <span class="phone-channel ch-wa">WA</span>
-          <div>
-            <div class="phone-meta"><b>Sarah</b><span>now</span></div>
-            <p class="phone-msg">can I move my booking?</p>
-            <span class="phone-tag ok">Replied</span>
-          </div>
-        </li>
-        <li class="phone-notif">
-          <span class="phone-channel ch-ig">IG</span>
-          <div>
-            <div class="phone-meta"><b>@leo_03</b><span>1m</span></div>
-            <p class="phone-msg">hi what time u open</p>
-            <span class="phone-tag ok">Replied</span>
-          </div>
-        </li>
-        <li class="phone-notif">
-          <span class="phone-channel ch-dc">DC</span>
-          <div>
-            <div class="phone-meta"><b>#orders</b><span>4m</span></div>
-            <p class="phone-msg">invoice #8821?</p>
-            <span class="phone-tag fwd">Forwarded</span>
-          </div>
-        </li>
-        <li class="phone-notif">
-          <span class="phone-channel ch-em">@</span>
-          <div>
-            <div class="phone-meta"><b>orders@</b><span>9m</span></div>
-            <p class="phone-msg">refund request, order {hash}412</p>
-            <span class="phone-tag ok">Replied</span>
-          </div>
-        </li>
-      </ul>
-      <div class="phone-foot" aria-hidden="true">
-        <span>0 sent to you</span>
-        <span>All caught up</span>
-      </div>
-      {compose_row}
+      {phone_screen}
     </div>
   </aside>
 </section>
+<!-- Reference modal: the "under the hood" layer, opened from the small
+     link inside the activated phone. Carries the explanatory blurb, the
+     roleplay context for the selected persona, the full three-part
+     system-prompt envelope, and the real-channels note. The live chat
+     itself now lives inside the phone, not here. -->
 <div x-show="open" x-cloak class="modal-overlay"
   role="dialog" aria-modal="true" aria-labelledby="demo-chat-modal-title"
   x-trap.noscroll.inert="open"
@@ -349,100 +488,42 @@ pub fn welcome_html(
   <div class="modal-card">
     <div class="between mb-8">
       <div>
-        <h2 id="demo-chat-modal-title" class="display-sm m-0">{chat_title}</h2>
-        <p class="muted fs-13 m-0 mt-4" x-text="currentPersona.slug === 'concierge' ? '{chat_subtitle_concierge}' : '{chat_subtitle}'"></p>
+        <h2 id="demo-chat-modal-title" class="display-sm m-0">{chat_how_title}</h2>
+        <p class="muted fs-13 m-0 mt-4">{chat_how_subtitle}</p>
       </div>
       <button type="button" class="btn ghost modal-close" @click="open = false" aria-label="{chat_close}">&times;</button>
     </div>
-    <div class="chat-controls">
-      <label class="chat-persona-label">
-        <span class="eyebrow">{chat_persona_label}</span>
-        <select class="select chat-persona-select" x-model="personaSlug" :disabled="!personas.length" data-testid="demo-chat-persona">
-          <!-- Placeholder while the catalog is loading or empty. `x-if`
-               (vs `x-show`) actually removes the <option> from the DOM,
-               because browsers treat `display:none` on <option>
-               inconsistently otherwise, which manifests as a
-               cropped/misaligned arrow. -->
-          <template x-if="!personas.length">
-            <option :value="personaSlug" x-text="personasLoaded ? '(no personas available)' : 'Loading…'"></option>
-          </template>
-          <template x-for="p in personas" :key="p.slug">
-            <option :value="p.slug" x-text="p.business && p.business.name ? p.business.name : p.label"></option>
-          </template>
-        </select>
-      </label>
-      <button type="button" class="btn ghost sm" @click="showPrompt = !showPrompt" :aria-expanded="showPrompt" :disabled="!personas.length" aria-controls="demo-chat-prompt-panel">
-        <span x-show="!showPrompt">{chat_view_prompt}</span>
-        <span x-show="showPrompt" x-cloak>{chat_hide_prompt}</span>
-      </button>
-    </div>
-    <p class="muted fs-13 chat-persona-desc" x-text="personas.length ? currentPersona.description : (personasLoaded ? 'The demo isn\'t available right now. Please try again in a few minutes.' : 'Loading personas…')"></p>
-    <!-- Roleplay frame card: shown only when the visitor picked a sample
-         business persona (not the Concierge-self row). Tells them
-         they're playing one of that business's customers, and lists the
-         business's profile so they have something concrete to ask
-         about. -->
-    <div class="chat-business-card" x-show="currentPersona.slug !== 'concierge' && currentPersona.business" x-cloak>
-      <p class="roleplay">{chat_roleplay_prefix} <strong x-text="currentPersona.business && currentPersona.business.name"></strong>{chat_roleplay_suffix}</p>
-      <p class="biz-meta">
-        <span x-show="currentPersona.business && currentPersona.business.business_type"><b>{chat_lbl_type}</b><span x-text="currentPersona.business && currentPersona.business.business_type"></span></span>
-        <span x-show="currentPersona.business && currentPersona.business.city"><b>{chat_lbl_city}</b><span x-text="currentPersona.business && currentPersona.business.city"></span></span>
-        <span x-show="currentPersona.business && currentPersona.business.hours"><b>{chat_lbl_hours}</b><span x-text="currentPersona.business && currentPersona.business.hours"></span></span>
-        <span class="biz-goal" x-show="currentPersona.business && currentPersona.business.goal">
-          <b>{chat_lbl_goal}</b>
-          <span x-text="currentPersona.business && currentPersona.business.goal"></span>
-          <template x-if="currentPersona.business && currentPersona.business.goal_url">
-            <a class="biz-goal-link" :href="currentPersona.business.goal_url" x-text="currentPersona.business.goal_url" target="_blank" rel="noopener"></a>
-          </template>
-        </span>
-      </p>
-    </div>
-    <!-- Scroll region. Prompt panel sits above the messages when
-         "View system prompt" is on; messages stay visible underneath
-         so it's clear the toggle is additive, not a separate screen. -->
-    <div class="chat-scroll" x-ref="msgs">
-      <section id="demo-chat-prompt-panel" class="chat-prompt-panel" x-show="showPrompt" x-cloak aria-live="polite">
+    <div class="chat-scroll how-scroll">
+      <p class="how-intro">{chat_how_intro}</p>
+      <!-- Roleplay frame card: shown only when a sample business persona
+           is selected in the phone. Lists that business's profile so the
+           prompt below reads in context. -->
+      <div class="chat-business-card" x-show="currentPersona.slug !== 'concierge' && currentPersona.business" x-cloak>
+        <p class="roleplay">{chat_roleplay_prefix} <strong x-text="currentPersona.business && currentPersona.business.name"></strong>{chat_roleplay_suffix}</p>
+        <p class="biz-meta">
+          <span x-show="currentPersona.business && currentPersona.business.business_type"><b>{chat_lbl_type}</b><span x-text="currentPersona.business && currentPersona.business.business_type"></span></span>
+          <span x-show="currentPersona.business && currentPersona.business.city"><b>{chat_lbl_city}</b><span x-text="currentPersona.business && currentPersona.business.city"></span></span>
+          <span x-show="currentPersona.business && currentPersona.business.hours"><b>{chat_lbl_hours}</b><span x-text="currentPersona.business && currentPersona.business.hours"></span></span>
+          <span class="biz-goal" x-show="currentPersona.business && currentPersona.business.goal">
+            <b>{chat_lbl_goal}</b>
+            <span x-text="currentPersona.business && currentPersona.business.goal"></span>
+            <template x-if="currentPersona.business && currentPersona.business.goal_url">
+              <a class="biz-goal-link" :href="currentPersona.business.goal_url" x-text="currentPersona.business.goal_url" target="_blank" rel="noopener"></a>
+            </template>
+          </span>
+        </p>
+      </div>
+      <!-- Full system-prompt envelope for the persona selected in the
+           phone. Always shown here (no toggle): this modal *is* the
+           "view system prompt" surface now. -->
+      <section id="demo-chat-prompt-panel" class="chat-prompt-panel" aria-label="{chat_prompt_heading}">
         <div class="eyebrow mb-6">{chat_prompt_heading}</div>
         <p class="muted fs-12 mb-6">{chat_envelope_note}</p>
         <pre class="chat-prompt-body chat-prompt-fixed" x-text="preamble"></pre>
         <pre class="chat-prompt-body chat-prompt-middle" x-text="currentPersona.prompt"></pre>
         <pre class="chat-prompt-body chat-prompt-fixed" x-text="postamble"></pre>
       </section>
-      <div class="chat-messages">
-        <template x-for="(m, i) in messages" :key="i">
-          <div :class="'chat-msg ' + m.role" x-text="m.content"></div>
-        </template>
-        <div class="chat-thinking" x-show="sending">{chat_thinking}</div>
-      </div>
-    </div>
-    <!-- Handoff chip: appears once the model has emitted the handoff
-         token on a turn. Pure demo theater (there's no real human to
-         take over), but it signals the same UX a tenant would see in
-         their tenant-facing dashboard. -->
-    <div class="chat-handoff-chip" x-show="handoff" x-cloak>
-      <span class="chat-handoff-dot" aria-hidden="true"></span>
-      {chat_handoff_chip}
-    </div>
-    <!-- Channels hint: visible to everyone, with a slightly different
-         emphasis for the Concierge persona vs sample business personas.
-         Reinforces that this chat box is the demo only; real customer
-         messages arrive in WhatsApp / IG / Discord / email. -->
-    <p class="chat-channels-note">{chat_channels_note}</p>
-    <div class="chat-error" x-show="error" x-text="error"></div>
-    <form x-show="!showCta" @submit.prevent="send()" class="row gap-8 mt-12 chat-form">
-      <textarea class="chat-input" x-model="input" :placeholder="currentPersona.slug === 'concierge' ? '{chat_placeholder}' : ('{chat_placeholder_prefix} ' + currentPersona.label + ' {chat_placeholder_suffix}')"
-        :disabled="sending || !personas.length" x-ref="input" maxlength="300" rows="2"
-        @input="resetIdleTimer()"
-        @keydown.enter="if (!$event.shiftKey) {{ $event.preventDefault(); send(); }}"
-        autocomplete="off" autocorrect="off" autocapitalize="off"></textarea>
-      <button type="submit" class="btn primary" :disabled="sending || !input.trim() || !personas.length">{chat_send}</button>
-    </form>
-    <div class="chat-cta" x-show="showCta" x-cloak>
-      <div class="chat-cta-text">
-        <strong>{chat_cta_heading}</strong>
-        <span>{chat_cta_body}</span>
-      </div>
-      <a href="/auth/login" class="btn primary">{chat_cta_button}</a>
+      <p class="chat-channels-note">{chat_channels_note}</p>
     </div>
   </div>
 </div>
@@ -450,43 +531,18 @@ pub fn welcome_html(
 {preloaded_personas_block}
 {rotator}
 {chat_script}"#,
-        header = header,
+        // Most placeholders are captured implicitly from locals of the
+        // same name (hero_headline, aside_aria, phone_backdrop, idle_attrs,
+        // phone_try, phone_screen, chat_how_*, chat_lbl_*, chat_roleplay_*,
+        // chat_prompt_heading, chat_envelope_note, chat_channels_note,
+        // chat_close, preloaded_personas_block, rotator, chat_script, …).
+        // Only the inline-computed strings and the `hash`→HASH rename need
+        // to be spelled out here.
         eyebrow = t(locale, "welcome-eyebrow"),
-        hero_headline = hero_headline,
-        hero_hint = hero_hint,
-        aside_aria = aside_aria,
-        compose_row = compose_row,
-        preloaded_personas_block = preloaded_personas_block,
         lead = t(locale, "welcome-lead"),
         cta_primary = t(locale, "welcome-cta-primary"),
         cta_secondary = t(locale, "welcome-cta-secondary"),
-        chat_title = chat_title,
-        chat_subtitle = chat_subtitle,
-        chat_subtitle_concierge = chat_subtitle_concierge,
-        chat_persona_label = chat_persona_label,
-        chat_roleplay_prefix = chat_roleplay_prefix,
-        chat_roleplay_suffix = chat_roleplay_suffix,
-        chat_channels_note = chat_channels_note,
-        chat_lbl_hours = chat_lbl_hours,
-        chat_lbl_city = chat_lbl_city,
-        chat_lbl_type = chat_lbl_type,
-        chat_lbl_goal = chat_lbl_goal,
-        chat_handoff_chip = chat_handoff_chip,
-        chat_view_prompt = chat_view_prompt,
-        chat_hide_prompt = chat_hide_prompt,
-        chat_prompt_heading = chat_prompt_heading,
-        chat_placeholder = chat_placeholder,
-        chat_placeholder_prefix = chat_placeholder_prefix,
-        chat_placeholder_suffix = chat_placeholder_suffix,
-        chat_send = chat_send,
-        chat_close = chat_close,
-        chat_thinking = chat_thinking,
-        chat_cta_heading = chat_cta_heading,
-        chat_cta_body = chat_cta_body,
-        chat_cta_button = chat_cta_button,
         hash = HASH,
-        rotator = rotator,
-        chat_script = chat_script,
     );
 
     base_html("Concierge - Automated customer messaging", &content, locale)
@@ -636,15 +692,22 @@ const HERO_CHAT_JS: &str = r##"<script nonce="__CSP_NONCE__">
   // from /manage/demo (idle_timeout_secs).
   const CTA_TIMEOUT_MS = __CTA_TIMEOUT_MS__;
   window.conciergeChat = () => ({
+    // `activated`: the in-phone live demo is running (the phone has
+    // flipped from its notification illustration into the chat surface).
+    // `open`: the reference modal (full system prompt + "how it works")
+    // is layered on top. `wiping`: the brief concierge sweep overlay
+    // shown for one beat as the phone activates.
+    activated: false,
+    wiping: false,
     open: false,
     sending: false,
     error: '',
     input: '',
-    showPrompt: false,
     // Set true once /demo/chat returns handoff:true on a turn. Echoed
     // back on every subsequent send so the server replies under the
-    // holding-pattern middle. Resets on persona switch and modal close.
+    // holding-pattern middle. Resets on persona switch and deactivate.
     handoff: false,
+    _wipeTimer: null,
     // Personas come from /demo/personas (Approved-only D1 catalog).
     // Empty until init() fetches; dropdown shows a loading row.
     personas: [],
@@ -689,8 +752,12 @@ const HERO_CHAT_JS: &str = r##"<script nonce="__CSP_NONCE__">
       }
       this._defaultPersonaSlug = this.personaSlug;
       this.resetTranscript();
-      this.$watch('open', (v) => {
-        window.__heroPaused = !!v;
+      // The phone (not the modal) is the chat session now: focus the
+      // input and start the idle timer when it activates; tear the
+      // session down when it deactivates. `window.__heroPaused` is driven
+      // by the `x-effect` on the wrapper (activated || open), so it isn't
+      // set here.
+      this.$watch('activated', (v) => {
         if (v) {
           this.resetIdleTimer();
           this.$nextTick(() => {
@@ -712,25 +779,47 @@ const HERO_CHAT_JS: &str = r##"<script nonce="__CSP_NONCE__">
         });
       });
     },
+    // Flip the phone into chat mode. Plays the quick concierge "wipe"
+    // overlay first (skipped under reduced-motion), then the chat fades
+    // in. No-op if already active. Guarded on personas so a disabled /
+    // empty-catalog demo can't open an empty chat.
+    activate() {
+      if (this.activated || !this.personas.length) return;
+      this.activated = true;
+      const reduce = window.matchMedia
+        && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      if (this._wipeTimer) { clearTimeout(this._wipeTimer); this._wipeTimer = null; }
+      if (!reduce) {
+        this.wiping = true;
+        this._wipeTimer = setTimeout(() => { this.wiping = false; this._wipeTimer = null; }, 480);
+      }
+    },
+    // Close the demo: drop the reference modal too, stop the wipe, and
+    // let the `activated` watcher reset the transcript / idle timer.
+    deactivate() {
+      this.open = false;
+      this.wiping = false;
+      if (this._wipeTimer) { clearTimeout(this._wipeTimer); this._wipeTimer = null; }
+      this.activated = false;
+    },
     resetTranscript() {
       const p = this.currentPersona;
       this.messages = [{ role: 'assistant', content: p.greeting }];
       this.error = '';
       this.input = '';
-      this.showPrompt = false;
       this.handoff = false;
     },
     scrollDown() {
       const el = this.$refs.msgs;
       if (el) el.scrollTop = el.scrollHeight;
     },
-    // Idle window: starts on modal open, restarts on every keystroke
-    // in the chat input. When it fires the input swaps for the sign-up
-    // CTA. Cleared on modal close and once the CTA is up (no point
+    // Idle window: starts when the phone activates, restarts on every
+    // keystroke in the chat input. When it fires the input swaps for the
+    // sign-up CTA. Cleared on deactivate and once the CTA is up (no point
     // running a timer for a state we've already entered).
     resetIdleTimer() {
       this.clearIdleTimer();
-      if (this.ctaShown || !this.open) return;
+      if (this.ctaShown || !this.activated) return;
       this._ctaTimer = setTimeout(() => { this.ctaShown = true; }, CTA_TIMEOUT_MS);
     },
     clearIdleTimer() {
@@ -1822,6 +1911,74 @@ mod pricing_tests {
         assert!(html.contains("₹150"), "wizard help missing INR: {html}");
         assert!(html.contains("$"), "wizard help missing USD: {html}");
         assert!(html.contains("5"), "wizard help missing pack size: {html}");
+    }
+
+    #[test]
+    fn welcome_html_enabled_puts_the_demo_in_the_phone() {
+        let l = crate::locale::Locale::default_inr();
+        let personas = r#"{"personas":[{"slug":"concierge","label":"Concierge","greeting":"hi","prompt":"p"}]}"#;
+        let html = welcome_html("https://x.test", &l, true, 6, 90, Some(personas));
+        // The phone is both the activation target and the live chat host.
+        assert!(
+            html.contains(r#"class="phone-idle""#),
+            "missing idle screen"
+        );
+        assert!(
+            html.contains(r#"@click="activate()""#),
+            "phone/headline should activate the in-phone demo"
+        );
+        assert!(
+            html.contains(r#"class="phone-chat""#),
+            "chat should live in the phone"
+        );
+        assert!(
+            html.contains("phone-wipe-mark"),
+            "wipe should carry the brand mark, not a wordmark"
+        );
+        assert!(
+            html.contains(r#"aria-label="Live demo""#),
+            "the activated phone should be a dialog named Live demo"
+        );
+        // Reference modal now carries the prompt envelope + how-it-works.
+        assert!(
+            html.contains("How the demo works"),
+            "missing reference modal title"
+        );
+        assert!(
+            html.contains(r#"id="demo-chat-prompt-panel""#),
+            "system-prompt panel should live in the reference modal"
+        );
+        // The old compose row is gone; personas are embedded inline.
+        assert!(
+            !html.contains("phone-compose"),
+            "old compose row should be removed"
+        );
+        assert!(
+            html.contains(r#"<script id="demo-personas-data""#),
+            "personas island missing"
+        );
+    }
+
+    #[test]
+    fn welcome_html_disabled_is_illustration_only() {
+        let l = crate::locale::Locale::default_inr();
+        let html = welcome_html("https://x.test", &l, false, 6, 90, None);
+        assert!(
+            html.contains(r#"<aside class="hero-phone""#),
+            "phone illustration still present"
+        );
+        assert!(
+            !html.contains(r#"@click="activate()""#),
+            "no activation affordance when the demo is disabled"
+        );
+        assert!(
+            !html.contains(r#"class="phone-chat""#),
+            "no in-phone chat when disabled"
+        );
+        assert!(
+            !html.contains(r#"<script id="demo-personas-data""#),
+            "no personas island when disabled"
+        );
     }
 
     #[test]

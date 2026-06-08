@@ -66,8 +66,15 @@ welcome-cta-secondary = See features
 
 # Live demo chat ("ask me about Concierge"). Triggered from the welcome
 # CTA row; backed by /demo/chat.
-demo-chat-hint = click to try the live demo
+demo-chat-hint = tap to try the live demo
 demo-chat-title = Live demo
+# Shown inside the activated phone (the in-app demo surface) and on the
+# "how it works" reference modal it links out to.
+demo-chat-how-line = You're talking to the live AI that answers for a business.
+demo-chat-how-link = How this works
+demo-chat-how-title = How the demo works
+demo-chat-how-subtitle = What you're looking at, and the exact prompt behind it.
+demo-chat-how-intro = This is a real conversation with the same model Concierge uses for your customers. Pick a sample business, message it as if you were one of its customers, and you'll see the reply it would send on their behalf. Nothing here is scripted.
 demo-chat-subtitle = Pick a sample business, then message it as if you were one of its customers. You'll see exactly the kind of reply Concierge would send for you.
 demo-chat-subtitle-concierge = Ask me anything about Concierge: what I do, channels, pricing, setup.
 demo-chat-persona-label = Sample business

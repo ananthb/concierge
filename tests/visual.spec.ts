@@ -54,3 +54,108 @@ for (const shot of SHOTS) {
     });
   });
 }
+
+// ── Activated demo captures ────────────────────────────────────────────
+// The hero phone is the live demo: tapping it sweeps in a chat surface.
+// These shots drive that interaction so the gallery shows the demo in
+// use, not just the idle illustration on home.png. Personas + the AI
+// reply are stubbed so the conversation is deterministic (the local dev
+// server has no Workers AI binding).
+const DEMO_PERSONAS = {
+  personas: [
+    {
+      slug: 'concierge',
+      label: 'Concierge',
+      description: 'Talks about Concierge itself.',
+      greeting: "Hi! I'm Concierge — ask me anything about how I work.",
+      prompt: 'Voice: Concierge talking about itself.',
+    },
+    {
+      slug: 'friendly_florist',
+      label: 'Friendly Florist',
+      description: 'A warm neighbourhood florist.',
+      greeting: 'Hi there! Welcome to Petals & Stems 🌸 How can I help?',
+      business: {
+        name: 'Petals & Stems',
+        business_type: 'florist',
+        city: 'Mumbai',
+        hours: 'Tue–Sun, 9am–7pm',
+        goal: 'book a delivery slot',
+        goal_url: '/book',
+      },
+      prompt: 'Business: Petals & Stems, a neighbourhood florist in Mumbai.',
+    },
+  ],
+};
+
+async function stubDemo(page: any) {
+  await page.route('http://localhost:8787/', async (route: any) => {
+    const resp = await route.fetch();
+    const headers = resp.headers();
+    const body = (await resp.text()).replace(
+      /(<script id="demo-personas-data"[^>]*>)[\s\S]*?(<\/script>)/,
+      `$1${JSON.stringify(DEMO_PERSONAS)}$2`,
+    );
+    await route.fulfill({
+      status: resp.status(),
+      headers,
+      contentType: headers['content-type'] ?? 'text/html; charset=utf-8',
+      body,
+    });
+  });
+  await page.route('**/demo/chat', (route: any) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        reply:
+          "Yes — Sundays included! I can hold a slot now and confirm the moment the shop's open. Want me to pencil you in?",
+      }),
+    }),
+  );
+}
+
+// Activate the demo as a florist customer and run one exchange, leaving
+// the phone mid-conversation for the screenshot. `stubDemo` must already
+// be registered (its routes must intercept the navigation below).
+async function openDemoConversation(page: any) {
+  await page.goto('/');
+  await page.locator('#hero-headline').click();
+  const demo = page.getByRole('dialog', { name: /live demo/i });
+  await demo.locator('[data-testid="demo-chat-persona"]').selectOption('friendly_florist');
+  await demo.getByRole('textbox').fill('do you deliver on Sundays?');
+  await demo.getByRole('button', { name: 'Send' }).click();
+  await demo.getByText(/Sundays included/i).waitFor();
+  // Let the wipe finish and bubbles settle before the shot.
+  await page.waitForTimeout(500);
+  return demo;
+}
+
+test('capture demo.png', async ({ page }) => {
+  await page.setViewportSize(DESKTOP);
+  await stubDemo(page);
+  await openDemoConversation(page);
+  await page.screenshot({ path: join(OUTPUT_DIR, 'demo.png') });
+});
+
+test('capture demo-mobile.png', async ({ page }) => {
+  await page.setViewportSize(MOBILE);
+  await stubDemo(page);
+  await openDemoConversation(page);
+  // The activated phone is full-screen on mobile, so a viewport shot is
+  // the whole app surface.
+  await page.screenshot({ path: join(OUTPUT_DIR, 'demo-mobile.png') });
+});
+
+test('capture demo-prompt.png', async ({ page }) => {
+  await page.setViewportSize(DESKTOP);
+  await stubDemo(page);
+  const demo = await openDemoConversation(page);
+  // Open the "how it works" reference modal: the full system-prompt
+  // envelope for the selected persona.
+  await demo.getByRole('button', { name: /how this works/i }).click();
+  const modal = page.getByRole('dialog', { name: /how the demo works/i });
+  await modal.waitFor();
+  await page.waitForTimeout(300);
+  await page.screenshot({ path: join(OUTPUT_DIR, 'demo-prompt.png') });
+});
