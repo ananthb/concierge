@@ -448,7 +448,7 @@ table tr.audit-detail > td { padding:0; background:var(--paper);
    100dvh so landscape phones don't clip the chat scroll region (80vh
    on a 375h viewport leaves 300px, which doesn't fit the persona
    picker + form + reply feed). */
-.modal-overlay { position:fixed; inset:0; z-index:1000;
+.modal-overlay { position:fixed; inset:0; z-index:1200;
   background:rgba(0,0,0,.4); display:flex;
   align-items:flex-end; justify-content:center;
   padding:var(--page-pad); }
@@ -512,39 +512,129 @@ table tr.audit-detail > td { padding:0; background:var(--paper);
 .phone-foot { display:flex; justify-content:space-between;
   padding:2px 8px 0; font-family:var(--f-mono); font-size:10px;
   letter-spacing:.12em; text-transform:uppercase; color:var(--muted); }
-/* Fake "compose" row at the bottom of the phone: a real <button>
-   styled to look like a messaging app's input bar + send icon. The
-   whole row opens the demo modal — it's the primary visible CTA into
-   the demo (the hero headline carries a quiet, redundant click target
-   for sighted users; AT users get the headline's aria-describedby and
-   this button's aria-label). */
-.phone-compose { display:flex; align-items:center; gap:8px;
-  width:100%; margin-top:6px; padding:6px 4px 2px;
-  background:transparent; border:0; cursor:pointer;
-  font-family:inherit; color:inherit;
-  border-radius:14px; outline:none;
-  transition:background .2s ease; }
-.phone-compose-input { flex:1; min-width:0; padding:9px 14px;
-  background:var(--cream); border:1px solid var(--hair);
-  border-radius:999px; color:var(--muted); font-size:13px;
-  text-align:left; line-height:1.3;
-  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+/* The phone IS the demo. Idle, it's the notification illustration and
+   one big activation button (role=button); tap it and the whole frame
+   becomes a live chat. The frame is `position:relative` so the wipe
+   overlay can clip to the screen; when active it lifts to a fixed,
+   centred "phone on a dimmed backdrop" (full-screen on mobile, so it
+   reads as being *inside* the app). */
+.phone-frame { position:relative; }
+.phone-idle { display:flex; flex-direction:column; gap:12px;
+  width:100%; padding:0; margin:0; background:none; border:0;
+  text-align:left; color:inherit; font:inherit; }
+[role="button"].phone-idle { cursor:pointer; }
+.phone-idle:focus-visible { outline:2px solid var(--accent);
+  outline-offset:6px; border-radius:18px; }
+/* Resting hover affordance on the whole frame while idle. */
+.hero-phone:not(.active) .phone-frame { transition:transform .2s ease, box-shadow .2s ease; }
+.hero-phone:not(.active) .phone-frame:hover { transform:translateY(-3px);
+  box-shadow:0 6px 0 rgba(27,24,20,.05), 0 20px 40px rgba(27,24,20,.12); }
+/* "tap to try" cue pinned under the notifications. */
+.phone-try { display:flex; align-items:center; justify-content:space-between;
+  gap:10px; margin-top:4px; padding:9px 14px;
+  background:var(--cream); border:1px solid var(--hair); border-radius:999px;
+  font-size:13px; color:var(--muted); letter-spacing:.01em;
   transition:border-color .2s ease, color .2s ease, background .2s ease; }
-.phone-compose-send { flex:none; width:36px; height:36px;
-  border-radius:50%; background:var(--accent); color:#fff;
+.phone-try-go { flex:none; color:var(--accent); font-weight:700;
+  transition:transform .2s ease; }
+.hero-phone:not(.active) .phone-frame:hover .phone-try { background:#fff;
+  border-color:var(--accent); color:var(--ink); }
+.hero-phone:not(.active) .phone-frame:hover .phone-try-go { transform:translateX(3px); }
+
+/* Dimmed backdrop behind the activated phone (sibling of the frame, so
+   the frame's own transform doesn't trap this fixed element). */
+.phone-backdrop { position:fixed; inset:0; z-index:1000; background:rgba(0,0,0,.45); }
+
+/* Activated frame: centre stage on a backdrop. Padding/gap drop to zero
+   so the chat fills the screen; the inner sections carry their own. */
+.phone-frame.active { position:fixed; z-index:1001; top:50%; left:50%;
+  transform:translate(-50%,-50%);
+  width:min(390px, calc(100vw - 32px)); height:min(680px, calc(100dvh - 48px));
+  max-width:none; padding:0; gap:0; overflow:hidden;
+  animation:phone-pop .3s ease; }
+@keyframes phone-pop {
+  from { opacity:0; transform:translate(-50%,-50%) scale(.96); }
+  to { opacity:1; transform:translate(-50%,-50%) scale(1); }
+}
+
+/* The concierge "wipe": a brand-coloured panel that sweeps top-to-bottom
+   across the screen as the phone activates, hiding the swap from
+   notifications to chat. ~480ms, one pass. */
+.phone-wipe { position:absolute; inset:0; z-index:5; pointer-events:none;
   display:flex; align-items:center; justify-content:center;
-  transition:background .2s ease, transform .2s ease; }
-.phone-compose:hover .phone-compose-input,
-.phone-compose:focus-visible .phone-compose-input {
-  background:#fff; border-color:var(--accent); color:var(--ink); }
-.phone-compose:hover .phone-compose-send,
-.phone-compose:focus-visible .phone-compose-send {
-  background:var(--accent-2); transform:scale(1.06); }
-.phone-compose:focus-visible {
-  outline:2px solid var(--accent); outline-offset:3px; }
+  background:linear-gradient(135deg, var(--accent), var(--accent-2));
+  border-radius:inherit;
+  animation:phone-wipe .48s cubic-bezier(.4,0,.2,1) forwards; }
+/* The brand mark lands as an app icon: a cream chip carrying the logo
+   glyph, so it reads on the accent wipe (the logo's own disc is accent
+   and would otherwise vanish into the background). */
+.phone-wipe-mark { display:flex; align-items:center; justify-content:center;
+  width:84px; height:84px; border-radius:22px; background:var(--cream);
+  box-shadow:0 10px 30px rgba(27,24,20,.25);
+  animation:phone-wipe-mark .48s ease forwards; }
+.phone-wipe-mark svg { width:52px; height:52px; }
+@keyframes phone-wipe {
+  0% { transform:translateY(-101%); }
+  40%,60% { transform:translateY(0); }
+  100% { transform:translateY(101%); }
+}
+@keyframes phone-wipe-mark {
+  0%,18% { opacity:0; }
+  46%,58% { opacity:1; }
+  100% { opacity:0; }
+}
+
+/* In-phone chat surface: header / how-line / scroll / composer, stacked
+   to fill the activated frame. */
+.phone-chat { display:flex; flex-direction:column; height:100%; min-height:0; }
+.phone-chat-head { display:flex; align-items:center; gap:10px;
+  padding:14px 14px 10px; border-bottom:1px solid var(--hair); flex:none; }
+.phone-chat-dot { flex:none; width:9px; height:9px; border-radius:50%;
+  background:var(--ok); box-shadow:0 0 0 4px rgba(62,127,74,.16); }
+.phone-persona { flex:1 1 auto; min-width:0; padding:7px 30px 7px 12px;
+  font-size:13px; }
+.phone-x { flex:none; width:30px; height:30px; padding:0;
+  display:inline-flex; align-items:center; justify-content:center;
+  font-size:20px; line-height:1; background:none; border:0; cursor:pointer;
+  color:var(--muted); border-radius:8px; transition:color .15s, background .15s; }
+.phone-x:hover { color:var(--ink); background:rgba(27,24,20,.05); }
+.phone-how { margin:0; padding:10px 14px 0; flex:none;
+  font-size:12px; line-height:1.45; color:var(--muted); }
+/* <button> styled as an inline dotted-underline link (the "how this
+   works" affordance opening the reference modal). */
+.linklike { background:none; border:0; padding:0; font:inherit; cursor:pointer;
+  color:var(--ink); text-decoration:underline; text-decoration-style:dotted;
+  text-underline-offset:2px; }
+.linklike:hover { color:var(--accent-2); }
+.linklike:disabled { color:var(--muted); cursor:default; text-decoration:none; }
+.phone-biz { margin:10px 14px 0; }
+.phone-scroll { flex:1 1 auto; min-height:0; padding:12px 14px; }
+.phone-handoff { margin:6px 14px 0; }
+.phone-chat .chat-error { padding:4px 14px 0; }
+.phone-form { display:flex; align-items:flex-end; gap:8px; flex:none;
+  padding:10px 12px; border-top:1px solid var(--hair); background:var(--paper); }
+.phone-input { flex:1 1 auto; min-height:42px; max-height:104px;
+  padding:9px 12px; }
+.phone-send { flex:none; width:42px; height:42px; padding:0; border-radius:50%;
+  display:inline-flex; align-items:center; justify-content:center; }
+.phone-cta { margin:0; border-radius:0; border:0; border-top:1px solid var(--accent); }
+
+/* Mobile: the activated phone fills the viewport so it reads as being
+   "inside" the app — edge to edge, no radius, safe-area aware. */
+@media (max-width:560px) {
+  .phone-frame.active { top:0; left:0; transform:none;
+    width:100vw; height:100dvh; max-height:none;
+    border-radius:0; border:0; animation:phone-fade .3s ease; }
+  .phone-chat-head { padding-top:max(14px, env(safe-area-inset-top)); }
+  .phone-form { padding-bottom:max(10px, env(safe-area-inset-bottom)); }
+}
+@keyframes phone-fade { from { opacity:0; } to { opacity:1; } }
+
 @media (prefers-reduced-motion: reduce) {
-  .phone-compose:hover .phone-compose-send,
-  .phone-compose:focus-visible .phone-compose-send { transform:none; }
+  .phone-frame.active { animation:none; }
+  .phone-wipe { display:none; }
+  .hero-phone:not(.active) .phone-frame:hover { transform:none; box-shadow:var(--shadow-2); }
+  .hero-phone:not(.active) .phone-frame:hover .phone-try-go { transform:none; }
 }
 
 /* Terminal */

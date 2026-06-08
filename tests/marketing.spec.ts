@@ -172,22 +172,22 @@ test('demo-chat persona picker swaps greeting and persona slug on the wire', asy
   });
 });
 
-test('demo-chat view-prompt toggle reveals the active persona prompt', async ({ page }) => {
+test('the how-it-works modal reveals the active persona system prompt', async ({ page }) => {
   await stubDemoPersonas(page);
   await page.goto('/');
   await page.locator('#hero-headline').click();
-  const dialog = page.getByRole('dialog', { name: /live demo/i });
+  const demo = page.getByRole('dialog', { name: /live demo/i });
 
-  const toggle = dialog.getByRole('button', { name: /view system prompt/i });
-  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
-  await toggle.click();
-  await expect(dialog.getByRole('button', { name: /hide system prompt/i })).toHaveAttribute(
-    'aria-expanded',
-    'true',
-  );
+  // The prompt envelope no longer toggles inside the chat; the live demo
+  // links out to a reference modal ("How the demo works") that always
+  // shows the full system prompt for whichever persona is selected.
+  await demo.getByRole('button', { name: /how this works/i }).click();
+  const modal = page.getByRole('dialog', { name: /how the demo works/i });
+  await expect(modal).toBeVisible();
+
   // Three-section envelope: preamble (fixed, never editable), middle
   // (current persona's prompt), postamble (fixed safety rules).
-  const panel = dialog.locator('#demo-chat-prompt-panel');
+  const panel = modal.locator('#demo-chat-prompt-panel');
   await expect(panel).toContainText(/automated reply assistant for a small business/i);
   await expect(panel).toContainText(/WhatsApp Business/);
   await expect(panel).toContainText(/House rules/i);
@@ -196,7 +196,7 @@ test('demo-chat view-prompt toggle reveals the active persona prompt', async ({ 
   await expect(panel.locator('.chat-prompt-middle')).toHaveCount(1);
 });
 
-test('clicking the hero headline also opens the chat modal', async ({ page }) => {
+test('clicking the hero headline also opens the in-phone demo', async ({ page }) => {
   await stubDemoPersonas(page);
   await page.route('**/demo/chat', (route) =>
     route.fulfill({
@@ -218,7 +218,7 @@ test('hero headline carries an accessible hint that it opens the demo', async ({
   // the description; sighted users discover the affordance via hover.
   const headline = page.locator('#hero-headline');
   await expect(headline).toHaveAttribute('aria-describedby', 'demo-chat-hint-text');
-  await expect(page.locator('#demo-chat-hint-text')).toHaveText(/click to try the live demo/i);
+  await expect(page.locator('#demo-chat-hint-text')).toHaveText(/tap to try the live demo/i);
 });
 
 test('demo-chat shows the rate-limit message on 429', async ({ page }) => {
