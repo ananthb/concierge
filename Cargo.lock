@@ -108,7 +108,7 @@ dependencies = [
  "base64",
  "botrelay",
  "console_error_panic_hook",
- "fixed_decimal",
+ "fixed_decimal 0.7.2",
  "fluent",
  "fluent-syntax",
  "futures",
@@ -212,6 +212,17 @@ dependencies = [
  "displaydoc",
  "smallvec",
  "writeable 0.5.5",
+]
+
+[[package]]
+name = "fixed_decimal"
+version = "0.7.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "79c3c892f121fff406e5dd6b28c1b30096b95111c30701a899d4f2b18da6d1bd"
+dependencies = [
+ "displaydoc",
+ "smallvec",
+ "writeable 0.6.2",
 ]
 
 [[package]]
@@ -566,7 +577,7 @@ checksum = "d115efb85e08df3fd77e77f52e7e087545a783fffba8be80bfa2102f306b1780"
 dependencies = [
  "displaydoc",
  "either",
- "fixed_decimal",
+ "fixed_decimal 0.5.6",
  "icu_calendar",
  "icu_datetime_data",
  "icu_decimal",
@@ -594,7 +605,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fb8fd98f86ec0448d85e1edf8884e4e318bb2e121bd733ec929a05c0a5e8b0eb"
 dependencies = [
  "displaydoc",
- "fixed_decimal",
+ "fixed_decimal 0.5.6",
  "icu_decimal_data",
  "icu_locid_transform",
  "icu_provider 1.5.0",
@@ -614,7 +625,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "844ad7b682a165c758065d694bc4d74ac67f176da1c499a04d85d492c0f193b7"
 dependencies = [
  "displaydoc",
- "fixed_decimal",
+ "fixed_decimal 0.5.6",
  "icu_collections 1.5.0",
  "icu_decimal",
  "icu_experimental_data",
@@ -773,7 +784,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ba5a70e7c025dbd5c501b0a5c188cd11666a424f0dadcd4f0a95b7dafde3b114"
 dependencies = [
  "displaydoc",
- "fixed_decimal",
+ "fixed_decimal 0.5.6",
  "icu_locid_transform",
  "icu_plurals_data",
  "icu_provider 1.5.0",
