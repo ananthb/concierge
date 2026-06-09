@@ -37,7 +37,7 @@ fluent-syntax = "0.11"
 
 # Money handling: ISO 4217 metadata + locale-correct formatting (incl. INR
 # lakh grouping). Pure-Rust wasm-clean dep.
-rusty-money = "0.4"
+rusty-money = "0.5"
 
 [build-dependencies]
 sha2 = "0.10"
