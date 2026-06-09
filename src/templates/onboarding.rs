@@ -300,6 +300,14 @@ pub fn welcome_html(
         role="dialog" aria-modal="true" aria-label="{chat_title}"
         x-trap.noscroll.inert="activated && !open"
         @keydown.escape.window="activated && (open ? (open = false) : deactivate())">
+        <div class="phone-statusbar" aria-hidden="true">
+          <span class="phone-clock" x-text="clock">9:41</span>
+          <span class="phone-status-icons">
+            <span class="phone-sig"><i></i><i></i><i></i><i></i></span>
+            <svg class="phone-wifi" viewBox="0 0 16 12" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true"><path d="M2 4.2 A9 9 0 0 1 14 4.2"/><path d="M4.2 6.6 A5.5 5.5 0 0 1 11.8 6.6"/><circle cx="8" cy="9.4" r="1" fill="currentColor" stroke="none"/></svg>
+            <span class="phone-batt"><i></i></span>
+          </span>
+        </div>
         <div class="phone-chat-head">
           <span class="phone-chat-dot" aria-hidden="true"></span>
           <select class="select phone-persona" x-model="personaSlug" :disabled="!personas.length"
@@ -426,7 +434,7 @@ pub fn welcome_html(
     <div class="phone-frame" :class="(activated ? 'active ' : '') + (wiping ? 'wiping' : '')">
       <div class="phone-idle" x-show="!activated"{idle_attrs}>
         <div class="phone-bar" aria-hidden="true">
-          <span>9:47</span>
+          <span x-text="clock">9:47</span>
           <span class="phone-bar-dots"><i></i><i></i><i></i></span>
         </div>
         <div class="phone-header" aria-hidden="true">
@@ -700,6 +708,11 @@ const HERO_CHAT_JS: &str = r##"<script nonce="__CSP_NONCE__">
     activated: false,
     wiping: false,
     open: false,
+    // Live wall-clock for the phone's status bars (idle illustration and
+    // the activated chat). Refreshed every 30s so the minute rolls over
+    // promptly. Generic 12-hour, no am/pm, to suit the made-up phone.
+    clock: '',
+    _clockTimer: null,
     sending: false,
     error: '',
     input: '',
@@ -739,7 +752,14 @@ const HERO_CHAT_JS: &str = r##"<script nonce="__CSP_NONCE__">
         greeting: 'Loading…', prompt: '', slug: '', business: null,
       };
     },
+    updateClock() {
+      const d = new Date();
+      const h = ((d.getHours() + 11) % 12) + 1;
+      this.clock = h + ':' + String(d.getMinutes()).padStart(2, '0');
+    },
     async init() {
+      this.updateClock();
+      this._clockTimer = setInterval(() => this.updateClock(), 30000);
       try {
         this.personas = await personasReady;
       } catch (_) {
@@ -779,10 +799,11 @@ const HERO_CHAT_JS: &str = r##"<script nonce="__CSP_NONCE__">
         });
       });
     },
-    // Flip the phone into chat mode. Plays the quick concierge "wipe"
-    // overlay first (skipped under reduced-motion), then the chat fades
-    // in. No-op if already active. Guarded on personas so a disabled /
-    // empty-catalog demo can't open an empty chat.
+    // Flip the phone into chat mode. Plays the concierge "wipe" overlay
+    // first (skipped under reduced-motion), then the chat fades in. No-op
+    // if already active. Guarded on personas so a disabled / empty-catalog
+    // demo can't open an empty chat. The 900ms matches the .phone-wipe
+    // animation, which holds the brand mark on screen long enough to read.
     activate() {
       if (this.activated || !this.personas.length) return;
       this.activated = true;
@@ -791,7 +812,7 @@ const HERO_CHAT_JS: &str = r##"<script nonce="__CSP_NONCE__">
       if (this._wipeTimer) { clearTimeout(this._wipeTimer); this._wipeTimer = null; }
       if (!reduce) {
         this.wiping = true;
-        this._wipeTimer = setTimeout(() => { this.wiping = false; this._wipeTimer = null; }, 480);
+        this._wipeTimer = setTimeout(() => { this.wiping = false; this._wipeTimer = null; }, 900);
       }
     },
     // Close the demo: drop the reference modal too, stop the wipe, and
