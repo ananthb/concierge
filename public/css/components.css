@@ -361,11 +361,16 @@ table tr.audit-detail > td { padding:0; background:var(--paper);
 .chat-business-card { background:var(--paper); border:1px solid var(--hair);
   border-left:3px solid var(--accent); border-radius:8px;
   padding:10px 14px; margin:6px 0 8px; font-size:13px; line-height:1.45; }
-.chat-business-card .roleplay { color:var(--ink); margin:0 0 6px; }
+/* Tenants can give a business an arbitrarily long, unspaced name; break
+   anywhere so the card doesn't get pushed past the phone frame. */
+.chat-business-card .roleplay { color:var(--ink); margin:0 0 6px;
+  overflow-wrap:anywhere; }
 .chat-business-card .roleplay strong { color:var(--ink); }
 .chat-business-card .biz-meta { display:flex; flex-wrap:wrap; gap:4px 14px;
   color:var(--muted); font-size:12px; margin:0; min-width:0; }
-.chat-business-card .biz-meta span { white-space:nowrap; min-width:0; }
+/* Direct-child only: the goal cell carries its own wrapping rules below
+   and contains a nested span we *do* want to wrap. */
+.chat-business-card .biz-meta > span { white-space:nowrap; min-width:0; }
 .chat-business-card .biz-meta b { color:var(--ink-2); font-weight:600;
   letter-spacing:.04em; text-transform:uppercase; font-size:10px; margin-right:4px; }
 /* Goal often runs long (free-text + URL). Take a full row, wrap
