@@ -126,8 +126,14 @@ async function openDemoConversation(page: any) {
   await demo.getByRole('textbox').fill('do you deliver on Sundays?');
   await demo.getByRole('button', { name: 'Send' }).click();
   await demo.getByText(/Sundays included/i).waitFor();
-  // Let the wipe finish and bubbles settle before the shot.
-  await page.waitForTimeout(500);
+  // Wait out the concierge wipe overlay (it sweeps for ~900ms from the
+  // activation click) so the shot shows the chat, not the splash, then
+  // let the bubbles settle.
+  // (page-scoped: the wipe overlay is a sibling of the chat dialog, not
+  // inside it, so a demo-scoped locator would match nothing and resolve
+  // instantly.)
+  await page.locator('.phone-wipe').waitFor({ state: 'hidden' }).catch(() => {});
+  await page.waitForTimeout(300);
   return demo;
 }
 

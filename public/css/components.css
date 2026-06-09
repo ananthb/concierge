@@ -546,15 +546,24 @@ table tr.audit-detail > td { padding:0; background:var(--paper);
 .phone-backdrop { position:fixed; inset:0; z-index:1000; background:rgba(0,0,0,.45); }
 
 /* Activated frame: centre stage on a backdrop. Padding/gap drop to zero
-   so the chat fills the screen; the inner sections carry their own. */
+   so the chat fills the screen; the inner sections carry their own. The
+   open animation is a short hinge-flip: the phone tilts up from the
+   backdrop on an X axis with real perspective + depth (translateZ), so
+   it reads as a slab swinging toward you rather than a flat scale-in. */
 .phone-frame.active { position:fixed; z-index:1001; top:50%; left:50%;
   transform:translate(-50%,-50%);
   width:min(390px, calc(100vw - 32px)); height:min(680px, calc(100dvh - 48px));
   max-width:none; padding:0; gap:0; overflow:hidden;
-  animation:phone-pop .3s ease; }
-@keyframes phone-pop {
-  from { opacity:0; transform:translate(-50%,-50%) scale(.96); }
-  to { opacity:1; transform:translate(-50%,-50%) scale(1); }
+  transform-origin:50% 100%;
+  animation:phone-flip .5s cubic-bezier(.2,.75,.25,1); }
+@keyframes phone-flip {
+  0% { opacity:0;
+    transform:translate(-50%,-50%) perspective(1200px) rotateX(-38deg) translateZ(-80px) scale(.94);
+    box-shadow:0 50px 90px rgba(27,24,20,.04); }
+  55% { opacity:1; }
+  100% { opacity:1;
+    transform:translate(-50%,-50%) perspective(1200px) rotateX(0) translateZ(0) scale(1);
+    box-shadow:0 30px 70px rgba(27,24,20,.28); }
 }
 
 /* The concierge "wipe": a brand-coloured panel that sweeps top-to-bottom
@@ -564,25 +573,51 @@ table tr.audit-detail > td { padding:0; background:var(--paper);
   display:flex; align-items:center; justify-content:center;
   background:linear-gradient(135deg, var(--accent), var(--accent-2));
   border-radius:inherit;
-  animation:phone-wipe .48s cubic-bezier(.4,0,.2,1) forwards; }
+  animation:phone-wipe .9s cubic-bezier(.4,0,.2,1) forwards; }
 /* The brand mark lands as an app icon: a cream chip carrying the logo
    glyph, so it reads on the accent wipe (the logo's own disc is accent
-   and would otherwise vanish into the background). */
+   and would otherwise vanish into the background). It holds on screen
+   for a clear beat mid-sweep so the mark is legible, not a flicker. */
 .phone-wipe-mark { display:flex; align-items:center; justify-content:center;
   width:84px; height:84px; border-radius:22px; background:var(--cream);
   box-shadow:0 10px 30px rgba(27,24,20,.25);
-  animation:phone-wipe-mark .48s ease forwards; }
+  animation:phone-wipe-mark .9s ease forwards; }
 .phone-wipe-mark svg { width:52px; height:52px; }
 @keyframes phone-wipe {
   0% { transform:translateY(-101%); }
-  40%,60% { transform:translateY(0); }
+  30%,68% { transform:translateY(0); }
   100% { transform:translateY(101%); }
 }
 @keyframes phone-wipe-mark {
-  0%,18% { opacity:0; }
-  46%,58% { opacity:1; }
-  100% { opacity:0; }
+  0%,16% { opacity:0; transform:scale(.82); }
+  34%,62% { opacity:1; transform:scale(1); }
+  100% { opacity:0; transform:scale(1.05); }
 }
+
+/* Generic phone status bar across the top of the activated chat: live
+   clock on the left, signal / wi-fi / battery glyphs on the right. Drawn
+   from scratch (ascending bars, an arc, a capped cell) so it reads as "a
+   phone" without copying iOS's pill or Android's exact iconography. */
+.phone-statusbar { display:flex; align-items:center; justify-content:space-between;
+  flex:none; padding:9px 18px 5px;
+  font-family:var(--f-mono); font-size:12px; font-weight:600;
+  letter-spacing:.02em; color:var(--ink); }
+.phone-statusbar .phone-status-icons { display:inline-flex; align-items:center; gap:7px; }
+.phone-sig { display:inline-flex; align-items:flex-end; gap:2px; height:11px; }
+.phone-sig i { width:3px; background:var(--ink); border-radius:1px; }
+.phone-sig i:nth-child(1) { height:4px; }
+.phone-sig i:nth-child(2) { height:6px; }
+.phone-sig i:nth-child(3) { height:8px; }
+.phone-sig i:nth-child(4) { height:11px; }
+.phone-wifi { display:block; width:15px; height:11px; color:var(--ink); }
+.phone-batt { position:relative; box-sizing:border-box;
+  width:23px; height:11px; padding:1.5px;
+  border:1.5px solid var(--ink); border-radius:3px; }
+.phone-batt::after { content:""; position:absolute; right:-3px; top:50%;
+  transform:translateY(-50%); width:2px; height:4px;
+  background:var(--ink); border-radius:0 1px 1px 0; }
+.phone-batt i { display:block; height:100%; width:72%;
+  background:var(--ink); border-radius:1px; }
 
 /* In-phone chat surface: header / how-line / scroll / composer, stacked
    to fill the activated frame. */
@@ -625,7 +660,7 @@ table tr.audit-detail > td { padding:0; background:var(--paper);
   .phone-frame.active { top:0; left:0; transform:none;
     width:100vw; height:100dvh; max-height:none;
     border-radius:0; border:0; animation:phone-fade .3s ease; }
-  .phone-chat-head { padding-top:max(14px, env(safe-area-inset-top)); }
+  .phone-statusbar { padding-top:max(9px, env(safe-area-inset-top)); }
   .phone-form { padding-bottom:max(10px, env(safe-area-inset-bottom)); }
 }
 @keyframes phone-fade { from { opacity:0; } to { opacity:1; } }
