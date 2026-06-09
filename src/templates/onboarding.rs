@@ -353,7 +353,7 @@ pub fn welcome_html(
         <div class="chat-error" x-show="error" x-text="error"></div>
         <form x-show="!showCta" @submit.prevent="send()" class="phone-form">
           <textarea class="chat-input phone-input" x-model="input"
-            :placeholder="currentPersona.slug === 'concierge' ? '{chat_placeholder}' : ('{chat_placeholder_prefix} ' + currentPersona.label + ' {chat_placeholder_suffix}')"
+            :placeholder="currentPersona.slug === 'concierge' ? '{chat_placeholder}' : ('{chat_placeholder_prefix} ' + (currentPersona.business && currentPersona.business.name ? currentPersona.business.name : currentPersona.label) + ' {chat_placeholder_suffix}')"
             :disabled="sending || !personas.length" x-ref="input" maxlength="300" rows="1"
             @input="resetIdleTimer()"
             @keydown.enter="if (!$event.shiftKey) {{ $event.preventDefault(); send(); }}"
