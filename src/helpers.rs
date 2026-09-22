@@ -129,6 +129,24 @@ pub fn sha256_hex(s: &str) -> String {
 mod tests {
     use super::*;
 
+    /// Independently computed SHA-256 digests: this is the hash that
+    /// detects drift in safety-checked persona content, so a change in
+    /// its output would silently invalidate every stored prompt_hash.
+    #[test]
+    fn sha256_hex_matches_known_digests() {
+        assert_eq!(
+            sha256_hex("abc"),
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+        );
+        assert_eq!(
+            sha256_hex(""),
+            "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        );
+        // Multi-byte input, to pin that we hash UTF-8 bytes.
+        assert_eq!(sha256_hex("ஸுபா").len(), 64);
+        assert_ne!(sha256_hex("abc"), sha256_hex("abd"));
+    }
+
     #[test]
     fn test_html_escape() {
         assert_eq!(html_escape("hello"), "hello");
