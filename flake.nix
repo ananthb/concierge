@@ -111,8 +111,9 @@
             worker-build
             wasm-pack
             binaryen
+            # nodejs_22 ships npm; the old nodePackages.npm attribute was
+            # removed from nixpkgs.
             nodejs_22
-            nodePackages.npm
             # Headless Chromium for `npm run screenshots` (drives the docs
             # gallery in doc/screenshots/ and gives us visual-regression
             # checks against the live welcome / login templates).
