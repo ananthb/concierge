@@ -63,7 +63,7 @@ pub fn verify_payment_signature(
     signature: &str,
     key_secret: &str,
 ) -> bool {
-    use hmac::{Hmac, Mac};
+    use hmac::{Hmac, KeyInit, Mac};
     use sha2::Sha256;
     use subtle::ConstantTimeEq;
 
@@ -80,7 +80,7 @@ pub fn verify_payment_signature(
 
 /// Verify a Razorpay webhook signature (constant-time).
 pub fn verify_webhook_signature(body: &str, signature: &str, webhook_secret: &str) -> bool {
-    use hmac::{Hmac, Mac};
+    use hmac::{Hmac, KeyInit, Mac};
     use sha2::Sha256;
     use subtle::ConstantTimeEq;
 
@@ -139,4 +139,85 @@ fn base64_encode(input: &str) -> String {
 
 fn hex_encode(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{:02x}", b)).collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Expected digests computed independently (Python `hmac`/`hashlib`),
+    // not by calling the functions under test, so these pin the wire
+    // format Razorpay signs -- `{order_id}|{payment_id}` for payments,
+    // the raw body for webhooks -- as well as the HMAC itself.
+    const PAYMENT_SIG: &str = "7ecf420b62aca4b2ca03b4cdb2df2ade2600feeb9faca41d3258f07be04b9f5b";
+    const WEBHOOK_SIG: &str = "4f463a57dd128675850163391f0311888616d57bccca75c774c9cdb28134f851";
+
+    #[test]
+    fn payment_signature_verifies() {
+        assert!(verify_payment_signature(
+            "order_ABC123",
+            "pay_XYZ789",
+            PAYMENT_SIG,
+            "rzp_test_secret"
+        ));
+    }
+
+    #[test]
+    fn payment_signature_rejects_tampering_in_every_field() {
+        // Swapping order and payment id keeps every byte of the message
+        // and only moves the separator: the signature must still fail.
+        assert!(!verify_payment_signature(
+            "pay_XYZ789",
+            "order_ABC123",
+            PAYMENT_SIG,
+            "rzp_test_secret"
+        ));
+        assert!(!verify_payment_signature(
+            "order_OTHER",
+            "pay_XYZ789",
+            PAYMENT_SIG,
+            "rzp_test_secret"
+        ));
+        assert!(!verify_payment_signature(
+            "order_ABC123",
+            "pay_OTHER",
+            PAYMENT_SIG,
+            "rzp_test_secret"
+        ));
+        assert!(!verify_payment_signature(
+            "order_ABC123",
+            "pay_XYZ789",
+            PAYMENT_SIG,
+            "wrong_secret"
+        ));
+    }
+
+    #[test]
+    fn payment_signature_rejects_empty_and_truncated_signatures() {
+        assert!(!verify_payment_signature(
+            "order_ABC123",
+            "pay_XYZ789",
+            "",
+            "rzp_test_secret"
+        ));
+        assert!(!verify_payment_signature(
+            "order_ABC123",
+            "pay_XYZ789",
+            &PAYMENT_SIG[..32],
+            "rzp_test_secret"
+        ));
+    }
+
+    #[test]
+    fn webhook_signature_verifies_and_rejects() {
+        let body = r#"{"event":"payment.captured"}"#;
+        assert!(verify_webhook_signature(body, WEBHOOK_SIG, "whsec_test"));
+        assert!(!verify_webhook_signature(body, WEBHOOK_SIG, "whsec_other"));
+        assert!(!verify_webhook_signature(
+            r#"{"event":"payment.failed"}"#,
+            WEBHOOK_SIG,
+            "whsec_test"
+        ));
+        assert!(!verify_webhook_signature(body, "", "whsec_test"));
+    }
 }
