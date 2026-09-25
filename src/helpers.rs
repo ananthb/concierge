@@ -78,19 +78,19 @@ pub fn truncate(s: &str, max: usize) -> String {
 /// hi-IN, ...) get last-3-then-2s grouping (1,00,000); Western locales get
 /// thousands grouping (100,000). Backed by icu's `FixedDecimalFormatter`.
 pub fn format_count(n: i64, locale: &crate::locale::Locale) -> String {
-    use icu::decimal::{options::FixedDecimalFormatterOptions, FixedDecimalFormatter};
-    use icu::locid::Locale as IcuLocale;
+    use icu::decimal::{options::DecimalFormatterOptions, DecimalFormatter};
+    use icu::locale::Locale as IcuLocale;
 
-    // unic_langid -> icu_locid via string round-trip; both are BCP-47.
+    // unic_langid -> icu::locale via string round-trip; both are BCP-47.
     let icu_locale: IcuLocale = locale
         .langid
         .to_string()
         .parse()
-        .unwrap_or_else(|_| icu::locid::locale!("en-IN"));
+        .unwrap_or_else(|_| icu::locale::locale!("en-IN"));
     let formatter =
-        FixedDecimalFormatter::try_new(&icu_locale.into(), FixedDecimalFormatterOptions::default())
+        DecimalFormatter::try_new((&icu_locale).into(), DecimalFormatterOptions::default())
             .expect("locale supported by compiled_data");
-    let value: fixed_decimal::FixedDecimal = n.into();
+    let value: fixed_decimal::Decimal = n.into();
     formatter.format(&value).to_string()
 }
 

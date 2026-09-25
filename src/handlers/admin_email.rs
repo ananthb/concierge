@@ -99,7 +99,9 @@ pub async fn handle_email_admin(
                 created_at: now.clone(),
                 verified_at: Some(now.clone()),
             };
-            let new_addr = EmailAddress {
+            // Fully qualified: worker 0.8 exports its own `EmailAddress`,
+            // which is ambiguous with ours under the two glob imports.
+            let new_addr = crate::types::EmailAddress {
                 local_part: label.clone(),
                 tenant_id: tenant_id.to_string(),
                 auto_reply: ReplyConfig::default(),
