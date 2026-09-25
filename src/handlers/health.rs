@@ -14,6 +14,17 @@
 //! - **deep**: additionally invokes the optional async probe on
 //!   components that have one (D1 query, KV get, Discord API ping).
 //!   Cached in KV for 60s so /manage doesn't hammer providers.
+//!
+//! Two tiers, too. A [`Component`] is either **required** — the worker
+//! cannot serve without it, so an unmet requirement is [`Status::Error`]
+//! and `/health` answers 503 — or **optional**, an integration a given
+//! deployment may simply not use. An optional component that was never
+//! configured is [`Status::Warn`] ("not configured"), because a
+//! deployment that doesn't sell anything is not a deployment with a
+//! broken Razorpay. Only an unhealthy *required* component takes the
+//! rollup red; misconfiguring an optional one (some requirements set,
+//! others missing) is still an error, since that is a half-finished
+//! integration rather than an absent one.
 
 use serde::{Deserialize, Serialize};
 use worker::*;
@@ -115,6 +126,13 @@ pub trait Component {
         None
     }
 
+    /// Whether the worker needs this component to serve at all.
+    /// Required by default; integrations a deployment can legitimately
+    /// run without override this to `false`.
+    fn required(&self) -> bool {
+        true
+    }
+
     /// Cheap sync "is every requirement satisfied" — the canonical
     /// answer for feature-gate code paths.
     fn ready(&self, env: &Env) -> bool {
@@ -132,27 +150,39 @@ pub trait Component {
             .map(|r| r.name())
             .collect();
         let docs_url = self.docs_url().map(String::from);
-        if missing.is_empty() {
-            let n = self.requirements().len();
-            let detail = if n == 1 {
-                "configured".to_string()
-            } else {
-                format!("{n} requirements set")
-            };
-            Check {
-                name: self.name().into(),
-                status: Status::Ok,
-                detail,
-                docs_url,
-            }
-        } else {
-            Check {
-                name: self.name().into(),
-                status: Status::Error,
-                detail: format!("missing: {}", missing.join(", ")),
-                docs_url,
-            }
+        let total = self.requirements().len();
+        let status = classify(self.required(), missing.len(), total);
+        let detail = match status {
+            Status::Ok if total == 1 => "configured".to_string(),
+            Status::Ok => format!("{total} requirements set"),
+            Status::Warn => "not configured".to_string(),
+            Status::Error => format!("missing: {}", missing.join(", ")),
+        };
+        Check {
+            name: self.name().into(),
+            status,
+            detail,
+            docs_url,
         }
+    }
+}
+
+/// Status for a component with `missing` of its `total` requirements
+/// unmet.
+///
+/// An optional integration with *nothing* set was never turned on:
+/// amber, not red, because the deployment is healthy and that channel
+/// is merely unavailable. Partially configured stays an error whether
+/// the component is required or not — half a set of credentials fails
+/// mid-conversation rather than at deploy time, which is strictly worse
+/// than not having the integration at all.
+fn classify(required: bool, missing: usize, total: usize) -> Status {
+    if missing == 0 {
+        Status::Ok
+    } else if !required && missing == total {
+        Status::Warn
+    } else {
+        Status::Error
     }
 }
 
@@ -176,6 +206,9 @@ impl Component for FacebookLogin {
     fn docs_url(&self) -> Option<&'static str> {
         Some(concat_doc!("facebook-app-setup.html"))
     }
+    fn required(&self) -> bool {
+        false
+    }
 }
 
 pub struct WhatsAppSignup;
@@ -195,6 +228,9 @@ impl Component for WhatsAppSignup {
     fn docs_url(&self) -> Option<&'static str> {
         Some(concat_doc!("whatsapp.html"))
     }
+    fn required(&self) -> bool {
+        false
+    }
 }
 
 pub struct InstagramMessaging;
@@ -211,6 +247,9 @@ impl Component for InstagramMessaging {
     }
     fn docs_url(&self) -> Option<&'static str> {
         Some(concat_doc!("instagram.html"))
+    }
+    fn required(&self) -> bool {
+        false
     }
 }
 
@@ -229,6 +268,9 @@ impl Component for Discord {
     fn docs_url(&self) -> Option<&'static str> {
         Some(concat_doc!("discord.html"))
     }
+    fn required(&self) -> bool {
+        false
+    }
 }
 
 pub struct Razorpay;
@@ -245,6 +287,9 @@ impl Component for Razorpay {
     }
     fn docs_url(&self) -> Option<&'static str> {
         Some(concat_doc!("billing.html"))
+    }
+    fn required(&self) -> bool {
+        false
     }
 }
 
@@ -576,17 +621,23 @@ pub async fn run_checks(env: &Env, deep: bool) -> HealthReport {
     finalize(checks, deep)
 }
 
-fn finalize(checks: Vec<Check>, deep: bool) -> HealthReport {
-    let overall = checks
+/// Worst status across every check. Error dominates Warn dominates Ok,
+/// so an integration reported as merely unconfigured never takes the
+/// rollup — and `/health`'s status code — red.
+fn rollup(checks: &[Check]) -> Status {
+    checks
         .iter()
         .map(|c| c.status)
         .fold(Status::Ok, |acc, s| match (acc, s) {
             (Status::Error, _) | (_, Status::Error) => Status::Error,
             (Status::Warn, _) | (_, Status::Warn) => Status::Warn,
             _ => Status::Ok,
-        });
+        })
+}
+
+fn finalize(checks: Vec<Check>, deep: bool) -> HealthReport {
     HealthReport {
-        overall,
+        overall: rollup(&checks),
         generated_at: crate::helpers::now_iso(),
         deep,
         checks,
@@ -631,5 +682,95 @@ impl HeadersWithSet for Headers {
     fn with_set(self, name: &str, value: &str) -> Result<Headers> {
         self.set(name, value)?;
         Ok(self)
+    }
+}
+
+// ============================================================================
+// Tests
+// ============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn check(name: &str, status: Status) -> Check {
+        Check {
+            name: name.into(),
+            status,
+            detail: String::new(),
+            docs_url: None,
+        }
+    }
+
+    #[test]
+    fn fully_configured_is_ok_either_tier() {
+        assert_eq!(classify(true, 0, 3), Status::Ok);
+        assert_eq!(classify(false, 0, 3), Status::Ok);
+    }
+
+    #[test]
+    fn untouched_optional_component_is_a_warning() {
+        // Razorpay on a deployment that doesn't sell anything.
+        assert_eq!(classify(false, 3, 3), Status::Warn);
+    }
+
+    #[test]
+    fn untouched_required_component_is_an_error() {
+        assert_eq!(classify(true, 1, 1), Status::Error);
+    }
+
+    #[test]
+    fn half_configured_optional_component_is_an_error() {
+        // Two of Razorpay's three secrets set: someone started wiring
+        // this up and stopped. That breaks at checkout, not at deploy.
+        assert_eq!(classify(false, 1, 3), Status::Error);
+    }
+
+    #[test]
+    fn rollup_ignores_warnings_but_not_errors() {
+        // The live shape this fixes: every binding healthy, Meta and
+        // Razorpay simply never configured. 200 warn, not 503.
+        assert_eq!(
+            rollup(&[
+                check("D1", Status::Ok),
+                check("KV", Status::Ok),
+                check("Razorpay", Status::Warn),
+                check("Instagram messaging", Status::Warn),
+            ]),
+            Status::Warn
+        );
+
+        assert_eq!(
+            rollup(&[check("KV", Status::Ok), check("D1", Status::Error)]),
+            Status::Error
+        );
+
+        // An error anywhere wins, whatever order the checks arrive in.
+        assert_eq!(
+            rollup(&[check("D1", Status::Error), check("Razorpay", Status::Warn)]),
+            Status::Error
+        );
+
+        assert_eq!(rollup(&[check("D1", Status::Ok)]), Status::Ok);
+        assert_eq!(rollup(&[]), Status::Ok);
+    }
+
+    #[test]
+    fn optional_components_are_the_integrations_a_deployment_can_skip() {
+        assert!(!FacebookLogin.required());
+        assert!(!WhatsAppSignup.required());
+        assert!(!InstagramMessaging.required());
+        assert!(!Discord.required());
+        assert!(!Razorpay.required());
+
+        // Bindings and the secrets that gate login stay required: if
+        // any of these is unset the worker genuinely cannot serve.
+        assert!(EncryptionKey.required());
+        assert!(GoogleOAuth.required());
+        assert!(AiBinding.required());
+        assert!(D1Binding.required());
+        assert!(KvBinding.required());
+        assert!(EmailBinding.required());
+        assert!(ReplyBufferBinding.required());
     }
 }
