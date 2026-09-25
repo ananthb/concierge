@@ -71,3 +71,51 @@ jobs:
           name: test-results
           path: test-results/
           retention-days: 14
+
+  cargo:
+    name: Cargo (fmt, test, clippy)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      # Same nix devShell the playwright job uses, so the toolchain that
+      # runs the tests is the one pinned in flake.lock.
+      - uses: DeterminateSystems/nix-installer-action@main
+
+      - uses: cachix/cachix-action@v17
+        with:
+          name: ananthb
+          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
+
+      # Separate key from the playwright job: that one fills target/ with
+      # worker-build's wasm artifacts, this one with host-target test
+      # binaries. Sharing a key would have them evict each other.
+      - name: Cache cargo build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: cargo-checks-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: cargo-checks-${{ runner.os }}-
+
+      - name: cargo fmt
+        run: nix develop --command cargo fmt --check
+
+      # Unit tests run on the host target. Anything touching js-sys (the
+      # `now_iso` helper, every worker binding) panics there with "cannot
+      # call wasm-bindgen imported functions on non-wasm targets", so the
+      # suite covers pure logic: parsers, prompt assembly, templates,
+      # wire-format round-trips.
+      - name: cargo test
+        run: nix develop --command cargo test --lib
+
+      # Not gating yet: main carries 70 clippy warnings, none of them
+      # bugs (mostly needless to_string, too_many_arguments on the big
+      # handler signatures). Clearing them and flipping this to
+      # `-- -D warnings` is its own change; until then the step keeps the
+      # count visible in the log.
+      - name: cargo clippy
+        run: nix develop --command cargo clippy --target wasm32-unknown-unknown --all-targets

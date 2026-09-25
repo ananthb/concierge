@@ -18,7 +18,11 @@ if ! command -v worker-build >/dev/null 2>&1; then
     fi
     # shellcheck disable=SC1091
     . "$HOME/.cargo/env"
-    cargo install -q worker-build --version ^0.7
+    # Must track the `worker` major in Cargo.toml. worker-build
+    # refuses an older pin outright: "Unsupported version
+    # worker@0.7.4, expected at least worker@0.8.6". The nix
+    # devShell pins the same pair through flake.lock.
+    cargo install -q worker-build --version ^0.8
 fi
 
 exec worker-build --release
