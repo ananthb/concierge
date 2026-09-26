@@ -133,64 +133,54 @@
   <li>Must be globally unique across all tenants</li>
 </ul>
 
-<h2>Routing Rules</h2>
+<h2>Reply Rules</h2>
 
-<p>Rules are per-domain, evaluated in priority order (highest priority wins). Each rule has:</p>
+<p>Each address carries an ordered list of reply rules plus a mandatory default. The first rule whose matcher fires decides the reply; if none does, the default rule answers. Rules never drop or reject mail -- they choose <em>what to say</em>. Each rule has:</p>
 
 <table>
   <thead>
     <tr><th>Field</th><th>Description</th></tr>
   </thead>
   <tbody>
-    <tr><td><code>name</code></td><td>Human-readable label</td></tr>
-    <tr><td><code>priority</code></td><td>Integer priority (higher = evaluated later, wins over lower)</td></tr>
-    <tr><td><code>enabled</code></td><td>Toggle on/off without deleting</td></tr>
-    <tr><td><code>criteria</code></td><td>Match conditions (see below)</td></tr>
-    <tr><td><code>action</code></td><td>What to do when the rule matches</td></tr>
+    <tr><td><code>label</code></td><td>Human-readable name</td></tr>
+    <tr><td><code>matcher</code></td><td>When the rule fires (see below)</td></tr>
+    <tr><td><code>response</code></td><td>Canned text, or a prompt appended to the persona</td></tr>
+    <tr><td><code>approval</code></td><td>Whether the reply needs a human to approve it before sending</td></tr>
   </tbody>
 </table>
 
-<h2>Match Criteria (Glob Patterns)</h2>
+<p>Order is the priority: rules are evaluated top-down and the first match wins. The default rule occupies its own slot and cannot be deleted, so an address always has something to say.</p>
 
-<p>Rules match using glob patterns with <code>*</code> (any sequence) and <code>?</code> (single character). Matching is case-insensitive. All specified criteria must match (AND logic). Omitted criteria match everything.</p>
+<h2>Matchers</h2>
+
+<p>There are no glob patterns. A matcher is one of three kinds:</p>
 
 <table>
   <thead>
-    <tr><th>Criterion</th><th>Description</th><th>Example</th></tr>
+    <tr><th>Kind</th><th>Fires when</th></tr>
   </thead>
   <tbody>
-    <tr><td><code>from_pattern</code></td><td>Sender email address</td><td><code>*@newsletter.com</code></td></tr>
-    <tr><td><code>to_pattern</code></td><td>Recipient email address</td><td><code>support+*@example.com</code></td></tr>
-    <tr><td><code>subject_pattern</code></td><td>Email subject line</td><td><code>*invoice*</code></td></tr>
-    <tr><td><code>body_pattern</code></td><td>Plain-text body content</td><td><code>*unsubscribe*</code></td></tr>
-    <tr><td><code>has_attachment</code></td><td>Whether the email has attachments</td><td><code>true</code> or <code>false</code></td></tr>
+    <tr><td><strong>Default</strong></td><td>Always. Valid only in the default-rule slot.</td></tr>
+    <tr><td><strong>Keyword</strong></td><td>Any of its keywords appears in the message as a case-insensitive substring.</td></tr>
+    <tr><td><strong>Prompt</strong> (intent)</td><td>The inbound message is semantically close to a description you write. The description is embedded once on save; the pipeline embeds the message and compares by cosine similarity against a threshold (default 0.72).</td></tr>
   </tbody>
 </table>
 
-<h3>Pattern Examples</h3>
+<p>Keyword matching is literal and cheap. Intent matching costs an embedding call but catches phrasings you did not think of -- "do you have space in December" against a description like "asking about availability".</p>
 
-<ul>
-  <li><code>*</code>: matches everything</li>
-  <li><code>*@example.com</code>: any address at example.com</li>
-  <li><code>*@*.example.com</code>: any subdomain of example.com</li>
-  <li><code>support+*@example.com</code>: plus-addressed support emails</li>
-  <li><code>*invoice*</code>: subject or body containing "invoice"</li>
-</ul>
-
-<h2>Actions</h2>
+<h2>Responses</h2>
 
 <table>
   <thead>
-    <tr><th>Action</th><th>Description</th></tr>
+    <tr><th>Response</th><th>Description</th></tr>
   </thead>
   <tbody>
-    <tr><td><strong>Drop</strong></td><td>Silently discard the email. Nothing is sent back.</td></tr>
-    <tr><td><strong>Spam</strong></td><td>Reject the email with an optional message. The sender's MTA receives the rejection.</td></tr>
-    <tr><td><strong>Forward Email</strong></td><td>Forward to a destination email address. A reverse-alias is generated for reply routing (see below).</td></tr>
-    <tr><td><strong>Forward Discord</strong></td><td>Post the email content to a Discord channel as an embed. The email is consumed (not forwarded via SMTP).</td></tr>
-    <tr><td><strong>AI Reply</strong></td><td>Generate an AI draft reply using Workers AI, then post it to a Discord channel for human approval before sending.</td></tr>
+    <tr><td><strong>Canned</strong></td><td>Sent verbatim. No model call, and it consumes no credits.</td></tr>
+    <tr><td><strong>Prompt</strong></td><td>Appended to the tenant's persona prompt and run through the main model. Consumes one reply credit.</td></tr>
   </tbody>
 </table>
+
+<p>Either can be gated by the rule's approval policy, in which case the draft goes to the tenant's Discord channel with Reply / Approve / Drop buttons and nothing is sent until someone acts. The model can also end a turn by flagging a handoff, which stops automated replies for that conversation and pages the tenant -- see <a href="how-it-works.html">How it works</a>.</p>
 
 <h2>Reverse-Alias Reply Routing</h2>
 
@@ -205,23 +195,21 @@
   <li>Concierge forwards your reply back to <code>alice@external.com</code> with From: <code>support@acme.cncg.email</code></li>
 </ol>
 
-<h2>AI Reply with Approval</h2>
+<h2>Replies with Approval</h2>
 
-<p>The <strong>AI Reply</strong> action generates a draft response using Cloudflare Workers AI. The draft is not sent automatically; it is posted to a Discord channel for human approval with Approve and Reject buttons.</p>
+<p>A rule whose approval policy requires it does not send its reply straight away. The draft is posted to the tenant's Discord channel and nothing reaches the customer until someone acts on it.</p>
 
 <ul>
-  <li><strong>Approve</strong>: sends the AI-generated draft to the original sender</li>
-  <li><strong>Reject</strong>: discards the draft</li>
-  <li>You can also click <strong>Reply</strong> to write a custom response instead of using the draft</li>
+  <li><strong>Approve</strong>: sends the draft to the original sender</li>
+  <li><strong>Drop</strong>: discards it</li>
+  <li><strong>Reply</strong>: write a different response instead, which is sent in its place</li>
 </ul>
 
-<p>The AI Reply action supports an optional <code>system_prompt</code> to customize the AI's behavior for specific types of emails.</p>
+<p>This applies to canned replies as well as model-generated ones -- approval is a property of the rule, not of how the text was produced.</p>
 
 <h2>Managing Rules</h2>
 
-<p>Rules are managed via the <strong>web admin panel</strong>. Each address has its own rules page with full CRUD.</p>
-
-<p>Use Discord <code>/domains list</code> to view your addresses and their status.</p>
+<p>Rules are managed via the <strong>web admin panel</strong>, at <code>/dashboard/rules/email/&lt;local-part&gt;</code>. Each address has its own rules page with full CRUD, and the default rule cannot be removed.</p>
 
 <h2>Outbound Delivery (Email Service)</h2>
 
@@ -235,7 +223,9 @@
 
 <h2>Metrics</h2>
 
-<p>Email actions are tracked in the <code>email_metrics</code> table, aggregated by domain, rule, date, and action type. View them via the <code>/status</code> Discord command or the management panel.</p>
+<p>Inbound and outbound mail is recorded in the unified <code>messages</code> table alongside every other channel: channel, direction, sender, recipient, tenant, conversation id, the action taken and a timestamp. <strong>Message bodies are never written to durable storage</strong> -- they pass through the Worker and are gone. <code>/data-deletion</code> wipes the metadata that is kept.</p>
+
+<p>View activity via the <code>/status</code> Discord command or the management panel.</p>
 
       <nav class="pagernav">
         <a href="instagram.html" class="pagernav__item">

@@ -1094,11 +1094,6 @@ pub fn billing_overview_html(
 
       <div class="form-row mb-12 mt-16 form-row-tight">
         <label class="stack">
-          <span class="eyebrow lbl">Addresses per reply-email pack</span>
-          <input class="input mono w-input-sm" name="email_pack_size" type="number" min="1" required value="{email_pack_size}">
-          <span class="muted fs-11 mt-4">tenants receive this many addresses per active pack</span>
-        </label>
-        <label class="stack">
           <span class="eyebrow lbl">Minimum credits per purchase</span>
           <input class="input mono w-input-sm" name="min_credits" type="number" min="1" required value="{min_credits}">
           <span class="muted fs-11 mt-4">slider lower bound; smallest purchase a tenant can make</span>
@@ -1121,7 +1116,6 @@ pub fn billing_overview_html(
         base_url = base_url,
         hash = HASH,
         pricing_table = pricing_table,
-        email_pack_size = cfg.email_pack_size,
         min_credits = cfg.min_credits,
         max_credits = cfg.max_credits,
         max_credits_ceiling = crate::billing::MAX_CREDITS_CEILING,

@@ -8,6 +8,14 @@
 -- schema stays readable in one place. Before the first production
 -- deploy, freeze this file and switch to additive `000N_*.sql` delta
 -- migrations — and delete this comment block.
+--
+-- Edited in place on 2026-09-26 under exactly that convention, taking the
+-- second option above: `email_address_extras_purchased` (tenants),
+-- `email_pack_size` (pricing_config) and the two `address_price` rows went
+-- out with the per-address email SKU, and the one deployed database was
+-- recreated from this file rather than migrated. That is only safe while
+-- there is no data worth keeping — alpha, no customers. Once that stops
+-- being true this file freezes and deltas go in `0002_*.sql`.
 
 -- Tenants
 CREATE TABLE IF NOT EXISTS tenants (
@@ -18,7 +26,6 @@ CREATE TABLE IF NOT EXISTS tenants (
     plan TEXT DEFAULT 'free',
     currency TEXT NOT NULL DEFAULT 'INR',
     locale TEXT NOT NULL DEFAULT 'en-IN',
-    email_address_extras_purchased INTEGER NOT NULL DEFAULT 0,
     -- Set the first time we observe a captured Razorpay payment for this
     -- tenant. The sign-up wizard charges a small refundable amount as an
     -- abuse-prevention check, and any other captured payment also flips
@@ -156,9 +163,6 @@ CREATE INDEX IF NOT EXISTS idx_pa_status_created
 -- in `pricing_amount` below.
 CREATE TABLE IF NOT EXISTS pricing_config (
     id INTEGER PRIMARY KEY CHECK (id = 1),
-    -- Reply-email subscription pack size — addresses granted per pack
-    -- purchase. Currency-independent; the price lives in pricing_amount.
-    email_pack_size INTEGER NOT NULL DEFAULT 5,
     -- Bounds for the credit-purchase slider on /pricing and the in-app
     -- billing card. Operator-tunable from /manage/billing.
     min_credits INTEGER NOT NULL DEFAULT 1000,
@@ -172,11 +176,9 @@ INSERT OR IGNORE INTO pricing_config (id) VALUES (1);
 -- `concept` is one of:
 --   'unit_price_milli'    — per-AI-reply rate, in milli-minor units (1/1000
 --                           paise / cent / yen / etc) so sub-minor prices fit.
---   'address_price'       — reply-email pack price per recurring period, in
---                           minor units of the currency.
 --   'verification_amount' — sign-up verification charge, in minor units.
 --
--- Adding a currency = INSERT three rows here; no schema change needed.
+-- Adding a currency = INSERT two rows here; no schema change needed.
 -- Currency codes are ISO 4217 (e.g. INR, USD, EUR, JPY, KWD); we use
 -- rusty_money's metadata to look up symbols + minor-unit exponents.
 CREATE TABLE IF NOT EXISTS pricing_amount (
@@ -189,8 +191,6 @@ CREATE TABLE IF NOT EXISTS pricing_amount (
 INSERT OR IGNORE INTO pricing_amount (concept, currency_code, amount) VALUES
     ('unit_price_milli',    'INR', 10000),  -- 10000 milli-paise = ₹0.10/reply
     ('unit_price_milli',    'USD', 100),    -- 100 milli-cents = $0.001/reply
-    ('address_price',       'INR', 9900),   -- ₹99/pack/month
-    ('address_price',       'USD', 100),    -- $1/pack/month
     ('verification_amount', 'INR', 100),    -- ₹1
     ('verification_amount', 'USD', 100);    -- $1
 

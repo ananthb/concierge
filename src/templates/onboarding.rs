@@ -1858,10 +1858,9 @@ pub fn pricing_html(
 mod pricing_tests {
     use super::*;
 
-    fn cfg_with(milli_paise: i64, pack: i64) -> crate::storage::Pricing {
+    fn cfg_with(milli_paise: i64) -> crate::storage::Pricing {
         use crate::storage::PricingConcept::*;
         let mut p = crate::storage::Pricing {
-            email_pack_size: pack,
             min_credits: 1_000,
             max_credits: 1_000_000,
             amounts: std::collections::BTreeMap::new(),
@@ -1975,7 +1974,7 @@ mod pricing_tests {
     fn pricing_html_shows_db_inr_price() {
         let l = crate::locale::Locale::default_inr();
         // 25_000 milli-paise = ₹0.25 per reply.
-        let cfg = cfg_with(25_000, 5);
+        let cfg = cfg_with(25_000);
         let html = pricing_html("INR", &l, &cfg);
         assert!(html.contains("₹0.25"), "headline price missing: {html}");
         // Email is billed per reply like every channel, so the page must
@@ -1990,7 +1989,7 @@ mod pricing_tests {
     fn pricing_html_usd_currency_uses_cents() {
         let l = crate::locale::Locale::default_inr();
         // 25_000 milli-paise / 8_500 paise-per-USD ≈ 294 milli-cents → "$0.003"
-        let cfg = cfg_with(25_000, 5);
+        let cfg = cfg_with(25_000);
         let html = pricing_html("usd", &l, &cfg);
         assert!(html.contains("$0.003"), "headline usd price: {html}");
     }
@@ -2094,7 +2093,7 @@ mod pricing_tests {
     #[test]
     fn pricing_html_no_free_forever_copy() {
         let l = crate::locale::Locale::default_inr();
-        let cfg = cfg_with(25_000, 5);
+        let cfg = cfg_with(25_000);
         let html = pricing_html("INR", &l, &cfg);
         // Guard against regression: the user explicitly asked for these
         // claims to stay out of the rendered marketing copy.

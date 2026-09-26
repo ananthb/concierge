@@ -38,7 +38,7 @@ pub async fn handle_billing(
         }
 
         // Update pricing settings. Form posts a flat dict whose keys are
-        // either `email_pack_size`, `min_credits`, `max_credits`, or
+        // either `min_credits`, `max_credits`, or
         // `<concept>__<currency>` (e.g. `unit_price_milli__INR`). We walk
         // the config + every known currency × concept and upsert anything
         // that's positive.
@@ -54,15 +54,9 @@ pub async fn handle_billing(
             // defaults so a single-cell post doesn't clobber the other
             // two values when the form only carried one of them.
             let cfg_before = storage::get_pricing(db).await;
-            let pack_size = pick("email_pack_size").unwrap_or(cfg_before.email_pack_size);
             let min_credits = pick("min_credits").unwrap_or(cfg_before.min_credits);
             let max_credits = pick("max_credits").unwrap_or(cfg_before.max_credits);
 
-            if pack_size <= 0 {
-                return Response::from_html(
-                    r#"<div class="error">Addresses per pack must be positive.</div>"#,
-                );
-            }
             if min_credits < 1 {
                 return Response::from_html(
                     r#"<div class="error">Minimum credits must be at least 1.</div>"#,
@@ -79,7 +73,7 @@ pub async fn handle_billing(
                     crate::billing::MAX_CREDITS_CEILING
                 ));
             }
-            storage::update_pricing_config(db, pack_size, min_credits, max_credits).await?;
+            storage::update_pricing_config(db, min_credits, max_credits).await?;
 
             // Per-(concept, currency) cells. We accept any currency code
             // the form sends, so adding a currency client-side just works.

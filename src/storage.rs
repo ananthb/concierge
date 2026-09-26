@@ -42,10 +42,6 @@ fn row_to_tenant(row: &serde_json::Value) -> Tenant {
             .and_then(|v| v.as_str())
             .map(crate::locale::Currency::parse)
             .unwrap_or_default(),
-        email_address_extras_purchased: row
-            .get("email_address_extras_purchased")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(0) as u32,
         verified_at: row
             .get("verified_at")
             .and_then(|v| v.as_str())
@@ -107,8 +103,8 @@ pub async fn save_tenant(db: &D1Database, tenant: &Tenant) -> Result<()> {
         None => JsValue::NULL,
     };
     db.prepare(
-        "INSERT INTO tenants (id, email, name, facebook_id, plan, locale, currency, email_address_extras_purchased, verified_at, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        "INSERT INTO tenants (id, email, name, facebook_id, plan, locale, currency, verified_at, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET
            email = excluded.email,
            name = excluded.name,
@@ -116,7 +112,6 @@ pub async fn save_tenant(db: &D1Database, tenant: &Tenant) -> Result<()> {
            plan = excluded.plan,
            locale = excluded.locale,
            currency = excluded.currency,
-           email_address_extras_purchased = excluded.email_address_extras_purchased,
            verified_at = excluded.verified_at,
            updated_at = excluded.updated_at",
     )
@@ -128,7 +123,6 @@ pub async fn save_tenant(db: &D1Database, tenant: &Tenant) -> Result<()> {
         tenant.plan.as_str().into(),
         tenant.locale.as_str().into(),
         tenant.currency.as_str().into(),
-        JsValue::from(tenant.email_address_extras_purchased as f64),
         verified_val,
         tenant.created_at.as_str().into(),
         tenant.updated_at.as_str().into(),
@@ -1430,7 +1424,6 @@ impl PricingConcept {
 /// uses the same unit per concept (see `PricingConcept::is_milli`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Pricing {
-    pub email_pack_size: i64,
     pub min_credits: i64,
     pub max_credits: i64,
     pub amounts: std::collections::BTreeMap<(PricingConcept, String), i64>,
@@ -1446,7 +1439,6 @@ impl Default for Pricing {
         amounts.insert((PricingConcept::VerificationAmount, "INR".into()), 100);
         amounts.insert((PricingConcept::VerificationAmount, "USD".into()), 100);
         Self {
-            email_pack_size: 5,
             min_credits: 1_000,
             max_credits: 1_000_000,
             amounts,
@@ -1494,15 +1486,10 @@ pub async fn get_pricing(db: &D1Database) -> Pricing {
 
     // Currency-agnostic singleton.
     if let Ok(Some(row)) = db
-        .prepare(
-            "SELECT email_pack_size, min_credits, max_credits FROM pricing_config WHERE id = 1",
-        )
+        .prepare("SELECT min_credits, max_credits FROM pricing_config WHERE id = 1")
         .first::<serde_json::Value>(None)
         .await
     {
-        if let Some(n) = row.get("email_pack_size").and_then(|v| v.as_i64()) {
-            p.email_pack_size = n;
-        }
         if let Some(n) = row.get("min_credits").and_then(|v| v.as_i64()) {
             p.min_credits = n;
         }
@@ -1573,20 +1560,17 @@ pub async fn delete_pricing_currency(db: &D1Database, currency_code: &str) -> Re
 /// Persist the currency-agnostic settings.
 pub async fn update_pricing_config(
     db: &D1Database,
-    email_pack_size: i64,
     min_credits: i64,
     max_credits: i64,
 ) -> Result<()> {
     db.prepare(
         "UPDATE pricing_config SET \
-           email_pack_size = ?, \
            min_credits = ?, \
            max_credits = ?, \
            updated_at = datetime('now') \
          WHERE id = 1",
     )
     .bind(&[
-        JsValue::from_f64(email_pack_size as f64),
         JsValue::from_f64(min_credits as f64),
         JsValue::from_f64(max_credits as f64),
     ])?
