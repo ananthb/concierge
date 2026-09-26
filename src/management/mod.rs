@@ -5,6 +5,7 @@ pub mod archetypes;
 pub mod audit;
 pub mod billing;
 pub mod demo;
+pub mod reseed;
 pub mod tenants;
 
 use wasm_bindgen::JsCast;
@@ -49,6 +50,15 @@ pub async fn handle_management(
 
     if sub.starts_with("demo") {
         return demo::handle_demo(req, &env, &db, sub, method, &email, &base_url).await;
+    }
+
+    // Destructive, and gated a second time inside on ALLOW_SCHEMA_RESEED.
+    // POST only: a GET that wiped the database would fire on a prefetch.
+    if sub == "reseed" {
+        if method != Method::Post {
+            return Response::error("Method Not Allowed", 405);
+        }
+        return reseed::handle_reseed(req, &env, &db, &email).await;
     }
 
     match (method, sub) {
