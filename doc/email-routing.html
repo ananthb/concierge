@@ -86,55 +86,50 @@
       <h1 class="page-title">Email <em>routing</em>.</h1>
 
 
-<p>Concierge provides managed email subdomains with smart routing. Each tenant gets one or more subdomains (e.g., <code>acme.cncg.email</code>) provisioned automatically. Inbound emails are matched against configurable routing rules and actions are executed automatically.</p>
+<p>Concierge answers email you forward to it. A tenant creates addresses under the operator's email zone (e.g. <code>enquiries@cncg.email</code>) and forwards mail to them from whatever provider already hosts it. Nothing changes in the tenant's DNS: no MX records, no nameservers, no domain delegation. Replies go to the original sender, with the tenant's team copied.</p>
 
 <h2>Getting Started</h2>
 
 <ol>
-  <li>Go to <strong>Email Routing</strong> in the admin panel</li>
-  <li>Enter a subdomain name (e.g., <code>acme</code>): this creates <code>acme.cncg.email</code></li>
-  <li>You'll be redirected to Razorpay to complete payment (₹199/$2 per subdomain per month)</li>
-  <li>Once payment confirms, MX records are provisioned automatically and your subdomain goes live</li>
-  <li>Any email to <code>*@acme.cncg.email</code> is now processed by your routing rules</li>
-  <li>Set up routing rules to forward, relay to Discord, or auto-reply with AI</li>
+  <li>Go to <strong>Email</strong> in the admin panel</li>
+  <li>Create an address, e.g. <code>enquiries</code>, giving you <code>enquiries@cncg.email</code></li>
+  <li>In whatever already hosts your mail -- Google Workspace, Microsoft 365, cPanel, your registrar -- forward the address you publish to that Concierge address</li>
+  <li>Mail that arrives is auto-replied to the original sender; you and your team get a copy via Cc/Bcc</li>
 </ol>
 
-<p>Billing plans are created automatically based on the number of subdomains and currency. No manual configuration needed.</p>
+<p>There is nothing to configure in your DNS. Concierge never asks for your MX records, your nameservers, or a domain delegation, and it does not host your mailbox: your existing mail keeps working exactly as it does now, and forwarding is a copy, not a move. Addresses are unlimited and cost nothing per address -- AI replies draw on the same credit balance as every other channel, and static replies are free.</p>
 
 <h2>How It Works</h2>
 
 <ol>
-  <li>An email arrives at any address on your subdomain (e.g., <code>support@acme.cncg.email</code>)</li>
-  <li>Cloudflare Email Routing triggers the Worker's <code>email()</code> handler</li>
-  <li>The recipient domain is extracted and mapped to a tenant via a KV index</li>
-  <li>The email is parsed (subject, body, attachments)</li>
-  <li>A loop-detection header (<code>X-EmailProxy-Forwarded</code>) is checked</li>
-  <li>Routing rules for that subdomain are evaluated in priority order</li>
-  <li>The highest-priority matching rule's action is executed</li>
-  <li>If no rule matches, the subdomain's default action is used (defaults to Drop)</li>
-  <li>The action is logged to the <code>email_messages</code> table and <code>email_metrics</code> counters</li>
+  <li>Mail arrives at your Concierge address (e.g. <code>enquiries@cncg.email</code>), forwarded from your own provider</li>
+  <li>Cloudflare Email Routing on the operator's zone triggers the Worker's <code>email()</code> handler</li>
+  <li>The local-part is mapped to a tenant via a KV index</li>
+  <li>A loop-detection header (<code>X-EmailProxy-Forwarded</code>) is checked, so a forwarding loop cannot amplify</li>
+  <li>The message is parsed (subject, body, attachments)</li>
+  <li>Because the mail was forwarded, the envelope sender is your own provider, not the customer. The real sender is recovered from <code>Reply-To</code>, <code>X-Forwarded-For</code> or <code>X-Original-From</code>, falling back to the envelope</li>
+  <li>The address's reply rules are evaluated, then its default reply action</li>
+  <li>The reply is sent to the recovered sender, from a <code>reply+</code> reverse alias so their reply comes back into the same conversation</li>
+  <li>Channel, direction, sender, recipient and timestamp are logged. Message bodies are never written to durable storage</li>
 </ol>
 
-<h2>Subdomains</h2>
+<h2>Addresses</h2>
 
-<p>Each tenant can have multiple email subdomains. A subdomain represents a catch-all email endpoint under the operator's email zone. Subdomains are managed via the web admin panel.</p>
+<p>A tenant can create as many addresses as it likes under the operator's email zone. Each one is a flat local-part -- <code>enquiries@cncg.email</code>, not a per-tenant subdomain.</p>
 
 <ul>
-  <li><strong>Pricing</strong>: ₹199/$2 per subdomain per month (recurring via Razorpay)</li>
-  <li><strong>Provisioning</strong>: MX records are created automatically when you add a subdomain</li>
-  <li><strong>Suspension</strong>: If payment fails, the subdomain is suspended and MX records are removed</li>
-  <li><strong>Deletion</strong>: Removes MX records, cancels subscription, and clears all rules</li>
+  <li><strong>Cost</strong>: none per address. Replies are billed like every other channel</li>
+  <li><strong>Provisioning</strong>: nothing to provision. The operator's zone already receives mail; an address is a KV entry</li>
+  <li><strong>Uniqueness</strong>: local-parts are global across the platform, so the first tenant to claim <code>support</code> holds it</li>
+  <li><strong>Deletion</strong>: removes the address, its index entry and its rules. Mail forwarded to it afterwards is rejected at SMTP time</li>
 </ul>
 
-<p>Each subdomain has a <strong>default action</strong> that applies when no routing rule matches. The default is <code>Drop</code> (silently discard).</p>
-
-<h3>Subdomain Naming Rules</h3>
+<h3>Address Naming Rules</h3>
 
 <ul>
-  <li>3–63 characters</li>
-  <li>Letters, numbers, and hyphens only</li>
-  <li>Cannot start or end with a hyphen</li>
-  <li>Reserved names (<code>www</code>, <code>mail</code>, <code>admin</code>, <code>api</code>, etc.) are blocked</li>
+  <li>Letters, numbers, dot, dash and underscore</li>
+  <li>No leading, trailing or consecutive separators</li>
+  <li>Reserved local-parts (<code>www</code>, <code>mail</code>, <code>admin</code>, <code>api</code>, <code>noreply</code>, and the <code>reply+</code> alias prefix) are blocked</li>
   <li>Must be globally unique across all tenants</li>
 </ul>
 
@@ -199,7 +194,7 @@
 
 <h2>Reverse-Alias Reply Routing</h2>
 
-<p>When an email is forwarded via the <strong>Forward Email</strong> action, Concierge generates a unique reverse-alias address on the subdomain (e.g., <code>reply+abc123@acme.cncg.email</code>). This alias is used as the <code>From</code> address in the forwarded email.</p>
+<p>When an email is forwarded via the <strong>Forward Email</strong> action, Concierge generates a unique reverse-alias address on the operator's zone (e.g. <code>reply+abc123@cncg.email</code>). This alias is used as the <code>From</code> address in the forwarded email, so a reply from the recipient routes back into the same conversation.</p>
 
 <p>When the recipient replies to the forwarded email, their reply goes to the reverse-alias address. Concierge looks up the alias, finds the original sender, and forwards the reply back to them, so the customer talks back to the original sender, not to Concierge.</p>
 
@@ -224,9 +219,9 @@
 
 <h2>Managing Rules</h2>
 
-<p>Rules are managed via the <strong>web admin panel</strong>. Each subdomain has its own rules page with full CRUD.</p>
+<p>Rules are managed via the <strong>web admin panel</strong>. Each address has its own rules page with full CRUD.</p>
 
-<p>Use Discord <code>/domains list</code> to view your subdomains and their status.</p>
+<p>Use Discord <code>/domains list</code> to view your addresses and their status.</p>
 
 <h2>Outbound Delivery (Email Service)</h2>
 

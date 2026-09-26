@@ -1041,11 +1041,7 @@ pub fn connect_html(
     discord: Option<&crate::types::DiscordConfig>,
     base_url: &str,
     locale: &crate::locale::Locale,
-    cfg: &crate::storage::Pricing,
 ) -> String {
-    let address_paise = cfg.address_price("INR");
-    let address_cents = cfg.address_price("USD");
-    let email_pack_size = cfg.email_pack_size;
     let ig_name = t(locale, "wizard-channels-name-instagram");
     let ig_flavor = t(locale, "wizard-channels-flavor-instagram");
     let ig_demo = t(locale, "wizard-channels-handle-instagram-demo");
@@ -1143,15 +1139,7 @@ pub fn connect_html(
             lead_suffix = t(locale, "wizard-channels-email-lead-suffix"),
             ph = t(locale, "wizard-channels-email-placeholder"),
             add = t(locale, "wizard-channels-email-add"),
-            help = crate::i18n::t_args(
-                locale,
-                "wizard-channels-email-help",
-                &[
-                    ("inr", &format!("₹{:.0}", address_paise as f64 / 100.0)),
-                    ("usd", &format!("${:.0}", address_cents as f64 / 100.0)),
-                    ("pack_size", &email_pack_size.to_string()),
-                ],
-            ),
+            help = t(locale, "wizard-channels-email-help"),
         )
     };
 
@@ -1743,19 +1731,14 @@ pub fn pricing_html(
     locale: &crate::locale::Locale,
     cfg: &crate::storage::Pricing,
 ) -> String {
-    use crate::helpers::format_money;
     use crate::locale::Currency;
 
     let milli_paise = cfg.unit_price_milli("INR");
     let milli_cents = cfg.unit_price_milli("USD");
-    let address_paise = cfg.address_price("INR");
-    let address_cents = cfg.address_price("USD");
-    let email_pack_size = cfg.email_pack_size;
-
-    let (milli_price, address_price) = if default_currency.eq_ignore_ascii_case("usd") {
-        (milli_cents, address_cents)
+    let milli_price = if default_currency.eq_ignore_ascii_case("usd") {
+        milli_cents
     } else {
-        (milli_paise, address_paise)
+        milli_paise
     };
 
     // Public pricing page. Visitors aren't logged in, so the slider's
@@ -1788,7 +1771,6 @@ pub fn pricing_html(
         Currency::Usd => format!("${:.3}", milli_price as f64 / 100_000.0),
         Currency::Inr => format!("₹{:.2}", milli_price as f64 / 100_000.0),
     };
-    let address_price_label = format_money(address_price, &locale);
     let (inr_cls, usd_cls) = match locale.currency {
         Currency::Usd => ("btn ghost sm", "btn ghost sm is-active"),
         Currency::Inr => ("btn ghost sm is-active", "btn ghost sm"),
@@ -1830,8 +1812,7 @@ pub fn pricing_html(
   <p class="muted">{email_body}</p>
 
   <div class="card p-18 mt-24 mb-24">
-    <p class="m-0">{quota_prefix} <strong>{address_price}</strong> {quota_suffix}</p>
-    <p class="muted m-0 mt-8">{billing_note}</p>
+    <p class="muted m-0">{billing_note}</p>
   </div>
 </article>"##,
         nav = nav,
@@ -1845,15 +1826,8 @@ pub fn pricing_html(
         credits_li_3 = crate::i18n::t(&locale, "pricing-credits-li-3"),
         email_h = crate::i18n::t(&locale, "pricing-email-heading"),
         email_body = crate::i18n::t(&locale, "pricing-email-body"),
-        quota_prefix = crate::i18n::t_args(
-            &locale,
-            "pricing-email-quota-prefix",
-            &[("pack_size", &email_pack_size.to_string())],
-        ),
-        quota_suffix = crate::i18n::t(&locale, "pricing-email-quota-suffix"),
         billing_note = crate::i18n::t(&locale, "pricing-email-billing-note"),
         per_reply = per_reply,
-        address_price = address_price_label,
         slider = slider,
         inr_cls = inr_cls,
         usd_cls = usd_cls,
@@ -1863,19 +1837,10 @@ pub fn pricing_html(
 
     let meta_inr = format!("₹{:.2}", milli_paise as f64 / 100_000.0);
     let meta_usd = format!("${:.3}", milli_cents as f64 / 100_000.0);
-    let meta_addr_inr = format_money(address_paise, &crate::locale::Locale::default_inr());
-    let meta_addr_usd = format_money(address_cents, &crate::locale::Locale::default_usd());
-    let pack_size_str = email_pack_size.to_string();
     let meta_description = crate::i18n::t_args(
         &locale,
         "pricing-meta-description",
-        &[
-            ("inr", &meta_inr),
-            ("usd", &meta_usd),
-            ("addr_inr", &meta_addr_inr),
-            ("addr_usd", &meta_addr_usd),
-            ("pack_size", &pack_size_str),
-        ],
+        &[("inr", &meta_inr), ("usd", &meta_usd)],
     );
     base_html_with_meta(
         "Pricing - Concierge",
@@ -1893,7 +1858,7 @@ pub fn pricing_html(
 mod pricing_tests {
     use super::*;
 
-    fn cfg_with(milli_paise: i64, address_paise: i64, pack: i64) -> crate::storage::Pricing {
+    fn cfg_with(milli_paise: i64, pack: i64) -> crate::storage::Pricing {
         use crate::storage::PricingConcept::*;
         let mut p = crate::storage::Pricing {
             email_pack_size: pack,
@@ -1904,22 +1869,17 @@ mod pricing_tests {
         // INR side as overridden by the caller.
         p.amounts
             .insert((UnitPriceMilli, "INR".into()), milli_paise);
-        p.amounts
-            .insert((AddressPrice, "INR".into()), address_paise);
         p.amounts.insert((VerificationAmount, "INR".into()), 100);
         // USD side picked to match the legacy default ratios used by tests
         // (~₹85/$1, but rounded to even numbers so asserts read cleanly).
         p.amounts.insert((UnitPriceMilli, "USD".into()), 250);
-        p.amounts.insert((AddressPrice, "USD".into()), 200);
         p.amounts.insert((VerificationAmount, "USD".into()), 100);
         p
     }
 
     #[test]
-    fn connect_html_email_help_shows_db_address_price() {
+    fn connect_html_email_help_is_forward_only_and_quotes_no_price() {
         let l = crate::locale::Locale::default_inr();
-        // 5-pack at ₹150 (15_000 paise) per month → ~$1.76 with rate 8500.
-        let cfg = cfg_with(10_000, 15_000, 5);
         let html = connect_html(
             false,
             false,
@@ -1930,11 +1890,17 @@ mod pricing_tests {
             None,
             "https://example.test",
             &l,
-            &cfg,
         );
-        assert!(html.contains("₹150"), "wizard help missing INR: {html}");
-        assert!(html.contains("$"), "wizard help missing USD: {html}");
-        assert!(html.contains("5"), "wizard help missing pack size: {html}");
+        assert!(
+            html.contains("Forward your existing address"),
+            "wizard help should describe forwarding: {html}"
+        );
+        // Email carries no separate price any more, so the connect step
+        // must not quote one.
+        assert!(
+            !html.contains("per month"),
+            "wizard help still advertises a subscription: {html}"
+        );
     }
 
     #[test]
@@ -2009,18 +1975,22 @@ mod pricing_tests {
     fn pricing_html_shows_db_inr_price() {
         let l = crate::locale::Locale::default_inr();
         // 25_000 milli-paise = ₹0.25 per reply.
-        let cfg = cfg_with(25_000, 19_900, 5);
+        let cfg = cfg_with(25_000, 5);
         let html = pricing_html("INR", &l, &cfg);
         assert!(html.contains("₹0.25"), "headline price missing: {html}");
-        // Address row uses format_money: paise to ₹.
-        assert!(html.contains("₹199"), "address inr missing");
+        // Email is billed per reply like every channel, so the page must
+        // not quote a separate address price or a monthly term.
+        assert!(
+            !html.contains("per month"),
+            "pricing page still advertises a subscription: {html}"
+        );
     }
 
     #[test]
     fn pricing_html_usd_currency_uses_cents() {
         let l = crate::locale::Locale::default_inr();
         // 25_000 milli-paise / 8_500 paise-per-USD ≈ 294 milli-cents → "$0.003"
-        let cfg = cfg_with(25_000, 19_900, 5);
+        let cfg = cfg_with(25_000, 5);
         let html = pricing_html("usd", &l, &cfg);
         assert!(html.contains("$0.003"), "headline usd price: {html}");
     }
@@ -2124,7 +2094,7 @@ mod pricing_tests {
     #[test]
     fn pricing_html_no_free_forever_copy() {
         let l = crate::locale::Locale::default_inr();
-        let cfg = cfg_with(25_000, 19_900, 5);
+        let cfg = cfg_with(25_000, 5);
         let html = pricing_html("INR", &l, &cfg);
         // Guard against regression: the user explicitly asked for these
         // claims to stay out of the rendered marketing copy.

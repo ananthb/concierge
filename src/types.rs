@@ -86,16 +86,6 @@ pub struct Tenant {
     pub updated_at: String,
 }
 
-impl Tenant {
-    /// How many reply-email addresses this tenant is allowed to provision.
-    /// Equal to the cumulative count of addresses granted by paid pack
-    /// purchases. (Operator grants and pack-purchase webhooks both bump
-    /// `email_address_extras_purchased`. See billing/webhook.rs.)
-    pub fn email_address_quota(&self) -> u32 {
-        self.email_address_extras_purchased
-    }
-}
-
 fn default_locale() -> String {
     "en-IN".to_string()
 }

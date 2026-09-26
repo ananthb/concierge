@@ -1375,23 +1375,19 @@ pub enum PricingConcept {
     /// Per-AI-reply rate, in milli-minor units (1/1000 of paise / cent / etc).
     /// Stored fine-grained so sub-minor prices fit (e.g. ₹0.10 = 10000 mp).
     UnitPriceMilli,
-    /// Reply-email pack price per recurring period, in minor units.
-    AddressPrice,
     /// Sign-up verification charge, in minor units.
     VerificationAmount,
 }
 
 impl PricingConcept {
-    pub const ALL: [PricingConcept; 3] = [
+    pub const ALL: [PricingConcept; 2] = [
         PricingConcept::UnitPriceMilli,
-        PricingConcept::AddressPrice,
         PricingConcept::VerificationAmount,
     ];
 
     pub fn as_wire(self) -> &'static str {
         match self {
             PricingConcept::UnitPriceMilli => "unit_price_milli",
-            PricingConcept::AddressPrice => "address_price",
             PricingConcept::VerificationAmount => "verification_amount",
         }
     }
@@ -1399,7 +1395,6 @@ impl PricingConcept {
     pub fn from_wire(s: &str) -> Option<Self> {
         match s {
             "unit_price_milli" => Some(PricingConcept::UnitPriceMilli),
-            "address_price" => Some(PricingConcept::AddressPrice),
             "verification_amount" => Some(PricingConcept::VerificationAmount),
             _ => None,
         }
@@ -1416,7 +1411,6 @@ impl PricingConcept {
     pub fn label(self) -> &'static str {
         match self {
             PricingConcept::UnitPriceMilli => "Per-AI-reply rate",
-            PricingConcept::AddressPrice => "Reply-email pack price",
             PricingConcept::VerificationAmount => "Sign-up verification charge",
         }
     }
@@ -1449,8 +1443,6 @@ impl Default for Pricing {
         // have a usable pricing snapshot even on a DB that skipped seeding.
         amounts.insert((PricingConcept::UnitPriceMilli, "INR".into()), 10_000);
         amounts.insert((PricingConcept::UnitPriceMilli, "USD".into()), 100);
-        amounts.insert((PricingConcept::AddressPrice, "INR".into()), 9_900);
-        amounts.insert((PricingConcept::AddressPrice, "USD".into()), 100);
         amounts.insert((PricingConcept::VerificationAmount, "INR".into()), 100);
         amounts.insert((PricingConcept::VerificationAmount, "USD".into()), 100);
         Self {
@@ -1476,12 +1468,6 @@ impl Pricing {
     /// loudly on a 0-amount order, which is the right behavior.
     pub fn unit_price_milli(&self, currency_code: &str) -> i64 {
         self.amount(PricingConcept::UnitPriceMilli, currency_code)
-            .unwrap_or(0)
-    }
-
-    /// Reply-email pack price (minor units) for a currency.
-    pub fn address_price(&self, currency_code: &str) -> i64 {
-        self.amount(PricingConcept::AddressPrice, currency_code)
             .unwrap_or(0)
     }
 

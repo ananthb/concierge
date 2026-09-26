@@ -35,23 +35,15 @@ pub async fn handle_billing_admin(
                 .await?
                 .unwrap_or_default();
             let locale = crate::locale::Locale::from_tenant(&tenant.locale, Some(tenant.currency));
-            let kv = env.kv("KV")?;
-            let addrs = storage::get_email_addresses(&kv, tenant_id).await?;
-
             let cfg = storage::get_pricing(&db).await;
             let code = locale.currency.as_str();
             let milli_price = cfg.unit_price_milli(code);
-            let address_price = cfg.address_price(code);
 
-            Response::from_html(tmpl::billing_overview_with_addresses_html(
+            Response::from_html(tmpl::billing_overview_html(
                 &bill,
                 &locale,
                 base_url,
-                addrs.len() as u32,
-                tenant.email_address_quota(),
                 milli_price,
-                address_price,
-                cfg.email_pack_size,
                 cfg.min_credits,
                 cfg.max_credits,
                 tenant.currency,
@@ -177,46 +169,6 @@ pub async fn handle_billing_admin(
 
             Response::from_html(tmpl::verification_checkout_html(
                 order_id, amount, &locale, &key_id, tenant_id, &return_to, base_url,
-            ))
-        }
-
-        // Buy a reply-email subscription pack. Price + pack size come from
-        // pricing_config (defaults ₹99 / $1 per pack/month, 5 addresses).
-        // The order carries notes.kind="address" so the Razorpay webhook
-        // bumps the tenant's email_address_extras_purchased by the pack size.
-        (Method::Post, "address") => {
-            let tenant = storage::get_tenant(&db, tenant_id)
-                .await?
-                .unwrap_or_default();
-            let locale = crate::locale::Locale::from_tenant(&tenant.locale, Some(tenant.currency));
-            let currency = locale.currency.as_str();
-
-            let cfg = storage::get_pricing(&db).await;
-            let amount = cfg.address_price(locale.currency.as_str());
-
-            let key_id = env.secret("RAZORPAY_KEY_ID")?.to_string();
-            let key_secret = env.secret("RAZORPAY_KEY_SECRET")?.to_string();
-
-            let receipt = generate_id();
-            let order = razorpay::create_order_with_notes(
-                &key_id,
-                &key_secret,
-                amount,
-                currency,
-                &receipt,
-                serde_json::json!({
-                    "tenant_id": tenant_id,
-                    "kind": "address",
-                    // Omit "extras": the webhook falls back to the
-                    // configured email_pack_size (default 5) so adjusting
-                    // the pack size from /manage takes effect on the
-                    // next purchase without a code change here.
-                }),
-            )
-            .await?;
-            let order_id = order.get("id").and_then(|v| v.as_str()).unwrap_or("");
-            Response::from_html(tmpl::address_checkout_html(
-                order_id, amount, &locale, &key_id, tenant_id, base_url,
             ))
         }
 

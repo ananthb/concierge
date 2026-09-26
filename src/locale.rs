@@ -59,6 +59,9 @@ impl Locale {
         }
     }
 
+    /// Test-only counterpart to `default_inr`. Nothing in the running
+    /// worker constructs a USD locale directly any more.
+    #[cfg(test)]
     pub fn default_usd() -> Self {
         Self {
             langid: langid!("en-US"),
