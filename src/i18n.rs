@@ -172,17 +172,9 @@ mod tests {
         let s = t_args(
             &l,
             "pricing-meta-description",
-            &[
-                ("inr", "₹0.50"),
-                ("usd", "$0.005"),
-                ("addr_inr", "₹199"),
-                ("addr_usd", "$2"),
-                ("pack_size", "5"),
-            ],
+            &[("inr", "₹0.50"), ("usd", "$0.005")],
         );
         assert!(s.contains("₹0.50"));
         assert!(s.contains("$0.005"));
-        assert!(s.contains("₹199"));
-        assert!(s.contains("$2"));
     }
 }

@@ -131,47 +131,6 @@ pub async fn handle_tenants(
             ))
         }
 
-        // Grant reply-email address slots to a tenant. Bumps the tenant's
-        // purchased-extras counter so the quota gate at /dashboard/email opens
-        // up `count` more local-parts. Mirrors what a paid pack purchase
-        // does, minus the Razorpay round-trip.
-        (Method::Post, [id, "grant-addresses"]) => {
-            let mut tenant = match get_tenant(db, id).await? {
-                Some(t) => t,
-                None => return Response::error("Tenant not found", 404),
-            };
-            let form: serde_json::Value = req.json().await?;
-            let count = parse_form_i64(&form, "addresses").unwrap_or(0);
-
-            if count <= 0 {
-                return Response::from_html(
-                    r#"<div class="error">Address count must be positive.</div>"#,
-                );
-            }
-
-            tenant.email_address_extras_purchased = tenant
-                .email_address_extras_purchased
-                .saturating_add(count as u32);
-            tenant.updated_at = crate::helpers::now_iso();
-            save_tenant(db, &tenant).await?;
-
-            audit::log_action(
-                db,
-                actor_email,
-                "grant_addresses",
-                "tenant",
-                Some(id),
-                Some(&serde_json::json!({ "addresses": count })),
-            )
-            .await?;
-
-            Response::from_html(format!(
-                r#"<div class="success">Granted {count} address slots. New quota: {quota}.</div>"#,
-                count = count,
-                quota = tenant.email_address_quota(),
-            ))
-        }
-
         // Update tenant (plan)
         (Method::Put, [id]) => {
             let form: serde_json::Value = req.json().await?;
