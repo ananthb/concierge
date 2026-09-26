@@ -153,10 +153,9 @@ pub async fn handle_wizard(
             if crate::email::validate_local_part(&label).is_ok() {
                 let tenant = get_tenant(&db, tenant_id).await?.unwrap_or_default();
                 let addrs = get_email_addresses(&kv, tenant_id).await?;
-                let at_quota = (addrs.len() as u32) >= tenant.email_address_quota();
                 let already_owned = addrs.iter().any(|a| a.local_part == label);
                 let globally_taken = get_tenant_by_address(&kv, &label).await?.is_some();
-                if !at_quota && !already_owned && !globally_taken {
+                if !already_owned && !globally_taken {
                     let now = crate::helpers::now_iso();
                     let owner = NotificationRecipient {
                         id: crate::helpers::generate_id(),
@@ -393,8 +392,6 @@ async fn render_step(
                 .map(|v| v.to_string())
                 .unwrap_or_default();
             let discord = get_discord_config_by_tenant(kv, tenant_id).await?;
-            let db = env.d1("DB")?;
-            let cfg = crate::storage::get_pricing(&db).await;
             Response::from_html(connect_html(
                 !ig.is_empty(),
                 !wa.is_empty(),
@@ -405,7 +402,6 @@ async fn render_step(
                 discord.as_ref(),
                 base_url,
                 locale,
-                &cfg,
             ))
         }
         OnboardingStep::Notifications => {

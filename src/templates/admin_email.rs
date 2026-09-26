@@ -12,15 +12,10 @@ use super::HASH;
 /// Top-level email dashboard.
 pub fn email_dashboard_html(
     addrs: &[EmailAddress],
-    tenant: &Tenant,
     base_domain: &str,
     base_url: &str,
     locale: &Locale,
 ) -> String {
-    let used = addrs.len() as u32;
-    let quota = tenant.email_address_quota();
-    let at_limit = used >= quota;
-
     let mode_static = t(locale, "admin-email-mode-static");
     let mode_ai = t(locale, "admin-email-mode-ai");
     let on_label = t(locale, "admin-email-on");
@@ -91,41 +86,11 @@ pub fn email_dashboard_html(
         )
     };
 
-    let add_form = if at_limit {
-        // Two flavours: tenant has a quota and used it up vs. tenant
-        // never bought any address slots in the first place. The old
-        // copy read "you've used your 0 address slot(s)" when quota
-        // was zero, which doesn't make sense.
-        let warn_body = if quota == 0 {
-            format!(
-                r#"<strong>{none}</strong> <a href="{base_url}/dashboard/billing">{warn_link}</a> {tail}"#,
-                base_url = base_url,
-                none = t(locale, "admin-email-quota-none"),
-                warn_link = t(locale, "admin-email-quota-warn-link"),
-                tail = t(locale, "admin-email-quota-none-tail"),
-            )
-        } else {
-            format!(
-                r#"<strong>{warn_prefix} {quota} {warn_suffix}</strong> <a href="{base_url}/dashboard/billing">{warn_link}</a> {warn_tail}"#,
-                base_url = base_url,
-                quota = quota,
-                warn_prefix = t(locale, "admin-email-quota-warn-prefix"),
-                warn_suffix = t(locale, "admin-email-quota-warn-suffix"),
-                warn_link = t(locale, "admin-email-quota-warn-link"),
-                warn_tail = t(locale, "admin-email-quota-warn-tail"),
-            )
-        };
-        format!(
-            r#"<div class="card p-18 mt-16 card-warn">
-                <p class="m-0">{warn_body}</p>
-            </div>"#,
-            warn_body = warn_body,
-        )
-    } else {
+    let add_form = {
         format!(
             r##"<div class="card p-18 mt-16">
                 <h2 class="display-sm m-0 mb-8">{add_h2}</h2>
-                <p class="muted mb-12">{used} {prefix} {quota} {suffix}</p>
+                <p class="muted mb-12">{add_lead}</p>
                 <form hx-post="{base_url}/dashboard/email/addresses" hx-ext="json-enc" hx-target="{HASH}toast" hx-swap="innerHTML">
                     <div class="row gap-8 wrap">
                         <label for="email-local-part" class="sr-only">{add_h2}</label>
@@ -139,11 +104,8 @@ pub fn email_dashboard_html(
             HASH = HASH,
             base_url = base_url,
             base_domain = html_escape(base_domain),
-            used = used,
-            quota = quota,
             add_h2 = t(locale, "admin-email-add-h2"),
-            prefix = t(locale, "admin-email-add-lead-prefix"),
-            suffix = t(locale, "admin-email-add-lead-suffix"),
+            add_lead = t(locale, "admin-email-add-lead"),
             ph = t(locale, "admin-email-add-placeholder"),
             add_cta = t(locale, "admin-email-add-cta"),
         )

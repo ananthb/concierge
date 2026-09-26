@@ -72,9 +72,11 @@ test.describe('billing save-on-blur', () => {
 
     // And confirm the wiring isn't a one-off — every pricing cell
     // gets the same shape (a single happy-path cell could be a
-    // copy-paste outlier).
+    // copy-paste outlier). The table is PricingConcept::ALL x seeded
+    // currencies: 2 concepts (unit_price_milli, verification_amount)
+    // x INR + USD. Bump this when a concept is added or removed.
     const cellCount = await page.locator('input.cell-save').count();
-    expect(cellCount).toBeGreaterThanOrEqual(6);
+    expect(cellCount).toBeGreaterThanOrEqual(4);
   });
 
   test('the /settings endpoint accepts a single-cell update', async ({ request }) => {

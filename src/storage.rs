@@ -42,10 +42,6 @@ fn row_to_tenant(row: &serde_json::Value) -> Tenant {
             .and_then(|v| v.as_str())
             .map(crate::locale::Currency::parse)
             .unwrap_or_default(),
-        email_address_extras_purchased: row
-            .get("email_address_extras_purchased")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(0) as u32,
         verified_at: row
             .get("verified_at")
             .and_then(|v| v.as_str())
@@ -107,8 +103,8 @@ pub async fn save_tenant(db: &D1Database, tenant: &Tenant) -> Result<()> {
         None => JsValue::NULL,
     };
     db.prepare(
-        "INSERT INTO tenants (id, email, name, facebook_id, plan, locale, currency, email_address_extras_purchased, verified_at, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        "INSERT INTO tenants (id, email, name, facebook_id, plan, locale, currency, verified_at, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET
            email = excluded.email,
            name = excluded.name,
@@ -116,7 +112,6 @@ pub async fn save_tenant(db: &D1Database, tenant: &Tenant) -> Result<()> {
            plan = excluded.plan,
            locale = excluded.locale,
            currency = excluded.currency,
-           email_address_extras_purchased = excluded.email_address_extras_purchased,
            verified_at = excluded.verified_at,
            updated_at = excluded.updated_at",
     )
@@ -128,7 +123,6 @@ pub async fn save_tenant(db: &D1Database, tenant: &Tenant) -> Result<()> {
         tenant.plan.as_str().into(),
         tenant.locale.as_str().into(),
         tenant.currency.as_str().into(),
-        JsValue::from(tenant.email_address_extras_purchased as f64),
         verified_val,
         tenant.created_at.as_str().into(),
         tenant.updated_at.as_str().into(),
@@ -1375,23 +1369,19 @@ pub enum PricingConcept {
     /// Per-AI-reply rate, in milli-minor units (1/1000 of paise / cent / etc).
     /// Stored fine-grained so sub-minor prices fit (e.g. ₹0.10 = 10000 mp).
     UnitPriceMilli,
-    /// Reply-email pack price per recurring period, in minor units.
-    AddressPrice,
     /// Sign-up verification charge, in minor units.
     VerificationAmount,
 }
 
 impl PricingConcept {
-    pub const ALL: [PricingConcept; 3] = [
+    pub const ALL: [PricingConcept; 2] = [
         PricingConcept::UnitPriceMilli,
-        PricingConcept::AddressPrice,
         PricingConcept::VerificationAmount,
     ];
 
     pub fn as_wire(self) -> &'static str {
         match self {
             PricingConcept::UnitPriceMilli => "unit_price_milli",
-            PricingConcept::AddressPrice => "address_price",
             PricingConcept::VerificationAmount => "verification_amount",
         }
     }
@@ -1399,7 +1389,6 @@ impl PricingConcept {
     pub fn from_wire(s: &str) -> Option<Self> {
         match s {
             "unit_price_milli" => Some(PricingConcept::UnitPriceMilli),
-            "address_price" => Some(PricingConcept::AddressPrice),
             "verification_amount" => Some(PricingConcept::VerificationAmount),
             _ => None,
         }
@@ -1416,7 +1405,6 @@ impl PricingConcept {
     pub fn label(self) -> &'static str {
         match self {
             PricingConcept::UnitPriceMilli => "Per-AI-reply rate",
-            PricingConcept::AddressPrice => "Reply-email pack price",
             PricingConcept::VerificationAmount => "Sign-up verification charge",
         }
     }
@@ -1436,7 +1424,6 @@ impl PricingConcept {
 /// uses the same unit per concept (see `PricingConcept::is_milli`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Pricing {
-    pub email_pack_size: i64,
     pub min_credits: i64,
     pub max_credits: i64,
     pub amounts: std::collections::BTreeMap<(PricingConcept, String), i64>,
@@ -1449,12 +1436,9 @@ impl Default for Pricing {
         // have a usable pricing snapshot even on a DB that skipped seeding.
         amounts.insert((PricingConcept::UnitPriceMilli, "INR".into()), 10_000);
         amounts.insert((PricingConcept::UnitPriceMilli, "USD".into()), 100);
-        amounts.insert((PricingConcept::AddressPrice, "INR".into()), 9_900);
-        amounts.insert((PricingConcept::AddressPrice, "USD".into()), 100);
         amounts.insert((PricingConcept::VerificationAmount, "INR".into()), 100);
         amounts.insert((PricingConcept::VerificationAmount, "USD".into()), 100);
         Self {
-            email_pack_size: 5,
             min_credits: 1_000,
             max_credits: 1_000_000,
             amounts,
@@ -1476,12 +1460,6 @@ impl Pricing {
     /// loudly on a 0-amount order, which is the right behavior.
     pub fn unit_price_milli(&self, currency_code: &str) -> i64 {
         self.amount(PricingConcept::UnitPriceMilli, currency_code)
-            .unwrap_or(0)
-    }
-
-    /// Reply-email pack price (minor units) for a currency.
-    pub fn address_price(&self, currency_code: &str) -> i64 {
-        self.amount(PricingConcept::AddressPrice, currency_code)
             .unwrap_or(0)
     }
 
@@ -1508,15 +1486,10 @@ pub async fn get_pricing(db: &D1Database) -> Pricing {
 
     // Currency-agnostic singleton.
     if let Ok(Some(row)) = db
-        .prepare(
-            "SELECT email_pack_size, min_credits, max_credits FROM pricing_config WHERE id = 1",
-        )
+        .prepare("SELECT min_credits, max_credits FROM pricing_config WHERE id = 1")
         .first::<serde_json::Value>(None)
         .await
     {
-        if let Some(n) = row.get("email_pack_size").and_then(|v| v.as_i64()) {
-            p.email_pack_size = n;
-        }
         if let Some(n) = row.get("min_credits").and_then(|v| v.as_i64()) {
             p.min_credits = n;
         }
@@ -1587,20 +1560,17 @@ pub async fn delete_pricing_currency(db: &D1Database, currency_code: &str) -> Re
 /// Persist the currency-agnostic settings.
 pub async fn update_pricing_config(
     db: &D1Database,
-    email_pack_size: i64,
     min_credits: i64,
     max_credits: i64,
 ) -> Result<()> {
     db.prepare(
         "UPDATE pricing_config SET \
-           email_pack_size = ?, \
            min_credits = ?, \
            max_credits = ?, \
            updated_at = datetime('now') \
          WHERE id = 1",
     )
     .bind(&[
-        JsValue::from_f64(email_pack_size as f64),
         JsValue::from_f64(min_credits as f64),
         JsValue::from_f64(max_credits as f64),
     ])?

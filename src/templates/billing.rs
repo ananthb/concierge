@@ -56,17 +56,13 @@ fn format_expiry(iso: &str) -> String {
     }
 }
 
-/// Renders the billing dashboard, including the email address-quota card.
+/// Renders the billing dashboard.
 #[allow(clippy::too_many_arguments)]
-pub fn billing_overview_with_addresses_html(
+pub fn billing_overview_html(
     billing: &TenantBilling,
     locale: &Locale,
     base_url: &str,
-    addresses_used: u32,
-    address_quota: u32,
     milli_price: i64,
-    address_price: i64,
-    email_pack_size: i64,
     min_credits: i64,
     max_credits: i64,
     tenant_currency: crate::locale::Currency,
@@ -102,35 +98,6 @@ pub fn billing_overview_with_addresses_html(
     } else {
         String::new()
     };
-
-    let address_price_label = format_money(address_price, locale);
-    let address_action = if metered {
-        format!(
-            r##"<form hx-post="{base_url}/dashboard/billing/address" hx-target="body" hx-swap="innerHTML">
-                    <button class="btn primary" type="submit">Add a pack ({pack_size} for {address_price_label}/mo)</button>
-                </form>"##,
-            address_price_label = address_price_label,
-            pack_size = email_pack_size,
-            base_url = base_url,
-        )
-    } else {
-        r#"<span class="muted fs-13">Operator-managed</span>"#.to_string()
-    };
-    let address_card = format!(
-        r##"<div class="card p-18 mb-24">
-            <div class="between">
-                <div>
-                    <div class="eyebrow">Reply-email subscription</div>
-                    <div class="stat-n serif">{addresses_used} / {address_quota}</div>
-                    <div class="mono muted fs-11">addresses used / quota</div>
-                </div>
-                {address_action}
-            </div>
-        </div>"##,
-        addresses_used = addresses_used,
-        address_quota = address_quota,
-        address_action = address_action,
-    );
 
     let comp_banner = if metered {
         String::new()
@@ -189,7 +156,6 @@ pub fn billing_overview_with_addresses_html(
   <div class="eyebrow">Billing</div>
   <h2 class="display-sm m-0 mt-4 mb-16">AI reply credits</h2>
   {comp_banner}
-  {address_card}
 
   <div class="stats-grid mb-24">
     <div class="card p-18 ta-center">
@@ -223,7 +189,6 @@ pub fn billing_overview_with_addresses_html(
         granted_detail = granted_detail,
         used = billing.replies_used,
         slider = slider,
-        address_card = address_card,
         comp_banner = comp_banner,
         currency_card = currency_card,
     );
@@ -374,72 +339,4 @@ payBtn.addEventListener('click', () => {{
     );
 
     base_html("Verify account: Concierge", &content, locale)
-}
-
-/// Checkout for a reply-email subscription pack. The price comes from
-/// `pricing_config.address_price_*` (default ₹99 / $1 per pack/month) and
-/// grants `email_pack_size` addresses (default 5) on payment success.
-pub fn address_checkout_html(
-    order_id: &str,
-    amount: i64,
-    locale: &Locale,
-    razorpay_key: &str,
-    tenant_id: &str,
-    base_url: &str,
-) -> String {
-    let currency = locale.currency.as_str();
-    let display_amount = format_money(amount, locale);
-    let content = format!(
-        r##"<div class="ta-center" style="max-width:480px;margin:4rem auto;padding:0 1rem">
-  <div class="card p-28">
-    <h2 class="display-sm">Reply-email subscription</h2>
-    <p class="muted m-0 mt-8 mb-24">A pack of concierge addresses, billed monthly.</p>
-    <div class="stat-n serif mb-24">{display_amount}</div>
-    <button id="pay-btn" class="btn primary lg"><span>Pay with Razorpay</span><span class="spinner htmx-indicator" aria-hidden="true"></span></button>
-    <p class="mono muted fs-11 mt-12">Secure payment via Razorpay</p>
-  </div>
-  <a href="{base_url}/dashboard/email" class="btn ghost sm mt-16">&larr; Cancel</a>
-</div>
-<script src="https://checkout.razorpay.com/v1/checkout.js"></script>
-<script type="module" nonce="__CSP_NONCE__">
-const payBtn = document.getElementById('pay-btn');
-payBtn.addEventListener('click', () => {{
-  payBtn.classList.add('is-loading');
-  payBtn.disabled = true;
-  const options = {{
-    key: '{key}',
-    amount: {amount},
-    currency: '{currency}',
-    order_id: '{order_id}',
-    name: 'Concierge',
-    description: 'Extra email address',
-    notes: {{ tenant_id: '{tenant_id}', kind: 'address', extras: '1' }},
-    handler: async (response) => {{
-      await fetch('{base_url}/dashboard/billing/verify', {{
-        method: 'POST',
-        headers: {{ 'Content-Type': 'application/json' }},
-        body: JSON.stringify({{
-          razorpay_order_id: response.razorpay_order_id,
-          razorpay_payment_id: response.razorpay_payment_id,
-          razorpay_signature: response.razorpay_signature,
-        }}),
-      }});
-      window.location.href = '{base_url}/dashboard/email';
-    }},
-    modal: {{ ondismiss: () => {{ payBtn.classList.remove('is-loading'); payBtn.disabled = false; }} }},
-    theme: {{ color: '#E86A2C' }},
-  }};
-  new Razorpay(options).open();
-}});
-</script>"##,
-        display_amount = display_amount,
-        amount = amount,
-        currency = currency,
-        order_id = html_escape(order_id),
-        key = html_escape(razorpay_key),
-        tenant_id = html_escape(tenant_id),
-        base_url = base_url,
-    );
-
-    base_html("Extra email address: Concierge", &content, locale)
 }

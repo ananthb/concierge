@@ -71,12 +71,6 @@ pub struct Tenant {
     pub locale: String,
     #[serde(default)]
     pub currency: Currency,
-    /// Cumulative reply-email-address quota the tenant has purchased.
-    /// Each successful pack purchase bumps this by `email_pack_size`
-    /// (default 5). Quota = this value (no implicit freebie). Pricing and
-    /// pack size live in the singleton `pricing_config` row.
-    #[serde(default)]
-    pub email_address_extras_purchased: u32,
     /// Set the first time we observe a captured Razorpay payment for this
     /// tenant. The sign-up wizard charges a small refundable verification
     /// amount; this flips on success and gates wizard "Finish".
@@ -84,16 +78,6 @@ pub struct Tenant {
     pub verified_at: Option<String>,
     pub created_at: String,
     pub updated_at: String,
-}
-
-impl Tenant {
-    /// How many reply-email addresses this tenant is allowed to provision.
-    /// Equal to the cumulative count of addresses granted by paid pack
-    /// purchases. (Operator grants and pack-purchase webhooks both bump
-    /// `email_address_extras_purchased`. See billing/webhook.rs.)
-    pub fn email_address_quota(&self) -> u32 {
-        self.email_address_extras_purchased
-    }
 }
 
 fn default_locale() -> String {

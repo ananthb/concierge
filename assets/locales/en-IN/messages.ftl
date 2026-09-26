@@ -145,7 +145,7 @@ features-cta-primary = Get started →
 features-cta-secondary = See pricing
 
 # Pricing page (/pricing).
-pricing-meta-description = Simple, prepaid pricing for Concierge. { $inr } / { $usd } per AI reply, no subscriptions. Reply-email subscription: { $pack_size } addresses for { $addr_inr } / { $addr_usd } per month.
+pricing-meta-description = Simple, prepaid pricing for Concierge. { $inr } / { $usd } per AI reply, no subscriptions.
 pricing-og-title = Concierge Pricing
 pricing-headline-prefix = per AI reply. Static auto-replies don't consume credits.
 pricing-currency-inr-label = Indian rupees
@@ -155,11 +155,9 @@ pricing-credits-eyebrow = What costs a credit?
 pricing-credits-li-1 = <strong>AI auto-replies</strong> on WhatsApp, Instagram, email, or Discord: <strong>1 credit each.</strong>
 pricing-credits-li-2 = <strong>Static auto-replies</strong> (canned text you wrote yourself): no credits consumed.
 pricing-credits-li-3 = Inbound messages, notification CCs/BCCs, Discord relay, slash commands: no credits consumed.
-pricing-email-heading = Reply-email subscription
-pricing-email-body = Each address you set up at <code>name@cncg.email</code> can auto-reply to inbound mail. Replies go to the original sender; you and your team get a copy via Cc/Bcc.
-pricing-email-quota-prefix = <strong>{ $pack_size } addresses per pack</strong>, billed
-pricing-email-quota-suffix = per pack, monthly. Cancel any time.
-pricing-email-billing-note = AI replies draw from your credit balance above. Static replies don't consume credits.
+pricing-email-heading = Email
+pricing-email-body = Forward your existing address to a <code>name@cncg.email</code> address and Concierge auto-replies to whoever wrote in. Nothing changes in your DNS: no MX records, no mail migration. Replies go to the original sender; you and your team get a copy via Cc/Bcc.
+pricing-email-billing-note = No separate charge for email. Addresses are unlimited, and AI replies draw from the same credit balance as every other channel. Static replies don't consume credits.
 pricing-slider-cta-signin = Sign in to buy
 
 # Onboarding wizard chrome.
@@ -458,7 +456,7 @@ wizard-channels-email-lead-prefix = Pick a name to receive mail at
 wizard-channels-email-lead-suffix = . Replies go to the sender; you and your team get a copy via Cc/Bcc.
 wizard-channels-email-placeholder = your-name
 wizard-channels-email-add = Add
-wizard-channels-email-help = Reply-email subscription: { $pack_size } addresses per pack at { $inr } / { $usd } per month.
+wizard-channels-email-help = Forward your existing address here and Concierge replies for you. No DNS changes, no extra charge -- AI replies use the same credits as every channel.
 wizard-channels-card-active = active
 wizard-channels-card-manage = Manage
 wizard-channels-card-connect = Connect →
@@ -522,8 +520,7 @@ admin-email-quota-warn-tail = to add more.
 admin-email-quota-none = You don't have any reply-email addresses yet. Buy a 5-pack from
 admin-email-quota-none-tail = to claim your first one.
 admin-email-add-h2 = Add an address
-admin-email-add-lead-prefix = of
-admin-email-add-lead-suffix = addresses used. Pick a memorable local-part: it can use a-z, 0-9, dot, dash, underscore.
+admin-email-add-lead = Create an address, then forward your existing mail to it from your current provider. Pick a memorable local-part: it can use a-z, 0-9, dot, dash, underscore.
 admin-email-add-placeholder = support
 admin-email-add-cta = Add
 

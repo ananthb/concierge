@@ -215,7 +215,6 @@ pub async fn handle_whatsapp_signup(
                     plan: crate::types::Plan::Paid,
                     locale: signup_locale.langid.to_string(),
                     currency: signup_locale.currency,
-                    email_address_extras_purchased: 0,
                     verified_at: None,
                     created_at: now.clone(),
                     updated_at: now,

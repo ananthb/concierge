@@ -42,10 +42,8 @@ pub async fn handle_email_admin(
         // Dashboard.
         (Method::Get, []) => {
             let addrs = get_email_addresses(&kv, tenant_id).await?;
-            let tenant = get_tenant(&db, tenant_id).await?.unwrap_or_default();
             Response::from_html(email_dashboard_html(
                 &addrs,
-                &tenant,
                 &base_domain,
                 base_url,
                 &locale,
@@ -69,14 +67,7 @@ pub async fn handle_email_admin(
                 ));
             }
 
-            // Quota check.
             let tenant = get_tenant(&db, tenant_id).await?.unwrap_or_default();
-            let addrs = get_email_addresses(&kv, tenant_id).await?;
-            if (addrs.len() as u32) >= tenant.email_address_quota() {
-                return Response::from_html(
-                    r#"<div class="error">Address quota reached. <a href="/dashboard/billing">Buy more</a> to add additional addresses.</div>"#,
-                );
-            }
 
             // Global uniqueness: local-parts are shared across the platform.
             if get_tenant_by_address(&kv, &label).await?.is_some() {

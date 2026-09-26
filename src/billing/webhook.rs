@@ -6,7 +6,6 @@ use worker::*;
 
 use super::razorpay;
 use crate::helpers::generate_id;
-use crate::storage;
 
 /// Handle POST /webhook/razorpay
 pub async fn handle_razorpay_webhook(mut req: Request, env: Env) -> Result<Response> {
@@ -103,38 +102,6 @@ pub async fn handle_razorpay_webhook(mut req: Request, env: Env) -> Result<Respo
                                 "Verified {tenant_id}; auto-refund failed for {payment_id}: {e}"
                             );
                         }
-                    }
-                }
-                "address" => {
-                    // notes.extras tells us how many addresses to grant. The
-                    // default is the configured pack size (5) since one
-                    // purchase = one reply-email pack at our flat monthly rate.
-                    // TODO: switch this flow to Razorpay Subscriptions and
-                    // revoke pack addresses when the subscription lapses.
-                    let pack_size = crate::storage::get_pricing(&db).await.email_pack_size as u32;
-                    let extras = payment
-                        .pointer("/notes/extras")
-                        .and_then(|v| v.as_str())
-                        .and_then(|s| s.parse::<u32>().ok())
-                        .unwrap_or(pack_size);
-                    record_payment(
-                        &db,
-                        payment_id,
-                        tenant_id,
-                        extras as i64,
-                        currency,
-                        "address",
-                    )
-                    .await?;
-                    if let Some(mut tenant) = storage::get_tenant(&db, tenant_id).await? {
-                        tenant.email_address_extras_purchased += extras;
-                        tenant.updated_at = crate::helpers::now_iso();
-                        storage::save_tenant(&db, &tenant).await?;
-                        console_log!(
-                            "Granted {extras} extra email address(es) to {tenant_id} (payment {payment_id})"
-                        );
-                    } else {
-                        console_log!("Tenant {tenant_id} missing, skipping address grant");
                     }
                 }
                 _ => {
