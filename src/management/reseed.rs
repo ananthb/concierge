@@ -16,10 +16,16 @@
 //!   1. The route lives under `/manage`, which is Cloudflare
 //!      Access-protected. Reaching it at all means an operator identity
 //!      (or, locally, the dev bypass in [`crate::dev_bypass`]).
-//!   2. `ALLOW_SCHEMA_RESEED` must be set to the database's own name.
-//!      Not `1`, not `true` — the name, so the variable records *which*
-//!      database it licenses and cannot be set by reflex. Unset it again
-//!      afterwards.
+//!   2. `ALLOW_SCHEMA_RESEED` must equal the database's own name. Not `1`,
+//!      not `true` — the name, so it records *which* database it licenses
+//!      and cannot be set by reflex.
+//!
+//! The flag lives in `wrangler.toml` `[vars]`, commented out. Uncomment,
+//! push, reseed, re-comment, push. Not a dashboard variable and not
+//! Terraform: `tf/cloudflare/sites/workers.tf` in platform owns what the
+//! Workers are reached through and bind, never the scripts or their vars,
+//! so wrangler.toml is the one owner. Licensing and revoking are then both
+//! commits.
 //!
 //! The request body must name the same database, so a stray click cannot
 //! fire it during the window where the variable is set.
@@ -166,7 +172,7 @@ pub async fn handle_reseed(
 ) -> Result<Response> {
     let Some(licensed) = licensed_database(env) else {
         return Response::from_html(format!(
-            r#"<div class="error">Reseed is not licensed. Set the <code>{RESEED_VAR}</code> Worker variable to the database name, reseed, then unset it.</div>"#
+            r#"<div class="error">Reseed is not licensed. Uncomment <code>{RESEED_VAR}</code> in <code>wrangler.toml</code> <code>[vars]</code>, push, then retry.</div>"#
         ));
     };
 
@@ -219,7 +225,7 @@ pub async fn handle_reseed(
     }
 
     Response::from_html(format!(
-        r#"<div class="success">Reseeded <strong>{db_name}</strong>: cleared {n} tables, applied {s} statements. Unset <code>{RESEED_VAR}</code> now.</div>"#,
+        r#"<div class="success">Reseeded <strong>{db_name}</strong>: cleared {n} tables, applied {s} statements. Re-comment <code>{RESEED_VAR}</code> in <code>wrangler.toml</code> and push.</div>"#,
         db_name = crate::helpers::html_escape(&licensed),
         n = report.cleared.len(),
         s = report.statements_run,
