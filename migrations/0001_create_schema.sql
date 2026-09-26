@@ -1,21 +1,5 @@
--- Single canonical schema. Edits to this file do NOT propagate to remote
--- D1 automatically — `wrangler d1 migrations apply` skips files it has
--- already run. To change a deployed schema, add a fresh `000N_*.sql`
--- migration with the deltas, or drop the relevant tables and re-execute
--- this file with `wrangler d1 execute --file`.
---
--- TODO: this single-migration shape is a development convenience so the
--- schema stays readable in one place. Before the first production
--- deploy, freeze this file and switch to additive `000N_*.sql` delta
--- migrations — and delete this comment block.
---
--- Edited in place on 2026-09-26 under exactly that convention, taking the
--- second option above: `email_address_extras_purchased` (tenants),
--- `email_pack_size` (pricing_config) and the two `address_price` rows went
--- out with the per-address email SKU, and the one deployed database was
--- recreated from this file rather than migrated. That is only safe while
--- there is no data worth keeping — alpha, no customers. Once that stops
--- being true this file freezes and deltas go in `0002_*.sql`.
+-- Single canonical schema, edited in place. `POST /manage/reseed` applies
+-- it; see `src/management/reseed.rs` for why that exists and what gates it.
 
 -- Tenants
 CREATE TABLE IF NOT EXISTS tenants (

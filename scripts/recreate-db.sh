@@ -1,12 +1,18 @@
 #!/usr/bin/env bash
 # Drop every table and re-execute the canonical schema.
 #
+# BREAK-GLASS ONLY. The normal path is `POST /manage/reseed`, which does
+# the same thing from inside the Worker using its own DB binding, so a
+# `git push` is the whole deploy and nobody needs Cloudflare credentials.
+# See src/management/reseed.rs. Use this script when the Worker cannot
+# boot — a schema change that breaks startup is exactly when the endpoint
+# is unreachable.
+#
 # migrations/0001_create_schema.sql is edited in place rather than
-# extended with deltas (see its header). `wrangler d1 migrations apply`
-# will not help: it skips a migration it has already run, and every
-# CREATE is `IF NOT EXISTS`, so re-running it against a live database is
-# a no-op that leaves dropped columns in place. The tables have to go
-# first.
+# extended with deltas. `wrangler d1 migrations apply` will not help: it
+# skips a migration it has already run, and every CREATE is
+# `IF NOT EXISTS`, so re-running it against a live database is a no-op
+# that leaves dropped columns in place. The tables have to go first.
 #
 # DESTRUCTIVE: every row in the target database is deleted. Safe only
 # while there is no data worth keeping. Requires an authenticated
