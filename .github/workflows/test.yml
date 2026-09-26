@@ -112,10 +112,9 @@ jobs:
       - name: cargo test
         run: nix develop --command cargo test --lib
 
-      # Not gating yet: main carries 70 clippy warnings, none of them
-      # bugs (mostly needless to_string, too_many_arguments on the big
-      # handler signatures). Clearing them and flipping this to
-      # `-- -D warnings` is its own change; until then the step keeps the
-      # count visible in the log.
+      # Gating. Every warning main used to carry is cleared, so a new one
+      # fails the build rather than joining a backlog nobody reads.
+      # Deliberate exceptions are `#[allow]`d at the item with a comment
+      # saying why, which keeps them reviewable in the diff.
       - name: cargo clippy
-        run: nix develop --command cargo clippy --target wasm32-unknown-unknown --all-targets
+        run: nix develop --command cargo clippy --target wasm32-unknown-unknown --all-targets -- -D warnings
