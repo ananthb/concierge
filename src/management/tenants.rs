@@ -6,6 +6,7 @@ use crate::management::audit;
 use crate::storage::*;
 use crate::templates::management as tmpl;
 
+#[allow(clippy::too_many_arguments)]
 pub async fn handle_tenants(
     mut req: Request,
     _env: &Env,
@@ -94,12 +95,12 @@ pub async fn handle_tenants(
 
             if count <= 0 {
                 return Response::from_html(
-                    r#"<div class="error">Reply count must be positive.</div>"#.to_string(),
+                    r#"<div class="error">Reply count must be positive.</div>"#,
                 );
             }
             if expires_days <= 0 {
                 return Response::from_html(
-                    r#"<div class="error">Expiry must be at least 1 day.</div>"#.to_string(),
+                    r#"<div class="error">Expiry must be at least 1 day.</div>"#,
                 );
             }
 
@@ -144,7 +145,7 @@ pub async fn handle_tenants(
 
             if count <= 0 {
                 return Response::from_html(
-                    r#"<div class="error">Address count must be positive.</div>"#.to_string(),
+                    r#"<div class="error">Address count must be positive.</div>"#,
                 );
             }
 
@@ -199,7 +200,7 @@ pub async fn handle_tenants(
             )
             .await?;
 
-            Response::from_html(r#"<div class="success">Tenant updated</div>"#.to_string())
+            Response::from_html(r#"<div class="success">Tenant updated</div>"#)
         }
 
         // Delete tenant

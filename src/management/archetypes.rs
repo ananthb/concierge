@@ -84,8 +84,7 @@ pub async fn handle_archetypes(
             // Slug uniqueness.
             if storage::get_archetype(db, &row.slug).await?.is_some() {
                 return Response::from_html(
-                    r#"<div class="error">An archetype with that slug already exists.</div>"#
-                        .to_string(),
+                    r#"<div class="error">An archetype with that slug already exists.</div>"#,
                 );
             }
 

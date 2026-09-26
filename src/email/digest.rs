@@ -74,6 +74,7 @@ pub async fn sweep(env: &Env) -> Result<()> {
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn sweep_one(
     env: &Env,
     db: &D1Database,

@@ -81,7 +81,7 @@ impl ApprovalsDO {
             subs.push(tx);
         }
 
-        let stream = rx.map(|chunk| Ok::<Vec<u8>, Error>(chunk));
+        let stream = rx.map(Ok::<Vec<u8>, Error>);
         let mut resp = Response::from_stream(stream)?;
 
         let headers = resp.headers_mut();

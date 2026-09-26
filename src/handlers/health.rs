@@ -608,11 +608,14 @@ pub async fn run_checks(env: &Env, deep: bool) -> HealthReport {
         let report = finalize(checks, deep);
         if let Some(kv) = kv_ok {
             if let Ok(s) = serde_json::to_string(&report) {
-                let _ = kv
-                    .put(DEEP_CACHE_KEY, s)
-                    .and_then(|p| Ok(p.expiration_ttl(DEEP_CACHE_TTL_SECS)))
-                    .and_then(|p| Ok(p.execute()))
-                    .map(|f| async move { f.await });
+                // Await the put. The previous form ended in
+                // `.map(|f| async move { f.await })`, which built the
+                // future and dropped it unpolled, so this cache was
+                // never actually written and every deep check re-pinged
+                // Discord.
+                if let Ok(builder) = kv.put(DEEP_CACHE_KEY, s) {
+                    let _ = builder.expiration_ttl(DEEP_CACHE_TTL_SECS).execute().await;
+                }
             }
         }
         return report;

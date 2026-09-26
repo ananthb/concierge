@@ -87,7 +87,7 @@ fn risk_signal(draft: &str, persona: &PersonaConfig) -> Option<QueueReason> {
 
 fn risk_length(draft: &str) -> bool {
     let n = draft.chars().count();
-    n < MIN_LEN || n > MAX_LEN
+    !(MIN_LEN..=MAX_LEN).contains(&n)
 }
 
 fn risk_persona_drift(draft_lower: &str, persona: &PersonaConfig) -> bool {

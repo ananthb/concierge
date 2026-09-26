@@ -98,8 +98,7 @@ pub async fn handle_persona_admin(
                     let trimmed = raw.trim();
                     if trimmed.is_empty() {
                         return Response::from_html(
-                            r#"<div class="error">Write a prompt or pick another mode.</div>"#
-                                .to_string(),
+                            r#"<div class="error">Write a prompt or pick another mode.</div>"#,
                         );
                     }
                     let bounded: String = trimmed.chars().take(MAX_CUSTOM_PROMPT).collect();
@@ -107,7 +106,7 @@ pub async fn handle_persona_admin(
                 }
                 _ => {
                     return Response::from_html(
-                        r#"<div class="error">Unknown persona mode.</div>"#.to_string(),
+                        r#"<div class="error">Unknown persona mode.</div>"#,
                     );
                 }
             };

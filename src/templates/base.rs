@@ -72,157 +72,6 @@ pub fn public_nav_html(active: &str, locale: &Locale) -> String {
     )
 }
 
-#[cfg(test)]
-mod footer_tests {
-    fn count(haystack: &str, needle: &str) -> usize {
-        haystack.matches(needle).count()
-    }
-
-    #[test]
-    fn welcome_has_one_footer() {
-        let l = crate::locale::Locale::default_inr();
-        let s = crate::templates::onboarding::welcome_html("", &l, true, 3, 30, None);
-        assert_eq!(count(&s, r#"<footer class="site-footer">"#), 1, "welcome");
-    }
-
-    #[test]
-    fn welcome_substitutes_demo_chat_limits() {
-        let l = crate::locale::Locale::default_inr();
-        let s = crate::templates::onboarding::welcome_html("", &l, true, 5, 45, None);
-        assert!(
-            !s.contains("__TURN_LIMIT__") && !s.contains("__CTA_TIMEOUT_MS__"),
-            "demo chat JS placeholders must be substituted"
-        );
-        assert!(
-            s.contains("const TURN_LIMIT = 5;"),
-            "user-turn limit must be threaded into hero chat JS"
-        );
-        assert!(
-            s.contains("const CTA_TIMEOUT_MS = 45000;"),
-            "idle timeout must be converted to ms and threaded into hero chat JS"
-        );
-    }
-
-    /// Verify every FTL key used by the page resolves: `t()` falls back to
-    /// the key string on miss, so a passing assertion guarantees the FTL
-    /// bundle has every key the template references.
-    fn assert_keys_resolved(html: &str, keys: &[&str], page: &str) {
-        for key in keys {
-            assert!(
-                !html.contains(&format!(">{key}<"))
-                    && !html.contains(&format!("=\"{key}\""))
-                    && !html.contains(&format!(">{key} "))
-                    && !html.contains(&format!(" {key}<")),
-                "{page}: FTL key {key:?} appears unresolved in rendered HTML"
-            );
-        }
-    }
-
-    #[test]
-    fn welcome_resolves_all_keys() {
-        let l = crate::locale::Locale::default_inr();
-        let s = crate::templates::onboarding::welcome_html("", &l, true, 3, 30, None);
-        assert_keys_resolved(
-            &s,
-            &[
-                "welcome-eyebrow",
-                "welcome-headline",
-                "welcome-headline-2",
-                "welcome-headline-3",
-                "welcome-headline-4",
-                "welcome-headline-5",
-                "welcome-lead",
-                "welcome-cta-primary",
-                "welcome-cta-secondary",
-                "demo-chat-hint",
-                "demo-chat-title",
-                "demo-chat-subtitle",
-                "demo-chat-subtitle-concierge",
-                "demo-chat-persona-label",
-                "demo-chat-roleplay-prefix",
-                "demo-chat-roleplay-suffix",
-                "demo-chat-channels-note",
-                "demo-chat-business-hours",
-                "demo-chat-business-city",
-                "demo-chat-business-type",
-                "demo-chat-business-goal",
-                "demo-chat-handoff-chip",
-                "demo-chat-view-prompt",
-                "demo-chat-hide-prompt",
-                "demo-chat-prompt-heading",
-                "demo-chat-envelope-note",
-                "demo-chat-placeholder",
-                "demo-chat-placeholder-customer-prefix",
-                "demo-chat-placeholder-customer-suffix",
-                "demo-chat-send",
-                "demo-chat-close",
-                "demo-chat-thinking",
-                "demo-chat-error",
-                "demo-chat-rate-limited",
-            ],
-            "welcome",
-        );
-    }
-
-    #[test]
-    fn features_has_one_footer() {
-        let l = crate::locale::Locale::default_inr();
-        let cfg = crate::storage::Pricing::default();
-        let s = crate::templates::features::features_html(&l, &cfg);
-        assert_eq!(count(&s, r#"<footer class="site-footer">"#), 1, "features");
-        // Also catch any stray <footer> tag with a different class.
-        assert_eq!(count(&s, "<footer"), 1, "features any-footer");
-    }
-
-    #[test]
-    fn pricing_has_one_footer() {
-        let l = crate::locale::Locale::default_inr();
-        let cfg = crate::storage::Pricing::default();
-        let s = crate::templates::onboarding::pricing_html("INR", &l, &cfg);
-        assert_eq!(count(&s, r#"<footer class="site-footer">"#), 1, "pricing");
-    }
-
-    #[test]
-    fn terms_has_one_footer() {
-        let l = crate::locale::Locale::default_inr();
-        let s = crate::legal::terms_of_service_html(&l);
-        assert_eq!(count(&s, r#"<footer class="site-footer">"#), 1, "terms");
-    }
-
-    #[test]
-    fn privacy_has_one_footer() {
-        let l = crate::locale::Locale::default_inr();
-        let s = crate::legal::privacy_policy_html(&l);
-        assert_eq!(count(&s, r#"<footer class="site-footer">"#), 1, "privacy");
-    }
-
-    #[test]
-    fn footer_resolves_keys_in_both_locales() {
-        for l in [
-            crate::locale::Locale::default_inr(),
-            crate::locale::Locale::default_usd(),
-        ] {
-            let s = super::footer(&l);
-            assert!(s.contains("Features"), "footer-features in {}", l.langid);
-            assert!(
-                s.contains("Privacy Policy"),
-                "footer-privacy in {}",
-                l.langid
-            );
-        }
-    }
-
-    #[test]
-    fn html_lang_matches_locale() {
-        let inr = crate::locale::Locale::default_inr();
-        let usd = crate::locale::Locale::default_usd();
-        let s_inr = super::base_html("t", "<p>x</p>", &inr);
-        let s_usd = super::base_html("t", "<p>x</p>", &usd);
-        assert!(s_inr.contains(r#"<html lang="en-IN">"#));
-        assert!(s_usd.contains(r#"<html lang="en-US">"#));
-    }
-}
-
 /// Shared footer for all pages.
 pub fn footer(locale: &Locale) -> String {
     format!(
@@ -480,4 +329,155 @@ pub fn empty_state(headline: &str, subtext: &str, cta: Option<(&str, &str)>) -> 
         subtext = html_escape(subtext),
         cta = cta_html,
     )
+}
+
+#[cfg(test)]
+mod footer_tests {
+    fn count(haystack: &str, needle: &str) -> usize {
+        haystack.matches(needle).count()
+    }
+
+    #[test]
+    fn welcome_has_one_footer() {
+        let l = crate::locale::Locale::default_inr();
+        let s = crate::templates::onboarding::welcome_html("", &l, true, 3, 30, None);
+        assert_eq!(count(&s, r#"<footer class="site-footer">"#), 1, "welcome");
+    }
+
+    #[test]
+    fn welcome_substitutes_demo_chat_limits() {
+        let l = crate::locale::Locale::default_inr();
+        let s = crate::templates::onboarding::welcome_html("", &l, true, 5, 45, None);
+        assert!(
+            !s.contains("__TURN_LIMIT__") && !s.contains("__CTA_TIMEOUT_MS__"),
+            "demo chat JS placeholders must be substituted"
+        );
+        assert!(
+            s.contains("const TURN_LIMIT = 5;"),
+            "user-turn limit must be threaded into hero chat JS"
+        );
+        assert!(
+            s.contains("const CTA_TIMEOUT_MS = 45000;"),
+            "idle timeout must be converted to ms and threaded into hero chat JS"
+        );
+    }
+
+    /// Verify every FTL key used by the page resolves: `t()` falls back to
+    /// the key string on miss, so a passing assertion guarantees the FTL
+    /// bundle has every key the template references.
+    fn assert_keys_resolved(html: &str, keys: &[&str], page: &str) {
+        for key in keys {
+            assert!(
+                !html.contains(&format!(">{key}<"))
+                    && !html.contains(&format!("=\"{key}\""))
+                    && !html.contains(&format!(">{key} "))
+                    && !html.contains(&format!(" {key}<")),
+                "{page}: FTL key {key:?} appears unresolved in rendered HTML"
+            );
+        }
+    }
+
+    #[test]
+    fn welcome_resolves_all_keys() {
+        let l = crate::locale::Locale::default_inr();
+        let s = crate::templates::onboarding::welcome_html("", &l, true, 3, 30, None);
+        assert_keys_resolved(
+            &s,
+            &[
+                "welcome-eyebrow",
+                "welcome-headline",
+                "welcome-headline-2",
+                "welcome-headline-3",
+                "welcome-headline-4",
+                "welcome-headline-5",
+                "welcome-lead",
+                "welcome-cta-primary",
+                "welcome-cta-secondary",
+                "demo-chat-hint",
+                "demo-chat-title",
+                "demo-chat-subtitle",
+                "demo-chat-subtitle-concierge",
+                "demo-chat-persona-label",
+                "demo-chat-roleplay-prefix",
+                "demo-chat-roleplay-suffix",
+                "demo-chat-channels-note",
+                "demo-chat-business-hours",
+                "demo-chat-business-city",
+                "demo-chat-business-type",
+                "demo-chat-business-goal",
+                "demo-chat-handoff-chip",
+                "demo-chat-view-prompt",
+                "demo-chat-hide-prompt",
+                "demo-chat-prompt-heading",
+                "demo-chat-envelope-note",
+                "demo-chat-placeholder",
+                "demo-chat-placeholder-customer-prefix",
+                "demo-chat-placeholder-customer-suffix",
+                "demo-chat-send",
+                "demo-chat-close",
+                "demo-chat-thinking",
+                "demo-chat-error",
+                "demo-chat-rate-limited",
+            ],
+            "welcome",
+        );
+    }
+
+    #[test]
+    fn features_has_one_footer() {
+        let l = crate::locale::Locale::default_inr();
+        let cfg = crate::storage::Pricing::default();
+        let s = crate::templates::features::features_html(&l, &cfg);
+        assert_eq!(count(&s, r#"<footer class="site-footer">"#), 1, "features");
+        // Also catch any stray <footer> tag with a different class.
+        assert_eq!(count(&s, "<footer"), 1, "features any-footer");
+    }
+
+    #[test]
+    fn pricing_has_one_footer() {
+        let l = crate::locale::Locale::default_inr();
+        let cfg = crate::storage::Pricing::default();
+        let s = crate::templates::onboarding::pricing_html("INR", &l, &cfg);
+        assert_eq!(count(&s, r#"<footer class="site-footer">"#), 1, "pricing");
+    }
+
+    #[test]
+    fn terms_has_one_footer() {
+        let l = crate::locale::Locale::default_inr();
+        let s = crate::legal::terms_of_service_html(&l);
+        assert_eq!(count(&s, r#"<footer class="site-footer">"#), 1, "terms");
+    }
+
+    #[test]
+    fn privacy_has_one_footer() {
+        let l = crate::locale::Locale::default_inr();
+        let s = crate::legal::privacy_policy_html(&l);
+        assert_eq!(count(&s, r#"<footer class="site-footer">"#), 1, "privacy");
+    }
+
+    #[test]
+    fn footer_resolves_keys_in_both_locales() {
+        for l in [
+            crate::locale::Locale::default_inr(),
+            crate::locale::Locale::default_usd(),
+        ] {
+            let s = super::footer(&l);
+            assert!(s.contains("Features"), "footer-features in {}", l.langid);
+            assert!(
+                s.contains("Privacy Policy"),
+                "footer-privacy in {}",
+                l.langid
+            );
+        }
+    }
+
+    #[test]
+    fn html_lang_matches_locale() {
+        let inr = crate::locale::Locale::default_inr();
+        let usd = crate::locale::Locale::default_usd();
+        let s_inr = super::base_html("t", "<p>x</p>", &inr);
+        let s_usd = super::base_html("t", "<p>x</p>", &usd);
+        assert!(s_inr.contains(r#"<html lang="en-IN">"#));
+        assert!(s_usd.contains(r#"<html lang="en-US">"#));
+    }
 }

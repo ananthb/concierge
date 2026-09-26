@@ -1059,6 +1059,7 @@ use crate::types::{
 /// `conversation_id` ties this row to a `Session.conversation_id`. AI
 /// flows always pass `Some(...)`; canned-only or pre-AI inbound flows
 /// pass `None` because no conversation exists yet.
+#[allow(clippy::too_many_arguments)]
 pub async fn save_message(
     db: &D1Database,
     id: &str,

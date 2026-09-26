@@ -82,11 +82,10 @@ pub fn format_count(n: i64, locale: &crate::locale::Locale) -> String {
     use icu::locale::Locale as IcuLocale;
 
     // unic_langid -> icu::locale via string round-trip; both are BCP-47.
-    let icu_locale: IcuLocale = locale
-        .langid
-        .to_string()
-        .parse()
-        .unwrap_or_else(|_| icu::locale::locale!("en-IN"));
+    // `locale!` is const-evaluable, so the fallback is a plain constant
+    // rather than a closure.
+    const FALLBACK: IcuLocale = icu::locale::locale!("en-IN");
+    let icu_locale: IcuLocale = locale.langid.to_string().parse().unwrap_or(FALLBACK);
     let formatter =
         DecimalFormatter::try_new((&icu_locale).into(), DecimalFormatterOptions::default())
             .expect("locale supported by compiled_data");
@@ -176,6 +175,9 @@ mod tests {
         assert_eq!(format_count(1_234_567, &l), "1,234,567");
     }
 
+    // Literals are grouped the way the formatted output reads
+    // (Indian lakh grouping), which is what these assert.
+    #[allow(clippy::inconsistent_digit_grouping)]
     #[test]
     fn test_format_money_inr() {
         let l = Locale::default_inr();
@@ -186,6 +188,9 @@ mod tests {
         assert_eq!(format_money(2_00, &l), "₹2.00");
     }
 
+    // Literals are grouped the way the formatted output reads
+    // (Indian lakh grouping), which is what these assert.
+    #[allow(clippy::inconsistent_digit_grouping)]
     #[test]
     fn test_format_money_usd() {
         let l = Locale::default_usd();
