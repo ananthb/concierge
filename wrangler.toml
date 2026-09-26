@@ -101,6 +101,10 @@ name = "EMAIL"
 [vars]
 ENVIRONMENT = "production"
 
+# Uncomment, push, POST /manage/reseed, then re-comment and push again.
+# Value must be the D1 database name; see src/management/reseed.rs.
+# ALLOW_SCHEMA_RESEED = "concierge"
+
 # These are injected at deploy time from build environment variables of the
 # same name (see `npm run deploy` in package.json). Set them once in
 # Workers → Settings → Builds → Build environment variables:
