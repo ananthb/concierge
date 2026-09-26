@@ -60,18 +60,17 @@ pub async fn handle_billing(
 
             if pack_size <= 0 {
                 return Response::from_html(
-                    r#"<div class="error">Addresses per pack must be positive.</div>"#.to_string(),
+                    r#"<div class="error">Addresses per pack must be positive.</div>"#,
                 );
             }
             if min_credits < 1 {
                 return Response::from_html(
-                    r#"<div class="error">Minimum credits must be at least 1.</div>"#.to_string(),
+                    r#"<div class="error">Minimum credits must be at least 1.</div>"#,
                 );
             }
             if max_credits < min_credits {
                 return Response::from_html(
-                    r#"<div class="error">Maximum credits must be greater than or equal to the minimum.</div>"#
-                        .to_string(),
+                    r#"<div class="error">Maximum credits must be greater than or equal to the minimum.</div>"#,
                 );
             }
             if max_credits > crate::billing::MAX_CREDITS_CEILING {
@@ -123,9 +122,7 @@ pub async fn handle_billing(
             )
             .await?;
 
-            Response::from_html(
-                r#"<div class="success">Pricing settings updated.</div>"#.to_string(),
-            )
+            Response::from_html(r#"<div class="success">Pricing settings updated.</div>"#)
         }
 
         // Remove every row for a currency.

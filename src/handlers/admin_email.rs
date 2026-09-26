@@ -74,15 +74,14 @@ pub async fn handle_email_admin(
             let addrs = get_email_addresses(&kv, tenant_id).await?;
             if (addrs.len() as u32) >= tenant.email_address_quota() {
                 return Response::from_html(
-                    r#"<div class="error">Address quota reached. <a href="/dashboard/billing">Buy more</a> to add additional addresses.</div>"#
-                        .to_string(),
+                    r#"<div class="error">Address quota reached. <a href="/dashboard/billing">Buy more</a> to add additional addresses.</div>"#,
                 );
             }
 
             // Global uniqueness: local-parts are shared across the platform.
             if get_tenant_by_address(&kv, &label).await?.is_some() {
                 return Response::from_html(
-                    r#"<div class="error">That address is already taken.</div>"#.to_string(),
+                    r#"<div class="error">That address is already taken.</div>"#,
                 );
             }
 
@@ -187,7 +186,7 @@ pub async fn handle_email_admin(
 
             if !address.contains('@') || address.len() < 3 {
                 return Response::from_html(
-                    r#"<div class="error">Enter a valid email address.</div>"#.to_string(),
+                    r#"<div class="error">Enter a valid email address.</div>"#,
                 );
             }
             let kind = if kind_str == "bcc" {
@@ -206,9 +205,7 @@ pub async fn handle_email_admin(
                 .iter()
                 .any(|r| r.address == address && r.kind == kind)
             {
-                return Response::from_html(
-                    r#"<div class="error">Already in the list.</div>"#.to_string(),
-                );
+                return Response::from_html(r#"<div class="error">Already in the list.</div>"#);
             }
 
             let tenant = get_tenant(&db, tenant_id).await?.unwrap_or_default();
@@ -291,7 +288,7 @@ pub async fn handle_email_admin(
                 .unwrap_or(false);
             if was_owner {
                 return Response::from_html(
-                    r#"<div class="error">The owner email can't be removed.</div>"#.to_string(),
+                    r#"<div class="error">The owner email can't be removed.</div>"#,
                 );
             }
             addr.notification_recipients.retain(|r| r.id != id);

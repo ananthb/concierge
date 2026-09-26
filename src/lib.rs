@@ -217,7 +217,7 @@ async fn fetch(req: Request, env: Env, _ctx: Context) -> Result<Response> {
         .get("Content-Type")
         .ok()
         .flatten()
-        .map_or(false, |ct| ct.contains("text/html"));
+        .is_some_and(|ct| ct.contains("text/html"));
     if !is_html {
         return Ok(resp);
     }

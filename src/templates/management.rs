@@ -355,7 +355,7 @@ pub fn tenants_table_html(tenants: &[Tenant], query: &str, base_url: &str) -> St
                 email = html_escape(&t.email),
                 name = html_escape(t.name.as_deref().unwrap_or("–")),
                 plan = html_escape(t.plan.label()),
-                created = html_escape(&t.created_at.get(..10).unwrap_or(&t.created_at)),
+                created = html_escape(t.created_at.get(..10).unwrap_or(&t.created_at)),
             )
         })
         .collect();
@@ -458,6 +458,7 @@ fn render_recent_activity_card(recent: &[serde_json::Value], base_url: &str) -> 
     )
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn tenant_detail_html(
     tenant: &Tenant,
     wa: &[WhatsAppAccount],
@@ -528,7 +529,7 @@ pub fn tenant_detail_html(
             "{name} · {plan} · joined {created}",
             name = html_escape(tenant.name.as_deref().unwrap_or("–")),
             plan = html_escape(tenant.plan.label()),
-            created = html_escape(&tenant.created_at.get(..10).unwrap_or(&tenant.created_at)),
+            created = html_escape(tenant.created_at.get(..10).unwrap_or(&tenant.created_at)),
         )),
         &delete_btn,
     );
@@ -647,6 +648,7 @@ pub fn tenant_detail_html(
     )
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn audit_html(
     log: &[serde_json::Value],
     actor_q: &str,
@@ -963,7 +965,7 @@ fn audit_details_pretty(details: Option<&serde_json::Value>) -> String {
             }
         }
         Some(v) => {
-            if v.is_object() && v.as_object().map_or(false, |m| m.is_empty()) {
+            if v.is_object() && v.as_object().is_some_and(|m| m.is_empty()) {
                 None
             } else {
                 Some(v.clone())
@@ -1219,6 +1221,7 @@ fn pricing_form_table(cfg: &crate::storage::Pricing, base_url: &str) -> String {
                     // :invalid border so the operator sees
                     // immediately that the field is wrong.
                     let info = currency_info(code);
+                    let field_name = format!("{}__{}", concept.as_wire(), code);
                     format!(
                         r##"<td data-label="{symbol} {code}"><input class="input mono w-input-sm cell-save" name="{name}" type="number" min="1" max="9999999999" step="1" required value="{value}"
                                        hx-post="{base_url}/manage/billing/settings"
@@ -1227,7 +1230,7 @@ fn pricing_form_table(cfg: &crate::storage::Pricing, base_url: &str) -> String {
                                        hx-ext="json-enc"
                                        hx-include="this"></td>"##,
                         base_url = base_url,
-                        name = format!("{}__{}", concept.as_wire(), code),
+                        name = field_name,
                         value = value,
                         symbol = html_escape(&info.symbol),
                         code = html_escape(code),
@@ -1287,12 +1290,15 @@ fn add_currency_form(base_url: &str, existing: &[String]) -> String {
         .collect();
 
     // Each new-currency POST goes back through /settings with the chosen
-    // code and seed values for every concept. Defaults seed to 1 minor /
-    // milli-minor; the operator edits to taste afterwards.
+    // code and seed values for every concept. 100 suits every concept:
+    // for the milli-minor per-reply rate it is 0.1 minor (the real USD
+    // default), and for the plain-minor concepts it is one major unit.
+    // The operator edits to taste afterwards.
+    const SEED_AMOUNT: i64 = 100;
     let seed_inputs: String = PricingConcept::ALL
         .iter()
         .map(|concept| {
-            let default = if concept.is_milli() { 100 } else { 100 };
+            let default = SEED_AMOUNT;
             format!(
                 r#"<input type="hidden" :name="`{key}__${{currency}}`" :value="{default}">"#,
                 key = concept.as_wire(),

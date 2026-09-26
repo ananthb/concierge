@@ -118,8 +118,7 @@ pub async fn handle_wizard(
 
             if name.is_empty() || phone.is_empty() || business_type.is_empty() {
                 return Response::from_html(
-                    "<div class=\"error\">Brand name, phone, and entity type are required.</div>"
-                        .to_string(),
+                    "<div class=\"error\">Brand name, phone, and entity type are required.</div>",
                 );
             }
 
@@ -205,10 +204,8 @@ pub async fn handle_wizard(
                 .trim()
                 .to_lowercase();
 
-            if !label.is_empty() {
-                if delete_email_address(&kv, tenant_id, &label).await? {
-                    delete_email_address_index(&kv, &label).await?;
-                }
+            if !label.is_empty() && delete_email_address(&kv, tenant_id, &label).await? {
+                delete_email_address_index(&kv, &label).await?;
             }
 
             render_step(
@@ -233,7 +230,7 @@ pub async fn handle_wizard(
             let approval_email = is_true("approval_email");
             if !approval_discord && !approval_email {
                 return Response::from_html(
-                    r#"<div class="error">Pick at least one approval channel: Discord or Email: so the AI knows where to ask before sending.</div>"#.to_string(),
+                    r#"<div class="error">Pick at least one approval channel: Discord or Email: so the AI knows where to ask before sending.</div>"#,
                 );
             }
             let cadence_raw = form
@@ -348,8 +345,7 @@ pub async fn handle_wizard(
             let tenant = get_tenant(&db, tenant_id).await?.unwrap_or_default();
             if tenant.plan.is_metered() && tenant.verified_at.is_none() {
                 return Response::from_html(
-                    r#"<div class="error">Verify your account before finishing setup.</div>"#
-                        .to_string(),
+                    r#"<div class="error">Verify your account before finishing setup.</div>"#,
                 );
             }
 

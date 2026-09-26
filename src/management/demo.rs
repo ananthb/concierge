@@ -137,8 +137,7 @@ pub async fn handle_demo(
                 new_prompt
             } else {
                 return Response::from_html(
-                    r#"<div class="error">Click "Preview generation" before saving — the new prompt must produce a valid JSON array first.</div>"#
-                        .to_string(),
+                    r#"<div class="error">Click "Preview generation" before saving — the new prompt must produce a valid JSON array first.</div>"#,
                 );
             };
 
@@ -216,15 +215,14 @@ pub async fn handle_demo(
                 .to_string();
             if prompt.is_empty() {
                 return Response::from_html(
-                    r#"<div class="error">Add a prompt before previewing.</div>"#.to_string(),
+                    r#"<div class="error">Add a prompt before previewing.</div>"#,
                 );
             }
 
             let archetypes = storage::list_archetypes(db, true).await.unwrap_or_default();
             if archetypes.is_empty() {
                 return Response::from_html(
-                    r#"<div class="muted">No Approved archetypes yet — add and approve at least one before previewing.</div>"#
-                        .to_string(),
+                    r#"<div class="muted">No Approved archetypes yet — add and approve at least one before previewing.</div>"#,
                 );
             }
 
@@ -253,8 +251,7 @@ pub async fn handle_demo(
             let cfg = storage::get_demo_config(&kv).await.unwrap_or_default();
             if !cfg.enabled {
                 return Response::from_html(
-                    r#"<div class="error">Enable the demo before re-rolling personas.</div>"#
-                        .to_string(),
+                    r#"<div class="error">Enable the demo before re-rolling personas.</div>"#,
                 );
             }
             match crate::handlers::demo_personas_list::regenerate_and_store(

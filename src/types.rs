@@ -909,6 +909,10 @@ impl DigestCadence {
         }
     }
 
+    // Not `std::str::FromStr`: that trait's method returns Result, and
+    // this mapping is infallible by design -- an unknown value falls
+    // back to Hourly rather than failing a form submission.
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> Self {
         match s {
             "instant" => DigestCadence::Instant,
@@ -939,7 +943,7 @@ impl DigestCadence {
             DigestCadence::Instant => true,
             DigestCadence::Every15Min => true,
             DigestCadence::Hourly => minute < 15,
-            DigestCadence::Every4Hours => minute < 15 && hour % 4 == 0,
+            DigestCadence::Every4Hours => minute < 15 && hour.is_multiple_of(4),
             DigestCadence::Daily => minute < 15 && hour == 6,
         }
     }

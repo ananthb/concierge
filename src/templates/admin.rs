@@ -8,6 +8,7 @@ use crate::types::*;
 use super::base::{app_shell, base_html};
 use super::HASH;
 
+#[allow(clippy::too_many_arguments)]
 pub fn auth_login_html(
     base_url: &str,
     google_client_id: &str,
@@ -336,6 +337,7 @@ fn conversation_settings_card(
 /// WhatsApp, Discord, Email) with Connect/Manage buttons. Reuses the
 /// wizard's channel_card_html so the card shape is identical to step
 /// 02/05 of onboarding.
+#[allow(clippy::too_many_arguments)]
 pub fn channels_page_html(
     base_url: &str,
     wa: &[WhatsAppAccount],

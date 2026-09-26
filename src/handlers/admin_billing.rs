@@ -76,7 +76,7 @@ pub async fn handle_billing_admin(
                     }
                 }
             }
-            Response::from_html(r#"<div class="success">Currency updated.</div>"#.to_string())
+            Response::from_html(r#"<div class="success">Currency updated.</div>"#)
         }
 
         // Create Razorpay order: flat per-reply rate, any quantity.
@@ -241,7 +241,7 @@ pub async fn handle_billing_admin(
 
             if !razorpay::verify_payment_signature(order_id, payment_id, signature, &key_secret) {
                 return Response::from_html(
-                    r#"<div class="error">Payment verification failed.</div>"#.to_string(),
+                    r#"<div class="error">Payment verification failed.</div>"#,
                 );
             }
 

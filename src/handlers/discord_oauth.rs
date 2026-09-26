@@ -240,14 +240,12 @@ async fn save_channels(req: &mut Request, kv: &kv::KvStore, tenant_id: &str) -> 
         None => return Response::error("Discord not installed", 400),
     };
 
-    let opt_str = |key: &str| {
-        form.get(key)
-            .and_then(|v| v.as_str())
-            .map(str::trim)
-            .filter(|s| !s.is_empty())
-            .map(String::from)
-    };
-    cfg.approval_channel_id = opt_str("approval_channel_id");
+    cfg.approval_channel_id = form
+        .get("approval_channel_id")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(String::from);
 
     // Inbound triggers + AI auto-reply config
     cfg.inbound_mentions = form
@@ -287,7 +285,7 @@ async fn save_channels(req: &mut Request, kv: &kv::KvStore, tenant_id: &str) -> 
     }
 
     save_discord_config(kv, &cfg).await?;
-    Response::from_html(r#"<div class="success">Channels saved.</div>"#.to_string())
+    Response::from_html(r#"<div class="success">Channels saved.</div>"#)
 }
 
 async fn uninstall(

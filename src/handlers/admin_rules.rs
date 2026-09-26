@@ -196,7 +196,7 @@ pub async fn handle_rules(
 
     let allow_no_gate = approval::allow_no_gate(&env);
 
-    let rest_slice: Vec<&str> = rest.iter().copied().collect();
+    let rest_slice: Vec<&str> = rest.to_vec();
     match (method, rest_slice.as_slice()) {
         // List page
         (Method::Get, []) => {
@@ -395,7 +395,7 @@ async fn build_rule_from_form(
         "keyword" => {
             let raw = form.get("keywords").and_then(|v| v.as_str()).unwrap_or("");
             let keywords: Vec<String> = raw
-                .split(|c: char| c == ',' || c == '\n')
+                .split([',', '\n'])
                 .map(|s| s.trim().to_string())
                 .filter(|s| !s.is_empty())
                 .map(|s| s.chars().take(MAX_KEYWORD_LEN).collect())

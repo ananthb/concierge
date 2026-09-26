@@ -322,8 +322,8 @@ mod tests {
     fn handoff_cooldown_is_a_reasonable_window() {
         // Sanity: not zero (would make the holding-pattern useless),
         // not absurdly long.
-        assert!(DEFAULT_HANDOFF_COOLDOWN_MINS >= 5);
-        assert!(DEFAULT_HANDOFF_COOLDOWN_MINS <= 24 * 60);
+        const { assert!(DEFAULT_HANDOFF_COOLDOWN_MINS >= 5) };
+        const { assert!(DEFAULT_HANDOFF_COOLDOWN_MINS <= 24 * 60) };
     }
 
     #[test]
@@ -331,10 +331,10 @@ mod tests {
         // Conversation must not "end" before the holding-pattern
         // window itself does. Otherwise an active handoff would be
         // wiped while the human is still on the hook to take over.
-        assert!(DEFAULT_CONVERSATION_IDLE_GAP_MINS > DEFAULT_HANDOFF_COOLDOWN_MINS);
+        const { assert!(DEFAULT_CONVERSATION_IDLE_GAP_MINS > DEFAULT_HANDOFF_COOLDOWN_MINS) };
         // Also sanity-cap so a bad edit doesn't silently persist
         // sessions for weeks.
-        assert!(DEFAULT_CONVERSATION_IDLE_GAP_MINS <= 24 * 60);
+        const { assert!(DEFAULT_CONVERSATION_IDLE_GAP_MINS <= 24 * 60) };
     }
 
     #[test]
@@ -342,7 +342,7 @@ mod tests {
         // Cap should be high enough to track a real conversation
         // (a dozen-ish turns), low enough that the prompt stays
         // bounded under any plausible token budget.
-        assert!(DEFAULT_CONVERSATION_MAX_MESSAGES >= 4);
-        assert!(DEFAULT_CONVERSATION_MAX_MESSAGES <= 200);
+        const { assert!(DEFAULT_CONVERSATION_MAX_MESSAGES >= 4) };
+        const { assert!(DEFAULT_CONVERSATION_MAX_MESSAGES <= 200) };
     }
 }

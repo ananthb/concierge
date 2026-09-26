@@ -148,14 +148,12 @@ async fn process_tenant_job(
             checked_prompt_hash: Some(current_hash),
             checked_at: Some(now),
             vague_reason: None,
-            ..Default::default()
         },
         SafetyVerdict::Rejected { vague_reason } => PersonaSafety {
             status: PersonaSafetyStatus::Rejected,
             checked_prompt_hash: Some(current_hash),
             checked_at: Some(now),
             vague_reason: Some(vague_reason),
-            ..Default::default()
         },
     };
 

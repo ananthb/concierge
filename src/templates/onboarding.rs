@@ -1030,6 +1030,7 @@ pub fn basics_html(
     wizard_shell("basics", base_url, &x_data, progress_expr, &content, locale)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn connect_html(
     ig_connected: bool,
     wa_connected: bool,
@@ -1264,6 +1265,7 @@ pub fn channel_card_html(p: &ChannelCardProps, locale: &crate::locale::Locale) -
 }
 
 // Thin wrapper kept for the wizard's `connect_html` call sites.
+#[allow(clippy::too_many_arguments)]
 fn channel_card(
     key: &str,
     name: &str,
@@ -1574,6 +1576,7 @@ pub fn replies_html(
     )
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn launch_html(
     email_addresses: &[crate::types::EmailAddress],
     base_domain: &str,

@@ -480,13 +480,12 @@ pub(super) async fn create_session_and_redirect(
     // Drop the Secure cookie attribute on http origins so plain
     // wrangler dev still authenticates on browsers that don't treat
     // localhost as a secure origin.
-    let secure_attr = req
+    let is_https = req
         .url()
         .ok()
         .map(|u| u.scheme() == "https")
-        .unwrap_or(true)
-        .then_some("; Secure")
-        .unwrap_or("");
+        .unwrap_or(true);
+    let secure_attr = if is_https { "; Secure" } else { "" };
 
     let headers = Headers::new();
     headers.set("Location", "/dashboard")?;

@@ -57,6 +57,7 @@ fn format_expiry(iso: &str) -> String {
 }
 
 /// Renders the billing dashboard, including the email address-quota card.
+#[allow(clippy::too_many_arguments)]
 pub fn billing_overview_with_addresses_html(
     billing: &TenantBilling,
     locale: &Locale,
@@ -231,6 +232,7 @@ pub fn billing_overview_with_addresses_html(
     base_html("Billing - Concierge", &page, locale)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn checkout_html(
     order_id: &str,
     amount: i64,
