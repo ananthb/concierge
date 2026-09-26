@@ -26,7 +26,6 @@ pub fn parse_inbound(change: &WebhookChange, account: &WhatsAppAccount) -> Vec<I
                 sender_name,
                 recipient: phone_number_id.clone(),
                 body: text,
-                subject: None,
                 has_attachment: false,
                 tenant_id: account.tenant_id.clone(),
                 channel_account_id: account.id.clone(),
@@ -120,7 +119,6 @@ mod tests {
         assert_eq!(msgs[0].body, "Hello!");
         assert_eq!(msgs[0].recipient, "phone-123");
         assert_eq!(msgs[0].tenant_id, "tenant-1");
-        assert!(msgs[0].subject.is_none());
     }
 
     #[test]

@@ -16,10 +16,13 @@ command = "./scripts/build-worker.sh"
 # with one from `wrangler d1 create`.
 # ============================================================================
 # ============================================================================
-# Static assets served directly by Cloudflare's edge. CSS and any other
-# static files under public/ are returned without invoking the Worker.
-# The Worker still owns /, /dashboard, /api/*, etc. — wrangler only
-# short-circuits requests whose path matches a file in public/.
+# Static assets served directly by Cloudflare's edge: the compiled Elm
+# bundle (app.js) and the CSS modules. Requests whose path matches a file
+# under public/ are returned without invoking the Worker.
+#
+# There is deliberately no index.html here. The Worker renders the SPA shell
+# itself (src/shell.rs) for every app route, so the per-response CSP nonce
+# can be stamped into it and there's one code path that produces the page.
 # ============================================================================
 [assets]
 directory = "./public"
@@ -38,20 +41,15 @@ binding = "KV"
 # ============================================================================
 # Durable Objects:
 #   REPLY_BUFFER  — buffers inbound messages so we can reply to a batch.
-#   APPROVALS_DO  — per-tenant SSE fan-out for the approvals page. One DO
-#                   instance per tenant_id; each open browser tab
-#                   subscribes via GET /admin/approvals/stream, the worker
-#                   forwards to the DO, the DO holds a WritableStream per
-#                   client and pings them when an approval is enqueued or
-#                   resolved.
+#
+# ApprovalsDO (per-tenant SSE fan-out for the approvals page) was deleted
+# along with the approval queue. The v3 migration below tells Cloudflare to
+# drop the class; removing the binding alone would leave the class orphaned
+# and the deploy would be rejected.
 # ============================================================================
 [[durable_objects.bindings]]
 name = "REPLY_BUFFER"
 class_name = "ReplyBufferDO"
-
-[[durable_objects.bindings]]
-name = "APPROVALS_DO"
-class_name = "ApprovalsDO"
 
 [[migrations]]
 tag = "v1"
@@ -60,6 +58,10 @@ new_classes = ["ReplyBufferDO"]
 [[migrations]]
 tag = "v2"
 new_classes = ["ApprovalsDO"]
+
+[[migrations]]
+tag = "v3"
+deleted_classes = ["ApprovalsDO"]
 
 # ============================================================================
 # AI Binding for auto-reply generation
@@ -70,8 +72,9 @@ binding = "AI"
 # ============================================================================
 # Queues: persona safety classifier
 #
-# Producer: the persona admin handler enqueues a SafetyJob whenever a tenant
-# saves a new persona prompt.
+# Producer: PUT /api/persona and PUT /api/wizard/persona enqueue a SafetyJob
+# whenever a tenant's composed prompt changes; PUT /api/manage/archetypes does
+# the same for a catalog row.
 #
 # Consumer: src/safety_queue.rs:handle_batch (wired via #[event(queue)] in
 # src/lib.rs) re-reads the persona, runs the classifier, and writes the
@@ -93,7 +96,10 @@ max_retries = 3
 dead_letter_queue = "concierge-safety-dlq"
 
 # ============================================================================
-# Email Routing: send_email binding for outbound forwarding
+# Outbound email: used only to page a tenant when a conversation is handed
+# off to a human. Inbound Email Routing (the `email` handler and the
+# name@cncg.email addresses) was cut with the email channel, so no MX or
+# routing rules are needed any more — just the send binding.
 # ============================================================================
 [[send_email]]
 name = "EMAIL"
@@ -107,22 +113,22 @@ ENVIRONMENT = "production"
 #   CF_ACCESS_TEAM             Cloudflare Access team name
 #   CF_ACCESS_AUD              Cloudflare Access application AUD tag
 #   PUBLIC_BASE_URL            Primary site URL, e.g. https://concierge.example.com
-#   EMAIL_DOMAIN               Email domain you control (apex; MX wired in CF Email Routing)
-#   WHATSAPP_WABA_ID           Your WhatsApp Business Account ID (only if running WhatsApp)
-#   WHATSAPP_SIGNUP_CONFIG_ID  Meta Embedded Signup config ID (only if running WhatsApp)
+#   EMAIL_DOMAIN               Domain outbound handoff emails are sent from
+#                              (no MX needed — nothing is received here)
+#   WHATSAPP_WABA_ID           Your WhatsApp Business Account ID
+#   WHATSAPP_SIGNUP_CONFIG_ID  Meta Embedded Signup config ID
 
 # ============================================================================
 # Cron triggers:
-#   "*/15 * * * *" — approval-digest sweep: scan pending_approvals, send
-#                    digest emails to tenants whose cadence is due, expire
-#                    stale rows past 24h.
-#   "0 6 * * *"    — daily Instagram token refresh.
-#   "0 * * * *"    — hourly tick: re-roll demo personas when the operator
-#                    cadence has elapsed.
-# scheduled.rs dispatches on event.cron().
+#   "0 * * * *" — hourly tick: re-roll demo personas when the operator
+#                 cadence has elapsed.
+#
+# The 15-minute approval-digest sweep went with the approval queue, and the
+# daily Instagram token refresh with the Instagram channel. Mirror this list
+# in src/scheduled.rs, which dispatches on event.cron().
 # ============================================================================
 [triggers]
-crons = ["*/15 * * * *", "0 6 * * *", "0 * * * *"]
+crons = ["0 * * * *"]
 
 [observability.logs]
 enabled = true
@@ -130,20 +136,19 @@ invocation_logs = true
 
 # ============================================================================
 # Secrets the worker reads (set via `wrangler secret put`):
-#   ENCRYPTION_KEY             32-byte hex key for AES-256-GCM token encryption
 #   GOOGLE_OAUTH_CLIENT_ID     Google OAuth client ID
 #   GOOGLE_OAUTH_CLIENT_SECRET Google OAuth client secret
 #   WHATSAPP_ACCESS_TOKEN      System user token for the shared WABA
 #   WHATSAPP_VERIFY_TOKEN      WhatsApp webhook verification token
-#   META_APP_ID                Meta app ID (Facebook Login, Instagram, WhatsApp)
+#   META_APP_ID                Meta app ID (WhatsApp Embedded Signup)
 #   META_APP_SECRET            Meta app secret
-#   INSTAGRAM_VERIFY_TOKEN     Instagram DM webhook verification token
-#   DISCORD_PUBLIC_KEY         Discord Ed25519 verification key
-#   DISCORD_APPLICATION_ID     Discord application ID
-#   DISCORD_BOT_TOKEN          Discord bot token
 #   RAZORPAY_KEY_ID            Razorpay key ID
 #   RAZORPAY_KEY_SECRET        Razorpay key secret
 #   RAZORPAY_WEBHOOK_SECRET    Razorpay webhook secret
+#
+# No longer read: ENCRYPTION_KEY (sealed per-tenant Instagram tokens),
+# INSTAGRAM_VERIFY_TOKEN, and DISCORD_{PUBLIC_KEY,APPLICATION_ID,BOT_TOKEN}.
+# Delete them with `wrangler secret delete` once this is deployed.
 # ============================================================================
 # Optional overrides (defaults baked into the worker):
 #   AI_MODEL                   Workers AI reply model (default llama-4-scout-17b-16e-instruct)

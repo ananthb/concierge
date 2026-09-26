@@ -259,7 +259,7 @@ pub async fn handle_whatsapp_signup(
             };
             save_whatsapp_account(&kv, &account).await?;
 
-            super::auth::create_session_and_redirect(&req, &kv, &tenant.id, "whatsapp").await
+            super::auth::create_session_and_redirect(&req, &kv, &tenant.id).await
         }
 
         _ => Response::error("Not Found", 404),

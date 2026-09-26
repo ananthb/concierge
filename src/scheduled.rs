@@ -1,19 +1,11 @@
 use worker::*;
 
-use crate::crypto;
-use crate::email::digest;
-use crate::instagram;
-use crate::storage::*;
-
-/// Approval-digest sweep + 24h expiry. Mirror this string in `wrangler.toml`
-/// and `.github/workflows/deploy.yml` so the deploy registers the trigger.
-pub const CRON_DIGEST_SWEEP: &str = "*/15 * * * *";
-
-/// Daily Instagram long-lived-token refresh. Same wrangler/workflow contract.
-pub const CRON_INSTAGRAM_REFRESH: &str = "0 6 * * *";
-
 /// Hourly tick. Re-rolls demo personas when the operator-configured
 /// regen cadence has elapsed; cheap when not due (one KV read).
+///
+/// The only cron left. The 15-minute approval-digest sweep went with the
+/// approval queue, and the daily Instagram token refresh went with the
+/// Instagram channel. Mirror this string in `wrangler.toml`.
 pub const CRON_HOURLY_TICK: &str = "0 * * * *";
 
 pub async fn handle_scheduled(event: ScheduledEvent, env: Env, _ctx: ScheduleContext) {
@@ -21,16 +13,6 @@ pub async fn handle_scheduled(event: ScheduledEvent, env: Env, _ctx: ScheduleCon
     console_log!("Scheduled job started: {cron}");
 
     match cron.as_str() {
-        CRON_DIGEST_SWEEP => {
-            if let Err(e) = digest::sweep(&env).await {
-                console_log!("Digest sweep error: {:?}", e);
-            }
-        }
-        CRON_INSTAGRAM_REFRESH => {
-            if let Err(e) = refresh_instagram_tokens(&env).await {
-                console_log!("Instagram token refresh error: {:?}", e);
-            }
-        }
         CRON_HOURLY_TICK => {
             if let Err(e) = roll_demo_personas_if_due(&env).await {
                 console_log!("Demo persona regen error: {:?}", e);
@@ -94,109 +76,4 @@ async fn roll_demo_personas_if_due(env: &Env) -> Result<()> {
             Ok(())
         }
     }
-}
-
-async fn refresh_instagram_tokens(env: &Env) -> Result<()> {
-    let kv = env.kv("KV")?;
-
-    let encryption_key = env
-        .secret("ENCRYPTION_KEY")
-        .map(|s| s.to_string())
-        .unwrap_or_default();
-
-    if encryption_key.is_empty() {
-        return Ok(());
-    }
-
-    let app_id = env
-        .secret("META_APP_ID")
-        .map(|s| s.to_string())
-        .unwrap_or_default();
-    let app_secret = env
-        .secret("META_APP_SECRET")
-        .map(|s| s.to_string())
-        .unwrap_or_default();
-
-    // List all tenants by scanning kv prefix
-    let tenant_list = kv
-        .list()
-        .prefix("tenant:".to_string())
-        .execute()
-        .await
-        .map_err(|e| Error::from(e.to_string()))?;
-
-    let mut seen_tenants = std::collections::HashSet::new();
-    for key in &tenant_list.keys {
-        // Extract tenant_id from "tenant:{id}:instagram:{account_id}" keys
-        let parts: Vec<&str> = key.name.split(':').collect();
-        if parts.len() >= 4 && parts[2] == "instagram" {
-            seen_tenants.insert(parts[1].to_string());
-        }
-    }
-
-    let mut total_accounts = 0u32;
-    let mut refreshed = 0u32;
-    let mut failures = 0u32;
-
-    for tenant_id in &seen_tenants {
-        let accounts = list_instagram_accounts(&kv, tenant_id).await?;
-        for account in accounts {
-            if !account.enabled {
-                continue;
-            }
-            total_accounts += 1;
-
-            let token_key = format!("instagram_token:{}", account.id);
-            let encrypted_token = match kv.get(&token_key).text().await? {
-                Some(t) => t,
-                None => continue,
-            };
-
-            let token = match crypto::decrypt_token(&encrypted_token, &encryption_key).await {
-                Ok(t) => t,
-                Err(e) => {
-                    console_log!(
-                        "Failed to decrypt token for account {}: {:?}",
-                        account.id,
-                        e
-                    );
-                    failures += 1;
-                    continue;
-                }
-            };
-
-            if instagram::token_is_expired(&token) {
-                console_log!("Token expired for Instagram account {}", account.id);
-                failures += 1;
-                continue;
-            }
-
-            if instagram::token_needs_refresh(&token) {
-                match instagram::refresh_token(&token.access_token, &app_id, &app_secret).await {
-                    Ok(new_token) => {
-                        let encrypted = crypto::encrypt_token(&new_token, &encryption_key).await?;
-                        kv.put(&token_key, encrypted)?.execute().await?;
-                        refreshed += 1;
-                    }
-                    Err(e) => {
-                        console_log!(
-                            "Failed to refresh token for account {}: {:?}",
-                            account.id,
-                            e
-                        );
-                        failures += 1;
-                    }
-                }
-            }
-        }
-    }
-
-    console_log!(
-        "Instagram token refresh: {} accounts, {} refreshed, {} failures",
-        total_accounts,
-        refreshed,
-        failures
-    );
-
-    Ok(())
 }

@@ -190,7 +190,6 @@ CREATE TABLE IF NOT EXISTS archetypes (
     description           TEXT NOT NULL,
     voice_prompt          TEXT NOT NULL,
     greeting              TEXT NOT NULL,
-    default_rules_json    TEXT NOT NULL,
     catch_phrases_json    TEXT NOT NULL DEFAULT '[]',
     off_topics_json       TEXT NOT NULL DEFAULT '[]',
     never                 TEXT NOT NULL DEFAULT '',
@@ -208,14 +207,13 @@ CREATE INDEX IF NOT EXISTS idx_archetypes_status ON archetypes(safety_status);
 -- Seed data. The four base archetypes ship Approved so the demo and
 -- onboarding work the moment the migration runs. Management edits will
 -- drive new rows through the classifier.
-INSERT OR REPLACE INTO archetypes (slug, label, description, voice_prompt, greeting, default_rules_json, catch_phrases_json, off_topics_json, never, handoff_conditions_json, safety_status, safety_checked_at)
+INSERT OR REPLACE INTO archetypes (slug, label, description, voice_prompt, greeting, catch_phrases_json, off_topics_json, never, handoff_conditions_json, safety_status, safety_checked_at)
 VALUES
     ('friendly',
      'Friendly',
      'A warm, kind voice. Speak like a shopkeeper who has known the customer for years.',
      'Voice: warm, kind, conversational. Speak like a shopkeeper who has known the customer for years. Confirm you would love to help, ask one clarifying question if you need it, let the customer know a human will follow up where needed.',
      'Hi there! How can we help you today?',
-     '[{"id":"pricing","label":"Pricing questions","matcher":{"kind":"prompt","description":"asks about price, cost, or how much something is","embedding":[],"embedding_model":"","threshold":0.75},"response":{"kind":"prompt","text":"Confirm we''d love to help, ask what they have in mind, and let them know the owner will follow up with a quote."},"approval":"auto"},{"id":"after_hours","label":"After-hours messages","matcher":{"kind":"keyword","keywords":["after hours","closed","still open"]},"response":{"kind":"canned","text":"Thanks for reaching out — we''re closed right now but we''ll get back to you first thing."},"approval":"auto"}]',
      '[]', '[]', '', '[]',
      'approved', datetime('now')),
     ('professional',
@@ -223,7 +221,6 @@ VALUES
      'Concise and businesslike. Greet briefly, confirm what is possible.',
      'Voice: concise and professional. Greet briefly, confirm what is possible, ask for the missing detail. Defer firm commitments to a human follow-up.',
      'Thanks for reaching out. How can we help you today?',
-     '[{"id":"pricing","label":"Pricing questions","matcher":{"kind":"prompt","description":"asks about price, cost, or how much something is","embedding":[],"embedding_model":"","threshold":0.75},"response":{"kind":"prompt","text":"Acknowledge the question, ask for the missing detail (what they need, by when), and confirm a human will respond with a price."},"approval":"auto"},{"id":"after_hours","label":"After-hours messages","matcher":{"kind":"keyword","keywords":["after hours","closed","still open"]},"response":{"kind":"canned","text":"We''re outside business hours; we''ll respond when we''re back."},"approval":"auto"}]',
      '[]', '[]', '', '[]',
      'approved', datetime('now')),
     ('playful',
@@ -231,7 +228,6 @@ VALUES
      'Upbeat and light. Light use of emoji when it fits naturally.',
      'Voice: playful and upbeat. Light use of emoji when it fits naturally. Stay warm without being cute.',
      'hi 👋 what can we do for u today? ✨',
-     '[{"id":"pricing","label":"Pricing questions","matcher":{"kind":"prompt","description":"asks about price, cost, or how much something is","embedding":[],"embedding_model":"","threshold":0.75},"response":{"kind":"prompt","text":"Stay upbeat, ask what they''re after, and say someone will come back with the number soon."},"approval":"auto"},{"id":"after_hours","label":"After-hours messages","matcher":{"kind":"keyword","keywords":["after hours","closed","still open"]},"response":{"kind":"canned","text":"Catching some Zzz right now 💤 — we''ll write back when we''re up!"},"approval":"auto"}]',
      '[]', '[]', '', '[]',
      'approved', datetime('now')),
     ('formal',
@@ -239,6 +235,5 @@ VALUES
      'Polite and formal. Address the customer respectfully.',
      'Voice: polite and formal. Address the customer respectfully. Stay measured and considered; avoid casualness.',
      'Good day. How may we assist you today?',
-     '[{"id":"pricing","label":"Pricing questions","matcher":{"kind":"prompt","description":"asks about price, cost, or how much something is","embedding":[],"embedding_model":"","threshold":0.75},"response":{"kind":"prompt","text":"Acknowledge the inquiry politely, ask for the relevant detail, and indicate that a member of the team will respond with the price."},"approval":"auto"},{"id":"after_hours","label":"After-hours messages","matcher":{"kind":"keyword","keywords":["after hours","closed","still open"]},"response":{"kind":"canned","text":"Thank you for your message. We are currently outside business hours and will respond at our earliest opportunity."},"approval":"auto"}]',
      '[]', '[]', '', '[]',
      'approved', datetime('now'));

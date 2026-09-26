@@ -132,13 +132,3 @@ pub fn stub_persona_businesses(archetype_count: usize) -> String {
 /// access still see a plausible reply instead of an error toast.
 pub const STUB_CHAT_REPLY: &str =
     "Thanks for reaching out — happy to help. (dev bypass: this is a stub reply.)";
-
-/// Stub embedding vector for `crate::ai::embed`. Real BGE returns a
-/// 768-dimensional vector; we return a deterministic one so any rule
-/// matching done downstream sees stable values.
-pub fn stub_embedding() -> Vec<f32> {
-    // 768-dim vector of small constants. Not zero (some downstream
-    // code may special-case zero magnitude); not normalized either —
-    // dev only.
-    (0..768).map(|i| ((i % 17) as f32) * 0.01).collect()
-}

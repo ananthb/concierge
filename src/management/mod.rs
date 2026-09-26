@@ -1,141 +1,17 @@
-//! Management panel: super-admin routes gated by Cloudflare Access.
-//! Verifies the Cf-Access-Jwt-Assertion JWT against the team's JWKS.
+//! Cloudflare Access verification for the operator endpoints.
+//!
+//! The operator API lives in [`crate::api::manage`]; this module is how it
+//! authenticates. [`verify_access`] validates the `Cf-Access-Jwt-Assertion`
+//! JWT against the team's JWKS and returns the `email` claim, which becomes
+//! the actor recorded in the audit log.
+//!
+//! The HTML management panel this module used to route is gone.
 
-pub mod archetypes;
 pub mod audit;
-pub mod billing;
-pub mod demo;
 pub mod reseed;
-pub mod tenants;
 
 use wasm_bindgen::JsCast;
 use worker::*;
-
-use crate::templates::management as tmpl;
-
-/// Handle /manage/* routes. Requires Cloudflare Access.
-pub async fn handle_management(
-    req: Request,
-    env: Env,
-    path: &str,
-    method: Method,
-) -> Result<Response> {
-    let email = match verify_access(&req, &env).await {
-        Some(e) => e,
-        None => return Response::error("Forbidden: Cloudflare Access required", 403),
-    };
-
-    let kv = env.kv("KV")?;
-    let db = env.d1("DB")?;
-    let base_url = crate::handlers::get_base_url(&req);
-    let locale = crate::locale::Locale::from_request(&req);
-
-    let sub = path
-        .strip_prefix("/manage")
-        .unwrap_or("")
-        .trim_start_matches('/');
-
-    // Route subroutes first (before consuming method in match)
-    if sub.starts_with("tenants") {
-        return tenants::handle_tenants(req, &env, &kv, &db, sub, method, &email, &base_url).await;
-    }
-
-    if sub.starts_with("billing") {
-        return billing::handle_billing(req, &kv, &db, sub, method, &email, &base_url).await;
-    }
-
-    if sub.starts_with("archetypes") {
-        return archetypes::handle_archetypes(req, &env, &db, sub, method, &email, &base_url).await;
-    }
-
-    if sub.starts_with("demo") {
-        return demo::handle_demo(req, &env, &db, sub, method, &email, &base_url).await;
-    }
-
-    // Destructive, and gated a second time inside on ALLOW_SCHEMA_RESEED.
-    // POST only: a GET that wiped the database would fire on a prefetch.
-    if sub == "reseed" {
-        if method != Method::Post {
-            return Response::error("Method Not Allowed", 405);
-        }
-        return reseed::handle_reseed(req, &env, &db, &email).await;
-    }
-
-    match (method, sub) {
-        (Method::Get, "" | "/") => {
-            let tenant_count = crate::storage::count_tenants(&db).await.unwrap_or(0);
-            let report = crate::handlers::health::run_checks(&env, true).await;
-            Response::from_html(tmpl::dashboard_html(
-                &email,
-                tenant_count,
-                &report,
-                &base_url,
-                &locale,
-            ))
-        }
-
-        (Method::Get, "audit") => {
-            // Parse filter + cursor query params once. The HX-Request
-            // header distinguishes a "Load older" page swap (`before`
-            // is set) and a filter-input swap (no `before`) from the
-            // initial full-page render. Page size = 50 so a few
-            // pages cover most operator scrutiny without hammering D1.
-            let url = req.url()?;
-            let mut actor = String::new();
-            let mut action = String::new();
-            let mut resource_type = String::new();
-            let mut before = String::new();
-            for (k, v) in url.query_pairs() {
-                match k.as_ref() {
-                    "actor" => actor = v.into_owned(),
-                    "action" => action = v.into_owned(),
-                    "resource_type" => resource_type = v.into_owned(),
-                    "before" => before = v.into_owned(),
-                    _ => {}
-                }
-            }
-            const PAGE_SIZE: u32 = 50;
-            let log =
-                audit::search_audit_log(&db, &actor, &action, &resource_type, &before, PAGE_SIZE)
-                    .await?;
-            let has_more = log.len() as u32 == PAGE_SIZE;
-            let is_htmx = req.headers().get("HX-Request").ok().flatten().is_some();
-            if is_htmx && !before.is_empty() {
-                // "Load older" click: append-only fragment.
-                Response::from_html(tmpl::audit_page_fragment_html(
-                    &log,
-                    &actor,
-                    &action,
-                    &resource_type,
-                    has_more,
-                    &base_url,
-                ))
-            } else if is_htmx {
-                Response::from_html(tmpl::audit_table_html(
-                    &log,
-                    &actor,
-                    &action,
-                    &resource_type,
-                    has_more,
-                    &base_url,
-                ))
-            } else {
-                Response::from_html(tmpl::audit_html(
-                    &log,
-                    &actor,
-                    &action,
-                    &resource_type,
-                    has_more,
-                    &email,
-                    &base_url,
-                    &locale,
-                ))
-            }
-        }
-
-        _ => Response::error("Not Found", 404),
-    }
-}
 
 /// Verify the Cloudflare Access JWT and return the authenticated email.
 ///
@@ -149,7 +25,7 @@ pub async fn handle_management(
 /// header nor cookie present, signature mismatch) all log a specific
 /// diagnostic to `console_log!` so failed-Access debugging from
 /// `wrangler tail` shows *why* the 403 happened.
-async fn verify_access(req: &Request, env: &Env) -> Option<String> {
+pub async fn verify_access(req: &Request, env: &Env) -> Option<String> {
     // Local-dev bypass for the management panel and the AI stubs that
     // back it (see `crate::dev_bypass`). Active iff BOTH conditions
     // hold simultaneously:

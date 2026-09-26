@@ -1,38 +1,16 @@
+//! Small shared utilities.
+//!
+//! Number and money formatting used to live here, backed by icu4x and
+//! rusty-money. It moved to the frontend: `Intl.NumberFormat` produces the
+//! same Indian lakh grouping (₹1,00,000) from the browser's own locale data,
+//! which saved carrying compiled ICU data in the wasm bundle. The API returns
+//! amounts in minor units and an ISO 4217 code; the frontend renders them.
+
 use worker::*;
 
 /// Generate a unique ID
 pub fn generate_id() -> String {
     uuid::Uuid::new_v4().to_string()
-}
-
-/// Generate a URL-friendly slug
-pub fn generate_slug() -> Result<String> {
-    let adjectives = [
-        "swift", "bright", "calm", "bold", "warm", "cool", "soft", "keen", "quick", "light",
-        "fresh", "clear", "smart", "sharp", "neat", "fine",
-    ];
-    let nouns = [
-        "fox", "owl", "bear", "wolf", "hawk", "deer", "swan", "dove", "lynx", "crow", "hare",
-        "seal", "wren", "lark", "moth", "newt",
-    ];
-
-    let adj_idx = (js_sys::Math::random() * adjectives.len() as f64) as usize;
-    let noun_idx = (js_sys::Math::random() * nouns.len() as f64) as usize;
-    let mut rng_bytes = [0u8; 3];
-    getrandom::getrandom(&mut rng_bytes)
-        .map_err(|e| Error::from(format!("getrandom failed: {}", e)))?;
-    let suffix: String = rng_bytes
-        .iter()
-        .map(|b| {
-            let chars = b"abcdefghijklmnopqrstuvwxyz0123456789";
-            chars[(*b as usize) % chars.len()] as char
-        })
-        .collect();
-
-    Ok(format!(
-        "{}-{}-{}",
-        adjectives[adj_idx], nouns[noun_idx], suffix
-    ))
 }
 
 /// Generate a secure token
@@ -60,7 +38,10 @@ pub fn days_from_now(days: i64) -> String {
         .unwrap_or_else(|| String::from("2099-12-31T23:59:59.000Z"))
 }
 
-/// HTML escape for XSS prevention
+/// HTML escape for XSS prevention.
+///
+/// Only the schema-reseed report renders HTML now; everything else answers
+/// JSON, where `serde_json` does the escaping.
 pub fn html_escape(s: &str) -> String {
     s.replace('&', "&amp;")
         .replace('<', "&lt;")
@@ -72,43 +53,6 @@ pub fn html_escape(s: &str) -> String {
 /// Truncate string to max characters (Unicode-safe).
 pub fn truncate(s: &str, max: usize) -> String {
     s.chars().take(max).collect()
-}
-
-/// Format a count for display in the user's locale. Indian locales (en-IN,
-/// hi-IN, ...) get last-3-then-2s grouping (1,00,000); Western locales get
-/// thousands grouping (100,000). Backed by icu's `FixedDecimalFormatter`.
-pub fn format_count(n: i64, locale: &crate::locale::Locale) -> String {
-    use icu::decimal::{options::DecimalFormatterOptions, DecimalFormatter};
-    use icu::locale::Locale as IcuLocale;
-
-    // unic_langid -> icu::locale via string round-trip; both are BCP-47.
-    // `locale!` is const-evaluable, so the fallback is a plain constant
-    // rather than a closure.
-    const FALLBACK: IcuLocale = icu::locale::locale!("en-IN");
-    let icu_locale: IcuLocale = locale.langid.to_string().parse().unwrap_or(FALLBACK);
-    let formatter =
-        DecimalFormatter::try_new((&icu_locale).into(), DecimalFormatterOptions::default())
-            .expect("locale supported by compiled_data");
-    let value: fixed_decimal::Decimal = n.into();
-    formatter.format(&value).to_string()
-}
-
-/// Format a money amount in the smallest currency unit (paise / cents /
-/// fils / etc) for display. Delegates to rusty_money so locale-correct
-/// grouping (e.g. INR's 1,00,00,000) and the right symbol come out of the
-/// crate's ISO 4217 metadata. The currency comes from the locale; the
-/// amount is always in minor units.
-pub fn format_money(amount_minor: i64, locale: &crate::locale::Locale) -> String {
-    format_money_code(amount_minor, locale.currency.as_str())
-}
-
-/// Format a money amount given an ISO 4217 code directly. Used by
-/// callers that don't have a `Locale` handy (e.g. the management form's
-/// preview labels).
-pub fn format_money_code(amount_minor: i64, currency_code: &str) -> String {
-    use rusty_money::{iso, Money};
-    let currency = iso::find(currency_code).unwrap_or(iso::USD);
-    Money::from_minor(amount_minor, currency).to_string()
 }
 
 /// Hex SHA-256 of a string. Used to detect drift in safety-checked content.
@@ -155,49 +99,11 @@ mod tests {
         assert_eq!(html_escape("it's"), "it&#x27;s");
     }
 
-    use crate::locale::Locale;
-
     #[test]
-    fn test_format_count_indian() {
-        let l = Locale::default_inr();
-        assert_eq!(format_count(0, &l), "0");
-        assert_eq!(format_count(999, &l), "999");
-        assert_eq!(format_count(1_000, &l), "1,000");
-        assert_eq!(format_count(100_000, &l), "1,00,000");
-        assert_eq!(format_count(12_345_678, &l), "1,23,45,678");
-    }
-
-    #[test]
-    fn test_format_count_western() {
-        let l = Locale::default_usd();
-        assert_eq!(format_count(1_000, &l), "1,000");
-        assert_eq!(format_count(100_000, &l), "100,000");
-        assert_eq!(format_count(1_234_567, &l), "1,234,567");
-    }
-
-    // Literals are grouped the way the formatted output reads
-    // (Indian lakh grouping), which is what these assert.
-    #[allow(clippy::inconsistent_digit_grouping)]
-    #[test]
-    fn test_format_money_inr() {
-        let l = Locale::default_inr();
-        // amount in paise; rusty_money renders INR with 2-3-2 lakh
-        // grouping and two decimals.
-        assert_eq!(format_money(1_00_00_000, &l), "₹1,00,000.00");
-        assert_eq!(format_money(20_000_00, &l), "₹20,000.00");
-        assert_eq!(format_money(2_00, &l), "₹2.00");
-    }
-
-    // Literals are grouped the way the formatted output reads
-    // (Indian lakh grouping), which is what these assert.
-    #[allow(clippy::inconsistent_digit_grouping)]
-    #[test]
-    fn test_format_money_usd() {
-        let l = Locale::default_usd();
-        // amount in cents
-        assert_eq!(format_money(2, &l), "$0.02");
-        assert_eq!(format_money(50, &l), "$0.50");
-        assert_eq!(format_money(2_50, &l), "$2.50");
-        assert_eq!(format_money(20_000_00, &l), "$20,000.00");
+    fn truncate_is_unicode_safe() {
+        assert_eq!(truncate("hello", 10), "hello");
+        assert_eq!(truncate("hello", 2), "he");
+        // Multi-byte: a naive byte slice would panic mid-codepoint here.
+        assert_eq!(truncate("ஸுபா", 2), "ஸு");
     }
 }
