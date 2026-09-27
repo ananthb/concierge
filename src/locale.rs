@@ -59,16 +59,6 @@ impl Locale {
         }
     }
 
-    /// Test-only counterpart to `default_inr`. Nothing in the running
-    /// worker constructs a USD locale directly any more.
-    #[cfg(test)]
-    pub fn default_usd() -> Self {
-        Self {
-            langid: langid!("en-US"),
-            currency: Currency::Usd,
-        }
-    }
-
     /// Build a locale from a stored `Tenant.locale` tag plus an optional
     /// stored `Tenant.currency` override. Tenant-level configuration always
     /// wins over request-time signals.

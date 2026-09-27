@@ -46,11 +46,6 @@ pub async fn handle_webhook(
             Response::error("Forbidden", 403)
         }
 
-        // Instagram webhook verification (GET /webhook/instagram)
-        (Method::Get, ["instagram"]) => {
-            super::instagram_webhook::handle_instagram_verify(&req, &env)
-        }
-
         // Incoming WhatsApp messages (POST /webhook/whatsapp)
         (Method::Post, ["whatsapp"]) => {
             let sig_header = req
@@ -123,11 +118,6 @@ pub async fn handle_webhook(
             }
 
             Response::ok("OK")
-        }
-
-        // Incoming Instagram DMs (POST /webhook/instagram)
-        (Method::Post, ["instagram"]) => {
-            super::instagram_webhook::handle_instagram_dm(req, env).await
         }
 
         _ => Response::error("Not Found", 404),

@@ -49,17 +49,13 @@
       <div class="sidebar__group-label">Channels</div>
       <ul class="sidebar__list">
         <li><a href="whatsapp.html"><span class="dot"></span>WhatsApp</a></li>
-        <li><a href="instagram.html"><span class="dot"></span>Instagram</a></li>
-        <li><a href="email-routing.html"><span class="dot"></span>Email routing</a></li>
-        <li><a href="discord.html"><span class="dot"></span>Discord relay</a></li>
       </ul>
     </div>
     <div class="sidebar__group">
       <div class="sidebar__group-label">Operate</div>
       <ul class="sidebar__list">
         <li><a href="billing.html" class="is-current"><span class="dot"></span>Billing &amp; credits</a></li>
-        <li><a href="management.html"><span class="dot"></span>Management panel</a></li>
-        <li><a href="facebook-app-setup.html"><span class="dot"></span>Facebook app setup</a></li>
+        <li><a href="management.html"><span class="dot"></span>Operator API</a></li>
       </ul>
     </div>
     <div class="sidebar__group">
@@ -86,65 +82,74 @@
       <h1 class="page-title">Billing <em>&amp; credits</em>.</h1>
 
 
-<p>Concierge uses a prepaid reply credit system. Every auto-reply (WhatsApp, Instagram) and relay reply (Discord) deducts one credit from the tenant's balance. When credits reach zero, auto-replies stop silently.</p>
+<p>Concierge uses a prepaid reply credit system. Every <em>AI</em> reply deducts one credit from the tenant's balance. Canned replies are free, however many go out, and a draft the risk gate withholds is not refunded &mdash; the model ran. When credits reach zero, AI replies stop silently and canned replies keep going.</p>
 
-<h2>How Credits Work</h2>
+<h2 id="credits">How credits work</h2>
 
 <ul>
-  <li>Each tenant has a <code>TenantBilling</code> record in KV tracking: <code>replies_remaining</code>, <code>replies_used</code> (lifetime), and <code>replies_granted</code> (lifetime)</li>
-  <li>Credits are deducted <em>before</em> the reply is sent (optimistic deduction)</li>
-  <li>If the AI generation or message send fails, the credit is automatically restored</li>
-  <li>An empty reply (e.g., AI returns nothing) also triggers a credit restore</li>
-  <li>One AI reply &equiv; one credit, regardless of how much chat history is fed to the model. The multi&#8209;turn context (capped by <code>ConversationConfig::max_history_messages</code>) sharpens the answer but doesn&rsquo;t multiply the bill.</li>
-  <li>Static (canned) responses, prompt&#8209;injection scanning, persona safety classification, and BGE embedding lookups are all free &mdash; only the reply&#8209;model call deducts. Handoff turns under the cooldown are still AI&#8209;generated and still deduct one credit each; once the worker switches to silent mode past the cooldown, no further credits are spent.</li>
+  <li>Each tenant has a <code>TenantBilling</code> record holding a credit ledger &mdash; a list of entries, each with an amount, a source, and an optional expiry &mdash; plus a lifetime <code>replies_used</code> counter.</li>
+  <li>Credits are deducted <em>before</em> the reply is sent (optimistic deduction).</li>
+  <li>If AI generation or the message send fails, the credit is restored. An empty reply from the model restores it too.</li>
+  <li><strong>A draft the risk gate withholds does not restore the credit.</strong> The model ran and produced text; the decision not to send it is downstream of the spend.</li>
+  <li>One AI reply is one credit, however much chat history was fed to the model. The multi&#8209;turn context (capped by <code>max_history_messages</code>) sharpens the answer without multiplying the bill.</li>
+  <li>Canned responses, prompt&#8209;injection scanning and persona safety classification are free &mdash; only the reply&#8209;model call deducts. Holding&#8209;pattern turns inside the handoff cooldown are still AI&#8209;generated and still cost one each; once the worker goes silent past the cooldown, nothing further is spent.</li>
+  <li>Reading the balance prunes expired entries and re-sorts the ledger soonest&#8209;expiring&#8209;first, which is the order credits are consumed in, and persists the pruned form rather than recomputing it on every read.</li>
 </ul>
 
-<h2>Getting Credits</h2>
+<h2 id="getting">Getting credits</h2>
 
-<p>There are two ways to get reply credits:</p>
+<p>Two ways.</p>
 
-<h3>1. Management Grants (Free)</h3>
+<h3>1. Operator grants (free)</h3>
 
-<p>Platform operators can grant free credits to any tenant via the <a href="management.html">management panel</a>. This is useful for onboarding, promotions, or support situations. Grants are logged to the audit trail.</p>
+<p>Platform operators can grant credits to any tenant through the <a href="management.html">operator API</a> (<code>POST /api/manage/tenants/{id}/grant-replies</code>), optionally with an expiry. Useful for onboarding, promotions and support. Every grant is written to the audit log with the actor&rsquo;s email.</p>
 
-<h3>2. Paid Top-ups (Razorpay)</h3>
+<h3>2. Paid top-ups (Razorpay)</h3>
 
-<p>Tenants can purchase AI-reply credits via a slider in the dashboard. The credit-purchase bounds (default min 1000, max 1,000,000) and the flat per-reply rate are configurable by platform operators.</p>
+<p>Tenants buy credits with a slider on the dashboard&rsquo;s Credits tab: any quantity between the operator-configured bounds (default 1,000 to 1,000,000). No tiers, no packs, no subscription.</p>
 
-<p>The unit price for each currency is stored in the <code>pricing_config</code> table (as milli-units, i.e. 1/1000th of a cent or paisa). This allows operators to adjust pricing globally without changing code.</p>
+<p>The per-reply rate is stored per currency in milli-minor units &mdash; 1/1000 of a paisa or cent &mdash; so a sub-paisa price fits. &#8377;0.10 per reply is stored as <code>10000</code>. Operators change it without a code change.</p>
 
-<p>Prices are stored in paise (INR) and cents (USD) internally for the final transaction.</p>
-
-<h2>Razorpay Integration</h2>
-
-<p>The payment flow works as follows:</p>
+<h2 id="razorpay">Razorpay integration</h2>
 
 <ol>
-  <li>Tenant selects a credit pack on the pricing page (<code>/pricing</code>)</li>
-  <li>Concierge creates a Razorpay order via the API</li>
-  <li>The Razorpay checkout widget opens in the browser</li>
-  <li>On successful payment, Razorpay sends a webhook to <code>POST /webhook/razorpay</code></li>
-  <li>Concierge verifies the payment signature (HMAC-SHA256) and credits the tenant's balance</li>
-  <li>The payment is recorded in the <code>payments</code> D1 table</li>
+  <li>The tenant picks a quantity and presses Pay. The frontend calls <code>POST /api/billing/checkout</code>, which creates a Razorpay order server-side and returns the order id, the amount in minor units, the currency, and the <em>publishable</em> key id. The key secret never leaves the Worker.</li>
+  <li>The frontend opens Razorpay&rsquo;s hosted checkout with those parameters. This is the one place the app talks to JavaScript outside itself: the checkout is a modal their own SDK opens, so there is no redirect-only flow to use instead.</li>
+  <li>On completion the frontend calls <code>POST /api/billing/verify</code>, which checks the HMAC-SHA256 payment signature and <strong>grants nothing</strong>. It exists to confirm the payment is genuine and to flip the tenant&rsquo;s <code>verified_at</code> flag, so a user returning from checkout doesn&rsquo;t have to race the webhook.</li>
+  <li>Razorpay sends <code>payment.captured</code> to <code>POST /webhook/razorpay</code>. <strong>This is what grants credits.</strong> It verifies the webhook signature, credits the ledger, and records the payment in the <code>payments</code> D1 table.</li>
 </ol>
 
-<h3>Required Secrets</h3>
+<div class="callout callout--warn">
+  <div class="callout__icon">!</div>
+  <div class="callout__body">
+    <strong>The webhook is not optional.</strong>
+    <p>Credits are granted by the webhook and by nothing else. A deploy where the webhook is misconfigured will take payments and grant no credits &mdash; and the tenant-facing verify call will happily report success, because a valid signature is all it checks. The split is deliberate: a forged client call cannot mint credit. Configure the webhook before you charge anyone.</p>
+  </div>
+</div>
+
+<h3>Required secrets</h3>
 
 <ul>
-  <li><code>RAZORPAY_KEY_ID</code>: Razorpay API key ID</li>
-  <li><code>RAZORPAY_KEY_SECRET</code>: Razorpay API key secret</li>
-  <li><code>RAZORPAY_WEBHOOK_SECRET</code>: Webhook secret for signature verification</li>
+  <li><code>RAZORPAY_KEY_ID</code>: API key id. Also returned to the browser &mdash; it is the publishable half.</li>
+  <li><code>RAZORPAY_KEY_SECRET</code>: API key secret. Server-side only.</li>
+  <li><code>RAZORPAY_WEBHOOK_SECRET</code>: for verifying webhook signatures.</li>
 </ul>
 
-<h2>Pricing Management</h2>
+<h2 id="verification">The sign-up verification charge</h2>
 
-<p>Platform operators set the global per-reply and per-extra-address prices via the <a href="management.html">management panel</a> at <code>/manage/billing</code>. There is one flat rate per currency. No tiers, no packs.</p>
+<p>The onboarding wizard will not finish on a metered plan until a Razorpay payment has been captured for the tenant. A small charge (operator-configurable per currency) is taken through <code>POST /api/billing/verification</code>, which tags the order with <code>kind=verification</code>; the webhook records the capture, flips <code>verified_at</code>, and auto-refunds it.</p>
 
-<p>Prices are stored per-currency, in each currency's own units. There's no exchange rate and no conversion. The schema is split into two tables:</p>
+<p>This is the abuse gate for fresh sign-ups: it proves a working card without charging for anything. Complimentary (non-metered) accounts skip it entirely and cannot buy credits.</p>
+
+<h2 id="pricing">Pricing management</h2>
+
+<p>Operators set the global rates through <code>GET</code> / <code>PUT /api/manage/pricing</code>. One flat rate per currency &mdash; no tiers, no packs. Prices are stored per currency in that currency&rsquo;s own units; there is no exchange rate and no conversion.</p>
+
+<p>The schema is two tables:</p>
 
 <ul>
-  <li><code>pricing_config</code>: singleton (id = 1) holding currency-agnostic settings: <code>email_pack_size</code> (default 5), <code>min_credits</code> (default 1000), and <code>max_credits</code> (default 1,000,000).</li>
-  <li><code>pricing_amount(concept, currency_code, amount)</code>: one row per <code>(concept, currency)</code> cell. Currency codes are ISO 4217 (INR, USD, EUR, JPY, KWD, …). The unit is determined by the concept and is the same for every currency.</li>
+  <li><code>pricing_config</code>: singleton (id = 1) holding the currency-agnostic settings <code>min_credits</code> (default 1,000) and <code>max_credits</code> (default 1,000,000).</li>
+  <li><code>pricing_amount(concept, currency_code, amount)</code>: one row per <code>(concept, currency)</code> cell. Currency codes are ISO 4217. The unit is determined by the concept and is the same for every currency.</li>
 </ul>
 
 <table>
@@ -152,49 +157,41 @@
     <tr><th>Concept</th><th>Unit (every currency)</th><th>Used by</th></tr>
   </thead>
   <tbody>
-    <tr><td><code>unit_price_milli</code></td><td>milli-minor (1/1000 of paise / cent / fils / …)</td><td>Per-AI-reply rate. Stored fine-grained so sub-minor prices fit (e.g. ₹0.10 = 10000 mp).</td></tr>
-    <tr><td><code>address_price</code></td><td>minor units</td><td>Reply-email pack price per recurring period.</td></tr>
-    <tr><td><code>verification_amount</code></td><td>minor units</td><td>Sign-up verification charge (auto-refunded).</td></tr>
+    <tr><td><code>unit_price_milli</code></td><td>milli-minor (1/1000 of paise / cent / …)</td><td>The per-AI-reply rate. Stored fine-grained so sub-minor prices fit (&#8377;0.10 = 10000).</td></tr>
+    <tr><td><code>verification_amount</code></td><td>minor units</td><td>The sign-up verification charge, auto-refunded.</td></tr>
   </tbody>
 </table>
 
-<p>Currency metadata (symbol, ISO name, minor-unit exponent) comes from the <a href="https://crates.io/crates/rusty-money"><code>rusty_money</code></a> crate, so the form labels and tenant-facing money formatting stay correct for any ISO 4217 code.</p>
+<p class="muted">An <code>address_price</code> concept existed for the reply-email packs and went with the email channel. Rows for it are harmless if your database still carries them; nothing reads them.</p>
 
-<p>Adding a currency is a UI-only step: the management form's "Add currency" picker lets the operator choose any ISO code; submitting the form seeds default rows and re-renders the table with the new column. There's no migration to run.</p>
+<p><code>GET /api/manage/pricing</code> also returns the concept metadata &mdash; wire name, label, unit caption, and whether the amount is milli-minor &mdash; so an editor renders the table without hardcoding it, and a new concept appears without a frontend change. <code>max_credits</code> is capped at <code>billing::MAX_CREDITS_CEILING</code>; that is not a preference but an overflow bound, since the order total is credits &times; milli price.</p>
 
-<p>Edits to the pricing form trigger a <code>POST /manage/billing/settings</code>. Each per-cell input has a name like <code>unit_price_milli__USD</code>; the handler walks every known currency × concept and upserts cells whose values changed. The settings POST also writes an <code>update_pricing</code> audit-log entry with the full submitted form.</p>
+<p>Currency symbols are rendered by the frontend (<code>frontend/src/Format.elm</code>), which also implements Indian digit grouping &mdash; &#8377;1,00,000 is one lakh, and &#8377;100,000 is a bug that still looks like a number. The <code>rusty_money</code> crate that used to supply ISO 4217 metadata server-side is gone with the rest of the server-rendered templates.</p>
 
-<p><strong>Subscription enforcement, not yet wired:</strong> the reply-email pack is described as recurring monthly, but the current Razorpay integration creates one-time orders. A successful payment grants <code>email_pack_size</code> addresses for the lifetime of the account. A follow-up change should switch this flow to Razorpay Subscriptions, with a webhook handler that revokes pack-granted addresses when the subscription lapses.</p>
+<p>Every pricing edit writes an <code>update_pricing</code> entry to the audit log.</p>
 
-<p>All grants and pricing edits are recorded in the audit log.</p>
+<h2 id="state">Billing state</h2>
 
-<h2>Per-tenant grants</h2>
-
-<p>Operators can also grant credits or extra reply-email addresses to a specific tenant from that tenant's detail page (<code>/manage/tenants/{id}</code>):</p>
-
-<ul>
-  <li><strong>Grant free replies</strong>: adds an expiring batch of credits straight to the tenant's ledger. Backed by <code>POST /manage/tenants/{id}/grant-replies</code>.</li>
-  <li><strong>Grant reply-email addresses</strong>: bumps the tenant's <code>email_address_extras_purchased</code> counter so they can claim more local-parts without a Razorpay round-trip. Backed by <code>POST /manage/tenants/{id}/grant-addresses</code>.</li>
-</ul>
-
-<h2>Billing State</h2>
-
-<p>Each tenant's billing state is stored in KV as a <code>TenantBilling</code> JSON object:</p>
+<p>Each tenant&rsquo;s billing state is a JSON ledger:</p>
 
 <pre><code>{
-  "replies_remaining": 450,
-  "replies_used": 50,
-  "replies_granted": 500
+  "credits": [
+    { "amount": 100,  "source": "grant",     "expires_at": "2026-10-31T23:59:59Z" },
+    { "amount": 8350, "source": "purchased", "expires_at": null }
+  ],
+  "replies_used": 1550
 }</code></pre>
 
+<p>Purchased credits never expire. Granted credits may, and are spent first &mdash; the ledger is sorted soonest-expiring-first, so an expiring grant is consumed before a permanent balance rather than stranded behind it.</p>
+
       <nav class="pagernav">
-        <a href="discord.html" class="pagernav__item">
+        <a href="whatsapp.html" class="pagernav__item">
           <div class="pagernav__dir">← Previous</div>
-          <div class="pagernav__title">Discord relay</div>
+          <div class="pagernav__title">WhatsApp</div>
         </a>
         <a href="management.html" class="pagernav__item pagernav__item--next">
           <div class="pagernav__dir">Next →</div>
-          <div class="pagernav__title">Management panel</div>
+          <div class="pagernav__title">Operator API</div>
         </a>
       </nav>
 

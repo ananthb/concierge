@@ -49,17 +49,13 @@
       <div class="sidebar__group-label">Channels</div>
       <ul class="sidebar__list">
         <li><a href="whatsapp.html"><span class="dot"></span>WhatsApp</a></li>
-        <li><a href="instagram.html"><span class="dot"></span>Instagram</a></li>
-        <li><a href="email-routing.html"><span class="dot"></span>Email routing</a></li>
-        <li><a href="discord.html"><span class="dot"></span>Discord relay</a></li>
       </ul>
     </div>
     <div class="sidebar__group">
       <div class="sidebar__group-label">Operate</div>
       <ul class="sidebar__list">
         <li><a href="billing.html"><span class="dot"></span>Billing &amp; credits</a></li>
-        <li><a href="management.html" class="is-current"><span class="dot"></span>Management panel</a></li>
-        <li><a href="facebook-app-setup.html"><span class="dot"></span>Facebook app setup</a></li>
+        <li><a href="management.html" class="is-current"><span class="dot"></span>Operator API</a></li>
       </ul>
     </div>
     <div class="sidebar__group">
@@ -79,127 +75,135 @@
         <span class="crumb__sep">/</span>
         <span>Operate</span>
         <span class="crumb__sep">/</span>
-        <span>Management</span>
+        <span>Operator API</span>
       </div>
 
       <div class="page-eyebrow">Operate</div>
-      <h1 class="page-title">Management <em>panel</em>.</h1>
+      <h1 class="page-title">Operator <em>API</em>.</h1>
 
+<p>Everything under <code>/api/manage/*</code> is the platform operator surface: tenants, pricing, the archetype catalog, the demo, the audit log, and the schema reseed. It is protected by Cloudflare Access with full JWT verification, and answers JSON.</p>
 
-<p>The management panel at <code>/manage/*</code> is a platform operator dashboard for managing tenants, billing, and reviewing audit logs. It is protected by Cloudflare Access with full JWT verification.</p>
+<div class="callout callout--warn">
+  <div class="callout__icon">!</div>
+  <div class="callout__body">
+    <strong>There is no UI for this yet.</strong>
+    <p>Earlier revisions had a server-rendered panel at <code>/manage</code> with tenant tables, a pricing matrix and an archetype editor. The endpoints below are complete and are what that panel called, but nothing renders them &mdash; <code>/manage</code> in the app says so rather than showing a blank page. Drive them with <code>curl</code> through an Access service token, or build the views.</p>
+  </div>
+</div>
 
-<h2>Authentication</h2>
+<h2 id="auth">Authentication</h2>
 
-<p>Management routes verify the <code>Cf-Access-Jwt-Assertion</code> header:</p>
+<p>These routes verify the <code>Cf-Access-Jwt-Assertion</code> header, falling back to the <code>CF_Authorization</code> cookie. Access sets both on requests it forwards, but the header can be stripped by a proxy or a custom domain config, and the cookie still carries a valid JWT.</p>
 
 <ol>
-  <li><strong>Cloudflare Access</strong>: Handles the login flow and issues a signed JWT</li>
-  <li><strong>JWT verification</strong>: Concierge fetches the team's JWKS, verifies the RS256 signature, checks the <code>aud</code> claim against <code>CF_ACCESS_AUD</code>, and extracts the email</li>
+  <li><strong>Cloudflare Access</strong> handles the login flow and issues a signed JWT.</li>
+  <li><strong>Verification:</strong> Concierge fetches the team&rsquo;s JWKS, verifies the RS256 signature, checks the <code>aud</code> claim against <code>CF_ACCESS_AUD</code> and the expiry, and extracts the <code>email</code> claim.</li>
+  <li>That email becomes the <strong>actor</strong> on every audit-log entry the request writes.</li>
 </ol>
 
-<p>Anyone with a valid Access JWT (matching your Access policy) is authorized. Scope access via your Cloudflare Access policy.</p>
+<p>Anyone with a valid Access JWT matching your policy is authorized &mdash; there are no roles. Scope access with the Cloudflare Access policy itself. A failed check answers <code>403 access_required</code>; the Worker logs which specific step failed (no token, missing env var, signature mismatch) so <code>wrangler tail</code> tells you why.</p>
 
-<h2>Dashboard</h2>
+<p>This is a different credential from the tenant surface: <code>/api/manage/*</code> does <em>not</em> accept a session cookie, and the rest of the API does not accept an Access JWT.</p>
 
-<p>The main dashboard (<code>/manage</code>) shows:</p>
+<h2 id="endpoints">Endpoints</h2>
 
-<ul>
-  <li>The authenticated operator's email</li>
-  <li>Total tenant count</li>
-  <li>Links to tenant management, billing, and audit log</li>
-</ul>
+<div class="table-wrap">
+  <div class="table-wrap__head">
+    <b>/api/manage/*</b><span>Cloudflare Access required · JSON in, JSON out</span>
+  </div>
+  <table class="docs">
+    <thead><tr><th style="width:38%">Endpoint</th><th>What it does</th></tr></thead>
+    <tbody>
+      <tr><td><code>GET /overview</code></td><td class="muted">The authenticated operator&rsquo;s email, the tenant count, and the same component health report <code>/health</code> returns &mdash; so the two surfaces can never disagree about what&rsquo;s configured.</td></tr>
+      <tr><td><code>GET /tenants</code></td><td class="muted">Every tenant. Takes <code>?q=</code> for a case-insensitive search over email and id.</td></tr>
+      <tr><td><code>GET /tenants/{id}</code></td><td class="muted">One tenant with its billing ledger (pruned and sorted), onboarding state, connected WhatsApp numbers, and recent audit entries.</td></tr>
+      <tr><td><code>POST /tenants/{id}/grant-replies</code></td><td class="muted">Grant credits. <code>count</code> must be positive; <code>expires_in_days</code> is optional and a non-positive value is treated as absent rather than as an instantly-expired grant.</td></tr>
+      <tr><td><code>DELETE /tenants/{id}</code></td><td class="muted">Delete a tenant and everything keyed to it. Logged <em>before</em> the delete, because afterwards there is no tenant row to tie the entry to. Payment rows survive with <code>tenant_id</code> nulled.</td></tr>
+      <tr><td><code>GET /archetypes</code></td><td class="muted">The whole voice catalog including pending and rejected rows &mdash; that visibility is the point of the panel. Tenants only ever see approved ones.</td></tr>
+      <tr><td><code>PUT /archetypes/{slug}</code></td><td class="muted">Create or replace a row. Requires label, description, voice prompt and greeting.</td></tr>
+      <tr><td><code>DELETE /archetypes/{slug}</code></td><td class="muted">Remove a row.</td></tr>
+      <tr><td><code>GET /demo</code></td><td class="muted">The landing-page demo config, when its personas were last rolled, and the default generation prompt.</td></tr>
+      <tr><td><code>PUT /demo</code></td><td class="muted">Update the config. The idle timeout is clamped to 5&ndash;600 s and the turn cap to 1&ndash;20, so a typo can&rsquo;t lock visitors out or bake in a 24-hour window.</td></tr>
+      <tr><td><code>POST /demo/reroll</code></td><td class="muted">Regenerate the demo personas now, against the current catalog and prompt.</td></tr>
+      <tr><td><code>GET /pricing</code></td><td class="muted">Credit bounds, the per-(concept, currency) amounts, and the concept metadata (wire name, label, unit caption, whether the amount is milli-minor) so an editor doesn&rsquo;t hardcode it.</td></tr>
+      <tr><td><code>PUT /pricing</code></td><td class="muted">Update bounds and amounts. <code>max_credits</code> is capped at <code>billing::MAX_CREDITS_CEILING</code> &mdash; not a preference, but because the total is credits &times; milli price and a large enough max would overflow it.</td></tr>
+      <tr><td><code>DELETE /pricing/currency/{code}</code></td><td class="muted">Drop every amount for a currency.</td></tr>
+      <tr><td><code>GET /audit</code></td><td class="muted">The audit log, 50 per page. Filters: <code>actor</code>, <code>action</code>, <code>resource_type</code>, and <code>before</code> as a cursor.</td></tr>
+      <tr><td><code>POST /reseed</code></td><td class="muted">Reapply the schema. Destructive, and gated a second time on <code>ALLOW_SCHEMA_RESEED</code>. POST only: a GET that wiped the database would fire on a browser prefetch.</td></tr>
+    </tbody>
+  </table>
+</div>
 
-<h2>Tenant Management</h2>
+<h2 id="catalog">The archetype catalog</h2>
 
-<p>At <code>/manage/tenants</code>, operators can:</p>
-
-<ul>
-  <li>List all tenants with their email, plan, and creation date</li>
-  <li>View individual tenant details including connected accounts</li>
-  <li>See a tenant's billing state (credits remaining, used, granted)</li>
-  <li>Grant free reply credits to a tenant</li>
-</ul>
-
-<h2>Billing Controls</h2>
-
-<p>At <code>/manage/billing</code>, operators can:</p>
-
-<ul>
-  <li><strong>View credit packs</strong>: See all defined packs with their reply counts, prices, and status</li>
-  <li><strong>Create packs</strong>: Add new credit packs with name, reply count, INR price, USD price, and sort order</li>
-  <li><strong>Update packs</strong>: Edit existing pack details</li>
-  <li><strong>Activate/Deactivate packs</strong>: Control which packs are visible to tenants</li>
-  <li><strong>Delete packs</strong>: Remove packs entirely</li>
-  <li><strong>Grant credits</strong>: Give free reply credits to a specific tenant (at <code>/manage/billing/grant/{tenant_id}</code>)</li>
-</ul>
-
-<h2>Persona Catalog</h2>
-
-<p>At <code>/manage/personas</code>, operators curate the platform&#8209;wide catalog of persona archetypes that the public demo persona picker and the tenant onboarding wizard read from. Each row is a slug + label + description + a serialized <code>PersonaSource</code> (the editable middle, either <code>builder</code> with archetype + sample business fields or <code>custom</code> raw text) + a greeting + a safety verdict.</p>
+<p>The <code>archetypes</code> table is the platform-wide set of voices that both the tenant persona picker and the public demo read from. Each row carries a slug, label, description, the <code>voice_prompt</code> that becomes part of a tenant&rsquo;s composed prompt, a greeting, suggested catch-phrases, off-topics, a <code>never</code> line, handoff conditions, and a safety verdict.</p>
 
 <ul>
-  <li><strong>List</strong>: every row, including drafts and rejects. Tenants and the public demo only see <code>approved</code> rows.</li>
-  <li><strong>Create / edit</strong>: the same builder fields a tenant fills in (voice archetype, business name + type, city, goal, catch&#8209;phrases, off&#8209;topics, handoff conditions). Every save resets <code>safety_status</code> to <code>draft</code> and enqueues a <code>SafetyJob</code> on <code>SAFETY_QUEUE</code> keyed by slug. The classifier's verdict (<code>approved</code> or <code>rejected</code> with a vague user&#8209;facing reason) lands back on the row.</li>
-  <li><strong>System rows</strong>: rows with <code>is_system=1</code> are undeletable. The seed migration ships one — <code>concierge</code> — which powers the homepage live demo.</li>
-  <li><strong>Audit</strong>: <code>create_persona</code>, <code>update_persona</code>, <code>delete_persona</code> all write to the audit log with the actor email and the slug.</li>
+  <li><strong>Every write resets the verdict.</strong> <code>PUT /archetypes/{slug}</code> sets <code>safety_status</code> back to pending and enqueues a <code>SafetyJob</code> keyed by slug. An operator editing a voice prompt must not inherit the old row&rsquo;s approval.</li>
+  <li><strong>Only approved rows reach tenants.</strong> The tenant-facing <code>GET /api/archetypes</code> and the demo both filter on it.</li>
+  <li><strong>A write invalidates the demo.</strong> The rolled persona blob was generated from the old catalog, so it is dropped; the next visitor or cron tick regenerates it.</li>
+  <li><strong>Audited:</strong> <code>upsert_archetype</code> and <code>delete_archetype</code> record the actor and the slug.</li>
 </ul>
 
 <div class="callout callout--note">
   <div class="callout__icon">i</div>
   <div class="callout__body">
-    <strong>Snapshotting, not referencing.</strong>
-    <p>When a tenant picks an archetype during onboarding, the catalog row is <em>copied</em> into their <code>PersonaConfig</code> rather than referenced by slug. Subsequent management edits to the catalog don't reach back into existing tenants — each tenant owns their own snapshot and mutates it independently from <code>/dashboard/persona</code>.</p>
+    <strong>Referenced by slug, not snapshotted.</strong>
+    <p>A tenant&rsquo;s persona stores the archetype <em>slug</em> and layers their own fields over its voice prompt, so a catalog edit does reach existing tenants &mdash; and because the safety comparison is against the hash of the composed prompt, a tenant whose prompt changes underneath them has their AI replies paused until it is re-approved. Earlier revisions copied the row into the tenant instead; the <code>default_rules_json</code> column that copy carried went with the rule engine.</p>
   </div>
 </div>
 
-<h2>Audit Log</h2>
+<h2 id="audit">Audit log</h2>
 
-<p>At <code>/manage/audit</code>, operators can review a chronological log of all management actions. Each entry records:</p>
+<p><code>GET /audit</code> returns a chronological log of operator actions, newest first, 50 per page. Each entry records:</p>
 
 <table>
   <thead>
     <tr><th>Field</th><th>Description</th></tr>
   </thead>
   <tbody>
-    <tr><td><code>actor_email</code></td><td>The operator who performed the action</td></tr>
-    <tr><td><code>action</code></td><td>What was done (e.g., <code>grant_replies</code>, <code>create_pack</code>, <code>update_pack</code>, <code>delete_pack</code>)</td></tr>
-    <tr><td><code>resource_type</code></td><td>The type of resource affected (e.g., <code>billing</code>, <code>credit_pack</code>)</td></tr>
-    <tr><td><code>resource_id</code></td><td>The specific resource identifier (optional)</td></tr>
-    <tr><td><code>details</code></td><td>JSON payload with action-specific details</td></tr>
+    <tr><td><code>actor_email</code></td><td>The operator who performed the action, from the Access JWT&rsquo;s <code>email</code> claim</td></tr>
+    <tr><td><code>action</code></td><td>What was done: <code>grant_replies</code>, <code>delete_tenant</code>, <code>upsert_archetype</code>, <code>delete_archetype</code>, <code>update_demo_config</code>, <code>reroll_demo_personas</code>, <code>update_pricing</code>, <code>delete_pricing_currency</code></td></tr>
+    <tr><td><code>resource_type</code></td><td>What it affected: <code>tenant</code>, <code>archetype</code>, <code>demo</code>, <code>pricing</code></td></tr>
+    <tr><td><code>resource_id</code></td><td>The specific identifier, where there is one</td></tr>
+    <tr><td><code>details</code></td><td>JSON payload with action-specific detail</td></tr>
     <tr><td><code>created_at</code></td><td>Timestamp</td></tr>
   </tbody>
 </table>
 
-<p>The audit log shows the most recent 100 entries.</p>
+<p>Pass <code>before</code> with the oldest <code>created_at</code> you have to page backwards. <code>has_more</code> is true when the page came back full.</p>
 
-<h2>Setup</h2>
+<h2 id="setup">Setup</h2>
 
 <ol>
-  <li>In the Cloudflare dashboard, go to <strong>Zero Trust &gt; Access &gt; Applications</strong></li>
-  <li>Create a Self-hosted application with the path <code>your-domain/manage*</code> (no slash before the asterisk)</li>
-  <li>Copy the <strong>Application Audience (AUD) Tag</strong> from the application overview</li>
-  <li>Set <code>CF_ACCESS_TEAM</code> (your team name) and <code>CF_ACCESS_AUD</code> as plain&#8209;text variables in <strong>Workers &rsaquo; concierge &rsaquo; Settings &rsaquo; Variables and Secrets</strong></li>
-  <li>Add a policy allowing the emails that should have management access</li>
-  <li>Deploy with <code>wrangler deploy</code></li>
+  <li>In the Cloudflare dashboard, go to <strong>Zero Trust &rsaquo; Access &rsaquo; Applications</strong>.</li>
+  <li>Create a self-hosted application with the path <code>your-domain/api/manage*</code> (no slash before the asterisk).</li>
+  <li>Copy the <strong>Application Audience (AUD) Tag</strong> from the application overview.</li>
+  <li>Set <code>CF_ACCESS_TEAM</code> (your team name) and <code>CF_ACCESS_AUD</code> as build environment variables, so they survive each deploy.</li>
+  <li>Add a policy allowing the emails that should have operator access.</li>
+  <li>Deploy.</li>
 </ol>
 
 <div class="callout callout--note">
   <div class="callout__icon">i</div>
   <div class="callout__body">
-    <strong>Use <code>/manage*</code>, not <code>/manage/*</code> or <code>/manage</code>.</strong>
-    <p>The wildcard placement matters. <code>/manage</code> alone matches the dashboard but lets <code>/manage/audit</code>, <code>/manage/tenants/&hellip;</code>, and <code>/manage/billing/&hellip;</code> through unauthenticated. <code>/manage/*</code> protects the subroutes but leaves the bare <code>/manage</code> dashboard exposed. <code>/manage*</code> covers both.</p>
-    <p>If <code>/manage</code> 403&rsquo;s with &ldquo;Forbidden: Cloudflare Access required&rdquo; <em>after</em> a successful Access login, run <code>wrangler tail</code> while reloading the page. The worker logs the specific reason (missing token, missing <code>CF_ACCESS_AUD</code>/<code>CF_ACCESS_TEAM</code>, JWT verification error) instead of a bare 403.</p>
+    <strong>Use <code>/api/manage*</code>, not <code>/api/manage/*</code> or <code>/api/manage</code>.</strong>
+    <p><code>/api/manage/*</code> leaves the bare endpoint exposed; <code>/api/manage</code> alone leaves every subroute exposed. Only <code>/api/manage*</code> covers both. Setting <code>CF_ACCESS_AUD</code> also disables the local dev bypass, so a production deploy can never activate it.</p>
   </div>
 </div>
+
+<h2 id="local">Locally</h2>
+
+<p>Access can&rsquo;t reach localhost, so the dev server sets <code>MANAGE_BYPASS_EMAIL</code> and leaves <code>CF_ACCESS_AUD</code> empty. Both conditions must hold for the bypass to activate, which means a stray <code>MANAGE_BYPASS_EMAIL</code> in a production deploy is still blocked by the presence of the AUD. Run <code>dev</code> from the nix shell and the operator endpoints answer as that email.</p>
 
       <nav class="pagernav">
         <a href="billing.html" class="pagernav__item">
           <div class="pagernav__dir">← Previous</div>
           <div class="pagernav__title">Billing</div>
         </a>
-        <a href="facebook-app-setup.html" class="pagernav__item pagernav__item--next">
+        <a href="api/concierge/" class="pagernav__item pagernav__item--next">
           <div class="pagernav__dir">Next →</div>
-          <div class="pagernav__title">Facebook app setup</div>
+          <div class="pagernav__title">Rust API reference</div>
         </a>
       </nav>
 

@@ -1,4 +1,18 @@
-//! Authentication handlers - Google OAuth + Facebook Login
+//! Google OAuth sign-in.
+//!
+//! Stays outside the JSON API because OAuth is a browser redirect dance:
+//! the frontend links to `/auth/login`, Google bounces back to
+//! `/auth/callback`, and we set a session cookie and redirect to `/`. The
+//! Elm app then calls `/api/bootstrap` and finds itself signed in.
+//!
+//! There is no login *page* here any more. The Elm app renders that and
+//! links to `/auth/login`, which now redirects straight to Google's consent
+//! screen instead of rendering a provider chooser.
+//!
+//! Facebook Login as a sign-in method went with the Instagram channel. Meta
+//! identity still arrives through WhatsApp Embedded Signup, which does its
+//! own token exchange in [`super::whatsapp_signup`] and can create a tenant
+//! the same way this does.
 
 use serde::Deserialize;
 use worker::*;
@@ -6,12 +20,11 @@ use worker::*;
 use super::get_base_url;
 use crate::helpers::*;
 use crate::storage::*;
-use crate::templates::auth_login_html;
 use crate::types::*;
 
+const GOOGLE_AUTH_URL: &str = "https://accounts.google.com/o/oauth2/v2/auth";
 const GOOGLE_TOKEN_URL: &str = "https://oauth2.googleapis.com/token";
 const GOOGLE_USERINFO_URL: &str = "https://www.googleapis.com/oauth2/v2/userinfo";
-const GRAPH_API_BASE: &str = "https://graph.facebook.com";
 
 const SESSION_TTL_SECONDS: u64 = 7 * 24 * 60 * 60; // 7 days
 
@@ -26,81 +39,36 @@ struct GoogleUserInfo {
     name: Option<String>,
 }
 
-/// Handle auth routes (/auth/*)
+/// Handle auth routes (`/auth/*`).
 pub async fn handle_auth(req: Request, env: Env, path: &str, method: Method) -> Result<Response> {
     let base_url = get_base_url(&req);
-    let locale = crate::locale::Locale::from_request(&req);
 
     match (method, path) {
+        // Straight to Google. Already signed in? Send them to the app
+        // rather than minting a second session.
         (Method::Get, "/auth/login") => {
-            // Already signed in: skip the login page.
             let kv = env.kv("KV")?;
             if resolve_tenant_id(&req, &kv).await.is_some() {
-                let headers = Headers::new();
-                headers.set("Location", "/dashboard")?;
-                return Ok(Response::empty()?.with_status(302).with_headers(headers));
+                return redirect("/");
             }
 
-            let google_client_id = env
+            let client_id = env
                 .secret("GOOGLE_OAUTH_CLIENT_ID")
                 .map(|s| s.to_string())
                 .unwrap_or_default();
-            let meta_app_id = env
-                .secret("META_APP_ID")
-                .map(|s| s.to_string())
-                .unwrap_or_default();
-            let wa_config_id = env
-                .var("WHATSAPP_SIGNUP_CONFIG_ID")
-                .map(|v| v.to_string())
-                .unwrap_or_default();
-
-            // Gate the Facebook + WhatsApp buttons on every secret their
-            // callbacks actually need. The previous "META_APP_ID set?"
-            // check was too lax — META_APP_SECRET / WHATSAPP_ACCESS_TOKEN
-            // / WABA_ID can each be missing and the click flow then 500s
-            // (Facebook) or dead-ends in the WhatsApp signup callback.
-            // `Component::ready` reads the same Requirement list the
-            // /manage health panel reports against, so the two surfaces
-            // can never disagree.
-            use crate::handlers::health::Component;
-            let fb_enabled = crate::handlers::health::FacebookLogin.ready(&env);
-            let wa_enabled = crate::handlers::health::WhatsAppSignup.ready(&env);
-
-            // CSRF nonce for the public WhatsApp Embedded Signup flow. Stored
-            // in KV with a distinct prefix so it can't be confused with the
-            // admin-side `wa_signup_state:` keys (which carry a tenant_id).
-            // Skip the write entirely when the button is hidden — no point
-            // burning KV writes for a flow that can't run.
-            let wa_state = if wa_enabled {
-                let state = generate_token()?;
-                kv.put(&format!("wa_pubsignup_state:{}", state), "1")?
-                    .expiration_ttl(600)
-                    .execute()
-                    .await?;
-                state
-            } else {
-                String::new()
-            };
-
-            let last_provider = get_cookie(&req, "last_provider");
-            let dev_login_enabled = crate::dev_bypass::active(&env);
-            let html = auth_login_html(
-                &base_url,
-                &google_client_id,
-                &meta_app_id,
-                &wa_config_id,
-                &wa_state,
-                fb_enabled,
-                wa_enabled,
-                last_provider.as_deref(),
-                dev_login_enabled,
-                &locale,
+            if client_id.is_empty() {
+                return Response::error("Sign-in is not configured on this deploy.", 503);
+            }
+            let redirect_uri = format!("{base_url}/auth/callback");
+            let consent = format!(
+                "{GOOGLE_AUTH_URL}?client_id={}&redirect_uri={}&response_type=code&scope={}&access_type=online&prompt=select_account",
+                urlencoding::encode(&client_id),
+                urlencoding::encode(&redirect_uri),
+                urlencoding::encode("openid email profile"),
             );
-
-            Ok(Response::from_html(html)?)
+            redirect(&consent)
         }
 
-        // Google OAuth callback
         (Method::Get, "/auth/callback") => {
             let url = req.url()?;
             let query: std::collections::HashMap<_, _> = url.query_pairs().collect();
@@ -108,19 +76,21 @@ pub async fn handle_auth(req: Request, env: Env, path: &str, method: Method) -> 
             let code = match query.get("code") {
                 Some(c) => c.to_string(),
                 None => {
-                    let error = query
+                    // The user declined, or Google refused. Back to the app,
+                    // which renders the login screen again.
+                    let reason = query
                         .get("error")
                         .map(|e| e.to_string())
                         .unwrap_or_default();
-                    return Response::error(format!("OAuth error: {}", error), 400);
+                    console_log!("OAuth callback without a code: {reason}");
+                    return redirect("/?auth=failed");
                 }
             };
 
             let client_id = env.secret("GOOGLE_OAUTH_CLIENT_ID")?.to_string();
             let client_secret = env.secret("GOOGLE_OAUTH_CLIENT_SECRET")?.to_string();
-            let redirect_uri = format!("{}/auth/callback", base_url);
+            let redirect_uri = format!("{base_url}/auth/callback");
 
-            // Exchange code for access token
             let token_body = format!(
                 "code={}&client_id={}&client_secret={}&redirect_uri={}&grant_type=authorization_code",
                 urlencoding::encode(&code),
@@ -131,7 +101,6 @@ pub async fn handle_auth(req: Request, env: Env, path: &str, method: Method) -> 
 
             let headers = Headers::new();
             headers.set("Content-Type", "application/x-www-form-urlencoded")?;
-
             let mut init = RequestInit::new();
             init.with_method(Method::Post)
                 .with_headers(headers)
@@ -142,17 +111,15 @@ pub async fn handle_auth(req: Request, env: Env, path: &str, method: Method) -> 
             let token_text = token_resp.text().await?;
 
             if token_resp.status_code() != 200 {
-                console_log!("Google token exchange failed: {}", token_text);
-                return Response::error("Authentication failed. Please try again.", 500);
+                console_log!("Google token exchange failed: {token_text}");
+                return redirect("/?auth=failed");
             }
 
             let tokens: TokenResponse = serde_json::from_str(&token_text)
-                .map_err(|e| Error::from(format!("Failed to parse token response: {}", e)))?;
+                .map_err(|e| Error::from(format!("Failed to parse token response: {e}")))?;
 
-            // Get user info
             let headers = Headers::new();
             headers.set("Authorization", &format!("Bearer {}", tokens.access_token))?;
-
             let mut init = RequestInit::new();
             init.with_method(Method::Get).with_headers(headers);
 
@@ -161,16 +128,17 @@ pub async fn handle_auth(req: Request, env: Env, path: &str, method: Method) -> 
             let userinfo_text = userinfo_resp.text().await?;
 
             if userinfo_resp.status_code() != 200 {
-                return Response::error("Failed to get user info", 500);
+                console_log!("Google userinfo failed: {userinfo_text}");
+                return redirect("/?auth=failed");
             }
 
             let user: GoogleUserInfo = serde_json::from_str(&userinfo_text)
-                .map_err(|e| Error::from(format!("Failed to parse user info: {}", e)))?;
+                .map_err(|e| Error::from(format!("Failed to parse user info: {e}")))?;
 
             let kv = env.kv("KV")?;
             let db = env.d1("DB")?;
 
-            // Find or create tenant. New tenants pick locale from
+            // Find or create the tenant. New tenants take their locale from
             // Accept-Language > cf-ipcountry > en-IN; currency follows.
             let tenant = match get_tenant_by_email(&db, &user.email).await? {
                 Some(t) => t,
@@ -194,221 +162,24 @@ pub async fn handle_auth(req: Request, env: Env, path: &str, method: Method) -> 
                 }
             };
 
-            create_session_and_redirect(&req, &kv, &tenant.id, "google").await
+            create_session_and_redirect(&req, &kv, &tenant.id).await
         }
 
-        // Facebook OAuth callback
-        (Method::Get, "/auth/facebook/callback") => {
-            let url = req.url()?;
-            let query: std::collections::HashMap<_, _> = url.query_pairs().collect();
-
-            let code = match query.get("code") {
-                Some(c) => c.to_string(),
-                None => {
-                    let error = query
-                        .get("error")
-                        .map(|e| e.to_string())
-                        .unwrap_or_default();
-                    return Response::error(format!("Facebook OAuth error: {}", error), 400);
-                }
-            };
-
-            let app_id = env.secret("META_APP_ID")?.to_string();
-            let app_secret = env.secret("META_APP_SECRET")?.to_string();
-            let redirect_uri = format!("{}/auth/facebook/callback", base_url);
-
-            // Exchange code for access token
-            let token_url = format!(
-                "{}/{}/oauth/access_token?client_id={}&redirect_uri={}&client_secret={}&code={}",
-                GRAPH_API_BASE,
-                crate::META_API_VERSION,
-                app_id,
-                urlencoding::encode(&redirect_uri),
-                app_secret,
-                code
-            );
-
-            let mut init = RequestInit::new();
-            init.with_method(Method::Get);
-            let token_req = Request::new_with_init(&token_url, &init)?;
-            let mut token_resp = Fetch::Request(token_req).send().await?;
-
-            if token_resp.status_code() != 200 {
-                let err = token_resp.text().await.unwrap_or_default();
-                console_log!("Facebook token exchange failed: {}", err);
-                return Response::error("Authentication failed. Please try again.", 500);
-            }
-
-            let body: serde_json::Value = token_resp.json().await?;
-            let access_token = body
-                .get("access_token")
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| Error::from("Missing access_token"))?
-                .to_string();
-
-            // Get Facebook user info
-            let me_url = format!(
-                "{}/{}/me?fields=id,name,email&access_token={}",
-                GRAPH_API_BASE,
-                crate::META_API_VERSION,
-                access_token
-            );
-            let mut init = RequestInit::new();
-            init.with_method(Method::Get);
-            let me_req = Request::new_with_init(&me_url, &init)?;
-            let mut me_resp = Fetch::Request(me_req).send().await?;
-
-            if me_resp.status_code() != 200 {
-                return Response::error("Failed to get Facebook user info", 500);
-            }
-
-            let fb_user: serde_json::Value = me_resp.json().await?;
-            let fb_id = fb_user
-                .get("id")
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| Error::from("Missing Facebook user id"))?
-                .to_string();
-            let fb_name = fb_user
-                .get("name")
-                .and_then(|v| v.as_str())
-                .map(|s| s.to_string());
-            let fb_email = fb_user
-                .get("email")
-                .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .to_string();
-
-            let kv = env.kv("KV")?;
-            let db = env.d1("DB")?;
-
-            // Find tenant by facebook_id, then by email, then create
-            let tenant = if let Some(t) = get_tenant_by_facebook_id(&db, &fb_id).await? {
-                t
-            } else if !fb_email.is_empty() {
-                if let Some(mut t) = get_tenant_by_email(&db, &fb_email).await? {
-                    // Link Facebook to existing Google account
-                    t.facebook_id = Some(fb_id);
-                    t.updated_at = now_iso();
-                    save_tenant(&db, &t).await?;
-                    t
-                } else {
-                    let signup_locale = crate::locale::Locale::from_request(&req);
-                    let now = now_iso();
-                    let tenant = Tenant {
-                        id: generate_id(),
-                        email: fb_email,
-                        name: fb_name,
-                        facebook_id: Some(fb_id),
-                        plan: crate::types::Plan::Paid,
-                        locale: signup_locale.langid.to_string(),
-                        currency: signup_locale.currency,
-                        verified_at: None,
-                        created_at: now.clone(),
-                        updated_at: now,
-                    };
-                    save_tenant(&db, &tenant).await?;
-                    tenant
-                }
-            } else {
-                // No email from Facebook: cannot create account without email
-                return Response::error(
-                    "Facebook did not provide an email address. Please sign in with Google instead.",
-                    400,
-                );
-            };
-
-            create_session_and_redirect(&req, &kv, &tenant.id, "facebook").await
-        }
-
-        // Unlink a provider
-        (Method::Delete, "/auth/unlink/google") => {
-            let kv = env.kv("KV")?;
-            let db = env.d1("DB")?;
-            let tenant_id = match resolve_tenant_id(&req, &kv).await {
-                Some(id) => id,
-                None => return Response::error("Unauthorized", 401),
-            };
-            let mut tenant = match get_tenant(&db, &tenant_id).await? {
-                Some(t) => t,
-                None => return Response::error("Not found", 404),
-            };
-
-            // Must keep at least one provider
-            if tenant.facebook_id.is_none() {
-                return Response::from_html(
-                    "<div class=\"error\">Cannot unlink Google. It is your only sign-in method. Link Facebook first.</div>",
-                );
-            }
-
-            // Clear email (D1 unique index handles the rest)
-            tenant.email = String::new();
-            tenant.updated_at = now_iso();
-            save_tenant(&db, &tenant).await?;
-            Response::from_html("<div class=\"success\">Google account unlinked.</div>")
-        }
-
-        (Method::Delete, "/auth/unlink/facebook") => {
-            let kv = env.kv("KV")?;
-            let db = env.d1("DB")?;
-            let tenant_id = match resolve_tenant_id(&req, &kv).await {
-                Some(id) => id,
-                None => return Response::error("Unauthorized", 401),
-            };
-            let mut tenant = match get_tenant(&db, &tenant_id).await? {
-                Some(t) => t,
-                None => return Response::error("Not found", 404),
-            };
-
-            // Must keep at least one provider
-            if tenant.email.is_empty() {
-                return Response::from_html(
-                    "<div class=\"error\">Cannot unlink Facebook. It is your only sign-in method. Link Google first.</div>",
-                );
-            }
-
-            tenant.facebook_id = None;
-            tenant.updated_at = now_iso();
-            save_tenant(&db, &tenant).await?;
-            Response::from_html("<div class=\"success\">Facebook account unlinked.</div>")
-        }
-
-        // Discord bot install callback
-        (Method::Get, "/auth/discord/callback") => {
-            super::discord_oauth::handle_discord_callback(req, env).await
-        }
-
-        // Dev-only login shortcut. Mints a session for an arbitrary
-        // tenant email without going through Google / Facebook / WA
-        // OAuth — useful for clicking through `/dashboard` against
-        // `wrangler dev` (where real OAuth callbacks won't reach
-        // localhost). Gated on the same `crate::dev_bypass::active`
-        // flag the management panel uses; production deploys set
-        // CF_ACCESS_AUD so this route returns 404 there.
+        // Dev-only login shortcut. Mints a session for an arbitrary email
+        // without a round-trip to Google, which can't reach localhost.
+        // Gated on `dev_bypass::active`; production sets CF_ACCESS_AUD, so
+        // this 404s there.
         (Method::Post, "/auth/dev-login") => {
             if !crate::dev_bypass::active(&env) {
                 return Response::error("Not Found", 404);
             }
             let mut req = req;
-            // Accept either form-encoded (HTML form) or JSON.
-            let email_raw = match req.headers().get("Content-Type").ok().flatten().as_deref() {
-                Some(ct) if ct.contains("application/json") => req
-                    .json::<serde_json::Value>()
-                    .await
-                    .ok()
-                    .and_then(|v| v.get("email").and_then(|e| e.as_str()).map(str::to_string))
-                    .unwrap_or_default(),
-                _ => {
-                    let body = req.text().await.unwrap_or_default();
-                    body.split('&')
-                        .find_map(|kv| kv.strip_prefix("email="))
-                        .map(|v| {
-                            urlencoding::decode(v)
-                                .map(|c| c.into_owned())
-                                .unwrap_or_else(|_| v.to_string())
-                        })
-                        .unwrap_or_default()
-                }
-            };
+            let email_raw = req
+                .json::<serde_json::Value>()
+                .await
+                .ok()
+                .and_then(|v| v.get("email").and_then(|e| e.as_str()).map(str::to_string))
+                .unwrap_or_default();
             let email = if email_raw.trim().is_empty() {
                 "dev@local.test".to_string()
             } else {
@@ -430,6 +201,8 @@ pub async fn handle_auth(req: Request, env: Env, path: &str, method: Method) -> 
                         plan: crate::types::Plan::Paid,
                         locale: signup_locale.langid.to_string(),
                         currency: signup_locale.currency,
+                        // Pre-verified: there's no Razorpay checkout to
+                        // complete against a local dev deploy.
                         verified_at: Some(now.clone()),
                         created_at: now.clone(),
                         updated_at: now,
@@ -439,44 +212,39 @@ pub async fn handle_auth(req: Request, env: Env, path: &str, method: Method) -> 
                 }
             };
 
-            create_session_and_redirect(&req, &kv, &tenant.id, "dev").await
-        }
-
-        (Method::Get, "/auth/logout") => {
-            // Clear session from KV if exists
-            if let Some(session_token) = get_session_cookie(&req) {
-                let kv = env.kv("KV")?;
-                delete_session(&kv, &session_token).await?;
-            }
-
-            let headers = Headers::new();
-            headers.set("Location", "/auth/login")?;
-            headers.set(
-                "Set-Cookie",
-                "session=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0",
-            )?;
-
-            Ok(Response::empty()?.with_status(302).with_headers(headers))
+            create_session_and_redirect(&req, &kv, &tenant.id).await
         }
 
         _ => Response::error("Not Found", 404),
     }
 }
 
+fn redirect(location: &str) -> Result<Response> {
+    let headers = Headers::new();
+    headers.set("Location", location)?;
+    headers.set("Cache-Control", "no-store")?;
+    Ok(Response::empty()?.with_status(302).with_headers(headers))
+}
+
+/// Mint a session and bounce to the app root.
+///
+/// Lands on `/` rather than `/dashboard`: the Elm app reads
+/// `session.destination` from `/api/bootstrap` and routes to the wizard or
+/// the dashboard itself, so the correct landing spot is decided in one place
+/// instead of being duplicated here.
+///
+/// No CSRF cookie any more — the API authenticates state-changing calls with
+/// the `X-Concierge-Request` header instead (see [`crate::api`]).
 pub(super) async fn create_session_and_redirect(
     req: &Request,
     kv: &kv::KvStore,
     tenant_id: &str,
-    provider: &str,
 ) -> Result<Response> {
     let session_token = generate_token()?;
-    let csrf_token = generate_token()?;
     save_session(kv, &session_token, tenant_id, SESSION_TTL_SECONDS).await?;
-    save_csrf_token(kv, tenant_id, &csrf_token, SESSION_TTL_SECONDS).await?;
 
-    // Drop the Secure cookie attribute on http origins so plain
-    // wrangler dev still authenticates on browsers that don't treat
-    // localhost as a secure origin.
+    // Drop `Secure` on http origins so plain `wrangler dev` still
+    // authenticates on browsers that don't treat localhost as secure.
     let is_https = req
         .url()
         .ok()
@@ -485,7 +253,8 @@ pub(super) async fn create_session_and_redirect(
     let secure_attr = if is_https { "; Secure" } else { "" };
 
     let headers = Headers::new();
-    headers.set("Location", "/dashboard")?;
+    headers.set("Location", "/")?;
+    headers.set("Cache-Control", "no-store")?;
     headers.set(
         "Set-Cookie",
         &format!(
@@ -495,27 +264,10 @@ pub(super) async fn create_session_and_redirect(
             ttl = SESSION_TTL_SECONDS,
         ),
     )?;
-    headers.append(
-        "Set-Cookie",
-        &format!(
-            "csrf={token}; Path=/{secure}; SameSite=Lax; Max-Age={ttl}",
-            token = csrf_token,
-            secure = secure_attr,
-            ttl = SESSION_TTL_SECONDS,
-        ),
-    )?;
-    // Remember last provider (not HttpOnly so homepage JS can detect returning user)
-    headers.append(
-        "Set-Cookie",
-        &format!(
-            "last_provider={provider}; Path=/{secure}; SameSite=Lax; Max-Age=31536000",
-            secure = secure_attr,
-        ),
-    )?;
     Ok(Response::empty()?.with_status(302).with_headers(headers))
 }
 
-/// Extract a named cookie from request.
+/// Extract a named cookie from a request.
 pub fn get_cookie(req: &Request, name: &str) -> Option<String> {
     let cookie_header = req.headers().get("Cookie").ok()??;
     let prefix = format!("{name}=");
@@ -530,42 +282,13 @@ pub fn get_cookie(req: &Request, name: &str) -> Option<String> {
     None
 }
 
-/// Extract session cookie from request.
+/// Extract the session cookie from a request.
 pub fn get_session_cookie(req: &Request) -> Option<String> {
     get_cookie(req, "session")
 }
 
-/// Resolve tenant_id from session cookie, returns None if not authenticated
+/// Resolve `tenant_id` from the session cookie. `None` when signed out.
 pub async fn resolve_tenant_id(req: &Request, kv: &kv::KvStore) -> Option<String> {
     let token = get_session_cookie(req)?;
     get_session(kv, &token).await.ok()?
-}
-
-/// Validate CSRF token from X-CSRF-Token header or csrf form field against stored token.
-pub async fn validate_csrf(
-    req: &Request,
-    kv: &kv::KvStore,
-    tenant_id: &str,
-) -> std::result::Result<(), String> {
-    use subtle::ConstantTimeEq;
-
-    // Get token from header (HTMX) or cookie (double-submit)
-    let submitted = req
-        .headers()
-        .get("X-CSRF-Token")
-        .ok()
-        .flatten()
-        .or_else(|| get_cookie(req, "csrf"))
-        .ok_or_else(|| "Missing CSRF token".to_string())?;
-
-    let stored = get_csrf_token(kv, tenant_id)
-        .await
-        .map_err(|e| format!("CSRF lookup failed: {e}"))?
-        .ok_or_else(|| "No CSRF token stored for session".to_string())?;
-
-    let valid: bool = submitted.as_bytes().ct_eq(stored.as_bytes()).into();
-    if !valid {
-        return Err("CSRF token mismatch".to_string());
-    }
-    Ok(())
 }

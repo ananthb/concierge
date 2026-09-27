@@ -28,7 +28,6 @@ struct ConversationCtx {
     sender: String,
     recipient: String,
     channel_account_id: String,
-    subject: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -58,7 +57,6 @@ impl DurableObject for ReplyBufferDO {
             sender: msg.sender.clone(),
             recipient: msg.recipient.clone(),
             channel_account_id: msg.channel_account_id.clone(),
-            subject: msg.subject.clone(),
         };
         self.state.storage().put("ctx", &ctx).await?;
 
@@ -125,7 +123,6 @@ impl DurableObject for ReplyBufferDO {
             sender_name: first.sender_name,
             recipient: ctx.recipient,
             body: combined_body,
-            subject: ctx.subject,
             has_attachment: false,
             tenant_id: ctx.tenant_id,
             channel_account_id: ctx.channel_account_id,

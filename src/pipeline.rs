@@ -4,15 +4,13 @@
 use worker::*;
 
 use crate::ai;
-use crate::approval;
-use crate::approvals;
 use crate::billing;
 use crate::channel;
 use crate::helpers::generate_id;
 use crate::storage::*;
 use crate::types::*;
 
-/// Process an inbound message from WhatsApp, Instagram, or Discord.
+/// Process an inbound WhatsApp message.
 ///
 /// Routes through the ReplyBufferDO so quick-fire messages from the same
 /// sender batch into one AI call. wait_seconds=0 (or DO unreachable) falls
@@ -51,15 +49,6 @@ async fn lookup_wait_seconds(kv: &kv::KvStore, msg: &InboundMessage) -> Result<u
         Channel::WhatsApp => get_whatsapp_account(kv, &msg.channel_account_id)
             .await?
             .map(|a| a.auto_reply),
-        Channel::Instagram => get_instagram_account(kv, &msg.channel_account_id)
-            .await?
-            .map(|a| a.auto_reply),
-        Channel::Discord => get_discord_config_by_tenant(kv, &msg.tenant_id)
-            .await?
-            .map(|c| c.auto_reply),
-        Channel::Email => get_email_address(kv, &msg.tenant_id, &msg.channel_account_id)
-            .await?
-            .map(|a| a.auto_reply),
     };
     Ok(cfg.map(|c| c.wait_seconds).unwrap_or(0))
 }
@@ -87,20 +76,19 @@ async fn forward_to_buffer(env: &Env, msg: &InboundMessage, wait_seconds: u32) -
     Ok(())
 }
 
-/// Handle auto-reply for WhatsApp / Instagram / Email / Discord.
+/// Handle auto-reply for an inbound WhatsApp message.
 ///
 /// Pipeline:
 ///   1. Load the channel's `ReplyConfig`.
 ///   2. Skip if disabled.
 ///   3. Run prompt-injection scan on the body.
-///   4. If any rule is `Prompt`-based, embed the body **once** for cosine
-///      matching across all such rules.
-///   5. Walk `rules` in order; first match wins. Otherwise the
-///      mandatory `default_rule` fires.
-///   6. Build the response: `Canned` → send verbatim (no AI, no credit);
-///      `Prompt` → run the LLM with `persona prompt + rule prompt` (one credit).
-///   7. AI replies are blocked unless the tenant's persona safety status
+///   4. Build the response: `Canned` → send verbatim (no AI, no credit);
+///      `Prompt` → run the LLM with `persona prompt + instruction` (one credit).
+///   5. AI replies are blocked unless the tenant's persona safety status
 ///      is `Approved` and unchanged.
+///   6. AI drafts run the risk gate. A draft that trips it is never sent:
+///      the customer gets a fixed holding sentence, the tenant is paged,
+///      and the conversation enters the handoff path.
 async fn handle_auto_reply(
     msg: &InboundMessage,
     kv: &kv::KvStore,
@@ -111,16 +99,6 @@ async fn handle_auto_reply(
         Channel::WhatsApp => get_whatsapp_account(kv, &msg.channel_account_id)
             .await?
             .map(|a| a.auto_reply),
-        Channel::Instagram => get_instagram_account(kv, &msg.channel_account_id)
-            .await?
-            .filter(|a| a.enabled)
-            .map(|a| a.auto_reply),
-        Channel::Email => get_email_address(kv, &msg.tenant_id, &msg.channel_account_id)
-            .await?
-            .map(|a| a.auto_reply),
-        Channel::Discord => get_discord_config_by_tenant(kv, &msg.tenant_id)
-            .await?
-            .map(|c| c.auto_reply),
     };
 
     let config = match config {
@@ -141,39 +119,12 @@ async fn handle_auto_reply(
         return Ok(());
     }
 
-    // Embed once if any Prompt rule needs to be evaluated. Embedding errors
-    // skip prompt-rule matching entirely (we fall through to keyword rules
-    // and the default).
-    let needs_embedding = config
-        .rules
-        .iter()
-        .any(|r| matches!(r.matcher, ReplyMatcher::Prompt { .. }));
-    let body_embedding = if needs_embedding {
-        match ai::embed(env, &safe_body).await {
-            Ok(v) => Some(v),
-            Err(e) => {
-                console_log!("Inbound embedding failed, prompt rules disabled: {:?}", e);
-                None
-            }
-        }
-    } else {
-        None
-    };
+    let is_ai = matches!(config.response, ReplyResponse::Prompt { .. });
 
-    // Pick the first matching rule, or fall back to the default.
-    let matched: &ReplyRule = config
-        .rules
-        .iter()
-        .find(|rule| matches_rule(&rule.matcher, &safe_body, body_embedding.as_deref()))
-        .unwrap_or(&config.default_rule);
-
-    let is_ai = matches!(matched.response, ReplyResponse::Prompt { .. });
-
-    // Load full onboarding state once for AI-mode rules. We need the
-    // persona (for the prompt) AND the conversation knobs (for the
-    // idle-gap / handoff-cooldown / history-cap window). Skipping the
-    // load on canned-only rules saves a KV hit on the hot keyword
-    // path.
+    // Load full onboarding state once when the response is AI-backed. We
+    // need the persona (for the prompt) AND the conversation knobs (for
+    // the idle-gap / handoff-cooldown / history-cap window). A canned
+    // response skips the KV hit entirely.
     let onboarding = if is_ai {
         Some(get_onboarding(kv, &msg.tenant_id).await?)
     } else {
@@ -360,9 +311,11 @@ async fn handle_auto_reply(
         window.max_history_messages,
     );
 
-    let reply = match &matched.response {
+    let reply = match &config.response {
         ReplyResponse::Canned { text } => text.clone(),
-        ReplyResponse::Prompt { text: rule_prompt } => {
+        ReplyResponse::Prompt {
+            text: reply_instruction,
+        } => {
             let wrapped = match handoff_mode {
                 // Silent was handled with an early return above; if we
                 // reached here in Silent something is very wrong.
@@ -396,12 +349,12 @@ async fn handle_auto_reply(
                         .map(|p| p.active_prompt(&voice_prompt))
                         .unwrap_or_default();
                     let combined = if persona_prompt.is_empty() {
-                        rule_prompt.clone()
+                        reply_instruction.clone()
                     } else {
-                        format!("{persona_prompt}\n\n{rule_prompt}")
+                        format!("{persona_prompt}\n\n{reply_instruction}")
                     };
 
-                    // Wrap the tenant's persona+rule text in the
+                    // Wrap the tenant's persona text in the
                     // safety/alignment envelope. The envelope is
                     // non-editable and ships globally; the bookends
                     // are visible everywhere the user views a prompt
@@ -445,31 +398,31 @@ async fn handle_auto_reply(
         return Ok(());
     }
 
-    // For AI drafts, run the approval gate. The risk gate is the always-on
-    // safety net for `Auto`; `Always` always queues; `NoGate` skips the
-    // gate, but only when the operator's env var is on.
+    // For AI drafts, run the risk gate. A draft that trips it is never
+    // shown to the customer: we send a fixed holding sentence instead,
+    // page the tenant, and drop the conversation into the handoff path.
+    // The credit is not refunded — the model did run.
     //
-    // Skip the gate entirely for the handoff path:
-    //   - holding-pattern replies are pre-approved by construction
-    //     (the model is just saying "a human is on the way"), and
-    //   - the turn that *signals* a handoff also bypasses the queue.
-    //     It's a polite holding sentence, and we want it on the
-    //     customer's screen immediately while we page the tenant.
+    // Skip the gate for the handoff path itself:
+    //   - holding-pattern replies are safe by construction (the model is
+    //     only saying "a human is on the way"), and
+    //   - the turn that *signals* a handoff is already a holding sentence.
     let in_handoff_mode = matches!(handoff_mode, HandoffMode::HoldingPattern);
+    let mut reply = reply;
+    let mut new_handoff = new_handoff;
+    let mut risk_reason = None;
     if is_ai && !in_handoff_mode && !new_handoff {
-        let allow_no_gate = approval::allow_no_gate(env);
-        let persona_ref = persona.as_ref().expect("AI rule must have loaded persona");
-        let decision = approval::decide(matched, &reply, persona_ref, allow_no_gate);
-        if let approval::ApprovalDecision::Queue { reason } = decision {
-            if let Err(e) =
-                approvals::enqueue(env, msg, matched, &reply, reason, &conversation_id).await
-            {
-                // Enqueue failed: don't send (we'd bypass the human review
-                // the rule asked for) and don't restore credit (the AI ran).
-                // Log for visibility and bail.
-                console_log!("Approval enqueue failed: {:?}", e);
-                return Ok(());
-            }
+        let persona_ref = persona.as_ref().expect("AI reply must have loaded persona");
+        if let Some(reason) = crate::risk::signal(&reply, persona_ref) {
+            console_log!(
+                "Risk gate withheld a draft for tenant={} sender={}: {}",
+                msg.tenant_id,
+                msg.sender,
+                reason.as_str()
+            );
+            reply = crate::prompt::RISK_GATE_HOLDING_REPLY.to_string();
+            new_handoff = true;
+            risk_reason = Some(reason);
             if let Err(e) = save_message(
                 db,
                 &generate_id(),
@@ -479,49 +432,18 @@ async fn handle_auto_reply(
                 &msg.sender,
                 &msg.tenant_id,
                 &msg.channel_account_id,
-                Some(MessageAction::AiQueued),
+                Some(MessageAction::HandedOff),
                 Some(&conversation_id),
             )
             .await
             {
-                console_log!("Failed to log queued message: {:?}", e);
+                console_log!("Failed to log withheld draft: {:?}", e);
             }
-            // Persist the inbound turn we just appended, but do NOT
-            // append the queued draft as an assistant turn. Only
-            // sent outbounds enter the conversation history. (If the
-            // draft is rejected or edited later, an unsent assistant
-            // turn would poison the next AI call.)
-            let new_session = crate::types::Session {
-                last_inbound_at: now_iso,
-                handoff: active_handoff.clone(),
-                conversation_id: conversation_id.clone(),
-                messages: session_messages,
-            };
-            if let Err(e) = crate::storage::save_conversation_session(
-                kv,
-                &msg.tenant_id,
-                &msg.channel,
-                &msg.channel_account_id,
-                &msg.sender,
-                &new_session,
-            )
-            .await
-            {
-                console_log!("Failed to persist conversation session: {:?}", e);
-            }
-            return Ok(());
         }
     }
 
-    if let Err(e) = channel::send_reply(
-        &msg.channel,
-        env,
-        &msg.raw_metadata,
-        &msg.sender,
-        &reply,
-        None,
-    )
-    .await
+    if let Err(e) =
+        channel::send_reply(&msg.channel, env, &msg.raw_metadata, &msg.sender, &reply).await
     {
         console_log!("Auto-reply send error: {:?}", e);
         if is_ai {
@@ -590,6 +512,7 @@ async fn handle_auto_reply(
             &msg.channel,
             &msg.sender,
             &safe_body,
+            risk_reason,
         )
         .await
         {
@@ -693,34 +616,6 @@ fn age_minutes(timestamp: &str) -> Option<i64> {
     let now_ms = js_sys::Date::now();
     let delta_min = ((now_ms - then_ms) / 60_000.0) as i64;
     Some(delta_min)
-}
-
-/// Decide whether a single rule's matcher fires on the inbound text.
-/// `body_embedding` is `None` if no Prompt rules exist or embedding failed.
-/// In that case Prompt matchers can never fire.
-fn matches_rule(matcher: &ReplyMatcher, body: &str, body_embedding: Option<&[f32]>) -> bool {
-    match matcher {
-        ReplyMatcher::Default => false, // default fires only via fallback path
-        ReplyMatcher::Keyword { keywords } => {
-            let lower = body.to_lowercase();
-            keywords
-                .iter()
-                .any(|k| !k.is_empty() && lower.contains(&k.to_lowercase()))
-        }
-        ReplyMatcher::Prompt {
-            embedding,
-            threshold,
-            ..
-        } => {
-            let Some(body_vec) = body_embedding else {
-                return false;
-            };
-            if embedding.is_empty() {
-                return false;
-            }
-            ai::cosine(body_vec, embedding) >= *threshold
-        }
-    }
 }
 
 #[cfg(test)]

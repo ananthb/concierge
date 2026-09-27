@@ -77,6 +77,19 @@ pub const HANDOFF_TOKEN: &str = "[[HANDOFF]]";
 /// human is already on the way.
 pub const HOLDING_PATTERN_MIDDLE: &str = "Voice: brief, calm, polite. This conversation has already been escalated to a human.\n\nA teammate has been notified and will respond directly. Until they take over, your only job is to keep the customer comfortable.\n\nFor any further customer message:\n- Acknowledge it in a single sentence.\n- Confirm a human is on the way.\n- Do not try to answer the underlying question.\n- Do not promise a response time.\n- Do not ask for more details.\n- Never emit [[HANDOFF]] again. The handoff has already happened.";
 
+/// Sent verbatim to the customer when the risk gate withholds a draft.
+///
+/// The gate fires *after* the model has already produced a reply we've
+/// decided not to send, so there is nothing to fall back on and no budget
+/// for a second generation. This is a fixed sentence: deterministic, costs
+/// no credit, and says the one true thing — a person is picking it up.
+///
+/// Deliberately vague about *why*. The customer doesn't need to know a
+/// classifier flagged a price mention; the tenant is told that in the
+/// handoff page.
+pub const RISK_GATE_HOLDING_REPLY: &str =
+    "Thanks for that — I'm passing this to a colleague who'll reply here shortly.";
+
 /// Default for how long after the first handoff signal the worker
 /// stays in the holding-pattern path. Past this window, the worker
 /// stops replying entirely and lets the human take it from there.

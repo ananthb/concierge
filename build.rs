@@ -1,23 +1,35 @@
-//! Build-time SRI codegen for the public CSS modules.
+//! Build-time Subresource Integrity codegen for everything the shell loads.
 //!
-//! For every `.css` file in `public/css/`, we emit an entry in a
-//! generated `css_sri.rs` of the form:
-//!     ("tokens.css", "sha384-…")
-//! The order matches `CSS_LOAD_ORDER` below — dependency order from
-//! tokens through responsive, so the rendered `<link>` tags cascade
-//! correctly. Build script reruns when any CSS file or this script
-//! changes; no other file in the worker carries CSS bytes.
+//! Emits a generated `asset_sri.rs` with two tables, each `(filename, "sha384-…")`:
+//!
+//! * `CSS_MODULES` — the stylesheets, in cascade order (`CSS_LOAD_ORDER`):
+//!   tokens first so the custom properties every other file reads are defined,
+//!   `responsive` last so its media-query overrides win.
+//! * `SCRIPTS` — the executable code, in load order (`SCRIPT_LOAD_ORDER`):
+//!   the Elm bundle, then the initialiser that calls into it.
+//!
+//! **Ordering matters and is enforced by `scripts/build-worker.sh`**, which
+//! compiles the frontend *before* invoking `worker-build`. `public/app.js` is a
+//! build artifact, so it has to exist before this script can hash it. Anything
+//! that compiles the crate without having built the frontend first — a bare
+//! `cargo check`, `cargo test`, `cargo clippy` — fails here with the fix named,
+//! rather than silently emitting a wrong hash that would block the bundle at
+//! runtime and leave the app dead.
+//!
+//! The hashes reach two places. The Worker's shell (`src/shell.rs`) embeds them
+//! directly. The prerendered marketing pages in `public/` are snapshots of that
+//! shell, so they inherit them — which means a frontend rebuild without a
+//! re-prerender leaves stale hashes in the static files. CI regenerates the
+//! snapshots and fails on a diff, so that cannot ship quietly.
 
 use std::env;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use base64::Engine;
 use sha2::{Digest, Sha384};
 
-// Load order for the link-tag emission. Tokens first so cascading
-// custom properties resolve in every following module; responsive
-// last so its mobile overrides take precedence.
+/// Cascade order for the stylesheet link tags.
 const CSS_LOAD_ORDER: &[&str] = &[
     "tokens.css",
     "reset.css",
@@ -28,27 +40,76 @@ const CSS_LOAD_ORDER: &[&str] = &[
     "responsive.css",
 ];
 
+/// Load order for the script tags. `app.js` defines `window.Elm`, which
+/// `boot.js` then initialises, so the order is load-bearing rather than
+/// cosmetic.
+const SCRIPT_LOAD_ORDER: &[&str] = &["app.js", "boot.js"];
+
+/// Hash one file into an `integrity` attribute value.
+///
+/// A missing file is fatal. The alternative — a placeholder — would produce a
+/// hash the browser rejects, and an SRI rejection is silent: the page still
+/// renders, the asset just never applies. That is precisely the failure this
+/// script must not be able to cause.
+fn sri_for(path: &Path, hint: &str) -> String {
+    println!("cargo:rerun-if-changed={}", path.display());
+    let bytes = fs::read(path).unwrap_or_else(|e| {
+        panic!(
+            "build.rs: cannot read {} ({e}).\n\n{hint}\n",
+            path.display()
+        )
+    });
+    let digest = Sha384::digest(&bytes);
+    format!(
+        "sha384-{}",
+        base64::engine::general_purpose::STANDARD.encode(digest)
+    )
+}
+
+fn table(name: &str, entries: &[(String, String)]) -> String {
+    let rows: String = entries
+        .iter()
+        .map(|(file, sri)| format!("    (\"{file}\", \"{sri}\"),\n"))
+        .collect();
+    format!("pub const {name}: &[(&str, &str)] = &[\n{rows}];\n")
+}
+
 fn main() {
     let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
-    let css_dir = manifest_dir.join("public").join("css");
+    let public = manifest_dir.join("public");
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
 
     println!("cargo:rerun-if-changed=build.rs");
 
-    let mut entries = String::new();
-    for name in CSS_LOAD_ORDER {
-        let path = css_dir.join(name);
-        println!("cargo:rerun-if-changed={}", path.display());
-        let bytes = fs::read(&path)
-            .unwrap_or_else(|e| panic!("build.rs: failed to read {}: {e}", path.display()));
-        let digest = Sha384::digest(&bytes);
-        let b64 = base64::engine::general_purpose::STANDARD.encode(digest);
-        entries.push_str(&format!("    (\"{name}\", \"sha384-{b64}\"),\n"));
-    }
+    let css: Vec<(String, String)> = CSS_LOAD_ORDER
+        .iter()
+        .map(|name| {
+            let sri = sri_for(
+                &public.join("css").join(name),
+                "This is checked into the repo; a missing one means an incomplete checkout.",
+            );
+            ((*name).to_string(), sri)
+        })
+        .collect();
+
+    let scripts: Vec<(String, String)> = SCRIPT_LOAD_ORDER
+        .iter()
+        .map(|name| {
+            let sri = sri_for(
+                &public.join(name),
+                "public/app.js is built from the Elm sources and is not checked in.\n\
+                 Run `npm run build:frontend` (or scripts/build-frontend.sh) first.\n\
+                 `scripts/build-worker.sh` does this for you, which is why `wrangler dev`\n\
+                 and `wrangler deploy` work without the extra step.",
+            );
+            ((*name).to_string(), sri)
+        })
+        .collect();
 
     let generated = format!(
-        "// @generated by build.rs — do not edit\n\
-         pub const CSS_MODULES: &[(&str, &str)] = &[\n{entries}];\n",
+        "// @generated by build.rs — do not edit\n{}\n{}",
+        table("CSS_MODULES", &css),
+        table("SCRIPTS", &scripts),
     );
-    fs::write(out_dir.join("css_sri.rs"), generated).expect("write css_sri.rs");
+    fs::write(out_dir.join("asset_sri.rs"), generated).expect("write asset_sri.rs");
 }

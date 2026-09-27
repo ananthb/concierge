@@ -7,18 +7,21 @@ const BASE_URL = `http://localhost:${PORT}`;
  * Playwright Test config.
  *
  * Three projects:
- * - `desktop` and `mobile` run the full behavioural + layout suite at
- *   each viewport. They're what `npm test` exercises and what CI gates
- *   on.
- * - `screenshots` only runs `tests/visual.spec.ts` and writes the PNGs
- *   the docs gallery embeds. It's invoked via `npm run screenshots` and
- *   is *not* part of the default run — capturing screenshots churns the
- *   doc/screenshots/ files on every push otherwise.
+ * - `desktop` and `mobile` run the behavioural + layout suite at each
+ *   viewport. They're what `npm test` exercises and what CI gates on.
+ * - `screenshots` only runs `tests/visual.spec.ts` and writes the PNGs in
+ *   `doc/screenshots/`. Invoked via `npm run screenshots` and deliberately
+ *   *not* part of the default run, or every push would churn the images.
+ * - `prerender` only runs `tests/prerender.spec.ts` and writes the static
+ *   marketing pages into `public/`. Invoked via `npm run prerender`, and also
+ *   out of the default run — it writes files, and CI gates on the result being
+ *   unchanged rather than on the tests themselves passing in `npm test`.
  *
- * The dev server starts once per `playwright test` invocation via the
- * shim in `scripts/test-server.mjs`, which writes stub OAuth secrets so
- * /auth/login renders the real login template (not the maintenance
- * fallback the worker shows when essentials are missing).
+ * The dev server starts once per `playwright test` invocation via the shim in
+ * `scripts/test-server.mjs`, which applies migrations and writes stub secrets
+ * so the auth and operator routes behave. It runs `wrangler dev`, whose
+ * `[build]` command compiles the Elm frontend *and* the worker — so app.js is
+ * always in step with the wasm under test.
  */
 export default defineConfig({
   testDir: './tests',
@@ -39,23 +42,30 @@ export default defineConfig({
     {
       name: 'desktop',
       use: { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 800 } },
-      // The mobile-density sweep is keyed off mobile-specific media
-      // breakpoints (table-stack, tap-target floors, --page-pad token),
-      // so running it on desktop would just assert against the wrong
-      // computed values.
-      testIgnore: [/visual\.spec\.ts/, /mobile-density\.spec\.ts/],
+      testIgnore: [/visual\.spec\.ts/, /prerender\.spec\.ts/],
     },
     {
       name: 'mobile',
       use: { ...devices['Desktop Chrome'], viewport: { width: 375, height: 812 } },
-      // The layout sweep manages its own viewports, so running it under both
-      // projects would just duplicate work. Keep it desktop-only.
-      testIgnore: [/visual\.spec\.ts/, /layout\.spec\.ts/],
+      // The layout sweep sets its own viewports, and the API suite has no
+      // viewport at all, so running either twice would just duplicate work.
+      testIgnore: [
+        /visual\.spec\.ts/,
+        /prerender\.spec\.ts/,
+        /layout\.spec\.ts/,
+        /api\.spec\.ts/,
+      ],
     },
     {
       name: 'screenshots',
+      // Sets its own viewport per shot.
       use: { ...devices['Desktop Chrome'] },
       testMatch: /visual\.spec\.ts/,
+    },
+    {
+      name: 'prerender',
+      use: { ...devices['Desktop Chrome'] },
+      testMatch: /prerender\.spec\.ts/,
     },
   ],
 

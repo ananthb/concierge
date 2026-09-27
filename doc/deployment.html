@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Deployment · Concierge docs</title>
-<meta name="description" content="Deploy Concierge to Cloudflare Workers via Cloudflare Builds: bindings, secrets, Meta webhooks, Discord bot, Email Routing, Access policies.">
+<meta name="description" content="Deploy Concierge to Cloudflare Workers via Cloudflare Builds: bindings, secrets, the WhatsApp webhook, Access policies.">
 <meta name="theme-color" content="#e86a2c">
 <link rel="icon" type="image/svg+xml" href="https://concierge.calculon.tech/logo.svg">
 <link rel="stylesheet" href="docs.css">
@@ -50,17 +50,13 @@
       <div class="sidebar__group-label">Channels</div>
       <ul class="sidebar__list">
         <li><a href="whatsapp.html"><span class="dot"></span>WhatsApp</a></li>
-        <li><a href="instagram.html"><span class="dot"></span>Instagram</a></li>
-        <li><a href="email-routing.html"><span class="dot"></span>Email routing</a></li>
-        <li><a href="discord.html"><span class="dot"></span>Discord relay</a></li>
       </ul>
     </div>
     <div class="sidebar__group">
       <div class="sidebar__group-label">Operate</div>
       <ul class="sidebar__list">
         <li><a href="billing.html"><span class="dot"></span>Billing &amp; credits</a></li>
-        <li><a href="management.html"><span class="dot"></span>Management panel</a></li>
-        <li><a href="facebook-app-setup.html"><span class="dot"></span>Facebook app setup</a></li>
+        <li><a href="management.html"><span class="dot"></span>Operator API</a></li>
       </ul>
     </div>
     <div class="sidebar__group">
@@ -86,12 +82,12 @@
       <div class="page-eyebrow">Self&#8209;host · ~20 min</div>
       <h1 class="page-title">Deployment <em>guide</em>.</h1>
       <p class="page-lede">
-        From the <strong>Deploy to Cloudflare</strong> button on the README to a deployed Worker absorbing inbound messages on every channel. Cloudflare Builds handles the build and deploy from your fork; you&rsquo;ll set bindings and secrets in the dashboard, register Meta and Discord apps, and wire webhooks. Plan on twenty minutes if your accounts are ready.
+        From the <strong>Deploy to Cloudflare</strong> button on the README to a Worker answering WhatsApp messages. Cloudflare Builds handles the build and deploy from your fork; you&rsquo;ll set bindings and secrets in the dashboard, register a Meta app, and wire one webhook. Plan on twenty minutes if your accounts are ready.
       </p>
 
       <div class="page-meta">
         <span><b>Audience</b> Operators / agencies</span>
-        <span><b>Prereqs</b> Cloudflare · Meta · Discord</span>
+        <span><b>Prereqs</b> Cloudflare · Meta · Google · Razorpay</span>
         <span><b>Optional</b> Razorpay</span>
         <span><b>Time</b> ~20 min</span>
       </div>
@@ -103,14 +99,14 @@
             <span class="card__chip">CF</span>
             <span class="card__title">Cloudflare account</span>
           </div>
-          <p class="card__desc">Workers, D1, KV, Queues, and Email Routing enabled. Free tier is fine to start; D1 + AI usage will be the first thing to outgrow it.</p>
+          <p class="card__desc">Workers, D1, KV, Queues, Durable Objects, Workers AI and the Email Service enabled. Free tier is fine to start; D1 and AI usage will be the first things to outgrow it.</p>
         </div>
         <div class="card">
           <div class="card__head">
             <span class="card__chip">META</span>
             <span class="card__title">Meta Developer app</span>
           </div>
-          <p class="card__desc">A Facebook App with WhatsApp Business and Instagram Graph products. See <a href="facebook-app-setup.html">Facebook app setup</a>.</p>
+          <p class="card__desc">A Meta app with the WhatsApp Business product and an Embedded Signup configuration. You own one WhatsApp Business Account; your customers attach their own numbers to it.</p>
         </div>
         <div class="card">
           <div class="card__head">
@@ -121,24 +117,17 @@
         </div>
         <div class="card">
           <div class="card__head">
-            <span class="card__chip">DSC</span>
-            <span class="card__title">Discord application</span>
-          </div>
-          <p class="card__desc">For the relay bot and slash commands. <a href="discord.html">Discord integration</a> covers the bot setup.</p>
-        </div>
-        <div class="card">
-          <div class="card__head">
             <span class="card__chip">RZP</span>
             <span class="card__title">Razorpay account <span class="pill" style="margin-left:6px">optional</span></span>
           </div>
-          <p class="card__desc">Only if you want to sell paid credit packs. The hosted service uses this; self&#8209;hosters often skip it.</p>
+          <p class="card__desc">Needed for credit purchases <em>and</em> for the refundable sign-up verification charge, which the onboarding wizard will not finish without on a metered plan. Skip it only if every tenant is on a complimentary plan.</p>
         </div>
         <div class="card">
           <div class="card__head">
             <span class="card__chip">NIX</span>
             <span class="card__title">Nix <span class="pill" style="margin-left:6px">optional</span></span>
           </div>
-          <p class="card__desc">Cloudflare Builds installs <code>rustup</code>, <code>cargo</code>, and Node automatically; no Nix required for CI. For local dev, the flake provides a pinned shell: <code>nix develop</code>.</p>
+          <p class="card__desc">Cloudflare Builds installs <code>rustup</code>, <code>cargo</code> and the <code>elm</code> npm package automatically; no Nix required for CI. For local dev the flake provides a pinned shell with the same compilers: <code>nix develop</code>.</p>
         </div>
       </div>
 
@@ -163,13 +152,12 @@
             <table class="docs">
               <thead><tr><th>Binding</th><th>What it backs</th></tr></thead>
               <tbody>
-                <tr><td><code>DB</code> &rarr; D1 <code>concierge</code></td><td class="muted">SQLite for messages, rules, billing, audit log.</td></tr>
-                <tr><td><code>KV</code></td><td class="muted">Account configs, sessions, persona drafts, billing state.</td></tr>
-                <tr><td><code>AI</code></td><td class="muted">Workers AI (LLaMA reply generation + safety classifier).</td></tr>
-                <tr><td><code>EMAIL</code> (send_email)</td><td class="muted">Outbound forwarding via Email Routing.</td></tr>
-                <tr><td><code>REPLY_BUFFER</code> &rarr; <code>ReplyBufferDO</code></td><td class="muted">Durable Object: buffers inbound messages so we can reply to a batch.</td></tr>
-                <tr><td><code>APPROVALS_DO</code> &rarr; <code>ApprovalsDO</code></td><td class="muted">Durable Object: per-tenant SSE fan-out for the approvals page.</td></tr>
-                <tr><td><code>SAFETY_QUEUE</code> &rarr; <code>concierge-safety</code> + DLQ <code>concierge-safety-dlq</code></td><td class="muted">Persona safety classifier pipeline. If absent, persona safety checks stay <em>Pending</em> and AI replies are blocked tenant-wide; static replies still work.</td></tr>
+                <tr><td><code>DB</code> &rarr; D1 <code>concierge</code></td><td class="muted">Message metadata, billing, payments, the audit log, the archetype catalog.</td></tr>
+                <tr><td><code>KV</code></td><td class="muted">Account configs, auth sessions, persona, conversation state, the demo cache.</td></tr>
+                <tr><td><code>AI</code></td><td class="muted">Workers AI: reply generation, injection scanning, the safety classifier.</td></tr>
+                <tr><td><code>EMAIL</code> (send_email)</td><td class="muted">Outbound only &mdash; the one email sent when a conversation is handed to a human.</td></tr>
+                <tr><td><code>REPLY_BUFFER</code> &rarr; <code>ReplyBufferDO</code></td><td class="muted">Durable Object: buffers inbound messages so a burst gets one reply.</td></tr>
+                <tr><td><code>SAFETY_QUEUE</code> &rarr; <code>concierge-safety</code> + DLQ <code>concierge-safety-dlq</code></td><td class="muted">Persona safety classifier pipeline. If absent, safety checks stay <em>Pending</em> and AI replies are blocked tenant-wide; canned replies still work.</td></tr>
               </tbody>
             </table>
           </div>
@@ -188,13 +176,10 @@
             <table class="docs">
               <thead><tr><th>Secret</th><th>Notes</th></tr></thead>
               <tbody>
-                <tr><td><code>ENCRYPTION_KEY</code></td><td class="muted">32-byte hex (token encryption). Generate with <code>openssl rand -hex 32</code>.</td></tr>
-                <tr><td><code>GOOGLE_OAUTH_CLIENT_ID</code> / <code>GOOGLE_OAUTH_CLIENT_SECRET</code></td><td class="muted">Sign-in.</td></tr>
-                <tr><td><code>META_APP_ID</code> / <code>META_APP_SECRET</code></td><td class="muted">Shared across Facebook Login, Instagram, and WhatsApp.</td></tr>
+                <tr><td><code>GOOGLE_OAUTH_CLIENT_ID</code> / <code>GOOGLE_OAUTH_CLIENT_SECRET</code></td><td class="muted">Sign-in. The only provider.</td></tr>
+                <tr><td><code>META_APP_ID</code> / <code>META_APP_SECRET</code></td><td class="muted">WhatsApp Embedded Signup and webhook signature verification.</td></tr>
                 <tr><td><code>WHATSAPP_ACCESS_TOKEN</code> / <code>WHATSAPP_VERIFY_TOKEN</code></td><td class="muted">Platform WABA token + webhook verifier.</td></tr>
-                <tr><td><code>INSTAGRAM_VERIFY_TOKEN</code></td><td class="muted">Instagram DM webhook verifier.</td></tr>
-                <tr><td><code>DISCORD_PUBLIC_KEY</code> / <code>DISCORD_APPLICATION_ID</code> / <code>DISCORD_BOT_TOKEN</code></td><td class="muted">Discord interactions + bot.</td></tr>
-                <tr><td><code>RAZORPAY_KEY_ID</code> / <code>RAZORPAY_KEY_SECRET</code> / <code>RAZORPAY_WEBHOOK_SECRET</code></td><td class="muted">Only if billing is enabled.</td></tr>
+                <tr><td><code>RAZORPAY_KEY_ID</code> / <code>RAZORPAY_KEY_SECRET</code> / <code>RAZORPAY_WEBHOOK_SECRET</code></td><td class="muted">Credit purchases and the sign-up verification charge.</td></tr>
               </tbody>
             </table>
           </div>
@@ -208,11 +193,11 @@
               <thead><tr><th>Variable</th><th>What it&rsquo;s for</th></tr></thead>
               <tbody>
                 <tr><td><code>CF_ACCESS_TEAM</code></td><td class="muted">Your Cloudflare Access team name (the subdomain in <code>myteam.cloudflareaccess.com</code>).</td></tr>
-                <tr><td><code>CF_ACCESS_AUD</code></td><td class="muted">Application Audience (AUD) tag from your Access app (path <code>/manage*</code>).</td></tr>
+                <tr><td><code>CF_ACCESS_AUD</code></td><td class="muted">Application Audience (AUD) tag from your Access app (path <code>/api/manage*</code>).</td></tr>
                 <tr><td><code>PUBLIC_BASE_URL</code></td><td class="muted">Your deployment&rsquo;s primary URL (e.g. <code>https://concierge.example.com</code>).</td></tr>
-                <tr><td><code>EMAIL_DOMAIN</code></td><td class="muted">Email domain you control. Set MX records on its apex and add it to Cloudflare Email Routing.</td></tr>
-                <tr><td><code>WHATSAPP_WABA_ID</code></td><td class="muted">Your WhatsApp Business Account ID. Only required if you&rsquo;re running WhatsApp.</td></tr>
-                <tr><td><code>WHATSAPP_SIGNUP_CONFIG_ID</code></td><td class="muted">Meta Embedded Signup configuration ID. Only required if you&rsquo;re running WhatsApp.</td></tr>
+                <tr><td><code>EMAIL_DOMAIN</code></td><td class="muted">Domain handoff notifications are sent <em>from</em>. No MX records needed &mdash; nothing is received by email.</td></tr>
+                <tr><td><code>WHATSAPP_WABA_ID</code></td><td class="muted">Your WhatsApp Business Account ID.</td></tr>
+                <tr><td><code>WHATSAPP_SIGNUP_CONFIG_ID</code></td><td class="muted">Meta Embedded Signup configuration ID. Without it the frontend hides the connect button.</td></tr>
               </tbody>
             </table>
           </div>
@@ -221,7 +206,7 @@
 
         <li>
           <h3>Deploy</h3>
-          <p>Push to <code>main</code>. Cloudflare Builds runs <code>npm run deploy</code>: installs <code>worker-build</code>, compiles the Rust crate to WASM, applies any pending D1 migrations, runs <code>wrangler deploy</code>. Watch the build log under <strong>Settings &rsaquo; Builds</strong>; it prints the deployed Worker URL when it&rsquo;s done.</p>
+          <p>Push to <code>main</code>. Cloudflare Builds runs <code>npm run deploy</code> &rarr; <code>wrangler deploy</code> &rarr; <code>scripts/build-worker.sh</code>, which compiles the Elm frontend to <code>public/app.js</code> <em>then</em> the Rust crate to WASM. The frontend goes first deliberately: a deploy that shipped the wasm without a matching bundle would serve a shell that loads a 404. Pending D1 migrations are applied as part of the deploy. Watch the build log under <strong>Settings &rsaquo; Builds</strong>; it prints the deployed Worker URL when done.</p>
           <div class="codeblock">
             <div class="codeblock__head">
               <span class="codeblock__lang">bash</span>
@@ -234,59 +219,47 @@
         </li>
 
         <li>
-          <h3>Configure Meta webhooks</h3>
-          <p>In the Meta Developer Console, point both products at your Worker. Subscribe to the <code>messages</code> field on each.</p>
+          <h3>Configure the WhatsApp webhook</h3>
+          <p>In the Meta Developer Console, point the WhatsApp product at your Worker and subscribe to the <code>messages</code> field.</p>
           <div class="aside-block">
-            <div class="aside-block__title">Webhook URLs</div>
+            <div class="aside-block__title">Webhook URL</div>
             <dl>
               <dt>WhatsApp</dt><dd><code>https://your-domain/webhook/whatsapp</code></dd>
-              <dt>Instagram</dt><dd><code>https://your-domain/webhook/instagram</code></dd>
             </dl>
           </div>
-          <p>The verify tokens you set in step&nbsp;4 are echoed back during webhook setup. See <a href="facebook-app-setup.html">Facebook app setup</a> for screenshots.</p>
+          <p>The <code>WHATSAPP_VERIFY_TOKEN</code> you set in step&nbsp;4 is echoed back during the subscription handshake. Also configure an <strong>Embedded Signup</strong> configuration on the app and put its ID in <code>WHATSAPP_SIGNUP_CONFIG_ID</code> &mdash; that flow is how your customers attach their numbers, and the callback lands at <code>/whatsapp/signup/*</code>.</p>
         </li>
 
         <li>
-          <h3>Set up the Discord bot</h3>
+          <h3>Onboard the sender domain for outbound email</h3>
+          <p>Handoff notifications are sent from <code>noreply@&lt;EMAIL_DOMAIN&gt;</code> through the Cloudflare Email Service, which requires the sender domain to be onboarded in the dashboard before sends succeed.</p>
           <ol>
-            <li>Create a Discord application at <a href="https://discord.com/developers/applications">discord.com/developers</a>.</li>
-            <li>Set the <strong>Interactions Endpoint URL</strong> to <code>https://your-domain/discord/interactions</code>.</li>
-            <li>Create a bot user and copy the token into <code>DISCORD_BOT_TOKEN</code>.</li>
-            <li>Register the slash commands <code>/status</code>, <code>/domains</code>, <code>/rules</code> via the Discord API.</li>
-            <li>Invite the bot to your server with the appropriate permissions.</li>
+            <li>Open <strong>Email &rsaquo; Email Service</strong> in the Cloudflare dashboard and add your <code>EMAIL_DOMAIN</code> as a sender domain.</li>
+            <li>Complete the DNS verification it asks for.</li>
           </ol>
-          <p>Detailed walkthrough on the <a href="discord.html">Discord integration page</a>.</p>
-        </li>
-
-        <li>
-          <h3>Set up email routing</h3>
-          <p>Cloudflare Email Routing handles inbound mail for the domain in <code>EMAIL_DOMAIN</code>. To finish:</p>
-          <ol>
-            <li>In the Cloudflare dashboard, open <strong>Email Routing</strong> for your email domain.</li>
-            <li>Add a <strong>catch&#8209;all</strong> routing rule: <em>Action</em> → <strong>Send to a Worker</strong> → select <code>concierge</code>.</li>
-          </ol>
-          <p>See <a href="email-routing.html">Email routing</a> for the per-tenant address model.</p>
+          <p class="muted">No MX records, no Email Routing rule, no catch-all. Concierge does not receive email &mdash; the inbound email channel was removed. This is a one-time step because every handoff email comes from the same fixed address.</p>
         </li>
 
         <li>
           <h3>Set up Cloudflare Access for management</h3>
           <ol>
             <li>In the Cloudflare dashboard, go to <strong>Zero Trust → Access → Applications</strong>.</li>
-            <li>Create an application with the path <code>your-domain/manage*</code>. No slash before the asterisk. The wildcard placement matters: <code>/manage/*</code> leaves the bare dashboard exposed, <code>/manage</code> alone leaves every subroute exposed, and <code>/manage*</code> covers both.</li>
+            <li>Create an application with the path <code>your-domain/api/manage*</code>. No slash before the asterisk. The wildcard placement matters: <code>/api/manage/*</code> leaves the bare endpoint exposed, <code>/api/manage</code> alone leaves every subroute exposed, and <code>/api/manage*</code> covers both.</li>
             <li>Copy the <strong>Application Audience (AUD) Tag</strong> and set it as the <code>CF_ACCESS_AUD</code> variable under <strong>Workers &rsaquo; concierge &rsaquo; Settings &rsaquo; Variables and Secrets</strong>. Also set <code>CF_ACCESS_TEAM</code> there.</li>
             <li>Add a policy allowing the emails that should have management access.</li>
           </ol>
-          <p>See the <a href="management.html">Management panel</a> page. If <code>/manage</code> 403&rsquo;s with &ldquo;Forbidden: Cloudflare Access required&rdquo; <em>after</em> a successful Access login, run <code>wrangler tail</code> while reloading. The worker logs the specific failure mode (missing token, missing env var, JWT verification error).</p>
+          <p>See the <a href="management.html">Operator API</a> page. If a call answers <code>403 access_required</code> <em>after</em> a successful Access login, run <code>wrangler tail</code> while retrying: the Worker logs the specific failure mode (missing token, missing env var, JWT verification error).</p>
         </li>
 
         <li>
-          <h3>Set up Razorpay <span class="pill">optional</span></h3>
+          <h3>Set up Razorpay</h3>
           <ol>
             <li>Create a Razorpay account and grab your API keys.</li>
-            <li>Set up a webhook at <code>https://your-domain/webhook/razorpay</code> subscribing to <code>payment.captured</code>, <code>payment.failed</code>, <code>subscription.activated</code>, <code>subscription.charged</code>, <code>subscription.halted</code>, <code>subscription.cancelled</code>.</li>
+            <li>Set up a webhook at <code>https://your-domain/webhook/razorpay</code> subscribing to <code>payment.captured</code> and <code>payment.failed</code>. There are no subscriptions to subscribe to &mdash; billing is prepaid credits only.</li>
             <li>Set the webhook secret and API keys as Worker secrets.</li>
           </ol>
-          <p>See <a href="billing.html">Billing</a> for the credit&#8209;pack model.</p>
+          <p><strong>The webhook is not optional if you charge anyone.</strong> Credits are granted by the webhook and by nothing else: the frontend&rsquo;s post-checkout call only verifies the payment signature, so a customer who pays with the webhook misconfigured gets no credits. The same webhook also refunds the sign-up verification charge.</p>
+          <p>See <a href="billing.html">Billing</a> for the credit model.</p>
         </li>
       </ol>
 

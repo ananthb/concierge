@@ -49,17 +49,13 @@
       <div class="sidebar__group-label">Channels</div>
       <ul class="sidebar__list">
         <li><a href="whatsapp.html"><span class="dot"></span>WhatsApp</a></li>
-        <li><a href="instagram.html"><span class="dot"></span>Instagram</a></li>
-        <li><a href="email-routing.html"><span class="dot"></span>Email routing</a></li>
-        <li><a href="discord.html"><span class="dot"></span>Discord relay</a></li>
       </ul>
     </div>
     <div class="sidebar__group">
       <div class="sidebar__group-label">Operate</div>
       <ul class="sidebar__list">
         <li><a href="billing.html"><span class="dot"></span>Billing &amp; credits</a></li>
-        <li><a href="management.html"><span class="dot"></span>Management panel</a></li>
-        <li><a href="facebook-app-setup.html"><span class="dot"></span>Facebook app setup</a></li>
+        <li><a href="management.html"><span class="dot"></span>Operator API</a></li>
       </ul>
     </div>
     <div class="sidebar__group">
@@ -86,98 +82,118 @@
       <h1 class="page-title">Architecture</h1>
 
 
-<p>Concierge is a Cloudflare Worker (Rust → WebAssembly). All persistent state lives in Cloudflare D1 (metadata, payments) and KV (configs, sessions, in-flight buffers). No message content is stored at rest.</p>
+<p>Concierge is a Cloudflare Worker (Rust → WebAssembly) serving a JSON API, plus an Elm single-page app compiled to one static asset. All persistent state lives in Cloudflare D1 (metadata, billing, the archetype catalog) and KV (configs, sessions, conversation state). No message content is stored at rest.</p>
 
-<h2>Inbound channels</h2>
+<h2>The two halves</h2>
+<ul>
+  <li><strong>Worker owns:</strong> <code>/api/*</code>, the webhooks, the OAuth redirects, and the SPA shell. Nothing else.</li>
+  <li><strong>Frontend owns:</strong> every user-facing string and every screen. It is an Elm <code>Browser.application</code> in <code>frontend/</code>, compiled by <code>scripts/build-frontend.sh</code> to <code>public/app.js</code> and served by Cloudflare's asset handler.</li>
+  <li><strong>The shell:</strong> <code>src/shell.rs</code> renders one near-empty HTML document, served by the Worker for the routes that aren't prerendered and snapshotted by the prerenderer for the ones that are. It carries no copy — every string is in the Elm app, and a second copy here would be the stale one. Its two <code>&lt;script&gt;</code> tags sit in <code>&lt;head&gt;</code> with <code>defer</code> rather than at the end of <code>&lt;body&gt;</code>: Elm removes the body's children on init, scripts included, and the prerenderer snapshots the DOM after that happens — a body-tagged script would be missing from the static files and they would load as inert HTML.</li>
+  <li><strong>The marketing routes are prerendered to static HTML</strong> and served straight off Cloudflare's asset handler — the Worker is not invoked for them at all, so they cost no wasm cold start. See Prerendering below.</li>
+  <li><strong>One bootstrap request.</strong> <code>GET /api/bootstrap</code> returns pricing, the demo config and persona catalog, and the session if there is one. The first frame after the spinner is the real page rather than a skeleton filling in four times.</li>
+</ul>
+
+<h2>Prerendering</h2>
+<ul>
+  <li><strong>What and why.</strong> Elm has no server-side rendering story, so a crawler that doesn't execute JavaScript saw an empty <code>&lt;body&gt;</code> and two script tags — every marketing route was invisible. <code>tests/prerender.spec.ts</code> boots the real app in a headless browser against the real Worker, waits for the route to render, and writes <code>document.documentElement.outerHTML</code> to <code>public/</code>. Cloudflare's asset handler then answers <code>/pricing</code> with <code>public/pricing.html</code> and never runs the Worker.</li>
+  <li><strong>Routes:</strong> <code>/</code>, <code>/pricing</code>, <code>/features</code>, <code>/terms</code>, <code>/privacy</code>. Everything else (<code>/wizard</code>, <code>/dashboard/*</code>, <code>/manage</code>) is Worker-rendered from <code>src/shell.rs</code>, which is also the shell the prerenderer snapshots — so the two can't drift.</li>
+  <li><strong>Elm does not hydrate.</strong> <code>Browser.application</code> expects to own an empty <code>&lt;body&gt;</code>; handed a foreign tree it renders without taking ownership, which produces a page that looks perfect and is completely inert — link clicks fall through to the browser as full navigations. <code>public/boot.js</code> therefore clears the body before <code>Elm.Main.init</code>. That costs at most one frame of blank, because the markup Elm renders next is the markup just removed: the snapshot is this app's own output.</li>
+  <li><strong>Numbers are deliberately not captured.</strong> The prerenderer refuses <code>/api/bootstrap</code>, so each page renders its copy with data-dependent parts in the not-loaded state it already handles. Baking the seeded rate into a static file would go stale the moment pricing changed through the operator API, and a staleness check could not detect it — it compares against the same seeded database. Crawlers get the prose, which is the indexable content; the rate only ever comes from the live API. The pages are structured for this: copy renders outside the <code>RemoteData</code> wrapper, only the values inside it.</li>
+  <li><strong>Committed, and gated.</strong> Cloudflare Builds has no browser, so this cannot run at deploy time; the output is committed. CI regenerates and fails on <code>git diff -- public/</code>, so editing Elm copy without running <code>npm run prerender</code> breaks the build rather than quietly serving stale HTML.</li>
+  <li><strong>Headers.</strong> A prerendered page never reaches <code>add_security_headers</code>, so <code>public/_headers</code> states the same policy for it. <code>tests/csp.spec.ts</code> compares the two and fails if they drift — without that file the only pages an anonymous visitor sees would be the least hardened on the deploy.</li>
+</ul>
+
+<h2 id="sri">Subresource Integrity</h2>
+<p><code>build.rs</code> generates a SHA-384 hash for every stylesheet <em>and</em> both scripts, and the shell emits them as <code>integrity</code> attributes. Covering the scripts is the point: an earlier revision hashed only the CSS, which left <code>/app.js</code> — the executable part — unprotected.</p>
+<p>An SRI rejection is <strong>silent</strong>: the page still renders, the asset simply never applies. Four things keep the hashes honest, because documentation alone would not:</p>
+<ul>
+  <li><code>scripts/build-worker.sh</code> compiles the frontend <em>before</em> the wasm, so <code>build.rs</code> hashes the <code>app.js</code> that will actually be served. Ordering, not convention.</li>
+  <li><code>build.rs</code> refuses to emit a placeholder for a file it cannot read. A crate compiled without the frontend fails with the fix named, rather than producing a hash the browser will reject at runtime.</li>
+  <li>The prerendered pages inherit the hashes by snapshotting the shell, so a frontend rebuild without a re-prerender would leave stale ones in the static files. CI regenerates the snapshots and fails on a diff.</li>
+  <li><code>tests/app.spec.ts</code> asserts every stylesheet is <em>applied</em> by the browser and that the app actually boots — the two things a blocked asset breaks. Asserting on effects rather than on hash strings is deliberate: a page that looks right and does nothing is the failure mode worth catching.</li>
+</ul>
+<p>This is belt-and-braces for same-origin files. Anyone who can modify <code>public/</code> can modify the prerendered HTML too, hashes included, so it is not a defence against a compromised origin; it is a guard against an asset being altered or truncated between build and serve.</p>
+
+<h2>API conventions</h2>
+<ul>
+  <li><strong>Envelope:</strong> success returns the payload at the top level. Failure returns <code>{"error": {"code", "message"}}</code> with a matching status. <code>code</code> is a stable machine string the frontend matches on; <code>message</code> is shown to the user verbatim. Without this the frontend would reduce a useful "Connect a WhatsApp number to continue." to a bare 400.</li>
+  <li><strong>Auth is a cookie, and only a cookie.</strong> The SPA and the Worker are always same-origin, so the <code>HttpOnly; Secure; SameSite=Lax</code> session cookie set by <code>/auth/callback</code> rides along on every request. There is no token to store, attach or refresh, and nothing reads <code>document.cookie</code>.</li>
+  <li><strong>Signed out is a status code, not a redirect.</strong> Any protected endpoint answers <code>401 unauthenticated</code>. A redirect to a login page would hand the frontend HTML its decoder can't read; instead the app drops its session and renders the login screen.</li>
+  <li><strong>No inline script, and no CSP nonce.</strong> The policy was nonce-based; a static file can't carry a per-response value, so initialisation moved to <code>/boot.js</code> and the policy became plain <code>script-src 'self'</code> — which is <em>stricter</em>, since <code>'self'</code> admits only our own files where <code>'self' 'nonce-…'</code> also admitted whatever inline block carried the right nonce.</li>
+  <li><strong>CSRF:</strong> every state-changing request must carry <code>X-Concierge-Request</code>. A cross-site form post can't reach the API because the cookie is <code>SameSite=Lax</code>, and a custom header can't be set cross-origin without a preflight the Worker never grants. Checked before any handler runs, so a missing header can't be mistaken for a payload validation error. This replaced the per-tenant CSRF token the old HTML forms posted.</li>
+  <li><strong>No caching:</strong> every API response is <code>no-store</code>. So is the shell, which carries a nonce; <code>/app.js</code> is the immutable part.</li>
+  <li><strong>Redirect flows stay outside the API:</strong> Google OAuth (<code>/auth/*</code>), the WhatsApp Embedded Signup callback (<code>/whatsapp/signup/*</code>) and the webhooks all speak their counterparty's protocol.</li>
+</ul>
+
+<h2>Inbound channel</h2>
 
 <h3>WhatsApp Business</h3>
 <ul>
-  <li><strong>Transport:</strong> Meta Cloud API webhooks at <code>POST /webhook/whatsapp</code>.</li>
-  <li><strong>Auth:</strong> WhatsApp Embedded Signup OAuth → tenant exchanges code for system-user token, scoped to one phone number ID.</li>
+  <li><strong>Transport:</strong> Meta Cloud API webhooks at <code>POST /webhook/whatsapp</code>. Signature verified as HMAC-SHA256 over the raw body against <code>META_APP_SECRET</code>, compared in constant time.</li>
+  <li><strong>Onboarding:</strong> WhatsApp Embedded Signup. The tenant attaches their own number to the platform's WhatsApp Business Account; the callback at <code>/whatsapp/signup/*</code> exchanges the code, reads the Meta user's identity, and can create the tenant if this is their first contact with us.</li>
   <li><strong>Tenant lookup:</strong> reverse index <code>wa_phone:{phone_number_id}</code> → WhatsApp account id → tenant id.</li>
-  <li><strong>Outbound:</strong> Meta Graph API <code>POST /{phone_number_id}/messages</code> with the system-user token.</li>
-  <li><strong>Limits:</strong> no message-history endpoint, so post-hoc batching can't reconstruct text from older messages: see Reply Buffer below.</li>
+  <li><strong>Outbound:</strong> Meta Graph API <code>POST /{phone_number_id}/messages</code> using the single platform token <code>WHATSAPP_ACCESS_TOKEN</code>. Nothing per-tenant is stored, so there is nothing per-tenant to seal or rotate — which is why the AES-256-GCM token encryption that earlier revisions carried is gone, along with <code>ENCRYPTION_KEY</code>.</li>
+  <li><strong>Limits:</strong> no message-history endpoint, so post-hoc batching can't reconstruct text from older messages. See Reply buffer below.</li>
 </ul>
 
-<h3>Instagram DMs</h3>
-<ul>
-  <li><strong>Transport:</strong> Meta webhook events, same handler family as WhatsApp.</li>
-  <li><strong>Auth:</strong> Facebook Login → finds the user's Pages → finds the IG business account on each page → stores per-page access token (AES-256-GCM encrypted with <code>ENCRYPTION_KEY</code>).</li>
-  <li><strong>Tenant lookup:</strong> <code>ig_page:{page_id}</code> reverse index → IG account → tenant.</li>
-  <li><strong>Outbound:</strong> Graph API <code>POST /me/messages</code> with the page token.</li>
-</ul>
-
-<h3>Discord</h3>
-<ul>
-  <li><strong>Install:</strong> OAuth2 <code>scope=bot+applications.commands</code>, permission bitfield <code>76928</code> (SEND_MESSAGES | VIEW_CHANNEL | READ_MESSAGE_HISTORY | ADD_REACTIONS | MANAGE_MESSAGES). Callback at <code>/auth/discord/callback</code> records <code>guild_id → tenant_id</code> in KV.</li>
-  <li><strong>Inbound transport:</strong> Application Webhook Events at <code>POST /discord/events</code>. <code>MESSAGE_CREATE</code> events drive AI auto-reply.</li>
-  <li><strong>Triggers:</strong> per-tenant flags on <code>DiscordConfig</code>: <code>inbound_mentions</code> (reply when @-mentioned), <code>inbound_channel_ids[]</code> (reply to every message in these channels). DMs unsupported with the shared bot.</li>
-  <li><strong>Interactions:</strong> <code>POST /discord/interactions</code> handles slash commands (<code>/status</code>, <code>/domains list</code>, <code>/rules list</code>) and buttons (Reply, Approve, Reject, Drop).</li>
-  <li><strong>Signature verification:</strong> Ed25519 over <code>timestamp + body</code> using <code>DISCORD_PUBLIC_KEY</code>; same scheme for both endpoints.</li>
-  <li><strong>Outbound:</strong> shared bot token (<code>DISCORD_BOT_TOKEN</code> env secret), POST to <code>/channels/{id}/messages</code> via the <code>botrelay</code> crate.</li>
-</ul>
-
-<h3>Email</h3>
-<ul>
-  <li><strong>Transport:</strong> Cloudflare Email Routing. Every <code>*.cncg.email</code> subdomain gets MX records pointed at the worker. Inbound mail invokes the worker's <code>email</code> event handler with the raw RFC 2822 bytes.</li>
-  <li><strong>Tenant lookup:</strong> <code>email_domain:{domain}</code> KV reverse index.</li>
-  <li><strong>Routing rules:</strong> per-domain ordered list in KV at <code>email_rules:{tenant}:{domain}</code>. Each rule has <code>MatchCriteria</code> (from, to, subject, body globs + has_attachment) and an <code>EmailAction</code> (drop, spam, forward_email, forward_discord, ai_reply).</li>
-  <li><strong>Outbound:</strong> Cloudflare Email Service via the <code>EMAIL</code> binding's structured-message API. Sender domain must be onboarded in the Email Service dashboard.</li>
-  <li><strong>Reverse aliases:</strong> when forwarding, the From header is rewritten to a generated address on the tenant's domain so replies route back through Concierge. Mapping stored in <code>email_reverse:*</code> with 30-day TTL.</li>
-  <li><strong>Loop detection:</strong> outbound messages carry <code>X-EmailProxy-Forwarded</code>; inbound messages with that header are rejected.</li>
-</ul>
+<div class="callout callout--note">
+  <div class="callout__icon">i</div>
+  <div class="callout__body">
+    <strong>Channels that were cut</strong>
+    <p>Instagram DMs, the Discord relay and inbound email were each a full channel in earlier revisions, with their own webhooks, token storage and reverse indexes. They were removed to reach a launchable surface. The pipeline still dispatches on a <code>Channel</code> enum with one variant, so restoring one is a variant plus a match arm rather than re-plumbing the pipeline — but the adapters themselves are gone and would be rewritten.</p>
+  </div>
+</div>
 
 <h2>AI reply pipeline</h2>
 <ul>
-  <li><strong>Inference binding:</strong> Cloudflare Workers AI <code>AI</code> binding. Default models: <code>llama-4-scout-17b-16e-instruct</code> for replies, <code>llama-3.1-8b-instruct-fast</code> for prompt-injection scanning and persona safety classification, <code>@cf/baai/bge-base-en-v1.5</code> for embeddings. Reply and fast models are configurable via <code>AI_MODEL</code> / <code>AI_FAST_MODEL</code> env vars; the embedding model id is centralized in <code>ai::EMBEDDING_MODEL</code>.</li>
-  <li><strong>Prompt envelope:</strong> every system prompt sent to the reply model is wrapped by <code>prompt::wrap(middle)</code>: a fixed <code>PREAMBLE</code> framing the model as a small-business reply assistant, the editable middle (persona + rule prompt), and a fixed <code>POSTAMBLE</code> with universal house rules, jailbreak rails, and the handoff sentinel <code>[[HANDOFF]]</code>. Both bookends are constants in <code>src/prompt.rs</code>; tenant content can never reach the model alone, and admin templates render them verbatim alongside the editable middle so what-you-see is what-the-model-sees.</li>
-  <li><strong>Persona prompt:</strong> tenant-wide. Lives in <code>PersonaConfig.source</code> as one of two variants: <code>Builder(PersonaBuilder)</code> or <code>Custom(String)</code>. The builder carries voice archetype, business name + type, city, <code>goal</code> (free text + optional URL), <code>handoff_conditions</code>, catch-phrases, and off-topic boundaries; <code>personas::generate</code> renders these into the editable middle. <code>PersonaConfig::active_prompt()</code> returns the rendered middle (generated from builder fields or the raw custom string). Curated archetypes live in the <code>personas</code> D1 catalog (see below) and are <em>copied</em> into the tenant's builder rather than referenced — the tenant owns and edits their own snapshot.</li>
-  <li><strong>Reply rules:</strong> per-channel <code>ReplyConfig { enabled, rules: Vec&lt;ReplyRule&gt;, default_rule, wait_seconds }</code>. The pipeline walks <code>rules</code> in order; first match wins; otherwise the mandatory <code>default_rule</code> fires. Each rule has a <code>matcher</code> (<code>StaticText { keywords }</code> for case-insensitive substring or <code>Prompt { description, embedding, threshold }</code> for cosine-similarity intent matching) and a <code>response</code> (<code>Canned { text }</code> sent verbatim, or <code>Prompt { text }</code> appended to the persona prompt and run through the LLM).</li>
-  <li><strong>Embedding step:</strong> if any <code>Prompt</code> rule exists, the inbound message is embedded <em>once</em> per delivery and compared via <code>ai::cosine</code> to each rule's pre-computed embedding (computed at rule-save time, stored in the rule alongside the model id). Default threshold is 0.72; tunable per rule.</li>
-  <li><strong>Persona safety gate:</strong> AI replies (<code>ReplyResponse::Prompt</code>) are blocked unless the tenant's persona is <code>Approved</code> <em>and</em> its hash hasn't drifted since the last vetting. Canned responses are unaffected. See "Persona safety queue" below.</li>
-  <li><strong>Final prompt:</strong> the system prompt is <code>prompt::wrap(persona.active_prompt() + "\n\n" + rule_prompt)</code> — preamble + middle + postamble. The chat history (recent <code>(role, content)</code> turns from the conversation session, capped by <code>ConversationConfig::max_history_messages</code>) is passed as the prior turns. The latest inbound is the final <code>user</code> turn. <code>ai::generate_chat_reply</code> forwards the structured request to the Workers AI binding; an empty history degenerates to a single-turn call.</li>
-  <li><strong>Handoff sentinel:</strong> every model reply is run through <code>prompt::detect_and_strip_handoff</code> before it leaves the worker. Case-insensitive search for <code>[[HANDOFF]]</code> strips the token, and a present token flips the session into the holding-pattern path. See "Conversation sessions &amp; handoff" below.</li>
-  <li><strong>Injection scan:</strong> incoming bodies are truncated to 1000 chars, then a fast classifier checks for instruction-override patterns. Rejected messages skip the entire pipeline (no rule matching, no reply).</li>
-  <li><strong>Billing:</strong> only the AI reply step deducts a credit; static <code>Canned</code> responses are free, and embeddings/intent matching/safety classification are free. Deduction happens before the AI call (optimistic), restored on any failure path. Operators can grant credits to a specific tenant from the management panel.</li>
-  <li><strong>Pricing:</strong> flat per-AI-reply rate, no tiers. The unit price (in milli-units) for each currency is operator-configurable via the singleton <code>pricing_config</code> row and the management panel.</li>
+  <li><strong>Inference binding:</strong> Cloudflare Workers AI <code>AI</code> binding. Default models: <code>llama-4-scout-17b-16e-instruct</code> for replies, <code>llama-3.1-8b-instruct-fast</code> for prompt-injection scanning and persona safety classification. Both configurable via <code>AI_MODEL</code> / <code>AI_FAST_MODEL</code>. The BGE embedding model went with the rule matcher.</li>
+  <li><strong>Prompt envelope:</strong> every system prompt is wrapped by <code>prompt::wrap(middle)</code>: a fixed <code>PREAMBLE</code> framing the model as a small-business reply assistant, the editable middle (the tenant's persona), and a fixed <code>POSTAMBLE</code> carrying house rules, jailbreak rails and the handoff sentinel <code>[[HANDOFF]]</code>. Both bookends are constants in <code>src/prompt.rs</code>; tenant content never reaches the model alone, and the API returns all three parts so the UI can render what-you-see-is-what-the-model-sees.</li>
+  <li><strong>Persona prompt:</strong> tenant-wide, in <code>PersonaConfig.source</code> as one of two variants — <code>Builder(PersonaBuilder)</code> or <code>Custom(String)</code>, never a blend, so there is exactly one source for the active prompt. The builder carries archetype slug, business name and type, city, hours, <code>goal</code> (free text + optional sanitized URL), catch-phrases, off-topics, a <code>never</code> line, and <code>handoff_conditions</code>; <code>personas::generate</code> renders these into the middle. Curated archetypes live in the <code>archetypes</code> D1 catalog and are referenced by slug for their voice prompt, with the tenant's own fields layered over.</li>
+  <li><strong>Reply config:</strong> per-channel <code>ReplyConfig { enabled, response, wait_seconds }</code>. <code>response</code> is <code>Canned { text }</code> (sent verbatim, free) or <code>Prompt { text }</code> (appended to the persona and run through the LLM, one credit). The ordered rule list with keyword and embedding matchers, and the per-rule <code>ApprovalPolicy</code>, are gone; the field is deserialized with <code>alias = "default_rule"</code> so existing records still load.</li>
+  <li><strong>Persona safety gate:</strong> AI replies are blocked unless the tenant's persona is <code>Approved</code> <em>and</em> its hash hasn't drifted since the last vetting. Canned responses are unaffected. See Persona safety queue below.</li>
+  <li><strong>Final prompt:</strong> <code>prompt::wrap(persona.active_prompt() + "\n\n" + instruction)</code>. Recent <code>(role, content)</code> turns from the conversation session, capped by <code>max_history_messages</code>, are passed as prior turns; the latest inbound is the final <code>user</code> turn. An empty history degenerates to a single-turn call.</li>
+  <li><strong>Risk gate:</strong> <code>src/risk.rs</code> runs four pure, synchronous checks on the generated draft — length bounds (8–600 chars), money words, commitment words, and drift into the persona's own off-topics or <code>never</code> line. No model call, no I/O. A draft that trips any of them is <strong>not sent</strong>: the customer receives <code>prompt::RISK_GATE_HOLDING_REPLY</code>, the conversation enters handoff, the tenant is emailed with the reason, and a row is logged with action <code>handed_off</code>. The credit is not refunded, because the model ran. Always on — there is no per-rule policy and no <code>ALLOW_NO_GATE</code> override any more.</li>
+  <li><strong>Handoff sentinel:</strong> every model reply passes through <code>prompt::detect_and_strip_handoff</code> before leaving the worker. A case-insensitive match strips the token and flips the session into the holding-pattern path.</li>
+  <li><strong>Injection scan:</strong> bodies are truncated to 1000 chars, then a fast classifier checks for instruction-override patterns. A rejected message skips the entire pipeline: no reply, no credit.</li>
+  <li><strong>Billing:</strong> only the AI reply step deducts a credit. Canned responses, the injection scan and safety classification are free. Deduction is optimistic (before the call) and restored on generation or send failure. Operators can grant credits per tenant through the operator API.</li>
+  <li><strong>Pricing:</strong> a flat per-AI-reply rate, no tiers. The unit price in milli-minor units per currency lives in the singleton <code>pricing_config</code> row, operator-configurable.</li>
 </ul>
 
 <h2>Conversation sessions &amp; handoff</h2>
 <ul>
-  <li><strong>Session record:</strong> <code>Session</code> in <code>src/types.rs</code>, persisted to KV at <code>convsession:{tenant}:{channel}:{sender}</code>. Holds a stable <code>conversation_id</code>, <code>last_inbound_at</code>, a bounded <code>messages: Vec&lt;(role, content)&gt;</code>, and an optional <code>handoff: Option&lt;HandoffState&gt;</code> sub-record. KV namespace <code>convsession:</code> is distinct from the auth <code>session:</code> prefix.</li>
-  <li><strong>Idle gap:</strong> resolved per-tenant via <code>ConversationConfig::idle_gap_mins</code> (default <code>prompt::DEFAULT_CONVERSATION_IDLE_GAP_MINS</code> = 6 h). On inbound, if <code>now - last_inbound_at &gt; idle_gap</code>, the pipeline mints a fresh <code>conversation_id</code>, clears <code>messages</code>, drops <code>handoff</code>, and writes the new session.</li>
-  <li><strong>History cap:</strong> <code>ConversationConfig::max_history_messages</code> (default 20) bounds <code>messages</code>. Inbound and post-send assistant turns are appended; queued draft replies are <em>not</em> &mdash; a rejected draft can't poison the next AI call.</li>
-  <li><strong>Handoff cooldown:</strong> <code>ConversationConfig::handoff_cooldown_mins</code> (default 60 min). When the model emits <code>[[HANDOFF]]</code>, the pipeline strips the token, sets <code>handoff = Some(HandoffState { since })</code>, switches the next turns to <code>prompt::HOLDING_PATTERN_MIDDLE</code> (replaces the persona for cooldown duration), and pages the tenant once. Past the cooldown the worker stays silent until the idle gap fires.</li>
-  <li><strong>Tenant page:</strong> <code>src/escalations.rs</code> dispatches one notification per handoff &mdash; Discord embed via <code>DiscordBot</code> and/or immediate email via <code>send_outbound</code> (not the digest cron). Channel choice mirrors the existing <code>ApprovalNotificationConfig</code> the tenant has already set.</li>
-  <li><strong>Stamping <code>messages</code>:</strong> the unified D1 <code>messages</code> table gained a nullable <code>conversation_id</code> column + index <code>idx_messages_conversation</code>. AI flows stamp it on outbound rows at enqueue time and update it on the inbound row once the conversation is resolved. Canned-only flows leave it NULL — those threads don't go through the conversation/handoff machine. <code>ConversationContext</code> (the approval-relay record at <code>conv:{id}</code>) gained a <code>conversation_id</code> field so the post-approval send paths (Discord button + web admin) stamp it back through.</li>
-  <li><strong>Tunable card:</strong> <code>/dashboard/settings</code> renders a Conversation Timing card mapping the three knobs to optional <code>u32</code> fields. Empty input = use the in-code default; placeholders + inline "Default: N" hints surface the runtime fallback. <code>PUT /dashboard/settings/conversation</code> validates bounds (5..=1440 mins for both gaps, 1..=200 turns for history) and the cross-field invariant <code>idle_gap &gt; handoff_cooldown</code>; errors render as inline toasts via HTMX swap.</li>
+  <li><strong>Session record:</strong> <code>Session</code> in <code>src/types.rs</code>, persisted to KV at <code>convsession:{tenant}:{channel}:{sender}</code>. Holds a stable <code>conversation_id</code>, <code>last_inbound_at</code>, a bounded <code>messages: Vec&lt;ConversationMessage&gt;</code>, and an optional <code>handoff: Option&lt;HandoffState&gt;</code>. The <code>convsession:</code> namespace is distinct from the auth <code>session:</code> prefix.</li>
+  <li><strong>Idle gap:</strong> <code>ConversationConfig::idle_gap_mins</code> (default 6 h). If <code>now - last_inbound_at &gt; idle_gap</code>, the pipeline mints a fresh <code>conversation_id</code>, clears <code>messages</code>, drops <code>handoff</code>, and writes the new session.</li>
+  <li><strong>History cap:</strong> <code>max_history_messages</code> (default 20) bounds <code>messages</code>. Inbound and <em>sent</em> assistant turns are appended; a withheld draft is not, so it can't poison the next call.</li>
+  <li><strong>Handoff cooldown:</strong> <code>handoff_cooldown_mins</code> (default 60). Entering handoff — by sentinel or by risk gate — sets <code>handoff = Some(HandoffState { signaled_at, notified })</code> and swaps the persona for <code>prompt::HOLDING_PATTERN_MIDDLE</code> for the cooldown. Past it the worker stays silent until the idle gap fires.</li>
+  <li><strong>Tenant page:</strong> <code>src/escalations.rs</code> sends exactly one email per handoff, naming the channel, sender, an excerpt clamped to 200 chars, and — when the risk gate fired — which signal tripped. Email is the only channel; the Discord embed with Approve/Reject buttons went with the approval queue. Guarded by <code>HandoffState::notified</code>, and honouring the tenant's <code>handoff_email</code> opt-out.</li>
+  <li><strong>Stamping <code>messages</code>:</strong> the D1 <code>messages</code> table carries a nullable <code>conversation_id</code> with an index, stamped on outbound rows and updated on the inbound row once the conversation resolves. Canned-only flows leave it NULL — those threads don't enter the conversation machinery.</li>
 </ul>
 
-<h2>Live demo chat</h2>
+<h2>The interactive demo</h2>
 <ul>
-  <li><strong>Endpoints:</strong> <code>GET /demo/personas</code> returns the safety-Approved archetypes from the <code>personas</code> D1 catalog (with sample business fields for the picker), <code>POST /demo/chat</code> runs a single multi-turn AI call against the picked persona and the visitor-supplied history.</li>
-  <li><strong>Statelessness:</strong> the modal keeps history client-side and posts it on every turn. Handoff state round-trips as <code>{handoff: bool}</code> on the wire and an Alpine flag in the modal; persona switch and modal close reset it. No KV session.</li>
-  <li><strong>Same envelope, same gates:</strong> the handler runs the picked persona through <code>prompt::wrap</code>, gates on the same safety classifier, and respects the same <code>[[HANDOFF]]</code> sentinel as production. The "View prompt" panel renders the exact wrapped envelope so visitors can inspect what the model receives.</li>
-  <li><strong>Reframing:</strong> copy makes clear the visitor is roleplaying as a customer of the picked sample business; real customer messages arrive on WhatsApp / Instagram / Discord / email and never on this chat box.</li>
+  <li><strong>Endpoints:</strong> the persona catalog arrives inside <code>GET /api/bootstrap</code> (resolved server-side: warm KV cache → cold-miss regeneration against D1 + the LLM → empty), and <code>POST /api/demo/chat</code> runs one multi-turn call against the picked persona and the client-supplied history.</li>
+  <li><strong>Statelessness:</strong> the client keeps the transcript and posts it each turn. Handoff round-trips as <code>{handoff: bool}</code> on the wire and a field in the Elm model; picking another persona resets it. No KV session, and the server keeps nothing.</li>
+  <li><strong>Same envelope, same gates:</strong> the handler wraps the persona with <code>prompt::wrap</code>, refuses any archetype that isn't safety-approved, runs the same injection scanner, and honours the same sentinel. <strong>View the prompt</strong> renders the exact middle being sent.</li>
+  <li><strong>Rate limiting:</strong> a per-IP hourly cap and a global per-UTC-day cap, both in KV. The global cap bounds worst-case model spend even under IP rotation; the per-IP check runs first so a caller already over their own limit doesn't drain the shared budget on a request we'd refuse anyway.</li>
 </ul>
 
 <h2>Persona safety queue</h2>
 <ul>
-  <li><strong>Trigger:</strong> the admin persona handler (<code>POST /dashboard/persona</code>) computes <code>sha256(active_prompt())</code> on save; if it differs from <code>safety.checked_prompt_hash</code>, it sets <code>safety.status = Pending</code> and sends a <code>SafetyJob { tenant_id, prompt_hash }</code> onto the <code>SAFETY_QUEUE</code> producer binding. Saves that don't change the active prompt skip enqueue.</li>
-  <li><strong>Consumer:</strong> <code>#[event(queue)]</code> in <code>src/lib.rs</code> dispatches to <code>safety_queue::handle_batch</code>. Each job re-reads the persona, drops the job if the prompt hash has drifted (a newer save has already enqueued), runs <code>safety::classify_persona</code> against the fast model, and writes <code>Approved</code> or <code>Rejected { vague_reason }</code> back to KV with <code>checked_prompt_hash</code> and <code>checked_at</code>.</li>
-  <li><strong>Classifier:</strong> system prompt enumerates Calculon Tech's content policy (no incitement, harassment, discrimination, sexualization of minors, self-harm, illegal-activity promotion, unconsented impersonation). The model returns strict JSON <code>{"verdict":"approve"|"reject","category":"..."}</code>. Categories are logged for abuse review but never echoed; the user-facing rejection text comes from a fixed mapping in <code>safety::vague_reason_for</code> so users can't iterate prompts against the classifier.</li>
-  <li><strong>Failure mode:</strong> classifier or KV failures call <code>message.retry()</code>; the queue's DLQ policy (3 retries, then <code>concierge-safety-dlq</code>) takes over. While the persona stays <code>Pending</code>, AI replies are blocked but canned default rules still send.</li>
-  <li><strong>Bindings:</strong> producer + consumer for <code>concierge-safety</code>, DLQ <code>concierge-safety-dlq</code>. Both queues must exist before deploy: see Deploy.</li>
+  <li><strong>Trigger:</strong> <code>PUT /api/persona</code> and <code>PUT /api/wizard/persona</code> compute <code>sha256(active_prompt())</code> on save; if it differs from <code>safety.checked_prompt_hash</code>, status flips to <code>Pending</code> and a <code>SafetyJob { target, prompt_hash }</code> goes onto the <code>SAFETY_QUEUE</code> producer binding. A save that doesn't change the composed prompt keeps the existing verdict, so the badge doesn't flicker. <code>PUT /api/manage/archetypes/{slug}</code> does the same for a catalog row.</li>
+  <li><strong>Ordering:</strong> the enqueue happens <em>after</em> the save. A lost enqueue leaves the persona <code>Pending</code>, which is the safe direction; a successful enqueue against an unsaved persona would approve a hash nobody has.</li>
+  <li><strong>Consumer:</strong> <code>#[event(queue)]</code> in <code>src/lib.rs</code> dispatches to <code>safety_queue::handle_batch</code>. Each job re-reads the target, drops itself if the hash has drifted (a newer save has already enqueued), runs <code>safety::classify_persona</code> against the fast model, and writes back <code>Approved</code> or <code>Rejected { vague_reason }</code> with <code>checked_prompt_hash</code> and <code>checked_at</code>.</li>
+  <li><strong>Classifier:</strong> the system prompt enumerates the content policy (no incitement, harassment, discrimination, sexualization of minors, self-harm, illegal-activity promotion, unconsented impersonation) and the model returns strict JSON. The category is logged for abuse review but never returned; the user-facing text comes from a fixed mapping, so a prompt can't be iterated against the classifier.</li>
+  <li><strong>Failure mode:</strong> classifier or KV failures call <code>message.retry()</code>; after 3 retries the job lands in <code>concierge-safety-dlq</code>. While <code>Pending</code>, AI replies are blocked and canned replies still send.</li>
 </ul>
 
 <h2>Localization</h2>
 <ul>
-  <li><strong>Locale model:</strong> every tenant carries a BCP-47 tag (<code>Tenant.locale</code>, e.g. <code>en-IN</code>, <code>en-US</code>) and an optional independent <code>currency</code> override. <code>src/locale.rs::Locale</code> bundles the two into a single value carried through templates and handlers, replacing the previous tangle of <code>if currency == "INR"</code> branches.</li>
-  <li><strong>Resolution chain</strong> (first hit wins): tenant-stored locale &rarr; <code>Accept-Language</code> header (parsed via the <code>accept-language</code> crate, intersected with the supported set) &rarr; <code>cf-ipcountry</code> mapping (<code>IN</code> &rarr; <code>en-IN</code>, default <code>en-US</code>) &rarr; hardcoded <code>en-IN</code>. Set once at signup; admin-overrideable from <code>/dashboard/settings/currency</code>.</li>
-  <li><strong>Number / currency formatting:</strong> <code>helpers::format_count</code> and <code>helpers::format_money</code> use <code>icu::decimal::FixedDecimalFormatter</code> (<code>icu</code> crate, <code>compiled_data</code> feature). <code>en-IN</code> renders <code>1,00,000</code> (lakh / crore grouping); <code>en-US</code> renders <code>100,000</code>. INR shows whole rupees with the &#x20B9; symbol; USD shows two decimals with <code>$</code>.</li>
-  <li><strong>Translation:</strong> <code>fluent-bundle</code> with FTL files at <code>assets/locales/{tag}/messages.ftl</code>, baked in at build time via <code>include_str!</code>. <code>src/i18n.rs</code> exposes a <code>OnceLock</code>-backed <code>Translator</code> and <code>t(locale, key)</code> sugar. Lookup falls back to the canonical <code>en-IN</code> bundle, then to the literal key (so a missed key is loud in the rendered HTML and caught by template tests).</li>
-  <li><strong>Adding a locale:</strong> drop a new FTL file under <code>assets/locales/{tag}/</code>, add the tag to <code>Translator::new</code> and <code>Locale::from_request</code>'s match arms, and register it in <code>locale::parse_supported</code>. CLDR data for the new locale is shipped automatically via the <code>compiled_data</code> feature.</li>
-  <li><strong>Out of scope:</strong> AI-generated reply content stays English. Per-language persona prompts and a classifier model that handles target languages well are deferred: see the persona safety queue notes above.</li>
+  <li><strong>Locale model:</strong> every tenant carries a BCP-47 tag (<code>Tenant.locale</code>, e.g. <code>en-IN</code>, <code>en-US</code>) and an independent <code>currency</code> override. <code>src/locale.rs::Locale</code> bundles the two.</li>
+  <li><strong>Resolution chain</strong> (first hit wins): tenant-stored locale → <code>Accept-Language</code> (parsed via the <code>accept-language</code> crate, intersected with the supported set) → <code>cf-ipcountry</code> mapping (<code>IN</code> → <code>en-IN</code>, else <code>en-US</code>) → hardcoded <code>en-IN</code>. Returned in <code>/api/bootstrap</code>.</li>
+  <li><strong>Formatting is the frontend's job.</strong> The API returns amounts in minor units (paise, cents) or milli-minor units for the per-reply rate, plus an ISO 4217 code; <code>frontend/src/Format.elm</code> renders them. Indian digit grouping is implemented there and unit-tested, because ₹1,00,000 and ₹100,000 are both plausible renderings of the same integer and only one reads as one lakh.</li>
+  <li><strong>Pure Elm, not <code>Intl.NumberFormat</code>.</strong> Formatting happens during <code>view</code>, and a port is asynchronous — the number would arrive a frame after the markup needing it. Two currencies and one grouping rule don't justify that.</li>
+  <li><strong>What this replaced:</strong> icu4x (<code>FixedDecimalFormatter</code> with <code>compiled_data</code>), <code>rusty-money</code> for ISO 4217 metadata, and <code>fluent-bundle</code> with FTL files baked in via <code>include_str!</code>. All four dependencies are gone, along with <code>src/i18n.rs</code> and <code>assets/locales/</code>. UI copy lives in the Elm app.</li>
+  <li><strong>Out of scope:</strong> AI-generated reply content stays English regardless of UI locale.</li>
 </ul>
 
 <h2>Reply buffer (Durable Object)</h2>
@@ -185,65 +201,67 @@
   <li><strong>Class:</strong> <code>ReplyBufferDO</code> in <code>src/durable_objects/reply_buffer.rs</code>; binding <code>REPLY_BUFFER</code>.</li>
   <li><strong>Keying:</strong> one DO instance per <code>{tenant_id}:{channel}:{sender}</code> conversation.</li>
   <li><strong>Sliding window:</strong> each push appends to a pending list and resets the alarm to <code>now + wait_seconds</code>. Bursts collapse into one alarm fire.</li>
-  <li><strong>Drop-after-send:</strong> the alarm handler clears DO storage <em>before</em> calling the LLM. Bodies live in DO state for ≤ wait_seconds (5s default), then gone.</li>
-  <li><strong>Bypass:</strong> <code>wait_seconds = 0</code> on the channel's <code>AutoReplyConfig</code> skips the buffer for instant replies.</li>
-</ul>
-
-<h2>Approval relay</h2>
-<ul>
-  <li><strong>Discord:</strong> AI drafts post to the tenant's approval channel as embeds with Approve/Reject buttons. Button click triggers <code>/discord/interactions</code> → component handler → outbound send via the originating channel adapter.</li>
-  <li><strong>Conversation context:</strong> stored in KV at <code>conv:{id}</code> with 7-day TTL, holds the Discord message id and origin channel/sender so the reply routes back correctly.</li>
-  <li><strong>Email:</strong> approval-by-email digest sent at the tenant's configured cadence (default 15 min); links contain signed tokens for one-click approve/reject.</li>
+  <li><strong>Drop-after-send:</strong> the alarm handler clears DO storage <em>before</em> calling the LLM. Bodies live in DO state for ≤ <code>wait_seconds</code> (5 s default), then are gone.</li>
+  <li><strong>Bypass:</strong> <code>wait_seconds = 0</code> skips the buffer for instant replies.</li>
+  <li><strong>ApprovalsDO is gone.</strong> A second Durable Object fanned out server-sent events to open approval pages. <code>wrangler.toml</code> carries a <code>v3</code> migration with <code>deleted_classes</code> so Cloudflare drops the class; removing only the binding would leave it orphaned and the deploy would be rejected.</li>
 </ul>
 
 <h2>Storage layout</h2>
 
 <h3>D1 tables</h3>
 <ul>
-  <li><code>tenants</code>: id, email (UNIQUE), facebook_id, plan, currency.</li>
-  <li><code>messages</code>: unified inbound/outbound metadata (channel, direction, sender, recipient, action_taken, <code>conversation_id</code>). No body content. Indexed on tenant+time, channel+tenant+time, channel_account_id, and <code>conversation_id</code>+time so a conversation thread can be reconstructed for audit. AI flows stamp <code>conversation_id</code>; canned-only flows leave it NULL.</li>
-  <li><code>whatsapp_messages</code>, <code>instagram_messages</code>, <code>email_messages</code>, <code>email_metrics</code>: channel-specific logs.</li>
-  <li><code>tenant_billing</code>: credit ledger as JSON (entries with optional expiry).</li>
-  <li><code>payments</code>: Razorpay event log, kept for dispute and tax records.</li>
-  <li><code>audit_log</code>: management-action history.</li>
-  <li><code>personas</code>: curated archetype catalog (slug, label, description, <code>source_json</code> = serialized <code>PersonaSource</code>, greeting, <code>is_system</code>, <code>safety_status</code>, <code>safety_checked_at</code>, <code>safety_vague_reason</code>). Edited from <code>/manage/personas</code>; consumed by the public demo persona picker and snapshotted into a tenant's onboarding state when they pick one. Every edit resets <code>safety_status</code> to <code>draft</code> and enqueues a <code>SafetyJob</code>; only <code>approved</code> rows are visible to demo and onboarding. The <code>concierge</code> row is <code>is_system=1</code> (undeletable) and powers the homepage demo.</li>
+  <li><code>tenants</code>: id, email (UNIQUE), facebook_id, plan, locale, currency, <code>verified_at</code>.</li>
+  <li><code>messages</code>: unified inbound/outbound metadata (channel, direction, sender, recipient, action, <code>conversation_id</code>). No body content. Indexed on tenant+time, channel+tenant+time, channel_account_id, and <code>conversation_id</code>+time so a thread can be reconstructed for audit. Action is <code>auto_reply</code> or <code>handed_off</code>.</li>
+  <li><code>whatsapp_messages</code>: channel-specific log. The <code>instagram_messages</code>, <code>email_messages</code> and <code>email_metrics</code> tables went with those channels.</li>
+  <li><code>tenant_billing</code>: credit ledger as JSON, entries carrying optional expiry.</li>
+  <li><code>payments</code>: Razorpay event log, kept for dispute and tax records. A deleted tenant's rows survive with <code>tenant_id</code> nulled.</li>
+  <li><code>audit_log</code>: operator-action history.</li>
+  <li><code>archetypes</code>: the curated voice catalog (slug, label, description, <code>voice_prompt</code>, greeting, catch-phrases, off-topics, <code>never</code>, handoff conditions, safety columns). Managed through <code>/api/manage/archetypes</code>; read by the persona picker and the public demo. Every write resets <code>safety_status</code> and enqueues a <code>SafetyJob</code>; only approved rows reach tenants. The <code>default_rules_json</code> column went with the rule engine.</li>
+  <li><code>pricing_config</code> + the per-(concept, currency) amount table: operator-configurable pricing.</li>
 </ul>
 
 <h3>KV keys</h3>
 <ul>
-  <li><code>session:*</code>, <code>csrf:*</code>: auth cookies (TTL 7d).</li>
-  <li><code>whatsapp:{id}</code>, <code>instagram:{id}</code>: per-resource configs. Channel records embed their own <code>ReplyConfig</code> (rules + default rule + wait_seconds).</li>
-  <li><code>tenant:{tenant}:whatsapp:{id}</code> etc.: per-tenant indexes (empty values; existence is the index).</li>
-  <li><code>wa_phone:*</code>, <code>ig_page:*</code>, <code>email_domain:*</code>: webhook → tenant reverse indexes.</li>
-  <li><code>email_domains:{tenant}</code>, <code>email_rules:{tenant}:{domain}</code>, <code>email_reverse:*</code>: email config + alias mapping.</li>
-  <li><code>discord_guild:{guild_id}</code>, <code>discord_config:{tenant}</code>: guild ↔ tenant.</li>
-  <li><code>onboarding:{tenant}</code>: wizard state. Holds the <code>PersonaConfig</code> (source variant + safety status), <code>default_wait_seconds</code> applied to newly connected channels, and the <code>ConversationConfig</code> knobs (<code>idle_gap_mins</code>, <code>handoff_cooldown_mins</code>, <code>max_history_messages</code> &mdash; each <code>Option&lt;u32&gt;</code>, falling back to <code>prompt::DEFAULT_*</code> when unset).</li>
-  <li><code>convsession:{tenant}:{channel}:{sender}</code>: per-customer conversation session. Holds <code>conversation_id</code>, <code>last_inbound_at</code>, bounded <code>messages</code> list, and optional handoff state. Distinct from the auth <code>session:</code> prefix.</li>
-  <li><code>conv:{id}</code>: approval-relay conversation context (TTL 7d). Holds the originating channel + sender for routing an approved/edited reply back, plus the <code>conversation_id</code> stamped at enqueue time so the post-approval send paths can stamp matching D1 rows.</li>
+  <li><code>session:*</code>: auth sessions (TTL 7 d). The <code>csrf:*</code> keys are gone — the API uses a request header instead.</li>
+  <li><code>whatsapp:{id}</code>: per-resource config, embedding its own <code>ReplyConfig</code>.</li>
+  <li><code>tenant:{tenant}:whatsapp:{id}</code>: per-tenant index (empty value; existence is the index).</li>
+  <li><code>wa_phone:*</code>: webhook → tenant reverse index.</li>
+  <li><code>wa_signup_state:*</code>, <code>wa_pubsignup_state:*</code>: one-shot Embedded Signup nonces (TTL 10 min).</li>
+  <li><code>onboarding:{tenant}</code>: wizard state. Holds <code>BusinessInfo</code>, the <code>PersonaConfig</code> (source variant + safety status), <code>NotificationConfig</code>, the <code>ConversationConfig</code> knobs, <code>default_wait_seconds</code>, and the <code>completed</code> flag that seals the wizard.</li>
+  <li><code>convsession:{tenant}:{channel}:{sender}</code>: per-customer conversation session.</li>
+  <li><code>demo:*</code>: the rolled demo-persona blob and its config; <code>ratelimit:demo:*</code> for the two caps.</li>
+  <li><strong>Gone:</strong> <code>instagram:*</code>, <code>ig_page:*</code>, <code>instagram_token:*</code>, <code>email_domain:*</code>, <code>email_rules:*</code>, <code>email_reverse:*</code>, <code>email_addrs:*</code>, <code>email_verify:*</code>, <code>discord_guild:*</code>, <code>discord_config:*</code>, <code>conv:{id}</code>, <code>csrf:*</code>.</li>
 </ul>
 
 <h2>Auth</h2>
 <ul>
-  <li><strong>Login:</strong> Google OAuth (<code>/auth/callback</code>) and Facebook Login (<code>/auth/facebook/callback</code>). Same tenant gets linked to both providers if their email matches.</li>
-  <li><strong>Session:</strong> 7-day HttpOnly cookie; CSRF via double-submit cookie checked on every <code>POST/PUT/DELETE</code> under <code>/dashboard</code>.</li>
-  <li><strong>Management panel:</strong> <code>/manage/*</code> protected by Cloudflare Access (verifies the <code>Cf-Access-Jwt-Assertion</code> header against the team's JWKS).</li>
+  <li><strong>Login:</strong> Google OAuth only. <code>/auth/login</code> redirects straight to Google's consent screen — there is no login page to render, because the Elm app renders that and links here. <code>/auth/callback</code> exchanges the code, finds or creates the tenant, sets the session cookie, and redirects to <code>/</code>.</li>
+  <li><strong>Where you land:</strong> decided in one place — the session's <code>destination</code> field, computed server-side from whether onboarding is sealed. The callback always returns to <code>/</code> and the frontend routes from there, so the rule isn't duplicated between the Worker's redirects and the app.</li>
+  <li><strong>Facebook Login is gone</strong> as a sign-in method; it existed for Instagram. Meta identity still arrives through WhatsApp Embedded Signup, which does its own token exchange and can create a tenant the same way.</li>
+  <li><strong>Session:</strong> a 7-day <code>HttpOnly; Secure; SameSite=Lax</code> cookie holding an opaque token that resolves to a tenant id in KV. <code>Secure</code> is dropped on http origins so plain <code>wrangler dev</code> still authenticates.</li>
+  <li><strong>Dev shortcut:</strong> <code>POST /auth/dev-login</code> mints a session for an arbitrary email without a round-trip to Google, which can't reach localhost. Gated on <code>dev_bypass::active</code>; production sets <code>CF_ACCESS_AUD</code>, so it 404s there.</li>
+  <li><strong>Operator API:</strong> <code>/api/manage/*</code> is protected by Cloudflare Access — the <code>Cf-Access-Jwt-Assertion</code> header (or the <code>CF_Authorization</code> cookie) is verified as RS256 against the team's JWKS, and the <code>email</code> claim becomes the actor in the audit log.</li>
 </ul>
 
 <h2>Outbound APIs Concierge calls</h2>
 <ul>
-  <li>Meta Graph API for WhatsApp + Instagram + Facebook Login.</li>
-  <li>Discord REST API (<code>discord.com/api/v10</code>) for messages, channels, guild lookup.</li>
-  <li>Razorpay API for orders, subscriptions, payment verification.</li>
-  <li>Cloudflare Workers AI binding (no HTTP: direct binding call). Used for reply generation, prompt-injection scan, persona safety classification, and BGE embeddings.</li>
-  <li>Cloudflare Queues binding (<code>SAFETY_QUEUE</code>) for fanning persona safety jobs to the queue consumer.</li>
+  <li>Meta Graph API for WhatsApp messaging and Embedded Signup.</li>
+  <li>Google OAuth token and userinfo endpoints for sign-in.</li>
+  <li>Razorpay API for orders, payment-signature verification and refunds.</li>
+  <li>Cloudflare Workers AI binding (a direct binding call, not HTTP): reply generation, injection scanning, safety classification.</li>
+  <li>Cloudflare Queues binding (<code>SAFETY_QUEUE</code>) for persona safety jobs.</li>
+  <li>Cloudflare Email Service binding (<code>EMAIL</code>) for handoff notifications.</li>
+  <li>The Cloudflare Access JWKS endpoint, for operator-API verification.</li>
 </ul>
 
 <h2>Limits and known constraints</h2>
 <ul>
-  <li>Discord DM auto-reply is unsupported with the shared bot: incoming DMs hit the events endpoint with no <code>guild_id</code>, so we can't attribute them to a tenant.</li>
-  <li>WhatsApp has no message-history API; the reply buffer relies on its own DO state to reconstruct bursts.</li>
-  <li>Cloudflare Email Service requires sender domains to be onboarded in the dashboard before sends from them succeed; new tenant subdomains may need manual onboarding until that step is automated.</li>
-  <li>No per-message body storage. If you need a conversation web-view, that's a future feature requiring a schema change and ToS update.</li>
+  <li><strong>The prerendered pages are committed</strong>, because Cloudflare Builds has no browser. CI gates on them being current, but a deploy from a branch that skipped CI could ship stale marketing HTML.</li>
+  <li><strong>The operator API has no UI.</strong> <code>/api/manage/*</code> is complete, but <code>/manage</code> in the app says so rather than rendering a panel.</li>
+  <li><strong>WhatsApp has no message-history API</strong>, so the reply buffer relies on its own DO state to reconstruct bursts.</li>
+  <li><strong>Cloudflare Email Service requires sender domains to be onboarded</strong> in the dashboard before sends succeed. Handoff emails come from one fixed address, so this is a one-time step.</li>
+  <li><strong>No per-message body storage.</strong> A conversation web-view would need a schema change and a privacy-policy update.</li>
+  <li><strong>A custom prompt is capped</strong> at <code>prompt::MAX_CUSTOM_PROMPT</code> characters; anything past it is truncated on save.</li>
 </ul>
 
       <nav class="pagernav">

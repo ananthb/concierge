@@ -1,31 +1,16 @@
 //! Handler modules for the concierge worker
 
-mod admin;
-mod admin_approvals;
-mod admin_billing;
-mod admin_email;
-mod admin_instagram;
-mod admin_persona;
-pub mod admin_rules;
-mod admin_whatsapp;
 pub mod auth;
 mod data_deletion;
 mod demo_chat;
 pub mod demo_personas_list;
-pub mod discord_oauth;
 pub mod health;
-mod instagram_oauth;
-mod instagram_webhook;
-pub mod onboarding;
 mod webhook;
 mod whatsapp_signup;
 
-pub use admin::handle_admin;
 pub use auth::handle_auth;
 pub use data_deletion::handle_data_deletion;
 pub use demo_chat::handle_demo_chat;
-pub use instagram_oauth::handle_instagram;
-pub use onboarding::handle_wizard_top;
 pub use webhook::handle_webhook;
 pub use whatsapp_signup::handle_whatsapp_signup;
 

@@ -40,3 +40,8 @@ test-results/
 
 # Claude Code local state
 .claude/
+
+# Build artifacts from the Elm frontend. `scripts/build-frontend.sh` produces
+# app.js; elm-stuff is its incremental cache.
+public/app.js
+frontend/elm-stuff/

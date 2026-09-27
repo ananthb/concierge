@@ -1,7 +1,7 @@
 use wasm_bindgen::JsValue;
 use worker::*;
 
-use crate::types::{CreditEntry, InstagramAccount, Tenant, TenantBilling, WhatsAppAccount};
+use crate::types::{CreditEntry, Tenant, TenantBilling, WhatsAppAccount};
 
 // ============================================================================
 // Tenant D1 Operations
@@ -202,34 +202,6 @@ pub async fn list_archetypes(
         "SELECT * FROM archetypes ORDER BY label ASC"
     };
     let results = db.prepare(stmt).all().await?;
-    let rows: Vec<serde_json::Value> = results.results()?;
-    Ok(rows.iter().filter_map(row_to_archetype).collect())
-}
-
-/// Case-insensitive LIKE search over archetype slug, label, and
-/// description. Empty query falls through to `list_archetypes`.
-pub async fn search_archetypes(db: &D1Database, q: &str) -> Result<Vec<crate::types::Archetype>> {
-    let q = q.trim();
-    if q.is_empty() {
-        return list_archetypes(db, false).await;
-    }
-    let pattern = format!(
-        "%{}%",
-        q.replace('\\', r"\\")
-            .replace('%', r"\%")
-            .replace('_', r"\_")
-    );
-    let results = db
-        .prepare(
-            "SELECT * FROM archetypes
-             WHERE slug LIKE ?1 ESCAPE '\\' COLLATE NOCASE
-                OR label LIKE ?1 ESCAPE '\\' COLLATE NOCASE
-                OR description LIKE ?1 ESCAPE '\\' COLLATE NOCASE
-             ORDER BY label ASC",
-        )
-        .bind(&[pattern.as_str().into()])?
-        .all()
-        .await?;
     let rows: Vec<serde_json::Value> = results.results()?;
     Ok(rows.iter().filter_map(row_to_archetype).collect())
 }
@@ -438,17 +410,16 @@ pub async fn upsert_archetype(db: &D1Database, row: &crate::types::Archetype) ->
     let handoff_conditions_json = serde_json::to_string(&row.handoff_conditions)?;
 
     db.prepare(
-        "INSERT INTO archetypes (slug, label, description, voice_prompt, greeting, default_rules_json,
+        "INSERT INTO archetypes (slug, label, description, voice_prompt, greeting,
                                 catch_phrases_json, off_topics_json, never, handoff_conditions_json,
                                 safety_status, safety_checked_at, safety_vague_reason,
                                 created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
          ON CONFLICT(slug) DO UPDATE SET
            label = excluded.label,
            description = excluded.description,
            voice_prompt = excluded.voice_prompt,
            greeting = excluded.greeting,
-           default_rules_json = excluded.default_rules_json,
            catch_phrases_json = excluded.catch_phrases_json,
            off_topics_json = excluded.off_topics_json,
            never = excluded.never,
@@ -464,7 +435,6 @@ pub async fn upsert_archetype(db: &D1Database, row: &crate::types::Archetype) ->
         row.description.as_str().into(),
         row.voice_prompt.as_str().into(),
         row.greeting.as_str().into(),
-        row.default_rules_json.as_str().into(),
         catch_phrases_json.into(),
         off_topics_json.into(),
         row.never.as_str().into(),
@@ -518,7 +488,6 @@ fn row_to_archetype(row: &serde_json::Value) -> Option<crate::types::Archetype> 
     let description = row.get("description")?.as_str()?.to_string();
     let voice_prompt = row.get("voice_prompt")?.as_str()?.to_string();
     let greeting = row.get("greeting")?.as_str()?.to_string();
-    let default_rules_json = row.get("default_rules_json")?.as_str()?.to_string();
     let catch_phrases = row
         .get("catch_phrases_json")
         .and_then(|v| v.as_str())
@@ -567,7 +536,6 @@ fn row_to_archetype(row: &serde_json::Value) -> Option<crate::types::Archetype> 
         description,
         voice_prompt,
         greeting,
-        default_rules_json,
         catch_phrases,
         off_topics,
         never,
@@ -615,30 +583,6 @@ pub async fn delete_session(kv: &kv::KvStore, token: &str) -> Result<()> {
 
 // ============================================================================
 // CSRF Token KV Operations
-// ============================================================================
-
-pub async fn save_csrf_token(
-    kv: &kv::KvStore,
-    tenant_id: &str,
-    token: &str,
-    ttl_seconds: u64,
-) -> Result<()> {
-    kv.put(&format!("csrf:{}", tenant_id), token)?
-        .expiration_ttl(ttl_seconds)
-        .execute()
-        .await?;
-    Ok(())
-}
-
-pub async fn get_csrf_token(kv: &kv::KvStore, tenant_id: &str) -> Result<Option<String>> {
-    kv.get(&format!("csrf:{}", tenant_id))
-        .text()
-        .await
-        .map_err(|e| Error::from(e.to_string()))
-}
-
-// ============================================================================
-// WhatsApp Account KV Operations
 // ============================================================================
 
 pub async fn get_whatsapp_account(kv: &kv::KvStore, id: &str) -> Result<Option<WhatsAppAccount>> {
@@ -725,89 +669,6 @@ pub async fn get_whatsapp_account_by_phone(
 }
 
 // ============================================================================
-// Instagram Account KV Operations
-// ============================================================================
-
-pub async fn get_instagram_account(kv: &kv::KvStore, id: &str) -> Result<Option<InstagramAccount>> {
-    kv.get(&format!("instagram:{}", id))
-        .json::<InstagramAccount>()
-        .await
-        .map_err(|e| Error::from(e.to_string()))
-}
-
-pub async fn save_instagram_account(kv: &kv::KvStore, account: &InstagramAccount) -> Result<()> {
-    kv.put(&format!("instagram:{}", account.id), account)?
-        .execute()
-        .await?;
-    if !account.tenant_id.is_empty() {
-        kv.put(
-            &format!("tenant:{}:instagram:{}", account.tenant_id, account.id),
-            "",
-        )?
-        .execute()
-        .await?;
-    }
-    // Reverse index: page_id -> instagram account id (for webhook routing)
-    if !account.page_id.is_empty() {
-        kv.put(&format!("ig_page:{}", account.page_id), &account.id)?
-            .execute()
-            .await?;
-    }
-    Ok(())
-}
-
-pub async fn delete_instagram_account(kv: &kv::KvStore, tenant_id: &str, id: &str) -> Result<()> {
-    if let Some(account) = get_instagram_account(kv, id).await? {
-        if !account.page_id.is_empty() {
-            kv.delete(&format!("ig_page:{}", account.page_id)).await?;
-        }
-    }
-    kv.delete(&format!("instagram:{}", id)).await?;
-    if !tenant_id.is_empty() {
-        kv.delete(&format!("tenant:{}:instagram:{}", tenant_id, id))
-            .await?;
-    }
-    kv.delete(&format!("instagram_token:{}", id)).await?;
-    Ok(())
-}
-
-pub async fn list_instagram_accounts(
-    kv: &kv::KvStore,
-    tenant_id: &str,
-) -> Result<Vec<InstagramAccount>> {
-    let prefix = format!("tenant:{}:instagram:", tenant_id);
-    let list = kv
-        .list()
-        .prefix(prefix.clone())
-        .execute()
-        .await
-        .map_err(|e| Error::from(e.to_string()))?;
-
-    let mut accounts = Vec::new();
-    for key in list.keys {
-        let account_id = key.name.strip_prefix(&prefix).unwrap_or("").to_string();
-        if account_id.is_empty() {
-            continue;
-        }
-        if let Some(account) = get_instagram_account(kv, &account_id).await? {
-            accounts.push(account);
-        }
-    }
-    accounts.sort_by(|a, b| b.created_at.cmp(&a.created_at));
-    Ok(accounts)
-}
-
-pub async fn get_instagram_account_by_page(
-    kv: &kv::KvStore,
-    page_id: &str,
-) -> Result<Option<String>> {
-    kv.get(&format!("ig_page:{}", page_id))
-        .text()
-        .await
-        .map_err(|e| Error::from(e.to_string()))
-}
-
-// ============================================================================
 // Delete All Tenant Data
 // ============================================================================
 
@@ -818,19 +679,8 @@ pub async fn delete_tenant_data(kv: &kv::KvStore, db: &D1Database, tenant_id: &s
         delete_whatsapp_account(kv, tenant_id, &account.id).await?;
     }
 
-    // Delete Instagram accounts + page indexes + tokens
-    let ig_accounts = list_instagram_accounts(kv, tenant_id).await?;
-    for account in &ig_accounts {
-        delete_instagram_account(kv, tenant_id, &account.id).await?;
-    }
-
     // Delete D1 data: messages + billing. Payments and audit_log are kept for dispute and tax records.
-    for table in &[
-        "whatsapp_messages",
-        "instagram_messages",
-        "messages",
-        "tenant_billing",
-    ] {
+    for table in &["whatsapp_messages", "messages", "tenant_billing"] {
         let query = format!("DELETE FROM {} WHERE tenant_id = ?", table);
         let stmt = db.prepare(&query);
         if let Err(e) = stmt.bind(&[tenant_id.into()])?.run().await {
@@ -846,21 +696,6 @@ pub async fn delete_tenant_data(kv: &kv::KvStore, db: &D1Database, tenant_id: &s
         .await
     {
         console_log!("Failed to nullify tenant in payments: {:?}", e);
-    }
-
-    // Delete email addresses + indices (KV)
-    if let Ok(addrs) = get_email_addresses(kv, tenant_id).await {
-        for a in &addrs {
-            let _ = delete_email_address_index(kv, &a.local_part).await;
-        }
-        let _ = save_email_addresses(kv, tenant_id, &[]).await;
-    }
-
-    // Delete discord config (KV)
-    if let Ok(Some(config)) = get_discord_config_by_tenant(kv, tenant_id).await {
-        kv.delete(&format!("discord_guild:{}", config.guild_id))
-            .await?;
-        kv.delete(&format!("discord_config:{}", tenant_id)).await?;
     }
 
     // Delete onboarding state and credentials (KV)
@@ -880,173 +715,10 @@ pub async fn delete_tenant_data(kv: &kv::KvStore, db: &D1Database, tenant_id: &s
 }
 
 // ============================================================================
-// Email Address Storage
-// ============================================================================
-
-use crate::types::{EmailAddress, EmailReverseAlias};
-
-/// Get all email addresses owned by a tenant.
-pub async fn get_email_addresses(kv: &kv::KvStore, tenant_id: &str) -> Result<Vec<EmailAddress>> {
-    let key = format!("email_addrs:{tenant_id}");
-    match kv
-        .get(&key)
-        .json::<Vec<EmailAddress>>()
-        .await
-        .map_err(|e| Error::from(e.to_string()))?
-    {
-        Some(addrs) => Ok(addrs),
-        None => Ok(vec![]),
-    }
-}
-
-/// Save the full address list for a tenant.
-pub async fn save_email_addresses(
-    kv: &kv::KvStore,
-    tenant_id: &str,
-    addrs: &[EmailAddress],
-) -> Result<()> {
-    let key = format!("email_addrs:{tenant_id}");
-    kv.put(&key, serde_json::to_string(addrs)?)?
-        .execute()
-        .await?;
-    Ok(())
-}
-
-/// Look up a single address by local-part within a tenant. Returns None if
-/// the tenant doesn't own that local-part.
-pub async fn get_email_address(
-    kv: &kv::KvStore,
-    tenant_id: &str,
-    local_part: &str,
-) -> Result<Option<EmailAddress>> {
-    let addrs = get_email_addresses(kv, tenant_id).await?;
-    Ok(addrs.into_iter().find(|a| a.local_part == local_part))
-}
-
-/// Insert-or-replace one address by local-part. Persists the full list.
-pub async fn save_email_address(
-    kv: &kv::KvStore,
-    tenant_id: &str,
-    addr: &EmailAddress,
-) -> Result<()> {
-    let mut addrs = get_email_addresses(kv, tenant_id).await?;
-    if let Some(existing) = addrs.iter_mut().find(|a| a.local_part == addr.local_part) {
-        *existing = addr.clone();
-    } else {
-        addrs.push(addr.clone());
-    }
-    save_email_addresses(kv, tenant_id, &addrs).await
-}
-
-/// Drop an address from the tenant's list. Returns true if it existed.
-pub async fn delete_email_address(
-    kv: &kv::KvStore,
-    tenant_id: &str,
-    local_part: &str,
-) -> Result<bool> {
-    let mut addrs = get_email_addresses(kv, tenant_id).await?;
-    let before = addrs.len();
-    addrs.retain(|a| a.local_part != local_part);
-    if addrs.len() == before {
-        return Ok(false);
-    }
-    save_email_addresses(kv, tenant_id, &addrs).await?;
-    Ok(true)
-}
-
-/// Set the local-part → tenant_id reverse index. Local-parts are unique
-/// across the platform since every tenant shares one email domain.
-pub async fn set_email_address_index(
-    kv: &kv::KvStore,
-    local_part: &str,
-    tenant_id: &str,
-) -> Result<()> {
-    let key = format!("email_addr:{local_part}");
-    kv.put(&key, tenant_id)?.execute().await?;
-    Ok(())
-}
-
-/// Look up tenant_id by local-part.
-pub async fn get_tenant_by_address(kv: &kv::KvStore, local_part: &str) -> Result<Option<String>> {
-    let key = format!("email_addr:{local_part}");
-    kv.get(&key)
-        .text()
-        .await
-        .map_err(|e| Error::from(e.to_string()))
-}
-
-/// Delete the local-part → tenant index.
-pub async fn delete_email_address_index(kv: &kv::KvStore, local_part: &str) -> Result<()> {
-    let key = format!("email_addr:{local_part}");
-    kv.delete(&key).await?;
-    Ok(())
-}
-
-// --- Verification tokens for notification recipients --------------------
-
-/// Payload stored under each verification token. The recipient_id locates
-/// the row inside the address's notification_recipients vec.
-#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
-pub struct EmailVerificationPayload {
-    pub tenant_id: String,
-    pub local_part: String,
-    pub recipient_id: String,
-}
-
-const EMAIL_VERIFICATION_TTL: u64 = 7 * 24 * 60 * 60; // 7 days
-
-pub async fn set_email_verification_token(
-    kv: &kv::KvStore,
-    token: &str,
-    payload: &EmailVerificationPayload,
-) -> Result<()> {
-    let key = format!("email_verify:{token}");
-    kv.put(&key, serde_json::to_string(payload)?)?
-        .expiration_ttl(EMAIL_VERIFICATION_TTL)
-        .execute()
-        .await?;
-    Ok(())
-}
-
-pub async fn get_email_verification_token(
-    kv: &kv::KvStore,
-    token: &str,
-) -> Result<Option<EmailVerificationPayload>> {
-    let key = format!("email_verify:{token}");
-    kv.get(&key)
-        .json::<EmailVerificationPayload>()
-        .await
-        .map_err(|e| Error::from(e.to_string()))
-}
-
-pub async fn delete_email_verification_token(kv: &kv::KvStore, token: &str) -> Result<()> {
-    let key = format!("email_verify:{token}");
-    kv.delete(&key).await?;
-    Ok(())
-}
-
-// --- Reverse aliases (unchanged behavior; domain field now the platform) ---
-
-/// Get a reverse alias mapping.
-pub async fn get_email_reverse_alias(
-    kv: &kv::KvStore,
-    reverse_address: &str,
-) -> Result<Option<EmailReverseAlias>> {
-    let key = format!("email_reverse:{reverse_address}");
-    kv.get(&key)
-        .json::<EmailReverseAlias>()
-        .await
-        .map_err(|e| Error::from(e.to_string()))
-}
-
-// ============================================================================
 // Unified Message Storage
 // ============================================================================
 
-use crate::types::{
-    Channel, ConversationContext, DiscordConfig, InboundMessage, MessageAction, MessageDirection,
-    OnboardingState,
-};
+use crate::types::{Channel, InboundMessage, MessageAction, MessageDirection, OnboardingState};
 
 /// Save a unified message to D1. No message content stored: metadata only.
 ///
@@ -1133,39 +805,6 @@ pub async fn update_message_conversation_id(
 }
 
 // ============================================================================
-// Conversation Context (KV)
-// ============================================================================
-
-const CONVERSATION_TTL: u64 = 7 * 24 * 60 * 60; // 7 days
-
-pub async fn save_conversation_context(kv: &kv::KvStore, ctx: &ConversationContext) -> Result<()> {
-    let key = format!("conv:{}", ctx.id);
-    let json = serde_json::to_string(ctx).map_err(|e| Error::from(format!("JSON error: {e}")))?;
-    kv.put(&key, json)?
-        .expiration_ttl(CONVERSATION_TTL)
-        .execute()
-        .await?;
-    Ok(())
-}
-
-pub async fn get_conversation_context(
-    kv: &kv::KvStore,
-    id: &str,
-) -> Result<Option<ConversationContext>> {
-    let key = format!("conv:{id}");
-    kv.get(&key)
-        .json::<ConversationContext>()
-        .await
-        .map_err(|e| Error::from(e.to_string()))
-}
-
-pub async fn delete_conversation_context(kv: &kv::KvStore, id: &str) -> Result<()> {
-    let key = format!("conv:{id}");
-    kv.delete(&key).await?;
-    Ok(())
-}
-
-// ============================================================================
 // Conversation Sessions (KV)
 // ============================================================================
 //
@@ -1195,12 +834,7 @@ fn conversation_session_key(
     channel_account_id: &str,
     sender: &str,
 ) -> String {
-    let channel_str = match channel {
-        crate::types::Channel::WhatsApp => "whatsapp",
-        crate::types::Channel::Instagram => "instagram",
-        crate::types::Channel::Email => "email",
-        crate::types::Channel::Discord => "discord",
-    };
+    let channel_str = channel.as_str();
     let sender_hash = crate::helpers::sha256_hex(sender);
     format!("convsession:{tenant_id}:{channel_str}:{channel_account_id}:{sender_hash}")
 }
@@ -1237,35 +871,6 @@ pub async fn save_conversation_session(
 }
 
 // ============================================================================
-// Discord Config (KV)
-// ============================================================================
-
-pub async fn get_discord_config_by_guild(
-    kv: &kv::KvStore,
-    guild_id: &str,
-) -> Result<Option<DiscordConfig>> {
-    let key = format!("discord_guild:{guild_id}");
-    kv.get(&key)
-        .json::<DiscordConfig>()
-        .await
-        .map_err(|e| Error::from(e.to_string()))
-}
-
-pub async fn save_discord_config(kv: &kv::KvStore, config: &DiscordConfig) -> Result<()> {
-    let key = format!("discord_guild:{}", config.guild_id);
-    let json =
-        serde_json::to_string(config).map_err(|e| Error::from(format!("JSON error: {e}")))?;
-    kv.put(&key, json)?.execute().await?;
-
-    // Also store reverse mapping
-    let rev_key = format!("discord_config:{}", config.tenant_id);
-    let rev_json =
-        serde_json::to_string(config).map_err(|e| Error::from(format!("JSON error: {e}")))?;
-    kv.put(&rev_key, rev_json)?.execute().await?;
-    Ok(())
-}
-
-// ============================================================================
 // Onboarding State (KV)
 // ============================================================================
 
@@ -1287,17 +892,6 @@ pub async fn save_onboarding(
     let json = serde_json::to_string(state).map_err(|e| Error::from(format!("JSON error: {e}")))?;
     kv.put(&key, json)?.execute().await?;
     Ok(())
-}
-
-pub async fn get_discord_config_by_tenant(
-    kv: &kv::KvStore,
-    tenant_id: &str,
-) -> Result<Option<DiscordConfig>> {
-    let key = format!("discord_config:{tenant_id}");
-    kv.get(&key)
-        .json::<DiscordConfig>()
-        .await
-        .map_err(|e| Error::from(e.to_string()))
 }
 
 // ============================================================================

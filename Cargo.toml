@@ -16,29 +16,28 @@ uuid = { version = "1", features = ["v4", "js"] }
 wasm-bindgen = "0.2"
 wasm-bindgen-futures = "0.4"
 js-sys = "0.3"
-web-sys = { version = "0.3", features = ["Crypto", "SubtleCrypto", "CryptoKey", "ReadableStream", "Response"] }
+# Crypto/SubtleCrypto/CryptoKey: RS256 verification of the Cloudflare Access
+# JWT. ReadableStream/Response went with the inbound email handler, which read
+# the raw message off a stream.
+web-sys = { version = "0.3", features = ["Crypto", "SubtleCrypto", "CryptoKey"] }
 urlencoding = "2"
 sha2 = "0.11"
 hmac = "0.13"
-mail-parser = "0.11"
 base64 = "0.22"
 subtle = "2.6"
-futures = "0.3"
-botrelay = "0.2"
 
-# Localization: icu4x for number/currency/date formatting; unic-langid for
-# BCP-47 tag handling; accept-language for parsing the request header.
-icu = { version = "2.1", features = ["compiled_data"] }
-fixed_decimal = "0.7"
+# Locale resolution only: unic-langid for BCP-47 tag handling,
+# accept-language for parsing the request header.
+#
+# icu4x, fixed_decimal, rusty-money and fluent are gone with the server-side
+# templates. Number, currency and date formatting is the frontend's job now
+# (Intl.NumberFormat gives the same INR lakh grouping from the browser's own
+# locale data), and UI copy lives in the Elm app rather than in FTL files.
 unic-langid = { version = "0.9", features = ["macros"] }
 accept-language = "3"
-fluent = "0.17"
-fluent-syntax = "0.12"
 
-# Money handling: ISO 4217 metadata + locale-correct formatting (incl. INR
-# lakh grouping). Pure-Rust wasm-clean dep.
-rusty-money = "0.5"
-
+# Used only by build.rs, to generate the Subresource Integrity hashes the
+# shell embeds for every stylesheet and both scripts.
 [build-dependencies]
 sha2 = "0.11"
 base64 = "0.22"

@@ -26,3 +26,22 @@ export const test = base.extend<{ consoleErrors: string[] }>({
 });
 
 export { expect };
+
+/**
+ * Wait until the Elm app has actually booted.
+ *
+ * Necessary because the marketing routes are prerendered: their markup is a
+ * snapshot of Elm's own output, so every selector you might wait on is already
+ * present in the static HTML before the bundle has run. Waiting on markup
+ * therefore proves nothing and races the bundle — a click landing in that
+ * window gets handled by the browser as a plain link, not by Elm's router.
+ *
+ * `window.__conciergeBooted` is set by `public/boot.js` after
+ * `Elm.Main.init` returns. A JS global can't be captured by a DOM snapshot,
+ * which is exactly why it's used instead of an attribute.
+ */
+export async function waitForBoot(page: import('@playwright/test').Page) {
+  await page.waitForFunction(
+    () => (window as unknown as { __conciergeBooted?: boolean }).__conciergeBooted === true,
+  );
+}

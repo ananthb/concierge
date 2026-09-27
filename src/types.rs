@@ -100,14 +100,18 @@ pub struct WhatsAppAccount {
     pub updated_at: String,
 }
 
-/// Per-channel reply routing: an ordered list of rules whose first match wins,
-/// plus a mandatory default rule that fires when nothing matches.
+/// Per-channel reply behaviour: one response for every inbound message.
+///
+/// The ordered rule list (keyword and embedding matchers, per-rule approval
+/// policy) was cut. Every inbound now takes the same path: `Canned` sends
+/// verbatim, `Prompt` runs the persona through the LLM.
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct ReplyConfig {
     pub enabled: bool,
-    #[serde(default)]
-    pub rules: Vec<ReplyRule>,
-    pub default_rule: ReplyRule,
+    /// What to send. Was `default_rule`, the mandatory fallback that in
+    /// practice handled nearly every message anyway.
+    #[serde(default = "default_response", alias = "default_rule")]
+    pub response: ReplyResponse,
     /// Seconds to wait after the latest inbound message before replying.
     /// Lets users finish typing and groups multi-message bursts into one
     /// AI call. 0 = reply immediately (no buffering).
@@ -119,212 +123,45 @@ impl Default for ReplyConfig {
     fn default() -> Self {
         Self {
             enabled: false,
-            rules: Vec::new(),
-            default_rule: ReplyRule::default_fallback(),
+            response: default_response(),
             wait_seconds: default_wait_seconds(),
         }
     }
 }
 
 impl ReplyConfig {
-    /// Convenience: read the default rule's text without unwrapping the enum.
-    /// Used by channel admin templates that still expose a single
-    /// "default response" field while a richer rules UI is built out.
+    /// Read the response text without unwrapping the enum.
     pub fn default_text(&self) -> &str {
-        match &self.default_rule.response {
+        match &self.response {
             ReplyResponse::Canned { text } | ReplyResponse::Prompt { text } => text,
         }
     }
 
-    /// True when the default rule sends static text (no LLM, no credit).
+    /// True when the response is static text (no LLM, no credit).
     pub fn default_is_canned(&self) -> bool {
-        matches!(self.default_rule.response, ReplyResponse::Canned { .. })
+        matches!(self.response, ReplyResponse::Canned { .. })
     }
 
-    /// Mutate the default rule from an admin form. `mode` is the wire value
-    /// from the form ("canned" / "prompt" / legacy "static" / "ai").
+    /// Set the response from an API payload. `mode` is the wire value
+    /// ("canned" / "prompt" / legacy "static" / "ai").
     pub fn set_default_response(&mut self, mode: &str, text: String) {
-        self.default_rule.response = match mode {
+        self.response = match mode {
             "ai" | "prompt" => ReplyResponse::Prompt { text },
             _ => ReplyResponse::Canned { text },
         };
     }
 }
 
+/// Default response for a channel that hasn't been customized: run the
+/// persona through the LLM with a generic instruction.
+pub fn default_response() -> ReplyResponse {
+    ReplyResponse::Prompt {
+        text: "Reply to the customer's message helpfully.".to_string(),
+    }
+}
+
 pub fn default_wait_seconds() -> u32 {
     5
-}
-
-/// One reply routing entry: a matcher (when does this fire?) and a response
-/// (what do we send?).
-#[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct ReplyRule {
-    pub id: String,
-    pub label: String,
-    pub matcher: ReplyMatcher,
-    pub response: ReplyResponse,
-    #[serde(default)]
-    pub approval: ApprovalPolicy,
-}
-
-impl ReplyRule {
-    /// The default fallback rule used when a tenant hasn't customized.
-    /// Calls the LLM with the persona prompt + a generic instruction.
-    pub fn default_fallback() -> Self {
-        Self {
-            id: "default".to_string(),
-            label: "Default reply".to_string(),
-            matcher: ReplyMatcher::Default,
-            response: ReplyResponse::Prompt {
-                text: "Reply to the customer's message helpfully.".to_string(),
-            },
-            approval: ApprovalPolicy::default(),
-        }
-    }
-}
-
-/// Per-rule policy for AI-generated drafts. Only consulted when the rule's
-/// `response` is `ReplyResponse::Prompt` (canned rules send verbatim, no draft).
-///
-/// `Auto` is the default and runs the cheap risk gate: drafts that look
-/// risky get queued for human approval, the rest send. `Always` queues every
-/// AI draft. `NoGate` skips the safety check entirely and is locked behind
-/// the operator's `ALLOW_NO_GATE` env var plus a per-rule TOS acceptance.
-#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq, Eq)]
-#[serde(tag = "kind", rename_all = "snake_case")]
-pub enum ApprovalPolicy {
-    #[default]
-    Auto,
-    Always,
-    NoGate {
-        acceptance: NoGateAcceptance,
-    },
-}
-
-/// TOS acceptance recorded when a tenant flips a rule into `NoGate`. Lives
-/// inside the variant so changing the policy drops the acceptance.
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
-pub struct NoGateAcceptance {
-    pub accepted_at: String,
-    pub accepted_by: String,
-    /// Wording version. Bump when the disclaimer text materially changes,
-    /// so we know whether existing acceptances cover the new copy.
-    pub version: String,
-}
-
-/// Why an AI draft was diverted from the auto-send path to the approval
-/// queue. Logged on the pending_approvals row and shown in the admin UI.
-#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum QueueReason {
-    /// Rule policy is `Always`. No risk-gate signal, just the explicit choice.
-    RuleAlways,
-    /// Draft was very short or very long.
-    RiskLength,
-    /// Draft mentioned money, prices, or refunds.
-    RiskMoneyWord,
-    /// Draft made a commitment (guarantee/promise/by-day).
-    RiskCommitment,
-    /// Draft contained a topic in the persona's off-topics or never list.
-    RiskPersonaDrift,
-}
-
-/// One row of the pending_approvals D1 table, mirrored as a Rust struct.
-#[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct PendingApproval {
-    pub id: String,
-    pub tenant_id: String,
-    pub channel: Channel,
-    pub channel_account_id: String,
-    pub rule_id: String,
-    pub rule_label: String,
-    pub sender: String,
-    pub sender_name: Option<String>,
-    pub inbound_preview: String,
-    pub draft: String,
-    pub queue_reason: QueueReason,
-    pub status: ApprovalStatus,
-    pub created_at: String,
-    pub decided_at: Option<String>,
-    pub decided_by: Option<String>,
-    pub edited: bool,
-    pub last_digest_at: Option<String>,
-}
-
-#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum ApprovalStatus {
-    Pending,
-    Approved,
-    Rejected,
-    Expired,
-}
-
-/// Who decided a pending approval. Stored on `pending_approvals.decided_by`
-/// in a flat string form (`"discord:<id>" | "web:<email>" | "expired"`) so
-/// the column stays human-readable in the audit log.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum ApprovalDecider {
-    Discord { user_id: String },
-    Web { email: String },
-    Expired,
-}
-
-impl ApprovalDecider {
-    /// Wire form for the `decided_by` column.
-    pub fn wire(&self) -> String {
-        match self {
-            ApprovalDecider::Discord { user_id } => format!("discord:{user_id}"),
-            ApprovalDecider::Web { email } => format!("web:{email}"),
-            ApprovalDecider::Expired => "expired".to_string(),
-        }
-    }
-
-    /// Inverse of `wire`: parse a stored value. Returns `None` for unknown
-    /// forms. Used by tests and any future read path that needs to branch
-    /// on who decided.
-    pub fn from_wire(s: &str) -> Option<Self> {
-        if s == "expired" {
-            return Some(ApprovalDecider::Expired);
-        }
-        if let Some(id) = s.strip_prefix("discord:") {
-            return Some(ApprovalDecider::Discord {
-                user_id: id.to_string(),
-            });
-        }
-        if let Some(email) = s.strip_prefix("web:") {
-            return Some(ApprovalDecider::Web {
-                email: email.to_string(),
-            });
-        }
-        None
-    }
-}
-
-/// How a rule decides whether it matches the inbound message.
-#[derive(Serialize, Deserialize, Clone, Debug)]
-#[serde(tag = "kind", rename_all = "snake_case")]
-pub enum ReplyMatcher {
-    /// Only valid for the `default_rule` slot. Always matches.
-    Default,
-    /// Match if any keyword (case-insensitive substring) appears in the message.
-    Keyword { keywords: Vec<String> },
-    /// Embedding-based intent match. The `embedding` is precomputed from
-    /// `description` on save; the pipeline compares it to the embedded
-    /// inbound message via cosine similarity.
-    Prompt {
-        description: String,
-        #[serde(default)]
-        embedding: Vec<f32>,
-        #[serde(default)]
-        embedding_model: String,
-        #[serde(default = "default_match_threshold")]
-        threshold: f32,
-    },
-}
-
-pub fn default_match_threshold() -> f32 {
-    0.72
 }
 
 /// What to send when a rule matches.
@@ -335,35 +172,6 @@ pub enum ReplyResponse {
     Canned { text: String },
     /// Append this prompt to the persona prompt and run the main LLM.
     Prompt { text: String },
-}
-
-// ============================================================================
-// Instagram Account Resource
-// ============================================================================
-
-#[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct InstagramAccount {
-    pub id: String,
-    pub tenant_id: String,
-    pub instagram_user_id: String,
-    pub instagram_username: String,
-    pub page_id: String,
-    pub auto_reply: ReplyConfig,
-    pub enabled: bool,
-    pub created_at: String,
-    #[serde(default)]
-    pub updated_at: String,
-}
-
-// ============================================================================
-// Instagram Token
-// ============================================================================
-
-#[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct InstagramToken {
-    pub access_token: String,
-    pub expires_at: String,
-    pub user_id: String,
 }
 
 // ============================================================================
@@ -443,116 +251,19 @@ pub struct IncomingMessage {
 }
 
 // ============================================================================
-// Instagram DM Webhook Types
-// ============================================================================
-
-#[derive(Debug, Deserialize)]
-pub struct InstagramWebhookPayload {
-    pub object: String,
-    #[serde(default)]
-    pub entry: Vec<InstagramWebhookEntry>,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct InstagramWebhookEntry {
-    pub id: String,
-    #[serde(default)]
-    pub time: i64,
-    #[serde(default)]
-    pub messaging: Vec<InstagramMessaging>,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct InstagramMessaging {
-    pub sender: IdField,
-    pub recipient: IdField,
-    #[serde(default)]
-    pub timestamp: i64,
-    #[serde(default)]
-    pub message: Option<InstagramDm>,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct IdField {
-    pub id: String,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct InstagramDm {
-    pub mid: String,
-    #[serde(default)]
-    pub text: Option<String>,
-}
-
-// ============================================================================
-// Email Address Types
-// ============================================================================
-
-/// One concierge email address owned by a tenant. The full address is
-/// `{local_part}@{EMAIL_DOMAIN}` (the platform's single email domain).
-#[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct EmailAddress {
-    pub local_part: String,
-    pub tenant_id: String,
-    #[serde(default)]
-    pub auto_reply: ReplyConfig,
-    #[serde(default)]
-    pub notification_recipients: Vec<NotificationRecipient>,
-    pub created_at: String,
-    pub updated_at: String,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct NotificationRecipient {
-    pub id: String,
-    pub address: String,
-    pub kind: RecipientKind,
-    pub status: RecipientStatus,
-    /// True for the tenant owner's auth-login email; auto-verified, can't be
-    /// deleted by the user.
-    #[serde(default)]
-    pub is_owner: bool,
-    pub created_at: String,
-    #[serde(default)]
-    pub verified_at: Option<String>,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
-#[serde(rename_all = "snake_case")]
-pub enum RecipientKind {
-    Cc,
-    Bcc,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
-#[serde(rename_all = "snake_case")]
-pub enum RecipientStatus {
-    Pending,
-    Verified,
-}
-
-/// Reverse alias mapping for reply routing: when Concierge forwards a
-/// message out of the platform, the recipient's `Reply-To` is set to a
-/// short-lived alias so their reply lands back here and can be re-routed.
-#[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct EmailReverseAlias {
-    pub alias: String,
-    pub original_sender: String,
-    pub tenant_id: String,
-    pub domain: String,
-}
-
-// ============================================================================
 // Unified Messaging Types
 // ============================================================================
 
+/// Inbound channel a message arrived on.
+///
+/// WhatsApp is the only one at launch; Instagram, Email and Discord were
+/// cut. The enum stays (rather than being erased) because the D1 `channel`
+/// column, the conversation key and the pipeline all carry it, and adding
+/// a channel back should be a variant plus an arm.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum Channel {
     WhatsApp,
-    Instagram,
-    Email,
-    Discord,
 }
 
 impl Channel {
@@ -562,19 +273,13 @@ impl Channel {
     pub fn as_str(&self) -> &'static str {
         match self {
             Channel::WhatsApp => "whatsapp",
-            Channel::Instagram => "instagram",
-            Channel::Email => "email",
-            Channel::Discord => "discord",
         }
     }
 
-    /// Display label used in templates and email digests.
+    /// Display label used in the UI.
     pub fn label(&self) -> &'static str {
         match self {
             Channel::WhatsApp => "WhatsApp",
-            Channel::Instagram => "Instagram",
-            Channel::Email => "Email",
-            Channel::Discord => "Discord",
         }
     }
 }
@@ -585,8 +290,6 @@ impl Channel {
 pub enum MessageDirection {
     Inbound,
     Outbound,
-    /// A message routed back through Discord cross-channel relay.
-    Relay,
 }
 
 impl MessageDirection {
@@ -594,7 +297,6 @@ impl MessageDirection {
         match self {
             MessageDirection::Inbound => "inbound",
             MessageDirection::Outbound => "outbound",
-            MessageDirection::Relay => "relay",
         }
     }
 }
@@ -604,29 +306,18 @@ impl MessageDirection {
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum MessageAction {
-    /// Auto-reply sent without any approval gate.
+    /// Auto-reply sent.
     AutoReply,
-    /// Forwarded to Discord for human relay (not an AI draft).
-    Relay,
-    /// AI draft was diverted to the approval queue.
-    AiQueued,
-    /// AI draft sent after a human approval (Discord button or web).
-    AiApproved,
-    /// AI draft rejected; credit refunded.
-    AiRejected,
-    /// AI draft expired past its 24h hold without action.
-    AiExpired,
+    /// Draft tripped the risk gate: nothing was sent to the customer and
+    /// the tenant was paged to take the conversation over.
+    HandedOff,
 }
 
 impl MessageAction {
     pub fn as_str(self) -> &'static str {
         match self {
             MessageAction::AutoReply => "auto_reply",
-            MessageAction::Relay => "relay",
-            MessageAction::AiQueued => "ai_queued",
-            MessageAction::AiApproved => "ai_approved",
-            MessageAction::AiRejected => "ai_rejected",
-            MessageAction::AiExpired => "ai_expired",
+            MessageAction::HandedOff => "handed_off",
         }
     }
 }
@@ -640,52 +331,10 @@ pub struct InboundMessage {
     pub sender_name: Option<String>,
     pub recipient: String,
     pub body: String,
-    pub subject: Option<String>,
     pub has_attachment: bool,
     pub tenant_id: String,
     pub channel_account_id: String,
     pub raw_metadata: serde_json::Value,
-}
-
-/// Conversation context for cross-channel Discord relay.
-///
-/// Doubles as the per-conversation state store for human-handoff: when
-/// the AI emits the handoff token in a reply, the pipeline records
-/// `handoff_signaled_at` here so subsequent customer messages on the
-/// same conversation route through the holding-pattern prompt instead
-/// of the persona, and stop replying entirely after the tenant's
-/// effective handoff cooldown (see
-/// [`crate::prompt::DEFAULT_HANDOFF_COOLDOWN_MINS`]).
-#[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct ConversationContext {
-    pub id: String,
-    pub discord_channel_id: String,
-    pub origin_channel: Channel,
-    pub origin_sender: String,
-    pub origin_recipient: String,
-    pub tenant_id: String,
-    pub channel_account_id: String,
-    pub reply_metadata: serde_json::Value,
-    #[serde(default)]
-    pub ai_draft: Option<String>,
-    pub created_at: String,
-    /// RFC3339 timestamp of the *first* turn on this conversation that
-    /// emitted the handoff token. Once set, every subsequent turn
-    /// follows the holding-pattern path until the cooldown expires.
-    #[serde(default)]
-    pub handoff_signaled_at: Option<String>,
-    /// One-shot guard: flips to true once the tenant has been alerted
-    /// (Discord + email) so additional customer turns inside the
-    /// holding-pattern window don't re-spam them.
-    #[serde(default)]
-    pub handoff_notified: bool,
-    /// `Session.conversation_id` at the time this approval was queued.
-    /// Threaded through to the post-approval send paths
-    /// (Discord button, web admin) so the outbound row that finally
-    /// goes out gets stamped with the right conversation. Empty for
-    /// records created before this field existed.
-    #[serde(default)]
-    pub conversation_id: String,
 }
 
 /// Per-customer conversation session. Stable-keyed by
@@ -702,8 +351,8 @@ pub struct ConversationContext {
 /// the same sender belong to the same conversation regardless of
 /// length.
 ///
-/// This is distinct from `ConversationContext` (which is per
-/// AI-draft-approval). Sessions are per-thread.
+/// Sessions are the only conversation state: the per-approval
+/// `ConversationContext` record went with the approval queue.
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct Session {
     /// RFC3339 timestamp of the most recent inbound message we
@@ -853,128 +502,55 @@ pub struct BusinessInfo {
     pub pincode: String,
 }
 
-/// Notification delivery configuration. Today this only covers approval
-/// notifications. The previous activity-summary digest scaffolding was
-/// dropped: it was wizard-collected but never read by any send path.
-#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+/// Where a human handoff is announced.
+///
+/// Email is the only channel. The Discord relay that used to carry an
+/// embed with Approve/Reject buttons was cut along with the approval
+/// queue, and with the queue went the digest: a handoff pages the tenant
+/// the moment it happens, so there is no cadence left to configure.
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct NotificationConfig {
-    #[serde(default)]
-    pub approval_discord: bool,
-    #[serde(default)]
-    pub approval_email: bool,
-    #[serde(default)]
-    pub approval_email_cadence: DigestCadence,
+    /// Email the account owner when a conversation is handed off. On by
+    /// default — a handoff nobody hears about is a dropped customer.
+    #[serde(default = "default_true", alias = "approval_email")]
+    pub handoff_email: bool,
 }
 
-/// How often a tenant wants the approval-queue digest email. The cron sweep
-/// runs every 15 minutes and skips tenants whose cadence isn't due yet.
-/// `Instant` means a single-item email per draft, no batching.
-#[derive(Serialize, Deserialize, Clone, Copy, Debug, Default, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum DigestCadence {
-    Instant,
-    Every15Min,
-    #[default]
-    Hourly,
-    Every4Hours,
-    Daily,
+impl Default for NotificationConfig {
+    fn default() -> Self {
+        Self {
+            handoff_email: true,
+        }
+    }
 }
 
-impl DigestCadence {
-    /// Wire form used by HTML form submissions. Stable: this string also
-    /// appears in serde JSON since the enum uses `rename_all = "snake_case"`.
-    pub fn as_str(self) -> &'static str {
-        match self {
-            DigestCadence::Instant => "instant",
-            DigestCadence::Every15Min => "every15_min",
-            DigestCadence::Hourly => "hourly",
-            DigestCadence::Every4Hours => "every4_hours",
-            DigestCadence::Daily => "daily",
-        }
-    }
-
-    // Not `std::str::FromStr`: that trait's method returns Result, and
-    // this mapping is infallible by design -- an unknown value falls
-    // back to Hourly rather than failing a form submission.
-    #[allow(clippy::should_implement_trait)]
-    pub fn from_str(s: &str) -> Self {
-        match s {
-            "instant" => DigestCadence::Instant,
-            "every15_min" | "every_15_min" => DigestCadence::Every15Min,
-            "every4_hours" | "every_4_hours" => DigestCadence::Every4Hours,
-            "daily" => DigestCadence::Daily,
-            _ => DigestCadence::Hourly,
-        }
-    }
-
-    pub fn label(self) -> &'static str {
-        match self {
-            DigestCadence::Instant => "Instant",
-            DigestCadence::Every15Min => "Every 15 min",
-            DigestCadence::Hourly => "Hourly",
-            DigestCadence::Every4Hours => "Every 4 hours",
-            DigestCadence::Daily => "Daily",
-        }
-    }
-
-    /// True if the cron tick at this hour:minute should consider this
-    /// tenant due. The 15-minute cron is the minimum granularity, so
-    /// `Every15Min` always fires; coarser cadences fire only when the tick
-    /// aligns with their boundary (e.g. `Hourly` at minute :00, `Daily` at
-    /// 06:00 UTC).
-    pub fn is_due_at(self, hour: u32, minute: u32) -> bool {
-        match self {
-            DigestCadence::Instant => true,
-            DigestCadence::Every15Min => true,
-            DigestCadence::Hourly => minute < 15,
-            DigestCadence::Every4Hours => minute < 15 && hour.is_multiple_of(4),
-            DigestCadence::Daily => minute < 15 && hour == 6,
-        }
-    }
+fn default_true() -> bool {
+    true
 }
 
 #[cfg(test)]
 mod enum_tests {
-    use super::{ApprovalDecider, OnboardingStep, Plan};
-
-    #[test]
-    fn approval_decider_round_trip() {
-        let cases = [
-            ApprovalDecider::Discord {
-                user_id: "12345".into(),
-            },
-            ApprovalDecider::Web {
-                email: "owner@example.com".into(),
-            },
-            ApprovalDecider::Expired,
-        ];
-        for d in cases {
-            let wire = d.wire();
-            let parsed = ApprovalDecider::from_wire(&wire).expect("round trip");
-            assert_eq!(parsed, d);
-        }
-    }
-
-    #[test]
-    fn approval_decider_from_unknown_returns_none() {
-        assert_eq!(ApprovalDecider::from_wire("bogus:value"), None);
-        assert_eq!(ApprovalDecider::from_wire(""), None);
-    }
+    use super::{OnboardingStep, Plan};
 
     #[test]
     fn onboarding_step_round_trip_and_index() {
-        for step in [
-            OnboardingStep::Basics,
-            OnboardingStep::Channels,
-            OnboardingStep::Notifications,
-            OnboardingStep::Replies,
-            OnboardingStep::Launch,
-        ] {
+        for step in OnboardingStep::ALL {
             assert_eq!(OnboardingStep::from_wire(step.as_str()), Some(step));
         }
         assert_eq!(OnboardingStep::from_wire("welcome"), None);
-        // Indices stay in display order.
-        assert!(OnboardingStep::Basics.index() < OnboardingStep::Launch.index());
+        // Indices stay in display order, and ALL is in that order too.
+        for (i, step) in OnboardingStep::ALL.iter().enumerate() {
+            assert_eq!(step.index(), i);
+        }
+    }
+
+    #[test]
+    fn onboarding_step_accepts_the_old_replies_name() {
+        // A wizard abandoned mid-flight has "replies" persisted as its step.
+        assert_eq!(
+            OnboardingStep::from_wire("replies"),
+            Some(OnboardingStep::Persona)
+        );
     }
 
     #[test]
@@ -991,54 +567,6 @@ mod enum_tests {
     }
 }
 
-#[cfg(test)]
-mod cadence_tests {
-    use super::DigestCadence;
-
-    #[test]
-    fn instant_always_due() {
-        for h in 0..24 {
-            for m in [0_u32, 15, 30, 45] {
-                assert!(DigestCadence::Instant.is_due_at(h, m));
-            }
-        }
-    }
-
-    #[test]
-    fn every_15_min_always_due() {
-        for h in 0..24 {
-            for m in [0_u32, 15, 30, 45] {
-                assert!(DigestCadence::Every15Min.is_due_at(h, m));
-            }
-        }
-    }
-
-    #[test]
-    fn hourly_fires_only_in_first_quarter() {
-        assert!(DigestCadence::Hourly.is_due_at(10, 0));
-        assert!(DigestCadence::Hourly.is_due_at(10, 14));
-        assert!(!DigestCadence::Hourly.is_due_at(10, 15));
-        assert!(!DigestCadence::Hourly.is_due_at(10, 45));
-    }
-
-    #[test]
-    fn every4_fires_only_at_aligned_hours() {
-        assert!(DigestCadence::Every4Hours.is_due_at(0, 0));
-        assert!(DigestCadence::Every4Hours.is_due_at(4, 14));
-        assert!(DigestCadence::Every4Hours.is_due_at(8, 0));
-        assert!(!DigestCadence::Every4Hours.is_due_at(2, 0));
-        assert!(!DigestCadence::Every4Hours.is_due_at(4, 30));
-    }
-
-    #[test]
-    fn daily_fires_only_at_6_utc_first_quarter() {
-        assert!(DigestCadence::Daily.is_due_at(6, 0));
-        assert!(DigestCadence::Daily.is_due_at(6, 14));
-        assert!(!DigestCadence::Daily.is_due_at(6, 15));
-        assert!(!DigestCadence::Daily.is_due_at(7, 0));
-    }
-}
-
 /// Steps in the onboarding wizard, in display order. The wizard URL
 /// (`/wizard/<step>`) mirrors `as_str` exactly.
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -1047,18 +575,25 @@ pub enum OnboardingStep {
     #[default]
     Basics,
     Channels,
-    Notifications,
-    Replies,
+    Persona,
     Launch,
 }
 
 impl OnboardingStep {
+    /// Every step in display order. The frontend renders its progress bar
+    /// from this, so the wizard's shape is described in one place.
+    pub const ALL: [OnboardingStep; 4] = [
+        OnboardingStep::Basics,
+        OnboardingStep::Channels,
+        OnboardingStep::Persona,
+        OnboardingStep::Launch,
+    ];
+
     pub fn as_str(self) -> &'static str {
         match self {
             OnboardingStep::Basics => "basics",
             OnboardingStep::Channels => "channels",
-            OnboardingStep::Notifications => "notifications",
-            OnboardingStep::Replies => "replies",
+            OnboardingStep::Persona => "persona",
             OnboardingStep::Launch => "launch",
         }
     }
@@ -1067,8 +602,9 @@ impl OnboardingStep {
         match s {
             "basics" => Some(OnboardingStep::Basics),
             "channels" => Some(OnboardingStep::Channels),
-            "notifications" => Some(OnboardingStep::Notifications),
-            "replies" => Some(OnboardingStep::Replies),
+            // "replies" was this step's name when it also seeded per-channel
+            // reply rules. Accepted so a half-finished wizard resumes.
+            "persona" | "replies" => Some(OnboardingStep::Persona),
             "launch" => Some(OnboardingStep::Launch),
             _ => None,
         }
@@ -1080,9 +616,8 @@ impl OnboardingStep {
         match self {
             OnboardingStep::Basics => 0,
             OnboardingStep::Channels => 1,
-            OnboardingStep::Notifications => 2,
-            OnboardingStep::Replies => 3,
-            OnboardingStep::Launch => 4,
+            OnboardingStep::Persona => 2,
+            OnboardingStep::Launch => 3,
         }
     }
 }
@@ -1251,7 +786,6 @@ pub struct Archetype {
     pub description: String,
     pub voice_prompt: String,
     pub greeting: String,
-    pub default_rules_json: String,
     pub catch_phrases: Vec<String>,
     pub off_topics: Vec<String>,
     pub never: String,
@@ -1268,11 +802,6 @@ impl Archetype {
     /// True iff the archetype's safety verdict is Approved.
     pub fn is_safe_to_use(&self) -> bool {
         matches!(self.safety.status, PersonaSafetyStatus::Approved)
-    }
-
-    /// Deserialize the default rules from JSON.
-    pub fn default_rules(&self) -> Vec<ReplyRule> {
-        serde_json::from_str(&self.default_rules_json).unwrap_or_default()
     }
 }
 
@@ -1301,28 +830,6 @@ pub enum PersonaSafetyStatus {
     Pending,
     Approved,
     Rejected,
-}
-
-/// Discord guild → tenant mapping config.
-#[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct DiscordConfig {
-    pub guild_id: String,
-    pub tenant_id: String,
-    #[serde(default)]
-    pub guild_name: Option<String>,
-    /// Channel where AI drafts are posted with Approve/Reject buttons.
-    /// When unset, the approval queue lives only on the web page.
-    #[serde(default)]
-    pub approval_channel_id: Option<String>,
-    /// Reply when the bot is @mentioned in any channel of the guild.
-    #[serde(default)]
-    pub inbound_mentions: bool,
-    /// Reply to every message in these channels (regardless of mention).
-    #[serde(default)]
-    pub inbound_channel_ids: Vec<String>,
-    /// AI auto-reply configuration for inbound Discord messages.
-    #[serde(default)]
-    pub auto_reply: ReplyConfig,
 }
 
 #[cfg(test)]
@@ -1379,75 +886,6 @@ mod tests {
         assert_eq!(
             webhook.entry[0].changes[0].value.messages[0].from,
             "user123"
-        );
-    }
-
-    #[test]
-    fn test_channel_serialization() {
-        assert_eq!(
-            serde_json::to_string(&Channel::WhatsApp).unwrap(),
-            "\"whats_app\""
-        );
-        assert_eq!(serde_json::to_string(&Channel::Email).unwrap(), "\"email\"");
-        let ch: Channel = serde_json::from_str("\"instagram\"").unwrap();
-        assert_eq!(ch, Channel::Instagram);
-    }
-
-    #[test]
-    fn test_conversation_context_roundtrip() {
-        let ctx = ConversationContext {
-            id: "ctx-1".into(),
-            discord_channel_id: "ch-1".into(),
-            origin_channel: Channel::Email,
-            origin_sender: "alice@example.com".into(),
-            origin_recipient: "support@proxy.com".into(),
-            tenant_id: "tenant-1".into(),
-            channel_account_id: "example.com".into(),
-            reply_metadata: serde_json::json!({"domain": "example.com"}),
-            ai_draft: Some("Draft reply text".into()),
-            created_at: "2026-01-01T00:00:00Z".into(),
-            handoff_signaled_at: None,
-            handoff_notified: false,
-            conversation_id: "conv-1".into(),
-        };
-        let json = serde_json::to_string(&ctx).unwrap();
-        let parsed: ConversationContext = serde_json::from_str(&json).unwrap();
-        assert_eq!(parsed.origin_channel, Channel::Email);
-        assert_eq!(parsed.ai_draft.as_deref(), Some("Draft reply text"));
-        assert!(parsed.handoff_signaled_at.is_none());
-        assert!(!parsed.handoff_notified);
-    }
-
-    #[test]
-    fn test_instagram_webhook_deserialization() {
-        let json = r#"{
-            "object": "instagram",
-            "entry": [{
-                "id": "page-123",
-                "time": 1700000000,
-                "messaging": [{
-                    "sender": {"id": "sender-456"},
-                    "recipient": {"id": "page-123"},
-                    "timestamp": 1700000000,
-                    "message": {
-                        "mid": "mid-789",
-                        "text": "Hello!"
-                    }
-                }]
-            }]
-        }"#;
-
-        let payload: InstagramWebhookPayload = serde_json::from_str(json).unwrap();
-        assert_eq!(payload.object, "instagram");
-        assert_eq!(payload.entry[0].messaging[0].sender.id, "sender-456");
-        assert_eq!(
-            payload.entry[0].messaging[0]
-                .message
-                .as_ref()
-                .unwrap()
-                .text
-                .as_deref(),
-            Some("Hello!")
         );
     }
 

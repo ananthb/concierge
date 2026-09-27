@@ -49,17 +49,13 @@
       <div class="sidebar__group-label">Channels</div>
       <ul class="sidebar__list">
         <li><a href="whatsapp.html"><span class="dot"></span>WhatsApp</a></li>
-        <li><a href="instagram.html"><span class="dot"></span>Instagram</a></li>
-        <li><a href="email-routing.html"><span class="dot"></span>Email routing</a></li>
-        <li><a href="discord.html"><span class="dot"></span>Discord relay</a></li>
       </ul>
     </div>
     <div class="sidebar__group">
       <div class="sidebar__group-label">Operate</div>
       <ul class="sidebar__list">
         <li><a href="billing.html"><span class="dot"></span>Billing &amp; credits</a></li>
-        <li><a href="management.html"><span class="dot"></span>Management panel</a></li>
-        <li><a href="facebook-app-setup.html"><span class="dot"></span>Facebook app setup</a></li>
+        <li><a href="management.html"><span class="dot"></span>Operator API</a></li>
       </ul>
     </div>
     <div class="sidebar__group">
@@ -125,11 +121,11 @@
           <thead><tr><th style="width:30%">Variable</th><th>Description</th></tr></thead>
           <tbody>
             <tr><td><code>CF_ACCESS_TEAM</code></td><td class="muted">Cloudflare Access team name (the subdomain in <code>myteam.cloudflareaccess.com</code>).</td></tr>
-            <tr><td><code>CF_ACCESS_AUD</code></td><td class="muted">Cloudflare Access Application Audience (AUD) tag. Configure the Access app with the path <code>your-domain/manage*</code>: no slash before the asterisk, so it covers both the <code>/manage</code> dashboard and every subroute.</td></tr>
-            <tr><td><code>PUBLIC_BASE_URL</code></td><td class="muted">Your deployment&rsquo;s primary URL, e.g. <code>https://concierge.example.com</code>. Used in approval&#8209;digest email links and the email&#8209;domain redirect.</td></tr>
-            <tr><td><code>EMAIL_DOMAIN</code></td><td class="muted">Email domain you control; configure MX records manually on its apex and wire it into Cloudflare Email Routing.</td></tr>
-            <tr><td><code>WHATSAPP_WABA_ID</code></td><td class="muted">Your WhatsApp Business Account ID. Only required if you&rsquo;re running WhatsApp.</td></tr>
-            <tr><td><code>WHATSAPP_SIGNUP_CONFIG_ID</code></td><td class="muted">Meta Embedded Signup configuration ID for your Meta app. Only required if you&rsquo;re running WhatsApp.</td></tr>
+            <tr><td><code>CF_ACCESS_AUD</code></td><td class="muted">Cloudflare Access Application Audience (AUD) tag. Configure the Access app with the path <code>your-domain/api/manage*</code>: no slash before the asterisk, so it covers every operator endpoint. Setting this also disables the local dev bypass, so a production deploy can never activate it.</td></tr>
+            <tr><td><code>PUBLIC_BASE_URL</code></td><td class="muted">Your deployment&rsquo;s primary URL, e.g. <code>https://concierge.example.com</code>. Used for the OAuth redirect URI and for links in handoff emails. The Worker refuses to serve anything without it rather than silently degrade.</td></tr>
+            <tr><td><code>EMAIL_DOMAIN</code></td><td class="muted">Domain handoff notifications are sent <em>from</em>, as <code>noreply@&lt;domain&gt;</code>. No MX records and no Email Routing needed &mdash; nothing is received by email. The domain does need onboarding in the Email Service dashboard before sends succeed.</td></tr>
+            <tr><td><code>WHATSAPP_WABA_ID</code></td><td class="muted">Your WhatsApp Business Account ID. Required &mdash; WhatsApp is the only channel.</td></tr>
+            <tr><td><code>WHATSAPP_SIGNUP_CONFIG_ID</code></td><td class="muted">Meta Embedded Signup configuration ID for your Meta app. Without it the frontend hides the connect button rather than rendering one that dead-ends in the callback.</td></tr>
           </tbody>
         </table>
         <p class="muted" style="margin-top:0.5rem">The npm <code>deploy</code> script reads these from <code>process.env</code> and passes them as <code>--var</code> flags. Build env vars persist across deploys; Worker plain&#8209;text vars set in the dashboard get wiped on each deploy.</p>
@@ -151,21 +147,12 @@
       <h2 id="secrets">Secrets</h2>
       <p>Sensitive values, set with <code>wrangler secret put</code>. Grouped by integration.</p>
 
-      <h3 id="core">Core</h3>
-      <div class="table-wrap">
-        <div class="table-wrap__head">
-          <b>Encryption</b><span>required for token storage</span>
-          <span class="count">1 secret</span>
+      <div class="callout callout--note">
+        <div class="callout__icon">i</div>
+        <div class="callout__body">
+          <strong>Secrets that are no longer read</strong>
+          <p><code>ENCRYPTION_KEY</code>, <code>INSTAGRAM_VERIFY_TOKEN</code>, <code>DISCORD_PUBLIC_KEY</code>, <code>DISCORD_APPLICATION_ID</code> and <code>DISCORD_BOT_TOKEN</code> were required by earlier revisions. Nothing reads them now: the encryption key existed to seal per-tenant Instagram tokens, and WhatsApp uses one platform token that needs no sealing. Remove them with <code>wrangler secret delete</code>.</p>
         </div>
-        <table class="docs">
-          <thead><tr><th style="width:32%">Secret</th><th>Description</th></tr></thead>
-          <tbody>
-            <tr>
-              <td><code>ENCRYPTION_KEY</code></td>
-              <td class="muted">32&#8209;byte hex key for AES&#8209;256&#8209;GCM encryption of stored tokens. Generate with <code>openssl rand -hex 32</code>.</td>
-            </tr>
-          </tbody>
-        </table>
       </div>
 
       <h3 id="google">Google OAuth</h3>
@@ -183,44 +170,27 @@
         </table>
       </div>
 
-      <h3 id="meta">Meta: Facebook / Instagram / WhatsApp</h3>
+      <h3 id="meta">Meta: WhatsApp</h3>
       <div class="table-wrap">
         <div class="table-wrap__head">
-          <b>Meta Graph API</b><span>shared app for FB Login, Instagram, WhatsApp signup</span>
-          <span class="count">5 secrets</span>
+          <b>Meta Graph API</b><span>Embedded Signup + messaging</span>
+          <span class="count">4 secrets</span>
         </div>
         <table class="docs">
           <thead><tr><th style="width:32%">Secret</th><th>Description</th></tr></thead>
           <tbody>
-            <tr><td><code>META_APP_ID</code></td><td class="muted">Meta app ID: shared for Facebook Login, Instagram, WhatsApp signup.</td></tr>
-            <tr><td><code>META_APP_SECRET</code></td><td class="muted">Meta app secret: used for webhook signature verification and token exchange.</td></tr>
-            <tr><td><code>WHATSAPP_ACCESS_TOKEN</code></td><td class="muted">System user token for your shared WABA.</td></tr>
-            <tr><td><code>WHATSAPP_VERIFY_TOKEN</code></td><td class="muted">Webhook verification token. Generate with <code>openssl rand -hex 16</code>.</td></tr>
-            <tr><td><code>INSTAGRAM_VERIFY_TOKEN</code></td><td class="muted">Instagram webhook verification token. Generate with <code>openssl rand -hex 16</code>.</td></tr>
+            <tr><td><code>META_APP_ID</code></td><td class="muted">Meta app ID, used for WhatsApp Embedded Signup.</td></tr>
+            <tr><td><code>META_APP_SECRET</code></td><td class="muted">Meta app secret: webhook signature verification and the signup token exchange.</td></tr>
+            <tr><td><code>WHATSAPP_ACCESS_TOKEN</code></td><td class="muted">System user token for your shared WABA. One token for the whole platform &mdash; nothing per-tenant is stored.</td></tr>
+            <tr><td><code>WHATSAPP_VERIFY_TOKEN</code></td><td class="muted">Webhook verification token, echoed back during Meta&rsquo;s subscription handshake. Generate with <code>openssl rand -hex 16</code>.</td></tr>
           </tbody>
         </table>
       </div>
 
-      <h3 id="discord">Discord</h3>
+      <h3 id="razorpay">Razorpay</h3>
       <div class="table-wrap">
         <div class="table-wrap__head">
-          <b>Interactions API</b><span>slash commands, button &amp; modal callbacks</span>
-          <span class="count">3 secrets</span>
-        </div>
-        <table class="docs">
-          <thead><tr><th style="width:32%">Secret</th><th>Description</th></tr></thead>
-          <tbody>
-            <tr><td><code>DISCORD_PUBLIC_KEY</code></td><td class="muted">Discord application public key (Ed25519 signature verification for interactions).</td></tr>
-            <tr><td><code>DISCORD_APPLICATION_ID</code></td><td class="muted">Discord application ID (for registering slash commands).</td></tr>
-            <tr><td><code>DISCORD_BOT_TOKEN</code></td><td class="muted">Discord bot token (for sending messages and managing interactions).</td></tr>
-          </tbody>
-        </table>
-      </div>
-
-      <h3 id="razorpay">Razorpay <span class="pill" style="margin-left:8px;vertical-align:middle">optional</span></h3>
-      <div class="table-wrap">
-        <div class="table-wrap__head">
-          <b>Payments</b><span>credit packs &amp; subscription billing</span>
+          <b>Payments</b><span>credit purchases + the sign-up verification charge</span>
           <span class="count">3 secrets</span>
         </div>
         <table class="docs">
@@ -244,10 +214,10 @@
         <table class="docs">
           <thead><tr><th>Binding</th><th>Type</th><th>Description</th></tr></thead>
           <tbody>
-            <tr><td><code>DB</code></td><td><span class="pill">D1</span></td><td class="muted">SQLite database for message logs, payments, audit, credit packs.</td></tr>
-            <tr><td><code>KV</code></td><td><span class="pill">KV</span></td><td class="muted">Config store for tenants, accounts, sessions, routing rules, billing state, persona.</td></tr>
-            <tr><td><code>AI</code></td><td><span class="pill">AI</span></td><td class="muted">Cloudflare Workers AI for reply generation, prompt&#8209;injection scanning, persona safety classification, and BGE embeddings.</td></tr>
-            <tr><td><code>EMAIL</code></td><td><span class="pill">send_email</span></td><td class="muted">Outbound email for forwarding and reverse&#8209;alias replies.</td></tr>
+            <tr><td><code>DB</code></td><td><span class="pill">D1</span></td><td class="muted">SQLite for message metadata, billing, payments, the audit log, and the archetype catalog.</td></tr>
+            <tr><td><code>KV</code></td><td><span class="pill">KV</span></td><td class="muted">Tenant and account configs, auth sessions, conversation state, persona, the demo cache.</td></tr>
+            <tr><td><code>AI</code></td><td><span class="pill">AI</span></td><td class="muted">Cloudflare Workers AI: reply generation, prompt&#8209;injection scanning, persona safety classification.</td></tr>
+            <tr><td><code>EMAIL</code></td><td><span class="pill">send_email</span></td><td class="muted">Outbound only: the one email sent when a conversation is handed to a human.</td></tr>
             <tr><td><code>REPLY_BUFFER</code></td><td><span class="pill">DO</span></td><td class="muted">Per&#8209;conversation reply buffer that batches multi&#8209;message bursts within <code>wait_seconds</code>.</td></tr>
             <tr><td><code>SAFETY_QUEUE</code></td><td><span class="pill">Queue</span></td><td class="muted">Persona safety classifier jobs. Producer + consumer bound on the same Worker.</td></tr>
           </tbody>
@@ -273,7 +243,7 @@
 
       <h2 id="locale">Locale &amp; supported languages</h2>
       <p>
-        Every tenant has a BCP&#8209;47 locale tag (<code>Tenant.locale</code>) plus an independent currency override. Currently shipped: <code>en-IN</code> (default; Indian&#8209;style number grouping, INR currency) and <code>en-US</code> (Western grouping, USD). Locale is set at signup from the request&rsquo;s <code>Accept-Language</code> header, falling back to <code>cf-ipcountry</code>, then to <code>en-IN</code>. Admins can change both locale and currency independently from <code>/dashboard/settings</code>.
+        Every tenant has a BCP&#8209;47 locale tag (<code>Tenant.locale</code>) plus an independent currency override. Currently shipped: <code>en-IN</code> (default; Indian&#8209;style number grouping, INR currency) and <code>en-US</code> (Western grouping, USD). Locale is set at signup from the request&rsquo;s <code>Accept-Language</code> header, falling back to <code>cf-ipcountry</code>, then to <code>en-IN</code>. Currency is changeable with <code>PUT /api/billing/currency</code>, which the dashboard&rsquo;s Credits tab uses. <strong>Locale has no endpoint and no UI</strong> &mdash; it is set once at signup and only an operator editing the tenant record can change it.
       </p>
       <p>
         Adding a new locale is a drop&#8209;in change: place a translated <code>messages.ftl</code> at <code>assets/locales/{tag}/</code>, register the tag in <code>src/i18n.rs::Translator::new</code> and <code>src/locale.rs::Locale::from_request</code>, then rebuild. CLDR data for number / currency formatting ships automatically via icu4x&rsquo;s <code>compiled_data</code> feature. AI&#8209;generated reply content stays English regardless of the UI locale.
@@ -281,7 +251,7 @@
 
       <h2 id="conversation">Conversation timing</h2>
       <p>
-        Three per&#8209;tenant knobs control how the worker treats a customer thread. They live on <code>OnboardingState.conversation</code> (a <code>ConversationConfig</code>) in KV at <code>onboarding:{tenant}</code>; each is <code>Option&lt;u32&gt;</code> and falls back to a constant in <code>src/prompt.rs</code> when unset. Tenants edit them from the <em>Conversation Timing</em> card on <code>/dashboard/settings</code>; <code>PUT /dashboard/settings/conversation</code> validates bounds and the cross&#8209;field invariant before persisting.
+        Three per&#8209;tenant knobs control how the worker treats a customer thread. They live on <code>OnboardingState.conversation</code> (a <code>ConversationConfig</code>) in KV at <code>onboarding:{tenant}</code>; each is <code>Option&lt;u32&gt;</code> and falls back to a constant in <code>src/prompt.rs</code> when unset. <strong>These have no endpoint and no UI yet.</strong> Every tenant runs on the defaults unless an operator edits <code>onboarding:{tenant}</code> directly. The earlier revision had a <em>Conversation Timing</em> card that validated the bounds and the cross-field invariant on save; porting it needs an API endpoint first.
       </p>
       <div class="table-wrap">
         <div class="table-wrap__head">
@@ -312,16 +282,17 @@
           </tbody>
         </table>
         <p class="muted" style="margin-top:0.5rem">
-          Cross&#8209;field invariant: <code>idle_gap_mins &gt; handoff_cooldown_mins</code>. The form rejects saves that would let an active handoff be wiped before its cooldown ended.
+          Cross&#8209;field invariant: <code>idle_gap_mins &gt; handoff_cooldown_mins</code>. Set the other way round, an active handoff can be wiped before its cooldown ends. Nothing enforces this at present, because nothing writes these values.
         </p>
       </div>
 
       <h2 id="oauth">OAuth redirect URIs</h2>
       <p>Register these in the respective developer consoles:</p>
       <ul>
-        <li><strong>Google:</strong> <code>https://your-domain/auth/callback</code></li>
-        <li><strong>Facebook:</strong> <code>https://your-domain/auth/facebook/callback</code> and <code>https://your-domain/instagram/callback</code></li>
+        <li><strong>Google:</strong> <code>https://your-domain/auth/callback</code> &mdash; the only sign-in provider.</li>
+        <li><strong>Meta:</strong> <code>https://your-domain/whatsapp/signup/callback</code>, for the Embedded Signup flow that attaches a customer&rsquo;s number to your WABA. This is not a sign-in redirect, but Meta needs it registered as a valid OAuth redirect URI on the app.</li>
       </ul>
+      <p class="muted">The Facebook Login and Instagram callbacks that earlier revisions registered (<code>/auth/facebook/callback</code>, <code>/instagram/callback</code>) are gone. Both routes now 404; you can remove them from the Meta app.</p>
 
       <h2 id="webhooks">Webhook URLs</h2>
       <p>Configure these in the respective platforms:</p>
@@ -330,15 +301,14 @@
           <thead><tr><th>Platform</th><th>URL</th><th>Method</th></tr></thead>
           <tbody>
             <tr><td><strong>WhatsApp</strong></td><td><code>https://your-domain/webhook/whatsapp</code></td><td><span class="pill">GET&nbsp;/&nbsp;POST</span></td></tr>
-            <tr><td><strong>Instagram</strong></td><td><code>https://your-domain/webhook/instagram</code></td><td><span class="pill">GET&nbsp;/&nbsp;POST</span></td></tr>
-            <tr><td><strong>Discord</strong></td><td><code>https://your-domain/discord/interactions</code></td><td><span class="pill">POST</span></td></tr>
             <tr><td><strong>Razorpay</strong></td><td><code>https://your-domain/webhook/razorpay</code></td><td><span class="pill">POST</span></td></tr>
           </tbody>
         </table>
       </div>
 
       <h2 id="cron">Cron triggers</h2>
-      <p>A daily cron runs at <code>0 6 * * *</code> (06:00 UTC) for Instagram token refresh. Configured in the <code>[triggers]</code> section of <code>wrangler.toml</code>.</p>
+      <p>One cron, hourly at <code>0 * * * *</code>: it re-rolls the landing-page demo personas when the operator-configured cadence has elapsed, and is a single KV read when it isn&rsquo;t due. Configured in the <code>[triggers]</code> section of <code>wrangler.toml</code> and mirrored in <code>src/scheduled.rs</code>, which dispatches on the cron string.</p>
+      <p class="muted">Two crons were removed: a 15-minute approval-digest sweep (which expired stale queued drafts and emailed digests) and a daily Instagram token refresh.</p>
 
       <div class="codeblock">
         <div class="codeblock__head">
@@ -368,9 +338,23 @@
 [<span class="tok-k">ai</span>]            <span class="tok-v">binding</span> = <span class="tok-s">"AI"</span>
 [[<span class="tok-k">send_email</span>]]   <span class="tok-v">name</span>    = <span class="tok-s">"EMAIL"</span>
 
+<span class="tok-c"># The Elm bundle, boot.js, the CSS, and the prerendered marketing pages.</span>
+<span class="tok-c"># A request matching a file here is answered from the edge and the Worker</span>
+<span class="tok-c"># is never invoked — which is why public/_headers exists to set the CSP</span>
+<span class="tok-c"># for those routes. html_handling defaults to auto-trailing-slash, so</span>
+<span class="tok-c"># /pricing serves public/pricing.html.</span>
+[<span class="tok-k">assets</span>]
+<span class="tok-v">directory</span> = <span class="tok-s">"./public"</span>
+
 [[<span class="tok-k">durable_objects.bindings</span>]]
 <span class="tok-v">name</span>       = <span class="tok-s">"REPLY_BUFFER"</span>
 <span class="tok-v">class_name</span> = <span class="tok-s">"ReplyBufferDO"</span>
+
+<span class="tok-c"># ApprovalsDO was deleted; the migration tells Cloudflare to drop the</span>
+<span class="tok-c"># class. Removing only the binding leaves it orphaned and the deploy fails.</span>
+[[<span class="tok-k">migrations</span>]]
+<span class="tok-v">tag</span>             = <span class="tok-s">"v3"</span>
+<span class="tok-v">deleted_classes</span> = [<span class="tok-s">"ApprovalsDO"</span>]
 
 <span class="tok-c"># Persona safety classifier</span>
 [[<span class="tok-k">queues.producers</span>]]
@@ -384,16 +368,16 @@
 <span class="tok-v">max_retries</span>       = <span class="tok-n">3</span>
 <span class="tok-v">dead_letter_queue</span> = <span class="tok-s">"concierge-safety-dlq"</span>
 
-<span class="tok-c"># Daily Instagram token refresh, 06:00 UTC</span>
+<span class="tok-c"># Hourly: re-roll the demo personas when the cadence has elapsed</span>
 [<span class="tok-k">triggers</span>]
-<span class="tok-v">crons</span> = [<span class="tok-s">"0 6 * * *"</span>]</code></pre>
+<span class="tok-v">crons</span> = [<span class="tok-s">"0 * * * *"</span>]</code></pre>
       </div>
 
       <div class="callout callout--warn">
         <div class="callout__icon">!</div>
         <div class="callout__body">
           <strong>Rotating secrets</strong>
-          <p>Rotating <code>ENCRYPTION_KEY</code> invalidates every encrypted Instagram page token in KV: customers will need to reconnect. Webhook verify tokens (<code>WHATSAPP_VERIFY_TOKEN</code>, <code>INSTAGRAM_VERIFY_TOKEN</code>) can be rotated independently; just update them in the Meta Developer Console at the same time.</p>
+          <p>Nothing stores a per-tenant token any more, so there is no secret whose rotation forces customers to reconnect. <code>WHATSAPP_VERIFY_TOKEN</code> can be rotated independently &mdash; update it in the Meta Developer Console at the same time. Rotating <code>WHATSAPP_ACCESS_TOKEN</code> stops all outbound messages until the new value is set, since it is the only token the platform sends with.</p>
         </div>
       </div>
 
@@ -423,10 +407,8 @@
       <ul>
         <li class="lvl-2"><a href="#env" class="is-current">Environment variables</a></li>
         <li class="lvl-2"><a href="#secrets">Secrets</a></li>
-        <li class="lvl-3"><a href="#core">Core</a></li>
         <li class="lvl-3"><a href="#google">Google OAuth</a></li>
-        <li class="lvl-3"><a href="#meta">Meta</a></li>
-        <li class="lvl-3"><a href="#discord">Discord</a></li>
+        <li class="lvl-3"><a href="#meta">Meta: WhatsApp</a></li>
         <li class="lvl-3"><a href="#razorpay">Razorpay</a></li>
         <li class="lvl-2"><a href="#bindings">Bindings</a></li>
         <li class="lvl-2"><a href="#queues">Cloudflare Queues</a></li>

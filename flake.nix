@@ -1,5 +1,5 @@
 {
-  description = "Messaging automation for small businesses: WhatsApp, Instagram DM, lead capture";
+  description = "Automatic WhatsApp replies for small businesses";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -83,6 +83,21 @@
           fmt = craneLib.cargoFmt {
             inherit src;
           };
+
+          # elm-format is to Elm what rustfmt is to Rust: one canonical
+          # layout, no configuration, no debate. Runs offline, so it can live
+          # here; compiling the app cannot, because elm wants to resolve its
+          # package registry from the network and vendoring that (elm2nix)
+          # means a generated lock file to regenerate on every dep change.
+          # `elm make --optimize` runs in CI instead — see
+          # .github/workflows/test.yml.
+          elmFormat = pkgs.runCommand "elm-format-check"
+            {
+              nativeBuildInputs = [ pkgs.elmPackages.elm-format ];
+            } ''
+            elm-format --validate ${./frontend}/src
+            touch $out
+          '';
         };
 
         # `nix run .#dev` — local dev server with the management-panel
@@ -111,12 +126,17 @@
             worker-build
             wasm-pack
             binaryen
+            # Frontend. Same 0.19.2 the `elm` npm devDependency pins, which is
+            # what Cloudflare Workers Builds uses (no nix there). elm-format
+            # and elm-test back the flake checks below.
+            elmPackages.elm
+            elmPackages.elm-format
+            elmPackages.elm-test
             # nodejs_22 ships npm; the old nodePackages.npm attribute was
             # removed from nixpkgs.
             nodejs_22
-            # Headless Chromium for `npm run screenshots` (drives the docs
-            # gallery in doc/screenshots/ and gives us visual-regression
-            # checks against the live welcome / login templates).
+            # Headless Chromium for the Playwright suite and for
+            # `npm run screenshots`, which writes doc/screenshots/.
             playwright-driver.browsers
           ];
           shellHook = ''
@@ -129,13 +149,14 @@
             dev() {
               node scripts/test-server.mjs "$@"
             }
-            echo "Concierge Worker dev environment"
+            echo "Concierge dev environment"
+            echo "  npm run build:frontend - Compile the Elm app to public/app.js"
             echo "  dev                 - Local server + /manage bypass + migrations (run from this shell)"
             echo "  nix run .#dev       - Same as above, runnable from any shell"
-            echo "  wrangler dev        - Plain dev server (no bypass; /manage will 403)"
+            echo "  wrangler dev        - Plain dev server (no bypass; /api/manage will 403)"
             echo "  wrangler deploy     - Deploy to Cloudflare"
             echo "  npm test            - Run Playwright browser tests"
-            echo "  npm run screenshots - Regenerate docs gallery PNGs"
+            echo "  npm run screenshots - Recapture doc/screenshots/ (every screen, stubbed)"
             echo "  nix flake check     - Run CI checks"
           '';
         };
