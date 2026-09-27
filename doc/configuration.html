@@ -338,7 +338,11 @@
 [<span class="tok-k">ai</span>]            <span class="tok-v">binding</span> = <span class="tok-s">"AI"</span>
 [[<span class="tok-k">send_email</span>]]   <span class="tok-v">name</span>    = <span class="tok-s">"EMAIL"</span>
 
-<span class="tok-c"># The Elm bundle and the CSS. No index.html: the Worker renders the shell.</span>
+<span class="tok-c"># The Elm bundle, boot.js, the CSS, and the prerendered marketing pages.</span>
+<span class="tok-c"># A request matching a file here is answered from the edge and the Worker</span>
+<span class="tok-c"># is never invoked — which is why public/_headers exists to set the CSP</span>
+<span class="tok-c"># for those routes. html_handling defaults to auto-trailing-slash, so</span>
+<span class="tok-c"># /pricing serves public/pricing.html.</span>
 [<span class="tok-k">assets</span>]
 <span class="tok-v">directory</span> = <span class="tok-s">"./public"</span>
 

@@ -718,3 +718,55 @@ table tr.audit-detail > td { padding:0; background:var(--paper);
 .is-loading .spinner.htmx-indicator { animation:spin .7s linear infinite; }
 .btn.is-loading { opacity:.7; pointer-events:none; }
 @keyframes spin { to { transform:rotate(360deg); } }
+
+/* ── Site chrome: header nav + footer links ──────────────────────────────
+   These carry classes the Elm frontend introduced (`.nav-link`,
+   `.footer-links`), which replaced the `.btn.sm` anchors the old templates
+   used. Without rules they were bare anchors: visually plain, and only
+   ~18px tall, which is well under a usable tap target on a phone.
+
+   The `min-height` is what keeps `tests/app.spec.ts`'s 36px tap-target
+   audit passing. It's a floor, not a look — the padding is what you see.
+   36px is below the iOS HIG's 44px, but these sit in the chrome rather
+   than in the primary flow, and the audit exempts the brand lockup for
+   the same reason.                                                       */
+.site-header .site-nav { display:flex; align-items:center; gap:4px; }
+
+.nav-link {
+  display:inline-flex;
+  align-items:center;
+  min-height:36px;
+  padding:6px 10px;
+  border-radius:var(--r-sm);
+  color:var(--ink-2);
+  font-size:14px;
+  text-decoration:none;
+}
+.nav-link:hover { background:var(--paper); color:var(--ink); }
+.nav-link:focus-visible { outline:2px solid var(--accent); outline-offset:1px; }
+
+.footer-links {
+  display:flex;
+  flex-wrap:wrap;
+  align-items:center;
+  justify-content:center;
+  gap:4px 12px;
+  margin:0 0 6px;
+  padding:0;
+  list-style:none;
+}
+.footer-links a {
+  display:inline-flex;
+  align-items:center;
+  min-height:36px;
+  padding:0 6px;
+  color:var(--muted);
+  text-decoration:underline;
+  text-underline-offset:2px;
+}
+.footer-links a:hover { color:var(--ink); }
+.footer-links a:focus-visible { outline:2px solid var(--accent); outline-offset:1px; }
+
+/* The privacy note under the links. Narrower than the page so it reads as
+   a caption rather than body copy. */
+.footer-note { max-width:64ch; margin:0 auto; font-size:12px; line-height:1.7; }

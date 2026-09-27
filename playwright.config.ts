@@ -12,6 +12,10 @@ const BASE_URL = `http://localhost:${PORT}`;
  * - `screenshots` only runs `tests/visual.spec.ts` and writes the PNGs in
  *   `doc/screenshots/`. Invoked via `npm run screenshots` and deliberately
  *   *not* part of the default run, or every push would churn the images.
+ * - `prerender` only runs `tests/prerender.spec.ts` and writes the static
+ *   marketing pages into `public/`. Invoked via `npm run prerender`, and also
+ *   out of the default run — it writes files, and CI gates on the result being
+ *   unchanged rather than on the tests themselves passing in `npm test`.
  *
  * The dev server starts once per `playwright test` invocation via the shim in
  * `scripts/test-server.mjs`, which applies migrations and writes stub secrets
@@ -38,20 +42,30 @@ export default defineConfig({
     {
       name: 'desktop',
       use: { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 800 } },
-      testIgnore: [/visual\.spec\.ts/],
+      testIgnore: [/visual\.spec\.ts/, /prerender\.spec\.ts/],
     },
     {
       name: 'mobile',
       use: { ...devices['Desktop Chrome'], viewport: { width: 375, height: 812 } },
       // The layout sweep sets its own viewports, and the API suite has no
       // viewport at all, so running either twice would just duplicate work.
-      testIgnore: [/visual\.spec\.ts/, /layout\.spec\.ts/, /api\.spec\.ts/],
+      testIgnore: [
+        /visual\.spec\.ts/,
+        /prerender\.spec\.ts/,
+        /layout\.spec\.ts/,
+        /api\.spec\.ts/,
+      ],
     },
     {
       name: 'screenshots',
       // Sets its own viewport per shot.
       use: { ...devices['Desktop Chrome'] },
       testMatch: /visual\.spec\.ts/,
+    },
+    {
+      name: 'prerender',
+      use: { ...devices['Desktop Chrome'] },
+      testMatch: /prerender\.spec\.ts/,
     },
   ],
 

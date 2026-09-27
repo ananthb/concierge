@@ -1,4 +1,4 @@
-import { test, expect } from './_helpers/fixtures';
+import { test, expect, waitForBoot } from './_helpers/fixtures';
 import { checkTapTargets } from './_helpers/layout';
 
 /**
@@ -15,23 +15,36 @@ import { checkTapTargets } from './_helpers/layout';
  * error rather than a visibly broken page.
  */
 
-const app = (page: import('@playwright/test').Page) => page.locator('#app');
+/**
+ * Scope assertions to what Elm actually renders.
+ *
+ * Not `#app`: this is a `Browser.application`, so Elm takes over `<body>` and
+ * removes anything it finds there on init. `.site-main` is the container Elm
+ * itself renders, which is what we want to assert against anyway — its
+ * presence proves the bundle booted.
+ */
+const app = (page: import('@playwright/test').Page) => page.locator('main.site-main');
 
 test.describe('shell', () => {
   test('/ serves the shell and Elm mounts into it', async ({ page, consoleErrors }) => {
     await page.goto('/');
-    // Something — anything — rendered inside the mount point.
+    // Something — anything — rendered by Elm.
     await expect(app(page).locator('.landing')).toBeVisible();
     await expect(page.locator('.site-header .brand')).toBeVisible();
     expect(consoleErrors, consoleErrors.join('\n')).toEqual([]);
   });
 
   test('the shell carries no copy of its own', async ({ request }) => {
-    // Every user-facing string lives in the Elm app. If marketing copy
-    // starts appearing in the shell too there are two places to change it,
-    // and the shell's copy is the one that goes stale.
-    const body = await (await request.get('/')).text();
-    expect(body).toContain('<div id="app"></div>');
+    // Every user-facing string lives in the Elm app. If marketing copy starts
+    // appearing in the shell too there are two places to change it, and the
+    // shell's copy is the one that goes stale.
+    //
+    // Read /wizard, not /: the marketing routes are prerendered static files
+    // and *do* carry copy — that's their entire purpose. /wizard is never
+    // prerendered, so it is the shell.
+    const body = await (await request.get('/wizard')).text();
+    expect(body).toContain('/app.js');
+    expect(body).toContain('/boot.js');
     expect(body).not.toContain('Answer every customer');
   });
 
@@ -48,12 +61,91 @@ test.describe('shell', () => {
   test('static assets are served outside the worker', async ({ request }) => {
     const js = await request.get('/app.js');
     expect(js.status()).toBe(200);
-    // Cached hard: the bundle is immutable per deploy, unlike the shell,
-    // which carries a per-response nonce and must never be cached.
+    // Cached hard by `public/_headers`: the bundle is rebuilt on every
+    // deploy, unlike the shell, which is regenerated per request.
     expect(js.headers()['content-type']).toContain('javascript');
 
-    const css = await request.get('/css/tokens.css');
-    expect(css.status()).toBe(200);
+    const boot = await request.get('/boot.js');
+    expect(boot.status()).toBe(200);
+  });
+
+  test('every stylesheet the shell references actually loads', async ({ page, request }) => {
+    // This replaces a build-time guard. `build.rs` used to read each CSS file
+    // to hash it, so a missing one failed the build; without that, a name in
+    // `STYLESHEETS` with no matching file would 404 silently and the page
+    // would render unstyled. Checked at runtime, which also catches a file
+    // that exists locally but wasn't deployed.
+    const shell = await (await request.get('/wizard')).text();
+    const hrefs = [...shell.matchAll(/<link rel="stylesheet" href="([^"]+)"/g)].map((m) => m[1]);
+    expect(hrefs.length, 'shell should reference stylesheets').toBeGreaterThan(0);
+
+    for (const href of hrefs) {
+      const resp = await request.get(href);
+      expect(resp.status(), `${href} should load`).toBe(200);
+      expect(resp.headers()['content-type'], `${href} should be CSS`).toContain('css');
+    }
+
+    // And the browser must actually apply them — a stylesheet can 200 and
+    // still be rejected (that is exactly what integrity hashes did when they
+    // drifted). Compare the count the browser accepted against the count
+    // referenced.
+    await page.goto('/');
+    await page.locator('main.site-main').waitFor();
+    const accepted = await page.evaluate(
+      () =>
+        Array.from(document.styleSheets).filter((s) => {
+          try {
+            return s.href !== null && s.cssRules.length >= 0;
+          } catch {
+            return false;
+          }
+        }).length,
+    );
+    expect(accepted, 'every referenced stylesheet should be applied').toBe(hrefs.length);
+  });
+});
+
+test.describe('prerendered pages', () => {
+  const STATIC = ['/', '/pricing', '/features', '/terms', '/privacy'];
+
+  for (const path of STATIC) {
+    test(`${path} carries its copy without JavaScript`, async ({ request }) => {
+      // The whole point of prerendering: a crawler that never runs a script
+      // still reads the page. Asserted on the raw bytes, with no browser.
+      const body = await (await request.get(path)).text();
+      expect(body).toContain('site-main');
+      expect(body.length, `${path} looks like an empty shell`).toBeGreaterThan(2000);
+    });
+
+    test(`${path} comes alive when scripts do run`, async ({ page }) => {
+      // The failure this guards is the nasty one: a static page that renders
+      // perfectly and is completely inert, because the bundle never loaded or
+      // never initialised. Every DOM selector would still match, so only the
+      // boot marker can tell the difference.
+      await page.goto(path);
+      await waitForBoot(page);
+    });
+  }
+
+  test('a prerendered page still navigates as a SPA', async ({ page }) => {
+    await page.goto('/terms');
+    await waitForBoot(page);
+    await page.evaluate(() => {
+      (window as unknown as { __stillHere: boolean }).__stillHere = true;
+    });
+
+    // Footer, not header: the header's marketing links are hidden below
+    // 600px, and this spec runs at both viewports. The footer carries the same
+    // destinations at every width and is the navigation path on a phone.
+    await page.locator('.footer-links a[href="/features"]').click();
+    await expect(page.locator('main.site-main').getByRole('heading', { level: 1 })).toHaveText(
+      /What Concierge does/,
+    );
+
+    const stillHere = await page.evaluate(
+      () => (window as unknown as { __stillHere?: boolean }).__stillHere === true,
+    );
+    expect(stillHere, 'navigating away from a prerendered page reloaded the document').toBe(true);
   });
 });
 
@@ -79,11 +171,16 @@ test.describe('routing', () => {
 
   test('in-app navigation does not reload the page', async ({ page }) => {
     await page.goto('/');
+    // Must wait for the bundle, not for markup. `/` is a prerendered snapshot
+    // of Elm's own output, so every selector is present before Elm runs; a
+    // click in that window is handled by the browser as a plain link and the
+    // page really does reload.
+    await waitForBoot(page);
     await page.evaluate(() => {
       (window as unknown as { __stillHere: boolean }).__stillHere = true;
     });
 
-    await page.locator('.site-nav a[href="/pricing"]').click();
+    await page.locator('.footer-links a[href="/pricing"]').click();
     await expect(app(page).getByRole('heading', { name: /Pay for replies/ })).toBeVisible();
 
     // Survived the navigation ⇒ Elm handled it, no document reload.
@@ -95,7 +192,8 @@ test.describe('routing', () => {
 
   test('the back button returns to the previous route', async ({ page }) => {
     await page.goto('/');
-    await page.locator('.site-nav a[href="/features"]').click();
+    await waitForBoot(page);
+    await page.locator('.footer-links a[href="/features"]').click();
     await expect(app(page).getByRole('heading', { name: /What Concierge does/ })).toBeVisible();
     await page.goBack();
     await expect(app(page).locator('.landing')).toBeVisible();

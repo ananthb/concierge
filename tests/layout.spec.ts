@@ -29,9 +29,10 @@ for (const path of PATHS) {
     test(`layout @ ${width}px on ${path}`, async ({ page }) => {
       await page.setViewportSize({ width, height: 800 });
       await page.goto(path);
-      // Elm renders after the bundle loads; measuring before it mounts
-      // would check the layout of an empty <div id="app">.
-      await page.locator('#app .site-footer, #app .page, #app .landing').first().waitFor();
+      // Elm renders after the bundle loads; measuring before it mounts would
+      // check the layout of an empty body. `.site-main` is Elm's own
+      // container, so its presence proves the bundle booted.
+      await page.locator('main.site-main').waitFor();
       const issues = await checkLayout(page, width);
       expect(issues, issues.join('\n  ')).toEqual([]);
     });

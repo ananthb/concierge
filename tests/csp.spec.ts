@@ -3,70 +3,109 @@ import { test, expect } from './_helpers/fixtures';
 /**
  * Strict-CSP regression net.
  *
- * The fetch wrapper generates a fresh nonce per HTML response and stamps
- * it into both the CSP header and every `nonce="…"` placeholder in the
- * rendered body. These tests guard the invariants that make the strict
- * `script-src 'nonce-…'` (no `'unsafe-inline'`) policy actually work —
- * if a future template ships an inline `<script>` without a nonce, or
- * the wrapper stops swapping placeholders, CI fails.
+ * The policy has no nonce. It used to: the Worker generated one per response
+ * and stamped it into both the header and every inline `<script>`. Once the
+ * marketing routes became prerendered static files served off Cloudflare's
+ * asset handler, that stopped being possible — nothing can inject a
+ * per-response value into a static file — so initialisation moved to
+ * `/boot.js` and the policy became plain `script-src 'self' …`.
+ *
+ * That is *stricter*, not looser: `'self'` admits only our own files, where
+ * `'self' 'nonce-…'` also admitted whatever inline block carried the right
+ * nonce. The invariant these tests hold is therefore the stronger one —
+ * **there is no inline script anywhere** — plus the thing that could silently
+ * break it: the static pages and the Worker-rendered pages must state the same
+ * policy, because they get it from two different places
+ * (`public/_headers` and `add_security_headers` in src/lib.rs).
  */
 
-const PAGES = ['/', '/login', '/features', '/pricing'];
+/** Worker-rendered: these routes are not prerendered, so the Worker answers. */
+const WORKER_PAGES = ['/wizard', '/dashboard'];
 
-const NONCE_RE = /nonce-([A-Za-z0-9+/=_-]+)/;
+/** Prerendered static files, served without the Worker running. */
+const STATIC_PAGES = ['/', '/pricing', '/features', '/terms', '/privacy'];
 
-for (const path of PAGES) {
-  test(`${path} — CSP nonce in header matches every body nonce`, async ({ request }) => {
+const ALL_PAGES = [...STATIC_PAGES, ...WORKER_PAGES];
+
+function directive(csp: string, name: string): string {
+  const found = csp
+    .split(';')
+    .map((d) => d.trim())
+    .find((d) => d.startsWith(name));
+  expect(found, `CSP is missing a ${name} directive`).toBeTruthy();
+  return found!;
+}
+
+for (const path of ALL_PAGES) {
+  test(`${path} — sends a Content-Security-Policy at all`, async ({ request }) => {
+    // The trap this guards: a prerendered page is served by the asset handler
+    // and the Worker never runs, so it gets no headers from
+    // `add_security_headers`. Without `public/_headers` the only pages an
+    // anonymous visitor ever sees would be the least hardened on the deploy.
     const resp = await request.get(path);
-    expect(resp.status()).toBe(200);
-    const csp = resp.headers()['content-security-policy'];
-    expect(csp, 'CSP header missing').toBeTruthy();
-
-    const headerMatch = csp.match(NONCE_RE);
-    expect(headerMatch, 'header has no nonce-… token').not.toBeNull();
-    const headerNonce = headerMatch![1];
-
-    const body = await resp.text();
-    const bodyNonces = Array.from(body.matchAll(/nonce="([^"]+)"/g)).map((m) => m[1]);
-    expect(bodyNonces.length, 'body has at least one nonce attribute').toBeGreaterThan(0);
-    for (const n of bodyNonces) expect(n).toBe(headerNonce);
-
-    // Placeholder must always be replaced — leaking it would reveal
-    // every nonced tag is fixed, defeating the whole scheme.
-    expect(body, 'placeholder leaked into body').not.toContain('__CSP_NONCE__');
+    expect(resp.status(), `${path} should be reachable`).toBeLessThan(400);
+    expect(resp.headers()['content-security-policy'], `${path} has no CSP`).toBeTruthy();
   });
 
-  test(`${path} — strict CSP: no 'unsafe-inline' in script-src`, async ({ request }) => {
+  test(`${path} — script-src allows no inline, eval, or wildcard`, async ({ request }) => {
     const csp = (await request.get(path)).headers()['content-security-policy'];
-    const scriptSrc = csp.split(';').map((d) => d.trim()).find((d) => d.startsWith('script-src'));
-    expect(scriptSrc).toBeTruthy();
-    expect(scriptSrc, 'script-src must not allow unsafe-inline').not.toMatch(/'unsafe-inline'/);
+    const scriptSrc = directive(csp, 'script-src');
+
+    expect(scriptSrc, "must not allow 'unsafe-inline'").not.toMatch(/'unsafe-inline'/);
     // Alpine.js needed `new Function()` to evaluate its `x-show="a === b"`
     // attributes, so the policy carried 'unsafe-eval' for its sake. Elm
     // evaluates nothing at runtime, so it's gone — and must stay gone.
-    expect(scriptSrc, "script-src must not allow unsafe-eval").not.toMatch(/'unsafe-eval'/);
+    expect(scriptSrc, "must not allow 'unsafe-eval'").not.toMatch(/'unsafe-eval'/);
+    // A nonce would mean some inline script is being admitted somewhere.
+    expect(scriptSrc, 'should no longer carry a nonce').not.toMatch(/'nonce-/);
+    expect(scriptSrc, 'must not wildcard').not.toMatch(/\s\*/);
+    expect(scriptSrc, "must allow 'self'").toMatch(/'self'/);
   });
 
-  test(`${path} — every inline <script>/<style> carries a nonce`, async ({ request }) => {
+  test(`${path} — carries no inline script or style`, async ({ request }) => {
     const body = await (await request.get(path)).text();
-    // Inline = no `src=` for scripts. Self-closing/external tags are skipped.
-    const scriptOpenTags = body.match(/<script\b[^>]*>(?!\s*<\/script>)/gi) ?? [];
-    for (const tag of scriptOpenTags) {
-      if (/\bsrc=/.test(tag)) continue; // external scripts allow-listed by host
-      expect(tag, `inline <script> missing nonce: ${tag}`).toMatch(/\bnonce="/);
+
+    // Inline = a <script> with no src. This is the invariant that makes a
+    // nonce-free policy work: one inline block anywhere and every page would
+    // need 'unsafe-inline' or a nonce again.
+    const scriptTags = body.match(/<script\b[^>]*>/gi) ?? [];
+    for (const tag of scriptTags) {
+      expect(tag, `inline <script> found: ${tag}`).toMatch(/\bsrc=/);
     }
-    const styleOpenTags = body.match(/<style\b[^>]*>/gi) ?? [];
-    for (const tag of styleOpenTags) {
-      expect(tag, `inline <style> missing nonce: ${tag}`).toMatch(/\bnonce="/);
-    }
+
+    const styleTags = body.match(/<style\b[^>]*>/gi) ?? [];
+    expect(styleTags, `inline <style> found on ${path}`).toEqual([]);
+  });
+
+  test(`${path} — sends the other hardening headers`, async ({ request }) => {
+    const h = (await request.get(path)).headers();
+    expect(h['x-frame-options']).toBe('DENY');
+    expect(h['x-content-type-options']).toBe('nosniff');
+    expect(h['referrer-policy']).toBe('strict-origin-when-cross-origin');
   });
 
   test(`${path} — no CSP violations at runtime`, async ({ page, consoleErrors }) => {
     await page.goto(path);
-    // Wait for Elm to mount rather than sleeping: a violation that blocked
+    // Wait for Elm to render rather than sleeping: a violation that blocked
     // the bundle would otherwise pass as "no violations yet".
-    await page.locator('#app').locator('*').first().waitFor();
+    await page.locator('main.site-main').waitFor();
     const cspViolations = consoleErrors.filter((e) => e.startsWith('csp:'));
     expect(cspViolations).toEqual([]);
   });
 }
+
+test('the static and Worker policies agree', async ({ request }) => {
+  // These come from two places — `public/_headers` for the prerendered pages,
+  // `add_security_headers` in src/lib.rs for the rest — so they can drift
+  // silently. Comparing the directives that matter catches that; the two are
+  // allowed to differ only in the dev-only localhost allowances on
+  // form-action and img-src.
+  const staticCsp = (await request.get('/terms')).headers()['content-security-policy'];
+  const workerCsp = (await request.get('/wizard')).headers()['content-security-policy'];
+
+  for (const name of ['default-src', 'script-src', 'style-src', 'base-uri', 'object-src']) {
+    expect(directive(staticCsp, name), `${name} differs between static and Worker pages`).toBe(
+      directive(workerCsp, name),
+    );
+  }
+});

@@ -234,26 +234,36 @@ subscriptions config model =
 -- VIEW
 
 
-view : Api.Pricing -> Api.DemoConfig -> Model -> Html Msg
-view pricing config model =
+{-| Both arguments arrive as `Data` rather than resolved values, so the pitch
+renders on first paint and only the rate and the demo wait on the payload.
+-}
+view : Api.Data Api.Pricing -> Api.Data Api.DemoConfig -> Model -> Html Msg
+view pricing demo model =
     div [ class "landing" ]
-        [ hero pricing config
-        , case model.chat of
-            Just chat ->
+        [ hero pricing demo
+        , case ( model.chat, demo ) of
+            ( Just chat, Success config ) ->
                 chatPanel config model chat
 
-            Nothing ->
+            ( _, Success config ) ->
                 if config.enabled && not (List.isEmpty config.personas) then
                     personaPicker config
 
                 else
                     text ""
+
+            -- No demo yet. Deliberately renders nothing rather than a
+            -- spinner: the demo is an invitation, and an empty slot reads
+            -- better than a loading state where one may never appear (the
+            -- operator can switch it off entirely).
+            _ ->
+                text ""
         , howItWorks
         ]
 
 
-hero : Api.Pricing -> Api.DemoConfig -> Html Msg
-hero pricing config =
+hero : Api.Data Api.Pricing -> Api.Data Api.DemoConfig -> Html Msg
+hero pricing demo =
     section [ class "hero" ]
         [ h1 [] [ text "Answer every customer, even when you're closed." ]
         , p [ class "hero-sub" ]
@@ -262,14 +272,38 @@ hero pricing config =
             [ Html.a [ Html.Attributes.href "/auth/login", class "btn btn-primary btn-lg" ]
                 [ text "Get started" ]
             , Html.a [ Route.href Route.Pricing, class "btn btn-secondary btn-lg" ]
-                [ text ("From " ++ Format.milliRate "en-IN" pricing.currency pricing.unitPriceMilli ++ " a reply") ]
+                [ text (rateLabel pricing) ]
             ]
-        , if config.enabled && not (List.isEmpty config.personas) then
-            p [ class "hero-nudge" ] [ text "Try it below — you're the customer." ]
+        , case demo of
+            Success config ->
+                if config.enabled && not (List.isEmpty config.personas) then
+                    p [ class "hero-nudge" ] [ text "Try it below — you're the customer." ]
 
-          else
-            text ""
+                else
+                    text ""
+
+            _ ->
+                text ""
         ]
+
+
+{-| The secondary CTA's label.
+
+Falls back to wording with no number in it while the rate is unknown, rather
+than a spinner inside a button or a placeholder price. That also means a
+prerendered snapshot of this page never carries a rate that could go stale
+against the operator's configured value — the number only ever comes from the
+live API.
+
+-}
+rateLabel : Api.Data Api.Pricing -> String
+rateLabel pricing =
+    case pricing of
+        Success p_ ->
+            "From " ++ Format.milliRate "en-IN" p_.currency p_.unitPriceMilli ++ " a reply"
+
+        _ ->
+            "See pricing"
 
 
 personaPicker : Api.DemoConfig -> Html Msg

@@ -203,6 +203,13 @@ toggle config =
 
 
 {-| Site header. `session` decides whether the nav offers sign-in or the app.
+
+The stylesheet hides the two marketing links below 600px: the brand plus three
+items does not fit one row at 320px, and a wrapped header reads as broken. They
+are repeated in the footer, which is the navigation path on a phone, so nothing
+becomes unreachable. Whatever the visitor is actually here to do — sign in, or
+open their dashboard — is a button and stays visible at every width.
+
 -}
 header : Maybe Api.Session -> Html msg
 header session =
@@ -220,21 +227,17 @@ header session =
                     ]
 
                 Just s ->
+                    let
+                        ( route, label_ ) =
+                            if s.destination == "wizard" then
+                                ( Route.Wizard, "Finish setup" )
+
+                            else
+                                ( Route.Dashboard, "Dashboard" )
+                    in
                     [ navLink Route.Features "Features"
                     , navLink Route.Pricing "Pricing"
-                    , navLink
-                        (if s.destination == "wizard" then
-                            Route.Wizard
-
-                         else
-                            Route.Dashboard
-                        )
-                        (if s.destination == "wizard" then
-                            "Finish setup"
-
-                         else
-                            "Dashboard"
-                        )
+                    , a [ Route.href route, class "btn btn-primary" ] [ text label_ ]
                     ]
             )
         ]
@@ -249,7 +252,11 @@ footer : Html msg
 footer =
     Html.footer [ class "site-footer" ]
         [ ul [ class "footer-links" ]
-            [ li [] [ a [ Route.href Route.Terms ] [ text "Terms" ] ]
+            -- Features and Pricing are here as well as in the header, because
+            -- the header hides them on phones. See `header`.
+            [ li [] [ a [ Route.href Route.Features ] [ text "Features" ] ]
+            , li [] [ a [ Route.href Route.Pricing ] [ text "Pricing" ] ]
+            , li [] [ a [ Route.href Route.Terms ] [ text "Terms" ] ]
             , li [] [ a [ Route.href Route.Privacy ] [ text "Privacy" ] ]
             , li [] [ a [ href "https://ananthb.github.io/concierge/" ] [ text "Docs" ] ]
             ]

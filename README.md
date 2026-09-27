@@ -49,7 +49,11 @@ The Worker owns `/api/*`, the webhooks, and the OAuth redirects. Everything else
 
 Auth is a session cookie, and only a session cookie. The SPA and the Worker are always on the same origin, so the `HttpOnly; Secure; SameSite=Lax` cookie set by `/auth/callback` rides along on every request — there is no token to store or attach. State-changing calls must also carry `X-Concierge-Request`, which a cross-origin caller cannot set without a preflight the Worker never grants; that pair replaces the CSRF token the old HTML forms posted.
 
-**The marketing pages are not server-side rendered.** A crawler that doesn't run JavaScript sees an empty `<div id="app">`. This was a deliberate trade for shipping speed; the fix is a build-time prerender of `/`, `/pricing` and `/features` into static assets, which needs no frontend change.
+**The marketing pages are prerendered to static HTML.** `/`, `/pricing`, `/features`, `/terms` and `/privacy` are snapshotted into `public/` by `npm run prerender` and served straight off Cloudflare's asset handler — the Worker isn't invoked for them, so they cost no wasm cold start and a crawler that never runs a script still reads them. Everything else is Worker-rendered from `src/shell.rs`, which is also the shell the prerenderer snapshots.
+
+Elm doesn't hydrate, so `public/boot.js` clears the body before `Elm.Main.init`: handed a foreign tree, `Browser.application` renders without taking ownership and the page ends up looking perfect while being completely inert. Rates and other live values are deliberately *not* captured — the prerenderer refuses `/api/bootstrap`, so pages render their copy and the numbers arrive from the API. Baking them in would go stale the moment pricing changed.
+
+The output is committed because Cloudflare Builds has no browser; CI regenerates and fails on a diff, so editing copy without re-running the prerender breaks the build instead of quietly serving stale HTML to crawlers.
 
 ## Development
 
@@ -70,6 +74,7 @@ Then open http://localhost:8787.
 | `wrangler dev` | Plain dev server; `/api/manage/*` will 403 |
 | `npm test` | Playwright suite |
 | `npm run screenshots` | Recapture `doc/screenshots/` — every screen, against stubbed API fixtures |
+| `npm run prerender` | Regenerate the static marketing pages in `public/`. Run after changing their copy. |
 | `elm-test` | Frontend unit tests (run from `frontend/`) |
 | `nix flake check` | cargo fmt, clippy, tests, and elm-format |
 
@@ -87,7 +92,11 @@ src/            the Worker
 frontend/       the Elm app
   src/Api.elm   every request and decoder, in one place
   src/Page/     one module per screen
-public/         static assets: app.js, CSS
+public/         served from the edge, Worker not invoked
+  app.js        the compiled Elm bundle
+  boot.js       initialises Elm; the only JavaScript we hand-write
+  _headers      CSP and caching for everything here
+  *.html        prerendered marketing pages (generated; committed)
 ```
 
 ## Deploy

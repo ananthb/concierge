@@ -28,6 +28,13 @@
   .site-header .brand .serif { font-size:20px; }
   .site-header .site-nav { gap:6px; flex-wrap:wrap; justify-content:flex-end; }
   .site-header .site-nav .btn.sm { padding:5px 10px; font-size:12px; }
+  /* Brand + two links + the action button wraps to three rows at 320px, and a
+     wrapped header reads as broken. Drop the marketing links and keep the
+     action; both are repeated in the footer. Deliberately its own breakpoint
+     rather than reusing `.nav-ext` above, which hides at 760px — that was
+     sized for five buttons, and borrowing it would strip the links from
+     tablets that have ample room for them. */
+  .site-header .nav-link { display:none; }
   .site-footer { padding:18px 16px; line-height:1.9; }
   .page { padding:24px 16px 40px; }
   .display { font-size:clamp(32px,8vw,44px); margin:0 0 12px; }
@@ -90,6 +97,10 @@
   .site-header .brand .serif { font-size:18px; }
   .site-header .site-nav { gap:4px; }
   .site-header .site-nav .btn.sm { padding:4px 8px; font-size:11px; }
+  /* Only the primary action is left in the nav at this width (`.nav-ext` is
+     hidden above), so it can afford to stay legible while still fitting
+     beside the brand. */
+  .site-header .site-nav .btn { padding:7px 12px; font-size:13px; }
 }
 
 /* Scrollbars */

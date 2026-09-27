@@ -18,16 +18,28 @@ import Format
 import Html exposing (Html, a, div, h1, h2, h3, li, p, section, span, text, ul)
 import Html.Attributes exposing (class, href)
 import Route
+import Ui
 
 
-pricing : Api.Pricing -> Html msg
-pricing p_ =
+{-| The pricing page.
+
+Takes the rates as `Data` rather than a resolved value so the copy renders on
+first paint and only the numbers wait. That is what makes a prerendered
+snapshot of this page useful: a crawler gets the prose, and the rates are
+never baked into a static file where they could go stale against the
+operator-configured values.
+
+-}
+pricing : Api.Data Api.Pricing -> Html msg
+pricing rates =
     div [ class "page page-pricing" ]
         [ h1 [] [ text "Pay for replies, nothing else" ]
         , p [ class "page-sub" ]
             [ text "No subscription, no per-seat fee, no minimum. Buy a pile of replies and use them whenever." ]
         , section [ class "price-cards" ]
-            (List.map (rateCard p_) p_.currencies)
+            [ Ui.remote rates <|
+                \p_ -> div [ class "price-cards__inner" ] (List.map (rateCard p_) p_.currencies)
+            ]
         , section [ class "price-notes" ]
             [ h2 [] [ text "What counts as a reply" ]
             , ul []
@@ -38,12 +50,7 @@ pricing p_ =
                 ]
             , h2 [] [ text "Buying" ]
             , p []
-                [ text
-                    ("Any quantity from "
-                        ++ Format.count "en-IN" p_.minCredits
-                        ++ " upwards. Credits you buy don't expire."
-                    )
-                ]
+                [ text "Any quantity, upwards of the minimum shown above. Credits you buy don't expire." ]
             ]
         , div [ class "page-cta" ]
             [ a [ href "/auth/login", class "btn btn-primary btn-lg" ] [ text "Get started" ] ]
@@ -51,7 +58,7 @@ pricing p_ =
 
 
 rateCard : Api.Pricing -> { code : String, unitPriceMilli : Int } -> Html msg
-rateCard p_ rate =
+rateCard _ rate =
     div [ class "price-card" ]
         [ h3 [] [ text rate.code ]
         , p [ class "price" ]

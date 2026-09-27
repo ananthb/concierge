@@ -353,46 +353,66 @@ title route =
 
 content : Model -> Html Msg
 content model =
-    -- Everything needs the bootstrap payload, so one spinner here covers the
-    -- whole app rather than each page growing its own.
-    Ui.remote model.boot <|
-        \boot ->
-            case ( model.route, model.page ) of
-                ( Route.Landing, LandingPage landing ) ->
-                    Html.map LandingMsg (Landing.view boot.pricing boot.demo landing)
+    case model.route of
+        -- Routes with no data dependency. Rendered without waiting on
+        -- /api/bootstrap, so they appear on first paint and so a prerendered
+        -- snapshot of them carries real copy rather than a spinner.
+        Route.Features ->
+            Static.features
 
-                ( Route.Pricing, _ ) ->
-                    Static.pricing boot.pricing
+        Route.Terms ->
+            Static.terms
 
-                ( Route.Features, _ ) ->
-                    Static.features
+        Route.Privacy ->
+            Static.privacy
 
-                ( Route.Terms, _ ) ->
-                    Static.terms
+        Route.Login ->
+            Static.login
 
-                ( Route.Privacy, _ ) ->
-                    Static.privacy
+        Route.NotFound ->
+            Static.notFound
 
-                ( Route.Login, _ ) ->
-                    Static.login
+        Route.Manage ->
+            -- The operator console is API-only for now: /api/manage/* is
+            -- complete but has no UI. Say so instead of rendering an empty
+            -- page.
+            div [ class "page" ]
+                [ text "The operations console has no interface yet. Its endpoints live under /api/manage/." ]
 
-                ( Route.Wizard, WizardPage wizard ) ->
-                    Html.map WizardMsg (Wizard.view wizard)
+        -- Everything below needs the payload. The copy on these pages still
+        -- renders immediately; only the values wait.
+        Route.Pricing ->
+            Static.pricing (RemoteData.map .pricing model.boot)
 
-                ( _, DashboardPage dash ) ->
-                    case model.session of
-                        Just session ->
-                            Html.map DashboardMsg (Dashboard.view session dash)
-
-                        Nothing ->
-                            Static.login
-
-                ( Route.Manage, _ ) ->
-                    -- The operator console is API-only for now: /api/manage/*
-                    -- is complete but has no UI. Say so instead of rendering
-                    -- an empty page.
-                    div [ class "page" ]
-                        [ text "The operations console has no interface yet. Its endpoints live under /api/manage/." ]
+        Route.Landing ->
+            case model.page of
+                LandingPage landing ->
+                    Html.map LandingMsg
+                        (Landing.view
+                            (RemoteData.map .pricing model.boot)
+                            (RemoteData.map .demo model.boot)
+                            landing
+                        )
 
                 _ ->
-                    Static.notFound
+                    Ui.spinner
+
+        _ ->
+            -- The signed-in app. Gated on a session, which only arrives with
+            -- the bootstrap payload, so this genuinely can't render early.
+            Ui.remote model.boot <|
+                \_ ->
+                    case ( model.route, model.page ) of
+                        ( Route.Wizard, WizardPage wizard ) ->
+                            Html.map WizardMsg (Wizard.view wizard)
+
+                        ( _, DashboardPage dash ) ->
+                            case model.session of
+                                Just session ->
+                                    Html.map DashboardMsg (Dashboard.view session dash)
+
+                                Nothing ->
+                                    Static.login
+
+                        _ ->
+                            Static.notFound

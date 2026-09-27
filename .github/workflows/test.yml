@@ -88,6 +88,23 @@ jobs:
       - name: Install npm dependencies
         run: nix develop --command npm ci
 
+      # The prerendered marketing pages are committed, because Cloudflare Builds
+      # has no browser and cannot generate them at deploy time. Regenerate and
+      # diff: editing Elm copy without re-running `npm run prerender` would
+      # otherwise serve stale HTML to crawlers indefinitely, with the live app
+      # showing the new copy and nothing failing.
+      - name: Check the prerendered pages are current
+        run: |
+          nix develop --command npm run build:frontend
+          nix develop --command npm run prerender
+          if ! git diff --quiet -- public/; then
+            echo "::error::Prerendered pages are stale. Run 'npm run prerender' and commit public/*.html."
+            git diff --stat -- public/
+            exit 1
+          fi
+        env:
+          CI: 'true'
+
       - name: Run Playwright tests
         run: nix develop --command npm test
         env:

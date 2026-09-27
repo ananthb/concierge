@@ -1,0 +1,51 @@
+# Headers for everything Cloudflare's asset handler serves.
+#
+# This file exists because of a trap: a prerendered page at `public/index.html`
+# is served straight off the edge and the Worker never runs, so
+# `add_security_headers` in src/lib.rs never gets a chance to set a policy.
+# Without this file the public marketing pages — the only ones an anonymous
+# visitor sees — would be the *least* hardened routes on the deploy.
+#
+# The policy below must stay in lockstep with `add_security_headers`.
+# `tests/csp.spec.ts` fetches a static route and a Worker route and asserts the
+# two agree, so a change to one without the other fails CI.
+#
+# Note there is no nonce: nothing here can carry a per-response value, which is
+# exactly why initialisation lives in `/boot.js` rather than inline. With no
+# inline script anywhere, `script-src 'self'` covers every page and is tighter
+# than a nonce-based policy would be.
+
+/*
+  X-Frame-Options: DENY
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Content-Security-Policy: default-src 'self'; script-src 'self' https://checkout.razorpay.com https://connect.facebook.net; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https://www.facebook.com https://graph.facebook.com https://*.facebook.com https://api.razorpay.com; frame-src https://www.facebook.com https://*.facebook.com https://api.razorpay.com https://checkout.razorpay.com; base-uri 'self'; form-action 'self' https://accounts.google.com; object-src 'none'
+
+# The bundle and the stylesheets change name only when their content does — the
+# CSS carries an integrity hash in the shell, and app.js is rebuilt on every
+# deploy. Long-lived caching is safe for both.
+/app.js
+  Cache-Control: public, max-age=31536000, immutable
+
+/boot.js
+  Cache-Control: public, max-age=31536000, immutable
+
+/css/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# The prerendered pages are regenerated on every deploy and are the first thing
+# a crawler or a new visitor reads, so they get revalidated rather than pinned.
+/
+  Cache-Control: public, max-age=0, must-revalidate
+
+/pricing
+  Cache-Control: public, max-age=0, must-revalidate
+
+/features
+  Cache-Control: public, max-age=0, must-revalidate
+
+/terms
+  Cache-Control: public, max-age=0, must-revalidate
+
+/privacy
+  Cache-Control: public, max-age=0, must-revalidate

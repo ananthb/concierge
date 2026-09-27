@@ -66,19 +66,23 @@ const LOGO_192: &[u8] = include_bytes!("../assets/logo-192.png");
 const LOGO_512: &[u8] = include_bytes!("../assets/logo-512.png");
 const MSTILE_150: &[u8] = include_bytes!("../assets/mstile-150x150.png");
 
-/// Re-exported so handlers and the shell agree on the placeholder.
-pub use shell::CSP_NONCE_PLACEHOLDER;
-
 /// Add security headers to an HTML response.
 ///
+/// This must stay in lockstep with `public/_headers`, which states the same
+/// policy for the prerendered marketing pages. Those are served straight off
+/// Cloudflare's asset handler and never reach this code, so a change here
+/// alone would leave them on the old policy. `tests/csp.spec.ts` asserts the
+/// two agree.
+///
 /// CSP rationale (per directive):
-/// - **script-src**: only nonced inline scripts run. `'unsafe-eval'` is gone
-///   with Alpine.js — it needed `new Function()` to evaluate `x-show="a === b"`
-///   expressions. Elm compiles to plain JavaScript and evaluates nothing, so
-///   the directive is now as tight as it can be while still allowing the two
-///   third-party SDKs below.
+/// - **script-src**: `'self'` and nothing else of ours. There is no inline
+///   script anywhere — initialisation lives in `/boot.js` — so no nonce and
+///   no `'unsafe-inline'` are needed, which is tighter than the nonce-based
+///   policy this replaced. `'unsafe-eval'` went with Alpine.js, which needed
+///   `new Function()` to evaluate its `x-show="a === b"` attributes; Elm
+///   evaluates nothing at runtime.
 /// - **style-src**: keeps `'unsafe-inline'` for Elm's `style` attributes,
-///   which a nonce can't cover.
+///   which a nonce could not have covered either.
 /// - **script-src / connect-src / frame-src** allow `connect.facebook.net`
 ///   and `*.facebook.com` for WhatsApp Embedded Signup (the SDK aborts
 ///   silently when its login dialog and impression telemetry are blocked,
@@ -88,7 +92,7 @@ pub use shell::CSP_NONCE_PLACEHOLDER;
 ///
 /// `is_dev` mirrors `dev_bypass::active(env)`. When true, form-action allows
 /// localhost + 127.0.0.1 and img-src allows `blob:`.
-fn add_security_headers(resp: &mut Response, nonce: &str, is_dev: bool) -> Result<()> {
+fn add_security_headers(resp: &mut Response, is_dev: bool) -> Result<()> {
     let headers = resp.headers_mut();
     headers.set("X-Frame-Options", "DENY")?;
     headers.set("X-Content-Type-Options", "nosniff")?;
@@ -103,7 +107,7 @@ fn add_security_headers(resp: &mut Response, nonce: &str, is_dev: bool) -> Resul
     };
     let csp = format!(
         "default-src 'self'; \
-         script-src 'self' 'nonce-{nonce}' https://checkout.razorpay.com https://connect.facebook.net; \
+         script-src 'self' https://checkout.razorpay.com https://connect.facebook.net; \
          style-src 'self' 'unsafe-inline'; \
          img-src 'self' data: https:{img_extra}; \
          connect-src 'self' https://www.facebook.com https://graph.facebook.com https://*.facebook.com https://api.razorpay.com; \
@@ -143,24 +147,14 @@ async fn fetch(req: Request, env: Env, _ctx: Context) -> Result<Response> {
         .ok()
         .flatten()
         .is_some_and(|ct| ct.contains("text/html"));
-    if !is_html {
-        return Ok(resp);
+    if is_html {
+        // Headers only. The body used to be rewritten here to substitute a
+        // per-request CSP nonce; with initialisation moved to `/boot.js`
+        // there is no inline script to nonce, so the response passes through
+        // untouched.
+        add_security_headers(&mut resp, is_dev)?;
     }
-    // Generate a per-request nonce, swap every `__CSP_NONCE__` placeholder for
-    // it, and stamp the matching value into the CSP header. In practice the
-    // only HTML we emit is the SPA shell, but keeping this at the wrapper
-    // means a nonced response can't be produced without its header.
-    let status = resp.status_code();
-    let headers = resp.headers().clone();
-    let body = resp.text().await?;
-    let nonce = helpers::generate_token()?;
-    let body = body.replace(CSP_NONCE_PLACEHOLDER, &nonce);
-    headers.set("Content-Length", &body.len().to_string())?;
-    let mut new_resp = Response::ok(body)?
-        .with_status(status)
-        .with_headers(headers);
-    add_security_headers(&mut new_resp, &nonce, is_dev)?;
-    Ok(new_resp)
+    Ok(resp)
 }
 
 /// Serve the SPA shell.
@@ -171,8 +165,9 @@ async fn fetch(req: Request, env: Env, _ctx: Context) -> Result<Response> {
 fn serve_shell(status: u16) -> Result<Response> {
     let headers = Headers::new();
     headers.set("Content-Type", "text/html; charset=utf-8")?;
-    // The shell carries a per-response nonce, so it must never be cached.
-    // `/app.js` is the immutable part and is cached by the asset handler.
+    // Not cached: the shell is cheap to regenerate and caching it would pin a
+    // stale set of CSS integrity hashes across a deploy. `/app.js` and the
+    // prerendered pages are the cacheable parts, handled by the asset layer.
     headers.set("Cache-Control", "no-store")?;
     Ok(Response::ok(shell::html())?
         .with_status(status)

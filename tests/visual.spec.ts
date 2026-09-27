@@ -254,7 +254,7 @@ for (const shot of PUBLIC_SHOTS) {
     await stubPublic(page);
     await page.goto(shot.path);
     // Wait on the rendered page, not a timer: a shot of an empty
-    // <div id="app"> would silently become the gallery image.
+    // empty body would silently become the gallery image.
     await page.locator(shot.wait).waitFor();
     await settle(page);
     await capture(page, shot.name, shot.viewport);

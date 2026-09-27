@@ -36,10 +36,6 @@ subtle = "2.6"
 unic-langid = { version = "0.9", features = ["macros"] }
 accept-language = "3"
 
-[build-dependencies]
-sha2 = "0.11"
-base64 = "0.22"
-
 [profile.release]
 opt-level = "s"
 lto = true
