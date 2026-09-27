@@ -24,7 +24,7 @@ Don't want to self-host? [concierge.calculon.tech](https://concierge.calculon.te
 - **Conversation sessions**: per-customer threads carry a stable `conversation_id`, recent history, and any active handoff state. A configurable idle gap (default 6 h) wipes history and starts a fresh conversation; a max-history cap (default 20) bounds the multi-turn context.
 - **Reply batching**: a configurable wait (default 5 s) after the latest inbound message lets customers finish typing, so a burst of three messages gets one considered answer instead of three.
 - **Interactive demo**: the landing page hosts a live chat where visitors roleplay as a customer of a sample business. "View the prompt" reveals the exact middle being sent to the model. Personas come from the safety-approved archetype catalog. Real customer messages still arrive on WhatsApp — never on this chat box.
-- **Onboarding wizard**: four steps — business details, connect WhatsApp, choose a voice, go live.
+- **Onboarding wizard**: four steps — business details, connect WhatsApp, choose a voice, go live. The voice is editable afterwards from the dashboard, in the same guided form or as a raw prompt, with a preview of what it composes to.
 - **Billing**: flat prepaid credits (₹0.10 / $0.001 per AI reply). Canned replies are free. Buy any quantity — no tiers, no packs. All prices live in `global_settings` and are editable through the operator API.
 - **Metadata-only logging**: message bodies pass through the Worker but are never written to durable storage. Only channel, direction, sender, recipient, and timestamp are persisted. A `/data-deletion` endpoint wipes the metadata that is stored.
 

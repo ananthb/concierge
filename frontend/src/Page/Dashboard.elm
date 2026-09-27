@@ -9,9 +9,10 @@ real routes, so they're linkable and the back button works.
 -}
 
 import Api
+import Browser.Navigation as Nav
 import Format
 import Html exposing (Html, a, div, h1, h2, li, p, pre, section, span, text, ul)
-import Html.Attributes exposing (class, classList, href)
+import Html.Attributes exposing (class, classList)
 import Html.Events exposing (onClick)
 import Json.Encode as E
 import Ports
@@ -34,13 +35,87 @@ type alias Model =
     , persona : Api.Data Api.Persona
     , billing : Api.Data Api.Billing
 
+    -- The archetype catalog, for the voice picker. Operator-managed, so it's
+    -- fetched rather than hardcoded — a fifth voice appears here without a
+    -- frontend change.
+    , archetypes : Api.Data (List Api.Archetype)
+
     -- Local edits, keyed by the account being edited. Only one at a time,
     -- which matches the UI: you expand one number's settings.
     , editing : Maybe ( String, Api.Reply )
+
+    -- Open persona form. `Nothing` means the tab is in read-only mode.
+    , personaForm : Maybe PersonaForm
+
+    -- The composed prompt for the unsaved form, from /api/persona/preview.
+    , preview : Api.Data String
     , creditsToBuy : Int
+
+    -- Typed confirmation for closing the account. The worker requires the
+    -- account's own email, so this has to match before the button works.
+    , deleteConfirm : String
     , saving : Bool
     , notice : Maybe ( String, String )
     }
+
+
+{-| Local state for the persona editor.
+
+The chip lists are held as newline-delimited text while editing, because a
+textarea is the right control for "one per line" and converting on save keeps
+every keystroke from restructuring a list.
+
+-}
+type alias PersonaForm =
+    { mode : String
+    , builder : Api.PersonaBuilder
+    , customPrompt : String
+    , catchPhrasesText : String
+    , offTopicsText : String
+    , handoffText : String
+
+    -- The worker's cap on a custom prompt, carried through rather than
+    -- copied as a constant so the two can't drift.
+    , maxLength : Int
+    }
+
+
+{-| Seed the form from the saved persona, so opening the editor shows what is
+live rather than an empty form.
+-}
+formFrom : Api.Persona -> PersonaForm
+formFrom persona =
+    { mode = persona.mode
+    , builder = persona.builder
+    , customPrompt = persona.customPrompt
+    , catchPhrasesText = String.join "\n" persona.builder.catchPhrases
+    , offTopicsText = String.join "\n" persona.builder.offTopics
+    , handoffText = String.join "\n" persona.builder.handoffConditions
+    , maxLength = persona.maxCustomPrompt
+    }
+
+
+{-| Fold the newline-edited chip lists back into the builder for submission.
+-}
+formBuilder : PersonaForm -> Api.PersonaBuilder
+formBuilder form =
+    let
+        b =
+            form.builder
+    in
+    { b
+        | catchPhrases = lines form.catchPhrasesText
+        , offTopics = lines form.offTopicsText
+        , handoffConditions = lines form.handoffText
+    }
+
+
+lines : String -> List String
+lines text_ =
+    text_
+        |> String.lines
+        |> List.map String.trim
+        |> List.filter (not << String.isEmpty)
 
 
 init : Tab -> ( Model, Cmd Msg )
@@ -51,8 +126,12 @@ init tab =
             , channels = NotAsked
             , persona = NotAsked
             , billing = NotAsked
+            , archetypes = NotAsked
             , editing = Nothing
+            , personaForm = Nothing
+            , preview = NotAsked
             , creditsToBuy = 0
+            , deleteConfirm = ""
             , saving = False
             , notice = Nothing
             }
@@ -81,11 +160,21 @@ fetchFor tab model =
                 Cmd.none
 
         Persona ->
-            if RemoteData.isNotAsked model.persona then
-                Api.getPersona GotPersona
+            -- Both, in parallel: the editor can't render its voice picker
+            -- without the catalog, and waiting for one before asking for the
+            -- other would double the time to a usable form.
+            Cmd.batch
+                [ if RemoteData.isNotAsked model.persona then
+                    Api.getPersona GotPersona
 
-            else
-                Cmd.none
+                  else
+                    Cmd.none
+                , if RemoteData.isNotAsked model.archetypes then
+                    Api.getArchetypes GotArchetypes
+
+                  else
+                    Cmd.none
+                ]
 
         Billing ->
             if RemoteData.isNotAsked model.billing then
@@ -123,11 +212,27 @@ type Msg
     | CancelEdit
     | SaveReply
     | SavedReply (Api.Data Api.WhatsAppAccount)
+    | GotArchetypes (Api.Data (List Api.Archetype))
+    | OpenPersonaEditor
+    | ClosePersonaEditor
+    | SetPersonaMode String
+    | EditBuilder (Api.PersonaBuilder -> Api.PersonaBuilder)
+    | SetCatchPhrases String
+    | SetOffTopics String
+    | SetHandoff String
+    | SetCustomPrompt String
+    | RequestPreview
+    | GotPreview (Api.Data String)
+    | SavePersona
+    | SavedPersona (Api.Data Api.Persona)
     | SetCredits String
     | BuyCredits
     | GotOrder (Api.Data Api.Order)
     | PaymentCame Ports.PaymentOutcome
     | PaymentConfirmed (Api.Data ())
+    | SetDeleteConfirm String
+    | CloseAccount
+    | AccountClosed (Api.Data ())
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -141,6 +246,135 @@ update msg model =
 
         GotPersona result ->
             ( { model | persona = result }, Cmd.none )
+
+        GotArchetypes result ->
+            ( { model | archetypes = result }, Cmd.none )
+
+        OpenPersonaEditor ->
+            case model.persona of
+                Success persona ->
+                    ( { model
+                        | personaForm = Just (formFrom persona)
+
+                        -- The saved prompt is already on screen; seeding the
+                        -- preview with it means the panel doesn't go blank
+                        -- before the first Preview press.
+                        , preview = Success persona.prompt
+                        , notice = Nothing
+                      }
+                    , Cmd.none
+                    )
+
+                _ ->
+                    ( model, Cmd.none )
+
+        ClosePersonaEditor ->
+            ( { model | personaForm = Nothing, preview = NotAsked, notice = Nothing }, Cmd.none )
+
+        SetPersonaMode mode ->
+            ( { model | personaForm = Maybe.map (\f -> { f | mode = mode }) model.personaForm }
+            , Cmd.none
+            )
+
+        EditBuilder change ->
+            ( { model
+                | personaForm =
+                    Maybe.map (\f -> { f | builder = change f.builder }) model.personaForm
+              }
+            , Cmd.none
+            )
+
+        SetCatchPhrases value ->
+            ( { model | personaForm = Maybe.map (\f -> { f | catchPhrasesText = value }) model.personaForm }
+            , Cmd.none
+            )
+
+        SetOffTopics value ->
+            ( { model | personaForm = Maybe.map (\f -> { f | offTopicsText = value }) model.personaForm }
+            , Cmd.none
+            )
+
+        SetHandoff value ->
+            ( { model | personaForm = Maybe.map (\f -> { f | handoffText = value }) model.personaForm }
+            , Cmd.none
+            )
+
+        SetCustomPrompt value ->
+            ( { model | personaForm = Maybe.map (\f -> { f | customPrompt = value }) model.personaForm }
+            , Cmd.none
+            )
+
+        RequestPreview ->
+            -- On demand rather than on every keystroke. Each press is a
+            -- request, and a debounce that fired mid-sentence would spend
+            -- them on half-typed prompts.
+            case model.personaForm of
+                Just form ->
+                    ( { model | preview = Loading }
+                    , Api.previewPersona (formBuilder form) GotPreview
+                    )
+
+                Nothing ->
+                    ( model, Cmd.none )
+
+        GotPreview result ->
+            ( { model | preview = result }, Cmd.none )
+
+        SavePersona ->
+            case model.personaForm of
+                Just form ->
+                    if form.mode == "custom" && String.isEmpty (String.trim form.customPrompt) then
+                        ( { model
+                            | notice =
+                                Just ( "error", "Write a prompt, or switch to the guided builder." )
+                          }
+                        , Cmd.none
+                        )
+
+                    else
+                        ( { model | saving = True, notice = Nothing }
+                        , Api.savePersona
+                            { mode = form.mode
+                            , builder = formBuilder form
+                            , customPrompt = form.customPrompt
+                            }
+                            SavedPersona
+                        )
+
+                Nothing ->
+                    ( model, Cmd.none )
+
+        SavedPersona result ->
+            case result of
+                Success persona ->
+                    ( { model
+                        | saving = False
+                        , persona = Success persona
+                        , personaForm = Nothing
+                        , preview = NotAsked
+                        , notice =
+                            Just
+                                ( "success"
+                                , if persona.safetyStatus == "approved" then
+                                    "Saved."
+
+                                  else
+                                    -- Worth saying plainly: the tenant has
+                                    -- just turned their own AI replies off
+                                    -- until the classifier comes back.
+                                    "Saved. AI replies are paused while we check the new prompt."
+                                )
+                      }
+                    , Cmd.none
+                    )
+
+                Failure err ->
+                    ( { model | saving = False, notice = Just ( "error", Api.errorMessage err ) }
+                    , Cmd.none
+                    )
+
+                _ ->
+                    ( model, Cmd.none )
 
         GotBilling result ->
             let
@@ -276,6 +510,30 @@ update msg model =
                     PaymentConfirmed
                 )
 
+        SetDeleteConfirm value ->
+            ( { model | deleteConfirm = value, notice = Nothing }, Cmd.none )
+
+        CloseAccount ->
+            ( { model | saving = True, notice = Nothing }
+            , Api.deleteAccount (String.trim model.deleteConfirm) AccountClosed
+            )
+
+        AccountClosed result ->
+            case result of
+                Success () ->
+                    -- A real page load, not a route change: the session
+                    -- cookie is gone and every cached payload in this model
+                    -- belongs to an account that no longer exists.
+                    ( { model | saving = False }, Nav.load "/" )
+
+                Failure err ->
+                    ( { model | saving = False, notice = Just ( "error", Api.errorMessage err ) }
+                    , Cmd.none
+                    )
+
+                _ ->
+                    ( model, Cmd.none )
+
         PaymentConfirmed result ->
             case result of
                 Success () ->
@@ -343,7 +601,7 @@ view session model =
                 billingTab model
 
             Settings ->
-                settingsTab session
+                settingsTab session model
         ]
 
 
@@ -565,33 +823,308 @@ personaTab model =
     Ui.remote model.persona <|
         \persona ->
             section []
-                [ Ui.card
-                    [ h2 [] [ text "Safety check" ]
-                    , case persona.safetyStatus of
-                        "approved" ->
-                            Ui.banner "success" "Approved. AI replies are going out."
+                [ safetyCard persona
+                , case model.personaForm of
+                    Just form ->
+                        personaEditor model form
 
-                        "pending" ->
-                            Ui.banner "info" "We're checking this prompt. AI replies are paused until it clears."
-
-                        _ ->
-                            Ui.banner "error"
-                                (Maybe.withDefault
-                                    "This prompt didn't pass our safety check."
-                                    persona.safetyReason
-                                )
-                    ]
-                , Ui.card
-                    [ h2 [] [ text "What the model is sent" ]
-                    , p [ class "muted" ]
-                        [ text "The first and last parts are fixed and ship with Concierge. Only the middle is yours." ]
-                    , pre [ class "prompt-preview prompt-preview-fixed" ] [ text persona.preamble ]
-                    , pre [ class "prompt-preview prompt-preview-middle" ] [ text persona.prompt ]
-                    , pre [ class "prompt-preview prompt-preview-fixed" ] [ text persona.postamble ]
-                    , p [ class "hint" ]
-                        [ text "Editing the voice lives in the setup wizard for now. Changing it re-runs the safety check and pauses AI replies until it passes." ]
-                    ]
+                    Nothing ->
+                        promptCard persona
                 ]
+
+
+safetyCard : Api.Persona -> Html Msg
+safetyCard persona =
+    Ui.card
+        [ h2 [] [ text "Safety check" ]
+        , case persona.safetyStatus of
+            "approved" ->
+                Ui.banner "success" "Approved. AI replies are going out."
+
+            "pending" ->
+                Ui.banner "info" "We're checking this prompt. AI replies are paused until it clears."
+
+            _ ->
+                Ui.banner "error"
+                    (Maybe.withDefault
+                        "This prompt didn't pass our safety check."
+                        persona.safetyReason
+                    )
+        ]
+
+
+{-| Read-only view of what is live, with the fixed bookends shown around it.
+-}
+promptCard : Api.Persona -> Html Msg
+promptCard persona =
+    Ui.card
+        [ h2 [] [ text "What the model is sent" ]
+        , p [ class "muted" ]
+            [ text "The first and last parts are fixed and ship with Concierge. Only the middle is yours." ]
+        , pre [ class "prompt-preview prompt-preview-fixed" ] [ text persona.preamble ]
+        , pre [ class "prompt-preview prompt-preview-middle" ] [ text persona.prompt ]
+        , pre [ class "prompt-preview prompt-preview-fixed" ] [ text persona.postamble ]
+        , div [ class "card-actions" ]
+            [ Ui.button
+                { label = "Edit your voice"
+                , onClick = OpenPersonaEditor
+                , primary = True
+                , busy = False
+                }
+            ]
+        ]
+
+
+{-| The editor. Two modes, and only ever one: a persona is a guided builder or
+a raw prompt, never a blend, so there is exactly one source for the active
+prompt.
+-}
+personaEditor : Model -> PersonaForm -> Html Msg
+personaEditor model form =
+    Ui.card
+        [ h2 [] [ text "Edit your voice" ]
+        , Ui.banner "info"
+            "Saving re-runs the safety check. AI replies pause until the new prompt is approved; fixed replies keep going out."
+        , modeSwitch form.mode
+        , if form.mode == "custom" then
+            customFields model form
+
+          else
+            builderFields model form
+        , previewPanel model form
+        , div [ class "card-actions" ]
+            [ Ui.button
+                { label = "Cancel"
+                , onClick = ClosePersonaEditor
+                , primary = False
+                , busy = False
+                }
+            , Ui.button
+                { label = "Save"
+                , onClick = SavePersona
+                , primary = True
+                , busy = model.saving
+                }
+            ]
+        ]
+
+
+modeSwitch : String -> Html Msg
+modeSwitch current =
+    div [ class "field" ]
+        [ Html.label [] [ text "How you want to write it" ]
+        , div [ class "choice-row" ]
+            (List.map
+                (\( wire, label_ ) ->
+                    Html.button
+                        [ classList [ ( "choice", True ), ( "is-selected", current == wire ) ]
+                        , Html.Attributes.type_ "button"
+                        , onClick (SetPersonaMode wire)
+                        ]
+                        [ text label_ ]
+                )
+                [ ( "builder", "Guided" ), ( "custom", "Write the prompt myself" ) ]
+            )
+        ]
+
+
+builderFields : Model -> PersonaForm -> Html Msg
+builderFields model form =
+    let
+        b =
+            form.builder
+    in
+    div []
+        [ voicePicker model b.archetypeSlug
+        , Ui.field
+            { id = "biz_name"
+            , label = "Business name"
+            , value = b.bizName
+            , hint = "How the AI refers to you."
+            , required = False
+            , onInput = \v -> EditBuilder (\x -> { x | bizName = v })
+            }
+        , Ui.field
+            { id = "biz_type"
+            , label = "What you do"
+            , value = b.bizType
+            , hint = "A few words: florist, dental clinic, tuition centre."
+            , required = False
+            , onInput = \v -> EditBuilder (\x -> { x | bizType = v })
+            }
+        , Ui.field
+            { id = "city"
+            , label = "Where you are"
+            , value = b.city
+            , hint = ""
+            , required = False
+            , onInput = \v -> EditBuilder (\x -> { x | city = v })
+            }
+        , Ui.field
+            { id = "hours"
+            , label = "When you're open"
+            , value = b.hours
+            , hint = "So it can say when you'll be back instead of guessing."
+            , required = False
+            , onInput = \v -> EditBuilder (\x -> { x | hours = v })
+            }
+        , Ui.field
+            { id = "goal"
+            , label = "What each conversation should aim for"
+            , value = b.goal
+            , hint = "For example: get them to book a slot."
+            , required = False
+            , onInput = \v -> EditBuilder (\x -> { x | goal = v })
+            }
+        , Ui.field
+            { id = "goal_url"
+            , label = "A link worth sending"
+            , value = b.goalUrl
+            , hint = "Your booking page, menu or catalogue. Anything that isn't a plain http(s) link is dropped."
+            , required = False
+            , onInput = \v -> EditBuilder (\x -> { x | goalUrl = v })
+            }
+        , Ui.textarea
+            { id = "catch_phrases"
+            , label = "Things you'd actually say"
+            , value = form.catchPhrasesText
+            , hint = "One per line, up to five. These make it sound like you rather than like an assistant."
+            , rows = 3
+            , onInput = SetCatchPhrases
+            }
+        , Ui.textarea
+            { id = "off_topics"
+            , label = "Stay off these"
+            , value = form.offTopicsText
+            , hint = "One per line. A draft that strays into one of these is withheld and you're emailed instead."
+            , rows = 3
+            , onInput = SetOffTopics
+            }
+        , Ui.field
+            { id = "never"
+            , label = "Never say"
+            , value = b.never
+            , hint = "One thing it must not promise. Also checked against every draft before it's sent."
+            , required = False
+            , onInput = \v -> EditBuilder (\x -> { x | never = v })
+            }
+        , Ui.textarea
+            { id = "handoff"
+            , label = "When should it stop and fetch you?"
+            , value = form.handoffText
+            , hint = "One per line. Prices and commitments already stop it automatically — these are your own additions."
+            , rows = 3
+            , onInput = SetHandoff
+            }
+        ]
+
+
+voicePicker : Model -> String -> Html Msg
+voicePicker model current =
+    div [ class "field" ]
+        [ Html.label [] [ text "Voice" ]
+        , Ui.remote model.archetypes <|
+            \archetypes ->
+                if List.isEmpty archetypes then
+                    Ui.banner "info" "No voices are available right now. Try again shortly."
+
+                else
+                    ul [ class "voice-grid" ]
+                        (List.map
+                            (\archetype ->
+                                li []
+                                    [ Html.button
+                                        [ classList
+                                            [ ( "voice-card", True )
+                                            , ( "is-selected", current == archetype.slug )
+                                            ]
+                                        , Html.Attributes.type_ "button"
+                                        , onClick
+                                            (EditBuilder
+                                                (\x -> { x | archetypeSlug = archetype.slug })
+                                            )
+                                        ]
+                                        [ h2 [] [ text archetype.label ]
+                                        , p [] [ text archetype.description ]
+                                        ]
+                                    ]
+                            )
+                            archetypes
+                        )
+        ]
+
+
+customFields : Model -> PersonaForm -> Html Msg
+customFields model form =
+    let
+        used =
+            String.length form.customPrompt
+    in
+    div []
+        [ Ui.textarea
+            { id = "custom_prompt"
+            , label = "Your prompt"
+            , value = form.customPrompt
+            , hint =
+                "This replaces the guided fields entirely. The fixed preamble and postamble still wrap it — they can't be edited away."
+            , rows = 14
+            , onInput = SetCustomPrompt
+            }
+        , p
+            [ classList
+                [ ( "hint", True )
+                , ( "hint-warn", used > form.maxLength )
+                ]
+            ]
+            [ text
+                (String.fromInt used
+                    ++ " / "
+                    ++ String.fromInt form.maxLength
+                    ++ " characters"
+                    ++ (if used > form.maxLength then
+                            " — anything past the limit is dropped on save."
+
+                        else
+                            ""
+                       )
+                )
+            ]
+        ]
+
+
+{-| The composed middle for the _unsaved_ form.
+
+Worth its own panel: the guided fields don't obviously map onto a prompt, and
+the point of the product is that you can read exactly what the model is told.
+
+-}
+previewPanel : Model -> PersonaForm -> Html Msg
+previewPanel model form =
+    div [ class "preview-panel" ]
+        [ div [ class "preview-panel-head" ]
+            [ h2 [] [ text "What this composes to" ]
+            , Ui.button
+                { label = "Refresh preview"
+                , onClick = RequestPreview
+                , primary = False
+                , busy = RemoteData.isLoading model.preview
+                }
+            ]
+        , if form.mode == "custom" then
+            pre [ class "prompt-preview prompt-preview-middle" ]
+                [ text
+                    (if String.isEmpty (String.trim form.customPrompt) then
+                        "Nothing yet."
+
+                     else
+                        form.customPrompt
+                    )
+                ]
+
+          else
+            Ui.remote model.preview <|
+                \prompt -> pre [ class "prompt-preview prompt-preview-middle" ] [ text prompt ]
+        ]
 
 
 billingTab : Model -> Html Msg
@@ -682,8 +1215,12 @@ totalFor credits milliPrice =
     (credits * milliPrice + 500) // 1000
 
 
-settingsTab : Api.Session -> Html Msg
-settingsTab session =
+settingsTab : Api.Session -> Model -> Html Msg
+settingsTab session model =
+    let
+        confirmed =
+            String.toLower (String.trim model.deleteConfirm) == String.toLower session.email
+    in
     section []
         [ Ui.card
             [ h2 [] [ text "Account" ]
@@ -694,8 +1231,30 @@ settingsTab session =
         , Ui.card
             [ h2 [] [ text "Close your account" ]
             , p []
-                [ text "Deletes your settings, your connected number and your message metadata. Payment records are kept for tax and dispute purposes. This can't be undone." ]
-            , a [ href "mailto:support@calculon.tech?subject=Delete%20my%20Concierge%20account", class "btn btn-danger" ]
-                [ text "Request deletion" ]
+                [ text "Deletes your settings, your connected number, your persona and your message metadata. Payment records are kept with your account identifier removed, because tax and dispute rules require it. This cannot be undone." ]
+            , Ui.field
+                { id = "confirm_email"
+                , label = "Type " ++ session.email ++ " to confirm"
+                , value = model.deleteConfirm
+                , hint = ""
+                , required = False
+                , onInput = SetDeleteConfirm
+                }
+            , div [ class "card-actions" ]
+                [ Html.button
+                    [ class "btn btn-danger"
+                    , Html.Attributes.type_ "button"
+                    , Html.Attributes.disabled (not confirmed || model.saving)
+                    , onClick CloseAccount
+                    ]
+                    [ text
+                        (if model.saving then
+                            "Closing…"
+
+                         else
+                            "Close my account permanently"
+                        )
+                    ]
+                ]
             ]
         ]

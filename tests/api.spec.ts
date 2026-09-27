@@ -15,7 +15,14 @@ import { test, expect } from './_helpers/fixtures';
  *   - the operator surface needs Cloudflare Access, not a session
  */
 
-const PROTECTED_GETS = ['/api/session', '/api/wizard', '/api/whatsapp', '/api/persona', '/api/billing'];
+const PROTECTED_GETS = [
+  '/api/session',
+  '/api/wizard',
+  '/api/whatsapp',
+  '/api/persona',
+  '/api/archetypes',
+  '/api/billing',
+];
 
 test.describe('bootstrap', () => {
   test('answers the shape the frontend decodes', async ({ request }) => {
@@ -111,7 +118,9 @@ test.describe('request header', () => {
     ['POST', '/api/wizard/complete'],
     ['PUT', '/api/persona'],
     ['POST', '/api/billing/checkout'],
+    ['POST', '/api/persona/preview'],
     ['DELETE', '/api/session'],
+    ['DELETE', '/api/account'],
   ];
 
   for (const [method, path] of mutations) {
@@ -140,6 +149,37 @@ test.describe('request header', () => {
   test('GET needs no header', async ({ request }) => {
     const resp = await request.get('/api/bootstrap');
     expect(resp.status()).toBe(200);
+  });
+});
+
+test.describe('account deletion', () => {
+  // The most destructive call in the API. Two things guard it: the session
+  // cookie, and the account's own email echoed back in the body.
+  test('is refused when signed out', async ({ request }) => {
+    const resp = await request.fetch('/api/account', {
+      method: 'DELETE',
+      data: { confirm_email: 'someone@example.com' },
+      headers: { 'content-type': 'application/json', 'X-Concierge-Request': '1' },
+    });
+    // 401 before any confirmation check: you can't delete an account by
+    // guessing its email address.
+    expect(resp.status()).toBe(401);
+    expect((await resp.json()).error.code).toBe('unauthenticated');
+  });
+});
+
+test.describe('persona', () => {
+  test('preview needs a session but writes nothing', async ({ request }) => {
+    // The preview endpoint composes a prompt from unsaved fields. It must not
+    // be reachable without a session — it reads the archetype catalog — but
+    // it also must not touch the safety queue, which is why it's a separate
+    // route from the save.
+    const resp = await request.fetch('/api/persona/preview', {
+      method: 'POST',
+      data: { builder: { archetype_slug: 'friendly' } },
+      headers: { 'content-type': 'application/json', 'X-Concierge-Request': '1' },
+    });
+    expect(resp.status()).toBe(401);
   });
 });
 

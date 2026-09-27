@@ -333,6 +333,7 @@ const DASHBOARD_SHOTS: Array<{ name: string; path: string }> = [
   { name: 'dashboard-channels.png', path: '/dashboard/channels' },
   { name: 'dashboard-persona.png', path: '/dashboard/persona' },
   { name: 'dashboard-billing.png', path: '/dashboard/billing' },
+  { name: 'dashboard-settings.png', path: '/dashboard/settings' },
 ];
 
 for (const shot of DASHBOARD_SHOTS) {
@@ -347,6 +348,27 @@ for (const shot of DASHBOARD_SHOTS) {
     await capture(page, shot.name, DESKTOP);
   });
 }
+
+test('capture dashboard-persona-editor.png', async ({ page }) => {
+  // The editor behind "Edit your voice" — the longest form in the app, and
+  // the one whose fields don't obviously map onto the prompt underneath, so
+  // it's worth looking at whole.
+  await page.setViewportSize(DESKTOP);
+  await stubSignedIn(page);
+  await stub(page, '**/api/archetypes', {
+    archetypes: [
+      { slug: 'friendly', label: 'Friendly', description: 'Warm and familiar.', greeting: 'Hi there!' },
+      { slug: 'professional', label: 'Professional', description: 'Brief and businesslike.', greeting: 'Thanks for reaching out.' },
+      { slug: 'playful', label: 'Playful', description: 'Upbeat, a little emoji.', greeting: 'hi 👋' },
+      { slug: 'formal', label: 'Formal', description: 'Polite and measured.', greeting: 'Good day.' },
+    ],
+  });
+  await page.goto('/dashboard/persona');
+  await page.getByRole('button', { name: /Edit your voice/ }).click();
+  await page.locator('.voice-grid').waitFor();
+  await settle(page);
+  await page.screenshot({ path: join(OUTPUT_DIR, 'dashboard-persona-editor.png'), fullPage: true });
+});
 
 test('capture dashboard-mobile.png', async ({ page }) => {
   await page.setViewportSize(MOBILE);

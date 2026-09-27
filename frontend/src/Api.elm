@@ -22,6 +22,7 @@ module Api exposing
     , channelsDone
     , completeWizard
     , delete
+    , deleteAccount
     , demoChat
     , emptyBuilder
     , errorMessage
@@ -405,6 +406,20 @@ demoChat args =
             (D.field "reply" D.string)
             (D.field "handoff" D.bool)
         )
+
+
+{-| Close the account. Irreversible.
+
+The worker requires the account's own email address echoed back in
+`confirm_email`, so a mis-click can't do it. Answers 204 and clears the
+session cookie; the app then reloads onto the landing page.
+
+-}
+deleteAccount : String -> (Data () -> msg) -> Cmd msg
+deleteAccount confirmEmail =
+    delete "/api/account"
+        (E.object [ ( "confirm_email", E.string confirmEmail ) ])
+        (D.succeed ())
 
 
 
