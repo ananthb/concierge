@@ -8,14 +8,14 @@
 <link rel="icon" href="/favicon-16.png" sizes="16x16">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="manifest" href="/site.webmanifest">
-<link rel="stylesheet" href="/css/tokens.css">
-<link rel="stylesheet" href="/css/reset.css">
-<link rel="stylesheet" href="/css/buttons.css">
-<link rel="stylesheet" href="/css/forms.css">
-<link rel="stylesheet" href="/css/layout.css">
-<link rel="stylesheet" href="/css/components.css">
-<link rel="stylesheet" href="/css/responsive.css">
-<script defer="" src="/app.js"></script>
-<script defer="" src="/boot.js"></script>
+<link rel="stylesheet" href="/css/tokens.css" integrity="sha384-RZEaR6nrY4K0f17049oYHrBmgH1s4MnijjH6f02av+zapSIwBMA3fvitsBo5u9/e" crossorigin="anonymous">
+<link rel="stylesheet" href="/css/reset.css" integrity="sha384-0a5x5PuNSBa3qxxcgFNFjigrGSU85OU1B6DbcWJsWbekk2Jzk5CbLmjhrMPdEbTH" crossorigin="anonymous">
+<link rel="stylesheet" href="/css/buttons.css" integrity="sha384-Igt25j4v8izIJAyWW/sW3yJqJzA/EupMnm8g2PYo2u5FXAwm0G3IfLGrPiCW1N4g" crossorigin="anonymous">
+<link rel="stylesheet" href="/css/forms.css" integrity="sha384-HGxuFebXO8aEDaN9Vle4xlQQQXW+xjXbPvp6KAlvej2QDdHLIH8eW0BKMxtINLFL" crossorigin="anonymous">
+<link rel="stylesheet" href="/css/layout.css" integrity="sha384-3TcttI0OHPNXEjKiH2qkL6l73IpiAdlyuunr53fpqKCcmkGFY+B2NiVdky8OUNbL" crossorigin="anonymous">
+<link rel="stylesheet" href="/css/components.css" integrity="sha384-xQjMV6c8jP/MJdNDzhJ0c1mUhWicp3AfHh/4vBLF3251NlEfCgz/AOhjD82gGK/X" crossorigin="anonymous">
+<link rel="stylesheet" href="/css/responsive.css" integrity="sha384-RidsLBvgZUVaE9WeJEgZvSrnDJ9+MpxYZm0Ahq6oERTI9z3UmRXK6uGD1yE5g3aM" crossorigin="anonymous">
+<script defer="" src="/app.js" integrity="sha384-6tcRs2jbYDpu1UF9xWntdlB4CGC3VB1hnQpplGEKyNVnxbyU6Wp/wNQB6l7JKUPS" crossorigin="anonymous"></script>
+<script defer="" src="/boot.js" integrity="sha384-faMimiIBzyqWV/0Sz8gXyLSivDCGriFnQ/N0BwQtlzLorOUbxjSE+Ql02LGldJ14" crossorigin="anonymous"></script>
 </head>
 <body><header class="site-header"><a href="/" class="brand"><img src="/logo.svg" alt="" width="32" height="32"><span>Concierge</span></a><nav class="site-nav"><a href="/features" class="nav-link">Features</a><a href="/pricing" class="nav-link">Pricing</a><a href="/auth/login" class="btn btn-primary">Sign in</a></nav></header><main class="site-main"><div class="page page-legal"><h1>Privacy Policy</h1><p class="muted">Last updated 26 September 2026.</p><div><section><h2>The short version</h2><p>We do not store the contents of your customers' messages. They pass through our worker, are sent to an AI model to generate a reply, and are not written to any database we keep.</p></section><section><h2>What we store</h2><p>For every message: the channel, whether it was inbound or outbound, the sender, the recipient, a timestamp, and what Concierge did with it. Not the text.</p><p>For your account: your email address and name from Google, your business details as you entered them, your prompt configuration, and your credit balance and payment records.</p></section><section><h2>Who else sees it</h2><p>Meta, because that is where WhatsApp messages come from and go to.</p><p>Cloudflare, who host the service and run the AI model that writes replies. Message text is sent to that model to produce a reply and is not used to train it.</p><p>Razorpay, for payments. We never see or store your card details.</p><p>Google, if you sign in with them — they tell us your email address and name.</p></section><section><h2>How long</h2><p>Message metadata and account records are kept while your account is open. Payment records are kept as long as tax and accounting law requires, which is longer.</p></section><section><h2>Your data</h2><p>You can ask us to delete your account and the metadata attached to it. Payment records survive with your account identifier removed.</p><p>There is also a data-deletion endpoint at /data-deletion, which exists because Meta requires one.</p></section><section><h2>Contact</h2><p>Questions about any of this: support@calculon.tech.</p></section></div></div></main><footer class="site-footer"><ul class="footer-links"><li><a href="/features">Features</a></li><li><a href="/pricing">Pricing</a></li><li><a href="/terms">Terms</a></li><li><a href="/privacy">Privacy</a></li><li><a href="https://ananthb.github.io/concierge/">Docs</a></li></ul><p class="footer-note">Message bodies pass through but are never stored. Only channel, direction, sender, recipient and timestamp are kept.</p></footer></body></html>

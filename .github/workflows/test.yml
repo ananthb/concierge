@@ -155,6 +155,12 @@ jobs:
           key: cargo-checks-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
           restore-keys: cargo-checks-${{ runner.os }}-
 
+      # build.rs hashes public/app.js for the shell's integrity attributes, so
+      # the frontend has to exist before the crate will compile. The deploy
+      # path gets this from scripts/build-worker.sh; here it's explicit.
+      - name: Build frontend (required by build.rs)
+        run: nix develop --command npm ci && nix develop --command npm run build:frontend
+
       - name: cargo fmt
         run: nix develop --command cargo fmt --check
 

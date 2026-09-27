@@ -78,7 +78,7 @@ Then open http://localhost:8787.
 | `elm-test` | Frontend unit tests (run from `frontend/`) |
 | `nix flake check` | cargo fmt, clippy, tests, and elm-format |
 
-`wrangler dev` and `wrangler deploy` both run `scripts/build-worker.sh`, which builds the frontend before the wasm — so a deploy can't ship a shell that loads a missing `app.js`.
+`wrangler dev` and `wrangler deploy` both run `scripts/build-worker.sh`, which builds the frontend before the wasm — so a deploy can't ship a shell that loads a missing `app.js`. That ordering is load-bearing for more than convenience: `build.rs` hashes `public/app.js` to emit its Subresource Integrity attribute, so the crate will not compile until the frontend exists. A bare `cargo check` in a fresh clone fails with the fix named.
 
 ### Layout
 

@@ -69,6 +69,44 @@ test.describe('shell', () => {
     expect(boot.status()).toBe(200);
   });
 
+  test('every asset the shell loads carries an integrity hash', async ({ request }) => {
+    // Subresource Integrity covers the stylesheets *and* both scripts. The
+    // scripts matter more: they are the executable code, and an earlier
+    // revision hashed only the CSS, which left /app.js — the part that can
+    // actually do something — unprotected.
+    const shell = await (await request.get('/wizard')).text();
+
+    const tags = [
+      ...shell.matchAll(/<link rel="stylesheet"[^>]*>/g),
+      ...shell.matchAll(/<script[^>]*src=[^>]*>/g),
+    ].map((m) => m[0]);
+
+    expect(tags.length, 'shell should reference assets').toBeGreaterThan(0);
+    for (const tag of tags) {
+      expect(tag, `missing integrity: ${tag}`).toMatch(/\bintegrity="sha384-[A-Za-z0-9+/=]+"/);
+      // Required for the browser to check the hash at all.
+      expect(tag, `missing crossorigin: ${tag}`).toMatch(/\bcrossorigin="anonymous"/);
+    }
+  });
+
+  test('the integrity hashes match what is served', async ({ page }) => {
+    // An SRI rejection is silent: the page renders, the asset just never
+    // applies. That is why this asserts on *effects* — the stylesheets being
+    // applied, and the app having booted — rather than on the hash strings.
+    // A stale hash breaks both, and nothing else in the suite would notice a
+    // page that looks right and does nothing.
+    const errors: string[] = [];
+    page.on('console', (m) => {
+      if (m.type() === 'error') errors.push(m.text());
+    });
+
+    await page.goto('/wizard');
+    await waitForBoot(page);
+
+    const integrityFailures = errors.filter((e) => /integrity|Failed to find a valid digest/i.test(e));
+    expect(integrityFailures, integrityFailures.join('\n')).toEqual([]);
+  });
+
   test('every stylesheet the shell references actually loads', async ({ page, request }) => {
     // This replaces a build-time guard. `build.rs` used to read each CSS file
     // to hash it, so a missing one failed the build; without that, a name in

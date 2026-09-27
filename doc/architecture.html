@@ -103,13 +103,16 @@
   <li><strong>Headers.</strong> A prerendered page never reaches <code>add_security_headers</code>, so <code>public/_headers</code> states the same policy for it. <code>tests/csp.spec.ts</code> compares the two and fails if they drift — without that file the only pages an anonymous visitor sees would be the least hardened on the deploy.</li>
 </ul>
 
-<div class="callout callout--note">
-  <div class="callout__icon">i</div>
-  <div class="callout__body">
-    <strong>No Subresource Integrity on the stylesheets</strong>
-    <p>A <code>build.rs</code> used to generate SHA-384 hashes for each CSS file and emit them as <code>integrity</code> attributes. It was removed rather than extended to the prerendered pages. It defended nothing — the files are same-origin, so anyone able to modify them could equally modify <code>/app.js</code>, which never carried a hash — and it failed silently in a way prerendering made worse: the hashes were baked into the wasm at compile time while the static pages embedding them are generated separately, so a CSS edit without regenerating both blocked a stylesheet on the public pages, with everything still rendering and nothing reported. <code>tests/app.spec.ts</code> now asserts every referenced stylesheet loads <em>and</em> is applied by the browser, which also catches a file that exists locally but wasn't deployed.</p>
-  </div>
-</div>
+<h2 id="sri">Subresource Integrity</h2>
+<p><code>build.rs</code> generates a SHA-384 hash for every stylesheet <em>and</em> both scripts, and the shell emits them as <code>integrity</code> attributes. Covering the scripts is the point: an earlier revision hashed only the CSS, which left <code>/app.js</code> — the executable part — unprotected.</p>
+<p>An SRI rejection is <strong>silent</strong>: the page still renders, the asset simply never applies. Four things keep the hashes honest, because documentation alone would not:</p>
+<ul>
+  <li><code>scripts/build-worker.sh</code> compiles the frontend <em>before</em> the wasm, so <code>build.rs</code> hashes the <code>app.js</code> that will actually be served. Ordering, not convention.</li>
+  <li><code>build.rs</code> refuses to emit a placeholder for a file it cannot read. A crate compiled without the frontend fails with the fix named, rather than producing a hash the browser will reject at runtime.</li>
+  <li>The prerendered pages inherit the hashes by snapshotting the shell, so a frontend rebuild without a re-prerender would leave stale ones in the static files. CI regenerates the snapshots and fails on a diff.</li>
+  <li><code>tests/app.spec.ts</code> asserts every stylesheet is <em>applied</em> by the browser and that the app actually boots — the two things a blocked asset breaks. Asserting on effects rather than on hash strings is deliberate: a page that looks right and does nothing is the failure mode worth catching.</li>
+</ul>
+<p>This is belt-and-braces for same-origin files. Anyone who can modify <code>public/</code> can modify the prerendered HTML too, hashes included, so it is not a defence against a compromised origin; it is a guard against an asset being altered or truncated between build and serve.</p>
 
 <h2>API conventions</h2>
 <ul>
