@@ -14,7 +14,9 @@
   },
   "devDependencies": {
     "@playwright/test": "~1.63.0",
-    "elm": "0.19.2-0",
     "wrangler": "^4"
+  },
+  "dependencies": {
+    "elm": "0.19.2-0"
   }
 }

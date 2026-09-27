@@ -13,12 +13,34 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
+# Resolution order: PATH (the nix devShell), then the local install (npm,
+# which is how Cloudflare Builds gets it).
+#
+# `elm` is a regular dependency rather than a devDependency for exactly this
+# reason: it compiles the artifact that gets deployed, so an install that
+# omits dev packages — `NODE_ENV=production`, `npm ci --omit=dev` — must still
+# produce a working build.
 if command -v elm >/dev/null 2>&1; then
     ELM=elm
+elif [ -x node_modules/.bin/elm ]; then
+    # Absolute: the compiler runs from frontend/ below, so a relative path
+    # would resolve against the wrong directory.
+    ELM="$PWD/node_modules/.bin/elm"
 else
-    # `npx --no-install` so a missing devDependency fails loudly instead of
-    # silently pulling an arbitrary version off the network mid-build.
-    ELM="npx --no-install elm"
+    # Deliberately not falling back to `npx elm`, which would fetch some
+    # arbitrary version off the network mid-build. Fail with the fix instead.
+    cat >&2 <<'MSG'
+build-frontend.sh: no Elm compiler found.
+
+Looked for:
+  - `elm` on PATH            (provided by the nix devShell)
+  - ./node_modules/.bin/elm  (provided by `npm ci`; `elm` is a dependency,
+                              not a devDependency, so an install that omits
+                              dev packages should still provide it)
+
+Run `npm ci` — or enter the nix devShell with `nix develop`.
+MSG
+    exit 1
 fi
 
 # --optimize turns on Elm's dead-code elimination and refuses Debug.* calls,
