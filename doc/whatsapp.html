@@ -55,7 +55,7 @@
       <div class="sidebar__group-label">Operate</div>
       <ul class="sidebar__list">
         <li><a href="billing.html"><span class="dot"></span>Billing &amp; credits</a></li>
-        <li><a href="management.html"><span class="dot"></span>Management panel</a></li>
+        <li><a href="management.html"><span class="dot"></span>Operator API</a></li>
       </ul>
     </div>
     <div class="sidebar__group">
@@ -81,7 +81,7 @@
       <div class="page-eyebrow">Channel · 1 of 4</div>
       <h1 class="page-title">WhatsApp <em>auto&#8209;reply</em>.</h1>
       <p class="page-lede">
-        WhatsApp is one of four channels in the unified messaging pipeline. Incoming WhatsApp messages are normalized into <code>InboundMessage</code> structs and processed through the common pipeline, which evaluates reply rules, generates the response, and logs metadata.
+        WhatsApp is the only channel. Incoming messages are normalized into an <code>InboundMessage</code> and processed through the common pipeline, which generates the response, decides whether it may be sent, and logs metadata.
       </p>
 
       <!-- channel banner -->
@@ -125,16 +125,12 @@
         <div class="callout__icon">→</div>
         <div class="callout__body">
           <strong>Manual fallback</strong>
-          <p>If you already know your phone number ID, use <code>/dashboard/whatsapp/manual</code> instead. Useful for migrating from another platform or when Embedded Signup isn&rsquo;t available in your region.</p>
+          <p>If Embedded Signup isn&rsquo;t available in your region, an operator can create the account record directly with the phone number ID through the <a href="management.html">operator API</a>. There is no tenant-facing manual path.</p>
         </div>
       </div>
 
       <h2 id="auto-reply">Configuring auto-reply</h2>
-      <p>Each WhatsApp account has its own <code>ReplyConfig</code> with two layers:</p>
-      <ul>
-        <li><strong>Default reply</strong>: edited inline on the account&rsquo;s edit page. Sets the fallback when no rule matches. Pick canned text or AI prompt.</li>
-        <li><strong>Reply rules</strong>: managed at <code>/dashboard/rules/whatsapp/{account_id}</code>. An ordered list checked top&#8209;down on every inbound message; first match wins.</li>
-      </ul>
+      <p>Each WhatsApp account carries one <code>ReplyConfig</code>, edited from the dashboard&rsquo;s WhatsApp tab. There is exactly one response: every inbound message takes the same path.</p>
 
       <div class="table-wrap">
         <div class="table-wrap__head">
@@ -143,78 +139,84 @@
         <table class="docs">
           <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
           <tbody>
-            <tr><td><code>enabled</code></td><td><code>bool</code></td><td class="muted">Master switch; turns auto-reply off without losing rules.</td></tr>
-            <tr><td><code>rules</code></td><td><code>Vec&lt;ReplyRule&gt;</code></td><td class="muted">Ordered list. First match wins. Each rule pairs a matcher (keyword substring or BGE&#8209;embedding cosine similarity over a user&#8209;written intent description) with a response (canned text or AI prompt).</td></tr>
-            <tr><td><code>default_rule</code></td><td><code>ReplyRule</code></td><td class="muted">Mandatory fallback. Fires when no rule in <code>rules</code> matches.</td></tr>
-            <tr><td><code>wait_seconds</code></td><td><code>u32</code></td><td class="muted">0&ndash;30s buffer; lets quick&#8209;fire bursts collapse into one reply via the <code>REPLY_BUFFER</code> Durable Object.</td></tr>
+            <tr><td><code>enabled</code></td><td><code>bool</code></td><td class="muted">Master switch. Off means nothing is answered; the inbound is still logged.</td></tr>
+            <tr><td><code>response</code></td><td><code>ReplyResponse</code></td><td class="muted"><code>Canned { text }</code> sends verbatim and free. <code>Prompt { text }</code> appends the instruction to the persona and runs the model for one credit.</td></tr>
+            <tr><td><code>wait_seconds</code></td><td><code>u32</code></td><td class="muted">0&ndash;30&nbsp;s buffer, so quick-fire bursts collapse into one reply via the <code>REPLY_BUFFER</code> Durable Object. 0 replies immediately.</td></tr>
           </tbody>
         </table>
       </div>
 
+      <div class="callout callout--note">
+        <div class="callout__icon">i</div>
+        <div class="callout__body">
+          <strong>There used to be a rule engine</strong>
+          <p><code>ReplyConfig</code> carried an ordered <code>rules: Vec&lt;ReplyRule&gt;</code> plus a mandatory <code>default_rule</code>. Each rule paired a matcher &mdash; case-insensitive keyword substrings, or BGE-embedding cosine similarity against a written intent description &mdash; with a response, and the first match won. In practice the default rule handled nearly every message, so the list is gone and the field is now a single <code>response</code>. It deserializes with <code>alias = "default_rule"</code>, so records written by the old shape still load. The embedding model and the cosine matcher went with it.</p>
+        </div>
+      </div>
+
       <h3 id="canned">Canned response</h3>
-      <p>Sent verbatim. No AI call, no credit charge. Good for hours/closed/FAQ replies.</p>
+      <p>Sent verbatim. No model call, no credit. Good for hours, closed-for-the-day, and anything you want worded exactly.</p>
 
       <div class="codeblock">
         <div class="codeblock__head">
           <span class="codeblock__lang">json</span>
-          <span class="codeblock__file">example · canned</span>
+          <span class="codeblock__file">example &middot; canned</span>
           <button class="codeblock__copy">Copy</button>
         </div>
 <pre><code>{
-  <span class="tok-s">"id"</span><span class="tok-p">:</span> <span class="tok-s">"hours"</span>,
-  <span class="tok-s">"label"</span><span class="tok-p">:</span> <span class="tok-s">"Hours / location"</span>,
-  <span class="tok-s">"matcher"</span><span class="tok-p">:</span> {
-    <span class="tok-s">"kind"</span><span class="tok-p">:</span> <span class="tok-s">"static_text"</span>,
-    <span class="tok-s">"keywords"</span><span class="tok-p">:</span> [<span class="tok-s">"hours"</span>, <span class="tok-s">"open"</span>, <span class="tok-s">"closed"</span>, <span class="tok-s">"address"</span>]
-  },
+  <span class="tok-s">"enabled"</span><span class="tok-p">:</span> <span class="tok-k">true</span>,
   <span class="tok-s">"response"</span><span class="tok-p">:</span> {
     <span class="tok-s">"kind"</span><span class="tok-p">:</span> <span class="tok-s">"canned"</span>,
     <span class="tok-s">"text"</span><span class="tok-p">:</span> <span class="tok-s">"We're open 7am&ndash;7pm every day. Come say hi! &#9749;"</span>
-  }
+  },
+  <span class="tok-s">"wait_seconds"</span><span class="tok-p">:</span> <span class="tok-n">5</span>
 }</code></pre>
       </div>
 
       <h3 id="ai">AI prompt response</h3>
-      <p>The matched rule&rsquo;s prompt is concatenated to the tenant&rsquo;s <em>persona prompt</em> (set at <code>/dashboard/persona</code>) and sent to Workers AI as the system instruction. The sender&rsquo;s name and message are passed as user&#8209;message context. One credit deducts before the call.</p>
+      <p>The instruction is appended to the tenant&rsquo;s persona prompt and the pair is wrapped in the fixed envelope as the system message. Recent conversation turns are passed as prior history. One credit deducts before the call.</p>
 
       <div class="codeblock">
         <div class="codeblock__head">
           <span class="codeblock__lang">json</span>
-          <span class="codeblock__file">example · prompt rule</span>
+          <span class="codeblock__file">example &middot; AI</span>
           <button class="codeblock__copy">Copy</button>
         </div>
 <pre><code>{
-  <span class="tok-s">"id"</span><span class="tok-p">:</span> <span class="tok-s">"booking"</span>,
-  <span class="tok-s">"label"</span><span class="tok-p">:</span> <span class="tok-s">"Booking requests"</span>,
-  <span class="tok-s">"matcher"</span><span class="tok-p">:</span> {
-    <span class="tok-s">"kind"</span><span class="tok-p">:</span> <span class="tok-s">"prompt"</span>,
-    <span class="tok-s">"description"</span><span class="tok-p">:</span> <span class="tok-s">"wants to book, reschedule, or check availability for an appointment"</span>,
-    <span class="tok-s">"threshold"</span><span class="tok-p">:</span> <span class="tok-n">0.72</span>
-  },
+  <span class="tok-s">"enabled"</span><span class="tok-p">:</span> <span class="tok-k">true</span>,
   <span class="tok-s">"response"</span><span class="tok-p">:</span> {
     <span class="tok-s">"kind"</span><span class="tok-p">:</span> <span class="tok-s">"prompt"</span>,
-    <span class="tok-s">"text"</span><span class="tok-p">:</span> <span class="tok-s">"Ask which service and which day they prefer; mention a stylist will confirm shortly."</span>
-  }
+    <span class="tok-s">"text"</span><span class="tok-p">:</span> <span class="tok-s">"Reply to the customer's message helpfully."</span>
+  },
+  <span class="tok-s">"wait_seconds"</span><span class="tok-p">:</span> <span class="tok-n">5</span>
 }</code></pre>
+      </div>
+
+      <div class="callout callout--warn">
+        <div class="callout__icon">!</div>
+        <div class="callout__body">
+          <strong>An AI reply is not guaranteed to reach the customer</strong>
+          <p>After generation the draft goes through the <a href="how-it-works.html#risk">risk gate</a>. If it quotes a price, makes a commitment, strays past your stated boundaries, or comes out a suspicious length, it is discarded: the customer gets a fixed holding sentence, you get an email, and the conversation enters handoff. The credit is still spent, because the model ran.</p>
+        </div>
       </div>
 
       <div class="callout callout--note">
         <div class="callout__icon">i</div>
         <div class="callout__body">
           <strong>Models</strong>
-          <p>Reply generation uses <code>@cf/meta/llama-4-scout-17b-16e-instruct</code>. Prompt&#8209;injection scanning + persona safety classification use the smaller <code>@cf/meta/llama-3.1-8b-instruct-fast</code>. Rule embeddings use <code>@cf/baai/bge-base-en-v1.5</code>. Latency is typically 600&ndash;1200ms; the customer sees it as &ldquo;typing&hellip;&rdquo; in WhatsApp.</p>
+          <p>Reply generation uses <code>@cf/meta/llama-4-scout-17b-16e-instruct</code>; prompt-injection scanning and persona safety classification use the smaller <code>@cf/meta/llama-3.1-8b-instruct-fast</code>. Both are overridable with <code>AI_MODEL</code> and <code>AI_FAST_MODEL</code>. Latency is typically 600&ndash;1200&nbsp;ms, which the customer sees as &ldquo;typing&hellip;&rdquo; in WhatsApp.</p>
         </div>
       </div>
 
       <h2 id="persona">Persona</h2>
       <p>
-        The system prompt for every AI reply is the tenant&#8209;wide persona prompt at <code>/dashboard/persona</code> (preset, builder, or custom) concatenated with the matched rule&rsquo;s prompt. AI replies are blocked unless the persona&rsquo;s safety status is <em>Approved</em>; canned default replies still send.
+        The system prompt for every AI reply is the tenant-wide persona (guided builder or raw prompt, edited at <code>/dashboard/persona</code>) concatenated with the channel&rsquo;s instruction, wrapped in the fixed envelope. AI replies are blocked unless the persona&rsquo;s safety status is <em>Approved</em> and its hash hasn&rsquo;t drifted since; canned replies still send.
       </p>
       <p>See <a href="how-it-works.html#persona">Persona &amp; safety check</a> for the async classifier flow.</p>
 
       <h2 id="credits">Credit deduction</h2>
       <p>
-        Each AI&#8209;mode reply (rule with a <em>Prompt</em> response) deducts one credit from the tenant&rsquo;s balance. Canned responses are free. Credits are deducted <em>before</em> the AI call (optimistic) and restored if generation or send fails. When credits reach zero, AI replies stop silently; canned default replies still send.
+        Each AI reply deducts one credit. Canned responses are free. Credits are deducted <em>before</em> the call (optimistic) and restored if generation or send fails &mdash; but <em>not</em> when the risk gate withholds the draft, because the model ran. When credits reach zero, AI replies stop silently; canned replies still send.
       </p>
       <p>See <a href="billing.html">Billing</a> for managing credits.</p>
 
@@ -248,7 +250,7 @@
 <pre><code><span class="tok-k">CREATE TABLE</span> messages (
   id          <span class="tok-k">INTEGER PRIMARY KEY AUTOINCREMENT</span>,
   tenant_id   <span class="tok-k">TEXT NOT NULL</span>,
-  channel     <span class="tok-k">TEXT NOT NULL</span>,    <span class="tok-c">-- whatsapp | instagram | email | discord</span>
+  channel     <span class="tok-k">TEXT NOT NULL</span>,    <span class="tok-c">-- whatsapp (the only value today)</span>
   direction   <span class="tok-k">TEXT NOT NULL</span>,    <span class="tok-c">-- inbound | outbound</span>
   sender_id   <span class="tok-k">TEXT NOT NULL</span>,
   recipient_id <span class="tok-k">TEXT NOT NULL</span>,
@@ -275,9 +277,9 @@
           <div class="pagernav__dir">← Previous</div>
           <div class="pagernav__title">Deployment</div>
         </a>
-        <a href="instagram.html" class="pagernav__item pagernav__item--next">
+        <a href="billing.html" class="pagernav__item pagernav__item--next">
           <div class="pagernav__dir">Next →</div>
-          <div class="pagernav__title">Instagram DM auto-reply</div>
+          <div class="pagernav__title">Billing &amp; credits</div>
         </a>
       </nav>
 

@@ -55,7 +55,7 @@
       <div class="sidebar__group-label">Operate</div>
       <ul class="sidebar__list">
         <li><a href="billing.html"><span class="dot"></span>Billing &amp; credits</a></li>
-        <li><a href="management.html"><span class="dot"></span>Management panel</a></li>
+        <li><a href="management.html"><span class="dot"></span>Operator API</a></li>
       </ul>
     </div>
     <div class="sidebar__group">
@@ -81,26 +81,18 @@
       <div class="page-eyebrow">Architecture</div>
       <h1 class="page-title">How it <em>works</em>.</h1>
       <p class="page-lede">
-        Concierge runs as a single Cloudflare Worker that handles four messaging channels through one unified pipeline. Every inbound event (a WhatsApp message, an Instagram DM, an email arriving at your catch&#8209;all, or a Discord interaction) is normalized into the same shape and processed by the same steps.
+        Concierge is one Cloudflare Worker. A WhatsApp message arrives on a webhook, is normalized into a single struct, and walks one pipeline that ends in exactly one of three outcomes: a canned reply, an AI reply, or nothing sent and a person paged.
       </p>
 
       <!-- HERO PIPELINE -->
       <div class="hero">
-        <div class="hero__caption">The pipeline · runs identically for every channel</div>
+        <div class="hero__caption">The pipeline · one inbound message, three possible endings</div>
         <div class="pipeline">
           <div class="pipeline__col">
             <div class="pipeline__col-label">Inbound</div>
             <div class="pipeline__node">
               <span class="pipeline__node-dot wa"></span>
-              <span class="pipeline__node-text"><b>WhatsApp</b><span>webhook</span></span>
-            </div>
-            <div class="pipeline__node">
-              <span class="pipeline__node-dot ig"></span>
-              <span class="pipeline__node-text"><b>Instagram</b><span>webhook</span></span>
-            </div>
-            <div class="pipeline__node">
-              <span class="pipeline__node-dot em"></span>
-              <span class="pipeline__node-text"><b>Email</b><span>email() handler</span></span>
+              <span class="pipeline__node-text"><b>WhatsApp</b><span>signed webhook</span></span>
             </div>
           </div>
 
@@ -112,66 +104,69 @@
           <div class="pipeline__core">
             <div class="pipeline__core-title">Common pipeline</div>
             <div class="pipeline__core-step"><span class="num">01</span><span><b>Normalize</b> → <em class="serif">InboundMessage</em></span></div>
-            <div class="pipeline__core-step"><span class="num">02</span><span><b>Tenant</b> + <b>credit</b> check</span></div>
-            <div class="pipeline__core-step"><span class="num">03</span><span><b>Reply rules</b> · keyword + embedding</span></div>
-            <div class="pipeline__core-step"><span class="num">04</span><span><b>Envelope</b> + persona + history</span></div>
-            <div class="pipeline__core-step"><span class="num">05</span><span><b>Action</b> dispatch &middot; <b>handoff</b> check</span></div>
-            <div class="pipeline__core-step"><span class="num">06</span><span><b>Log metadata</b> &middot; D1</span></div>
+            <div class="pipeline__core-step"><span class="num">02</span><span><b>Injection scan</b> · fast model</span></div>
+            <div class="pipeline__core-step"><span class="num">03</span><span><b>Session</b> · history + handoff state</span></div>
+            <div class="pipeline__core-step"><span class="num">04</span><span><b>Credit</b> check + deduct</span></div>
+            <div class="pipeline__core-step"><span class="num">05</span><span><b>Envelope</b> + persona + history</span></div>
+            <div class="pipeline__core-step"><span class="num">06</span><span><b>Risk gate</b> · withhold or send</span></div>
+            <div class="pipeline__core-step"><span class="num">07</span><span><b>Log metadata</b> &middot; D1</span></div>
           </div>
 
           <div class="pipeline__connector">
             <div class="pipeline__connector-line"></div>
-            <div class="pipeline__connector-label">Dispatch</div>
+            <div class="pipeline__connector-label">Outcome</div>
           </div>
 
           <div class="pipeline__col">
-            <div class="pipeline__col-label">Actions</div>
-            <div class="pipeline__action"><b>Canned reply</b><span>Static text · no AI · free</span></div>
-            <div class="pipeline__action"><b>AI reply</b><span>Workers AI · llama&#8209;4&#8209;scout · persona + rule prompt</span></div>
-            <div class="pipeline__action"><b>Forward → Discord</b><span>Embed + Reply / Approve / Drop</span></div>
-            <div class="pipeline__action"><b>Forward email</b><span>Reverse&#8209;alias for replies</span></div>
-            <div class="pipeline__action"><b>Drop / spam reject</b><span>Silent or NDR</span></div>
+            <div class="pipeline__col-label">Outcomes</div>
+            <div class="pipeline__action"><b>Canned reply</b><span>Your text, verbatim · no AI · free</span></div>
+            <div class="pipeline__action"><b>AI reply</b><span>Workers AI · llama&#8209;4&#8209;scout · persona envelope · one credit</span></div>
+            <div class="pipeline__action"><b>Withheld → handoff</b><span>Holding sentence to the customer, email to you</span></div>
           </div>
         </div>
       </div>
 
-      <h2 id="pipeline">The unified pipeline</h2>
+      <h2 id="pipeline">The pipeline</h2>
       <p>
-        Regardless of which channel a message arrives on, it&rsquo;s normalized into an <code>InboundMessage</code> struct (channel, sender, recipient, tenant, metadata), and processed through the same steps. This is the spine of the codebase. Channel handlers exist only to translate webhooks into <code>InboundMessage</code> and to dispatch outbound replies.
+        Everything is normalized into an <code>InboundMessage</code> (channel, sender, recipient, tenant, metadata) before any logic runs. Channel handlers exist only to translate a webhook into that struct and to dispatch the outbound reply. WhatsApp is the only channel today; the pipeline still dispatches on a <code>Channel</code> enum, so adding one back is a variant plus an arm rather than a re&#8209;plumb.
       </p>
 
       <ol class="steps">
         <li>
-          <h3>Channel handler receives the raw event</h3>
-          <p>WhatsApp and Instagram POST signed webhook payloads to <code>/webhook/*</code>. Email arrives via Cloudflare&rsquo;s <code>send_to_worker</code> action, invoking the Worker&rsquo;s <code>email()</code> entrypoint.</p>
+          <h3>The webhook arrives</h3>
+          <p>Meta POSTs a signed payload to <code>/webhook/whatsapp</code>. The signature is verified against <code>META_APP_SECRET</code> with a constant&#8209;time comparison before the body is looked at.</p>
         </li>
         <li>
           <h3>Normalize into <code>InboundMessage</code></h3>
-          <p>Channel, sender, recipient, tenant ID, and any channel&#8209;specific metadata. From here, every code path is identical.</p>
+          <p>Channel, sender, recipient, tenant ID, and channel&#8209;specific metadata. From here every code path is identical.</p>
         </li>
         <li>
           <h3>Log metadata to <code>messages</code></h3>
-          <p>An append&#8209;only row in D1: <em>channel, direction, sender ID, recipient ID, tenant, timestamp</em>. Message <strong>content</strong> is never persisted: only the fact that something happened, with whom.</p>
+          <p>An append&#8209;only row in D1: <em>channel, direction, sender ID, recipient ID, tenant, timestamp</em>. Message <strong>content</strong> is never persisted &mdash; only that something happened, with whom.</p>
         </li>
         <li>
-          <h3>Reply rules evaluate in order</h3>
-          <p>Each channel carries an ordered <code>ReplyConfig</code>. Rules pair a matcher (case&#8209;insensitive keyword substring or BGE&#8209;embedding cosine similarity over a user&#8209;written intent description) with a response (canned text or an AI prompt). First match wins; the mandatory default rule fires if nothing else does.</p>
+          <h3>Batch the burst</h3>
+          <p>Inbound messages are held for <code>wait_seconds</code> (default 5) in a Durable Object keyed by tenant&nbsp;+&nbsp;channel&nbsp;+&nbsp;sender. Three short messages typed in a row become one considered answer instead of three. Setting it to 0 replies immediately.</p>
+        </li>
+        <li>
+          <h3>Scan for injection</h3>
+          <p>The body is truncated to 1000 characters and run past a fast classifier. An injection attempt is dropped silently &mdash; no reply, no credit.</p>
         </li>
         <li>
           <h3>Resolve the conversation session</h3>
-          <p>Per&#8209;customer threads are tracked in KV at <code>convsession:{tenant}:{channel}:{sender}</code>. If the customer has been silent for longer than <code>idle_gap_mins</code> (default 6&nbsp;h), a fresh conversation begins: a new <code>conversation_id</code> is minted, message history clears, any handoff state is wiped. Otherwise the existing session is loaded and the inbound is appended to its messages list.</p>
+          <p>Per&#8209;customer threads live in KV at <code>convsession:{tenant}:{channel}:{sender}</code>. If the customer has been silent longer than <code>idle_gap_mins</code> (default 6&nbsp;h) a fresh conversation begins: new <code>conversation_id</code>, history cleared, handoff state wiped. Otherwise the existing session loads and the inbound is appended.</p>
         </li>
         <li>
           <h3>Build the prompt envelope</h3>
-          <p>The system prompt sent to the reply model is always a sandwich: a fixed <em>preamble</em> framing the model as a small&#8209;business reply assistant, the <em>editable middle</em> (the tenant&rsquo;s persona prompt + the rule prompt + the persona&rsquo;s goal &amp; handoff conditions), and a fixed <em>postamble</em> with universal house rules, jailbreak rails, and handoff triggers. The preamble and postamble are constants in <code>src/prompt.rs</code>; tenant content can never reach the model alone.</p>
+          <p>The system prompt is always a sandwich: a fixed <em>preamble</em> framing the model as a small&#8209;business reply assistant, the <em>editable middle</em> (the tenant&rsquo;s persona, goal and handoff conditions), and a fixed <em>postamble</em> carrying house rules, jailbreak rails and the handoff sentinel. Preamble and postamble are constants in <code>src/prompt.rs</code>; tenant content never reaches the model alone.</p>
         </li>
         <li>
-          <h3>Action dispatches &middot; canned text or multi&#8209;turn LLM call</h3>
-          <p>Canned responses send verbatim, no credit charge. Prompt responses run the reply model with the envelope above as the system message and the session&rsquo;s recent message history (capped by <code>max_history_messages</code>, default 20) as the prior turns. One credit is deducted before the call (optimistic) and restored if generation or send fails. AI replies are blocked unless the persona&rsquo;s asynchronous safety check has approved the current prompt.</p>
+          <h3>Generate &mdash; canned text or a multi&#8209;turn LLM call</h3>
+          <p>A canned response sends verbatim, no credit. A prompt response runs the reply model with the envelope as the system message and up to <code>max_history_messages</code> recent turns (default 20) as prior context. One credit is deducted before the call and restored if generation or send fails. AI replies are blocked entirely unless the persona&rsquo;s asynchronous safety check has approved the <em>current</em> prompt.</p>
         </li>
         <li>
-          <h3>Handoff scan</h3>
-          <p>Every model reply is scanned for the <code>[[HANDOFF]]</code> sentinel before it leaves the worker. If present, the token is stripped, the session is flipped into the holding&#8209;pattern path for <code>handoff_cooldown_mins</code> (default 60&nbsp;min), and the tenant is paged once via their configured approval channels (Discord embed and/or immediate email). Past the cooldown the worker stays silent until the idle gap resets the conversation.</p>
+          <h3>Gate the draft</h3>
+          <p>Two checks, in order. The <a href="#risk">risk gate</a> withholds a draft that quotes a price, makes a commitment, strays past the persona&rsquo;s boundaries, or comes out a suspicious length. Then the reply is scanned for the <code>[[HANDOFF]]</code> sentinel, which the model emits when it wants a person itself. Either way the conversation enters <a href="#conversations">handoff</a> and the tenant is emailed once.</p>
         </li>
       </ol>
 
@@ -179,133 +174,126 @@
         <div class="callout__icon">i</div>
         <div class="callout__body">
           <strong>Storage note</strong>
-          <p>The unified <code>messages</code> table stores <em>only</em> metadata: channel, direction, sender ID, recipient ID, tenant, timestamp. No subjects, no bodies, no attachments. AI replies are generated synchronously from in-memory data and discarded.</p>
+          <p>The <code>messages</code> table stores <em>only</em> metadata: channel, direction, sender ID, recipient ID, tenant, timestamp. No subjects, no bodies, no attachments. Replies are generated from in&#8209;memory data and discarded. Recent conversation turns do live in KV, because multi&#8209;turn context needs them; they are cleared by the idle gap.</p>
         </div>
       </div>
 
-      <h2 id="whatsapp">WhatsApp / Instagram auto&#8209;reply</h2>
-      <p>Both Meta channels run through the same reply pipeline:</p>
+      <h2 id="risk">The risk gate</h2>
+      <p>
+        This is the part of Concierge that matters most and is easiest to miss: <strong>a draft the gate dislikes is never sent to the customer at all.</strong> There is no review queue to approve it from, and no setting to turn the gate off.
+      </p>
+      <p>
+        The checks are pure and synchronous &mdash; no model call, no I/O &mdash; and run on the generated draft, not the customer&rsquo;s message:
+      </p>
+      <div class="table-wrap">
+        <div class="table-wrap__head">
+          <b>What trips it</b><span>src/risk.rs · always on</span>
+        </div>
+        <table class="docs">
+          <thead><tr><th>Signal</th><th>Fires when the draft&hellip;</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Length</strong></td><td>is under 8 or over 600 characters. Both ends correlate with a model that has lost the thread.</td></tr>
+            <tr><td><strong>Money</strong></td><td>mentions a currency symbol, or the words price, quote, refund, discount, free, cost.</td></tr>
+            <tr><td><strong>Commitment</strong></td><td>says guarantee, promise, confirmed, booked, or names a day (&ldquo;by Friday&rdquo;, &ldquo;by tomorrow&rdquo;).</td></tr>
+            <tr><td><strong>Persona drift</strong></td><td>contains one of the tenant&rsquo;s own <em>off&#8209;topics</em> or their <em>never say</em> phrase.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        When one fires: the customer gets a single fixed sentence saying a colleague will reply shortly, the conversation enters the handoff path, and the tenant is emailed with the reason that tripped it. The credit is <em>not</em> refunded &mdash; the model did run. The withheld draft is not stored, and the row logged to D1 carries the action <code>handed_off</code>.
+      </p>
+      <div class="callout callout--note">
+        <div class="callout__icon">i</div>
+        <div class="callout__body">
+          <strong>This replaced an approval queue</strong>
+          <p>Earlier revisions held a risky draft for a human to approve, edit or reject &mdash; from a Discord embed with buttons, or a web page, with a 24&#8209;hour expiry and a digest email. That queue is gone. The safety property is the same (a draft mentioning money cannot reach a customer unreviewed) but there is nothing to staff and nothing to expire.</p>
+        </div>
+      </div>
+
+      <h2 id="whatsapp">WhatsApp auto&#8209;reply</h2>
       <ol>
-        <li>Meta delivers the inbound message to <code>POST /webhook/whatsapp</code> or <code>POST /webhook/instagram</code>.</li>
-        <li>Concierge looks up the channel account (phone number ID for WhatsApp, page ID for Instagram) and its <code>ReplyConfig</code>.</li>
-        <li>The body is truncated to 1000 chars and run past a fast prompt&#8209;injection scanner; injection attempts are dropped.</li>
-        <li>If any rule has a <em>Prompt</em> matcher, the inbound message is embedded once and compared via cosine similarity to each rule&rsquo;s precomputed embedding.</li>
-        <li>Rules are walked in order; the first match wins. Otherwise the mandatory default rule fires.</li>
-        <li>Canned responses send verbatim with no credit charge. Prompt responses combine persona + rule prompt + a context block, deduct one credit, and run the main LLM. AI replies require the tenant&rsquo;s persona to be safety&#8209;<em>Approved</em>.</li>
+        <li>Meta delivers the inbound message to <code>POST /webhook/whatsapp</code>, signed.</li>
+        <li>Concierge looks up the WhatsApp account by phone number ID and loads its <code>ReplyConfig</code>: enabled or not, one response (canned text or an AI instruction), and a wait window.</li>
+        <li>The body is truncated to 1000 characters and run past the injection scanner.</li>
+        <li>A canned response sends verbatim, free. An AI response combines the persona with the instruction, deducts one credit, and runs the model &mdash; provided the persona is safety&#8209;<em>Approved</em>.</li>
+        <li>The draft passes the risk gate, or it doesn&rsquo;t and the conversation is handed to you.</li>
       </ol>
+      <div class="callout callout--note">
+        <div class="callout__icon">i</div>
+        <div class="callout__body">
+          <strong>No rule engine</strong>
+          <p>Each channel used to carry an ordered list of reply rules pairing a matcher (keyword substring, or BGE&#8209;embedding cosine similarity over a written intent description) with a response. In practice the mandatory default rule handled nearly every message, so the list is gone and a channel now has exactly one response. The embedding model and the cosine matcher went with it.</p>
+        </div>
+      </div>
 
       <h2 id="persona">Persona &amp; safety check</h2>
       <ol>
-        <li>The tenant fills in the persona builder at <code>/dashboard/persona</code>: a voice archetype (Friendly / Professional / Playful / Formal), business name and type, a <em>goal</em> (what to drive customers toward, free text + optional URL), catch&#8209;phrases, off&#8209;topic boundaries, and <em>handoff conditions</em> (what to escalate to a human). Alternatively the tenant copies a curated archetype from the platform&rsquo;s D1 catalog (<code>/manage/personas</code>) or writes a raw custom prompt.</li>
-        <li>On save, the rendered active prompt is hashed; if the hash differs from the last&#8209;vetted hash, status flips to <em>Pending</em> and a <code>SafetyJob</code> is enqueued onto Cloudflare Queue <code>concierge-safety</code>.</li>
-        <li>The queue consumer reads the job, re&#8209;checks the hash (drops stale jobs), and runs the safety classifier with Calculon Tech&rsquo;s content policy.</li>
-        <li>The result lands back in KV as <em>Approved</em> or <em>Rejected</em> with a vague user&#8209;facing reason.</li>
-        <li>While <em>Pending</em> or <em>Rejected</em>, AI replies are blocked tenant&#8209;wide; canned default replies still send.</li>
+        <li>The tenant picks a voice during onboarding and can rewrite every field afterwards from <code>/dashboard/persona</code>: voice archetype, business name and type, city, opening hours, a <em>goal</em> (what to drive customers toward, plus an optional URL), catch&#8209;phrases, off&#8209;topic boundaries, a <em>never say</em> line, and <em>handoff conditions</em>. A power user can instead write a raw prompt; a persona is one or the other, never a blend.</li>
+        <li>The archetypes are a platform&#8209;curated catalog in D1, managed through the operator API and themselves safety&#8209;checked. Tenants only ever see approved ones.</li>
+        <li>On save the composed prompt is hashed. If the hash differs from the last&#8209;vetted one, status flips to <em>Pending</em> and a <code>SafetyJob</code> goes onto the <code>concierge-safety</code> queue.</li>
+        <li>The consumer re&#8209;checks the hash (dropping stale jobs), runs the classifier, and writes back <em>Approved</em> or <em>Rejected</em> with a deliberately vague user&#8209;facing reason &mdash; the classifier&rsquo;s actual category is logged, never returned, so a prompt can&rsquo;t be iterated against it.</li>
+        <li>While <em>Pending</em> or <em>Rejected</em>, AI replies are blocked tenant&#8209;wide. Canned replies keep going out. Because the comparison is against the hash of the current prompt, an edit cannot slip past a stale approval.</li>
       </ol>
 
       <h2 id="conversations">Conversations &amp; handoff</h2>
       <p>
-        Inbound messages don&rsquo;t live in a vacuum. Each customer&times;channel pair has a <em>conversation session</em> in KV (<code>convsession:{tenant}:{channel}:{sender}</code>) holding a stable <code>conversation_id</code>, a bounded list of recent <code>(role, content)</code> turns, the timestamp of the last inbound, and an optional handoff sub&#8209;state. The session is also stamped onto matching rows in the unified <code>messages</code> D1 table via a <code>conversation_id</code> column so a thread can be reconstructed for audit.
+        Each customer&times;channel pair has a <em>conversation session</em> in KV holding a stable <code>conversation_id</code>, a bounded list of recent <code>(role, content)</code> turns, the timestamp of the last inbound, and an optional handoff sub&#8209;state. The id is stamped onto matching rows in D1 so a thread can be reconstructed for audit without ever having stored its contents.
       </p>
       <ol>
-        <li><strong>Idle gap.</strong> If the customer has been silent for longer than <code>idle_gap_mins</code> (default 6&nbsp;h), the next inbound starts a fresh conversation: history clears, handoff is wiped, the persona replies normally. Six hours is long enough for a customer mulling a quote over lunch, short enough that next morning&rsquo;s message is genuinely fresh.</li>
-        <li><strong>Multi&#8209;turn context.</strong> Up to <code>max_history_messages</code> recent turns (default 20, roughly ten back&#8209;and&#8209;forths) are passed to the reply model as the prior chat history on every AI call. Queued draft replies are <em>not</em> appended to history &mdash; a draft that gets rejected can&rsquo;t poison the next AI call.</li>
-        <li><strong>Handoff signal.</strong> The postamble defines the universal triggers (the model doesn&rsquo;t understand the request; the customer asks for a person; the message touches medical / legal / financial / safety territory) and the persona&rsquo;s <em>handoff conditions</em> add tenant&#8209;specific ones. To escalate, the model writes one polite holding sentence and ends the reply with <code>[[HANDOFF]]</code> on its own line.</li>
-        <li><strong>Pipeline reaction.</strong> The token is stripped before the customer sees the reply. The session flips into the holding pattern, replacing the persona middle with a calm "a person has been notified" voice for any follow&#8209;up turns within <code>handoff_cooldown_mins</code> (default 60&nbsp;min). Past the cooldown the worker stays silent until the idle gap resets the conversation.</li>
-        <li><strong>Tenant page.</strong> The tenant is paged once per handoff via their configured approval&#8209;notification channels &mdash; Discord embed (via the bot) and/or immediate email through <code>send_outbound</code>. This is not the digest cron: the page goes out the moment the handoff fires.</li>
+        <li><strong>Idle gap.</strong> Silence longer than <code>idle_gap_mins</code> (default 6&nbsp;h) means the next inbound starts fresh: history clears, handoff is wiped, the persona replies normally. Six hours is long enough for a customer mulling a quote over lunch, short enough that next morning&rsquo;s message is genuinely new.</li>
+        <li><strong>Multi&#8209;turn context.</strong> Up to <code>max_history_messages</code> turns (default 20, roughly ten exchanges) go to the model as prior history. Only <em>sent</em> replies are appended &mdash; a withheld draft never enters the history it would otherwise poison.</li>
+        <li><strong>Two ways in.</strong> The model can ask for a person by ending its reply with <code>[[HANDOFF]]</code> on its own line, triggered by the postamble&rsquo;s universal conditions (it doesn&rsquo;t understand; the customer asks for a human; the message touches medical, legal, financial or safety territory) plus the persona&rsquo;s own. Or the risk gate withholds a draft. Both land in the same state.</li>
+        <li><strong>Holding pattern.</strong> The sentinel is stripped before the customer sees anything. For follow&#8209;ups within <code>handoff_cooldown_mins</code> (default 60) the persona is replaced by a calm &ldquo;a person has been notified&rdquo; voice. Past the cooldown the worker goes silent until the idle gap resets the conversation.</li>
+        <li><strong>One page, by email.</strong> The tenant is emailed once per handoff, naming the channel, the sender, an excerpt, and &mdash; when the risk gate fired &mdash; which signal tripped. Guarded by a <code>notified</code> flag so extra customer turns inside the window don&rsquo;t re&#8209;send it.</li>
       </ol>
       <p>
-        Operators tune all three knobs (<code>idle_gap_mins</code>, <code>handoff_cooldown_mins</code>, <code>max_history_messages</code>) per&#8209;tenant from the Conversation Timing card on <code>/dashboard/settings</code>. The form enforces sensible bounds (5&ndash;1440 min, 1&ndash;200 turns) and a cross&#8209;field invariant: idle gap must be longer than handoff cooldown, otherwise an active handoff could be wiped before its cooldown ended. Empty fields fall back to the in&#8209;code defaults.
+        All three knobs (<code>idle_gap_mins</code>, <code>handoff_cooldown_mins</code>, <code>max_history_messages</code>) are per&#8209;tenant, with a cross&#8209;field invariant: the idle gap must exceed the handoff cooldown, or an active handoff could be wiped before its cooldown ended. Empty values fall back to the in&#8209;code defaults.
       </p>
 
-      <h2 id="demo">Live demo chat</h2>
+      <h2 id="demo">The interactive demo</h2>
       <p>
-        The public welcome page hosts a live demo modal so visitors can see the AI in action without signing up. It&rsquo;s framed explicitly: visitors roleplay as a customer of a sample business (florist, salon, cafe, &hellip;) and watch the AI reply in real time. Real customer messages still arrive on WhatsApp, Instagram, email, or Discord &mdash; the demo chat box is never a customer surface.
+        The landing page hosts a live chat so visitors can see the model work without signing up. It&rsquo;s framed explicitly: the visitor roleplays as a customer of a sample business and watches the reply arrive. Real customer messages arrive on WhatsApp &mdash; the demo chat box is never a customer surface.
       </p>
       <ol>
-        <li><code>GET /demo/personas</code> returns the safety&#8209;Approved archetypes from the D1 personas catalog, with sample business fields (name, type, city, goal) for the picker.</li>
-        <li>The chat&#8209;input form posts to <code>POST /demo/chat</code> with the picked persona slug, the visitor&rsquo;s message, the prior turns kept client&#8209;side, and a stateless handoff flag.</li>
-        <li>The handler runs the message through the same prompt envelope and reply model the production pipeline uses, gates on the same safety classifier, and respects the same handoff sentinel. The "View prompt" panel reveals the exact envelope being sent so visitors can see what the model receives.</li>
-        <li>Handoff round&#8209;trips statelessly via <code>{handoff: bool}</code> on the wire and an Alpine flag in the modal; persona switch and modal close reset it.</li>
-      </ol>
-
-      <h2 id="email">Email routing</h2>
-      <ol>
-        <li>An email arrives at your catch&#8209;all domain (configured via Cloudflare Email Routing).</li>
-        <li>Cloudflare triggers the Worker&rsquo;s <code>email()</code> handler.</li>
-        <li>Concierge extracts the domain, looks up the tenant, and parses the MIME message.</li>
-        <li>Routing rules are evaluated in priority order using glob&#8209;pattern matching on <code>from</code>, <code>to</code>, <code>subject</code>, <code>body</code>, and <code>has_attachment</code>.</li>
-        <li>The matched rule&rsquo;s action executes: <em>drop</em>, <em>spam reject</em>, <em>forward email</em>, <em>forward to Discord</em>, or <em>AI reply with approval</em>.</li>
-        <li>For email forwarding, a reverse&#8209;alias address is generated so replies route back through Concierge to the original sender.</li>
-      </ol>
-
-      <div class="aside-block">
-        <div class="aside-block__title">Glob semantics &nbsp;<span class="pill"><span class="pill__dot"></span>last match wins</span></div>
-        <dl>
-          <dt><code>*</code></dt><dd>any sequence of characters, zero or more</dd>
-          <dt><code>?</code></dt><dd>exactly one character</dd>
-          <dt>case</dt><dd>matching is case&#8209;insensitive</dd>
-          <dt>combine</dt><dd>all non&#8209;<em>None</em> criteria are AND&#8209;ed (from + to + subject + body + has_attachment)</dd>
-          <dt>order</dt><dd>rules are sorted by ascending priority; the highest priority match wins</dd>
-        </dl>
-      </div>
-
-      <h2 id="discord">Discord relay</h2>
-      <ol>
-        <li>When a message from any channel is forwarded to Discord (via email routing rules or future direct integrations), it arrives as an embed with <span class="kbd">Reply</span>, <span class="kbd">Approve</span>, and <span class="kbd">Drop</span> buttons.</li>
-        <li>A <code>ConversationContext</code> is saved in KV, linking the Discord message to the original channel, sender, and reply metadata.</li>
-        <li>When someone clicks <strong>Reply</strong>, a modal opens for composing a response.</li>
-        <li>The reply is sent back through the originating channel using the stored context.</li>
-        <li>For AI&#8209;generated drafts, <strong>Approve</strong> sends the draft and <strong>Drop</strong> discards it.</li>
+        <li><code>GET /api/bootstrap</code> carries the demo config and its persona catalog alongside pricing, so the page needs one request to render. Personas are resolved server&#8209;side (warm cache &rarr; cold&#8209;miss regeneration &rarr; empty) and the client never generates or fetches them itself.</li>
+        <li>The composer posts to <code>POST /api/demo/chat</code> with the persona slug, the turns so far, and a handoff flag. The server is stateless here; the client carries the conversation.</li>
+        <li>The handler runs the same prompt envelope and reply model the production pipeline uses, gates on the same safety classifier, and honours the same sentinel. <strong>View the prompt</strong> reveals the exact middle being sent &mdash; the product is a prompt envelope, so letting people read it is the demo.</li>
+        <li>Three limits, all operator&#8209;configured: a per&#8209;IP hourly cap and a global daily cap bound worst&#8209;case model spend; a turn cap and an idle timeout swap the input for a sign&#8209;up prompt.</li>
       </ol>
 
       <h2 id="billing">Billing</h2>
       <p>
-        Each AI&#8209;mode reply (rule with a <em>Prompt</em> response) deducts one credit from the tenant&rsquo;s balance. Canned replies, embedding lookups, intent classification, and persona safety checks are free. Credits are deducted <em>before</em> the AI call (optimistic deduction) and restored if generation or send fails. When credits reach zero, AI replies stop; canned defaults still send. Credits can be granted by management or purchased via Razorpay.
+        Each AI reply deducts one credit. Canned replies, the injection scan and persona safety checks are free. Credits are deducted <em>before</em> the call and restored if generation or send fails &mdash; but not when the risk gate withholds a draft, because the model did run. At zero, AI replies stop and canned replies keep going. Credits are bought through Razorpay in any quantity, or granted by an operator.
       </p>
 
       <h2 id="platform-model">Platform model</h2>
       <div class="table-wrap">
         <div class="table-wrap__head">
-          <b>Per-channel architecture</b><span>How each channel attaches to a tenant</span>
+          <b>How the channel attaches to a tenant</b><span>One channel, one model</span>
         </div>
         <table class="docs">
           <thead><tr><th>Channel</th><th>Model</th><th>Token storage</th></tr></thead>
           <tbody>
             <tr>
               <td><strong>WhatsApp</strong></td>
-              <td><span class="pill pill--accent"><span class="pill__dot"></span>Shared WABA</span>: you own one WABA, customers add numbers via Meta Embedded Signup</td>
-              <td>Single platform token <code>WHATSAPP_ACCESS_TOKEN</code></td>
-            </tr>
-            <tr>
-              <td><strong>Instagram</strong></td>
-              <td><span class="pill"><span class="pill__dot"></span>Per-account OAuth</span>: Facebook Login, page tokens per customer</td>
-              <td>Encrypted in KV, rotated daily by cron</td>
-            </tr>
-            <tr>
-              <td><strong>Email</strong></td>
-              <td><span class="pill"><span class="pill__dot"></span>Per-domain</span>: each tenant registers domains and creates rules</td>
-              <td>No tokens; Cloudflare Email Routing dispatches</td>
-            </tr>
-            <tr>
-              <td><strong>Discord</strong></td>
-              <td><span class="pill"><span class="pill__dot"></span>Guild → tenant</span>: each Discord server is linked to one tenant</td>
-              <td>Shared bot token (<code>DISCORD_BOT_TOKEN</code> env secret)</td>
+              <td><span class="pill pill--accent"><span class="pill__dot"></span>Shared WABA</span>: you own one WhatsApp Business Account; customers attach their own numbers through Meta Embedded Signup</td>
+              <td>One platform token, <code>WHATSAPP_ACCESS_TOKEN</code>. Nothing per&#8209;tenant is stored, so there is nothing per&#8209;tenant to seal or rotate.</td>
             </tr>
           </tbody>
         </table>
       </div>
 
-      <h2 id="architecture">Architecture</h2>
+      <h2 id="architecture">What it runs on</h2>
       <ul>
-        <li><strong>Cloudflare Worker</strong>: Rust compiled to WebAssembly. Handles all HTTP routes, webhooks, and email events.</li>
-        <li><strong>Cloudflare KV</strong>: tenant configs, account configs, tokens, sessions, routing rules, billing state, conversation contexts, persona.</li>
-        <li><strong>Cloudflare D1</strong>: SQLite for message metadata, email metrics, credit packs, payments, audit logs.</li>
-        <li><strong>Cloudflare Workers AI</strong>: reply generation, prompt&#8209;injection scanning, persona safety classification, BGE embeddings.</li>
-        <li><strong>Cloudflare Queues</strong>: persona safety classifier (<code>concierge-safety</code> + <code>concierge-safety-dlq</code>).</li>
-        <li><strong>Cloudflare Email Routing</strong>: triggers the Worker&rsquo;s email handler for inbound emails.</li>
-        <li><strong>Discord Interactions API</strong>: slash commands, button interactions, modal submissions via <code>POST /discord/interactions</code>.</li>
-        <li><strong>Razorpay</strong>: payment processing for credit pack purchases.</li>
+        <li><strong>Cloudflare Worker</strong>: Rust compiled to WebAssembly. Serves the JSON API, the webhooks, the OAuth redirects, and the SPA shell.</li>
+        <li><strong>Elm</strong>: the frontend, compiled to one <code>public/app.js</code> served as a static asset.</li>
+        <li><strong>Cloudflare KV</strong>: tenant and account configs, sessions, conversation state, persona, the archetype cache.</li>
+        <li><strong>Cloudflare D1</strong>: message metadata, billing, payments, the archetype catalog, audit log.</li>
+        <li><strong>Cloudflare Workers AI</strong>: reply generation, prompt&#8209;injection scanning, persona safety classification.</li>
+        <li><strong>Cloudflare Queues</strong>: the persona safety classifier (<code>concierge-safety</code> + its dead&#8209;letter queue).</li>
+        <li><strong>Cloudflare Durable Objects</strong>: the reply buffer that batches quick&#8209;fire messages.</li>
+        <li><strong>Cloudflare Email Service</strong>: outbound handoff notifications. Nothing is received by email.</li>
+        <li><strong>Razorpay</strong>: credit purchases and the sign&#8209;up verification charge.</li>
       </ul>
 
       <div class="codeblock">
@@ -318,11 +306,12 @@
 <span class="tok-c">/// exist only to translate webhooks into this struct.</span>
 <span class="tok-k">pub struct</span> <span class="tok-f">InboundMessage</span> {
     <span class="tok-k">pub</span> id:                 <span class="tok-v">String</span>,
-    <span class="tok-k">pub</span> channel:            Channel,        <span class="tok-c">// WhatsApp | Instagram | Email | Discord</span>
+    <span class="tok-k">pub</span> channel:            Channel,        <span class="tok-c">// WhatsApp (the only variant today)</span>
     <span class="tok-k">pub</span> sender:             <span class="tok-v">String</span>,
     <span class="tok-k">pub</span> sender_name:        <span class="tok-v">Option</span>&lt;<span class="tok-v">String</span>&gt;,
     <span class="tok-k">pub</span> recipient:          <span class="tok-v">String</span>,
     <span class="tok-k">pub</span> body:               <span class="tok-v">String</span>,         <span class="tok-c">// in&#8209;memory only, never persisted</span>
+    <span class="tok-k">pub</span> has_attachment:     <span class="tok-v">bool</span>,
     <span class="tok-k">pub</span> tenant_id:          <span class="tok-v">String</span>,
     <span class="tok-k">pub</span> channel_account_id: <span class="tok-v">String</span>,
     <span class="tok-k">pub</span> raw_metadata:       <span class="tok-v">Value</span>,
@@ -353,16 +342,15 @@
     <aside class="content__toc">
       <h4>On this page</h4>
       <ul>
-        <li class="lvl-2"><a href="#pipeline" class="is-current">The unified pipeline</a></li>
-        <li class="lvl-2"><a href="#whatsapp">WhatsApp / Instagram auto-reply</a></li>
+        <li class="lvl-2"><a href="#pipeline" class="is-current">The pipeline</a></li>
+        <li class="lvl-2"><a href="#risk">The risk gate</a></li>
+        <li class="lvl-2"><a href="#whatsapp">WhatsApp auto-reply</a></li>
         <li class="lvl-2"><a href="#persona">Persona &amp; safety check</a></li>
         <li class="lvl-2"><a href="#conversations">Conversations &amp; handoff</a></li>
-        <li class="lvl-2"><a href="#demo">Live demo chat</a></li>
-        <li class="lvl-2"><a href="#email">Email routing</a></li>
-        <li class="lvl-2"><a href="#discord">Discord relay</a></li>
+        <li class="lvl-2"><a href="#demo">The interactive demo</a></li>
         <li class="lvl-2"><a href="#billing">Billing</a></li>
         <li class="lvl-2"><a href="#platform-model">Platform model</a></li>
-        <li class="lvl-2"><a href="#architecture">Architecture</a></li>
+        <li class="lvl-2"><a href="#architecture">What it runs on</a></li>
       </ul>
     </aside>
   </main>

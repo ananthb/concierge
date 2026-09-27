@@ -405,6 +405,11 @@ composer chat =
             []
         , button
             [ class "btn btn-primary"
+
+            -- Explicit, though a <button> in a form submits by default:
+            -- the tests select on it, and a selector can't match an
+            -- attribute the browser only implies.
+            , Html.Attributes.type_ "submit"
             , disabled (String.isEmpty (String.trim chat.draft) || RemoteData.isLoading chat.pending)
             ]
             [ text "Send" ]

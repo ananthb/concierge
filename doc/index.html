@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Concierge: multi-channel messaging for small businesses</title>
-<meta name="description" content="WhatsApp, Instagram, email, and Discord automation in one Cloudflare Worker. AI auto-replies, glob-pattern email rules, prepaid credits.">
+<title>Concierge: automatic WhatsApp replies for small businesses</title>
+<meta name="description" content="Automatic WhatsApp replies in one Cloudflare Worker. AI or canned replies, a risk gate that withholds risky drafts, human handoff, prepaid credits.">
 <meta name="theme-color" content="#e86a2c">
 <link rel="icon" type="image/svg+xml" href="https://concierge.calculon.tech/logo.svg">
 <link rel="stylesheet" href="docs.css">
@@ -61,7 +61,7 @@
       <div class="sidebar__group-label">Operate</div>
       <ul class="sidebar__list">
         <li><a href="billing.html"><span class="dot"></span>Billing &amp; credits</a></li>
-        <li><a href="management.html"><span class="dot"></span>Management panel</a></li>
+        <li><a href="management.html"><span class="dot"></span>Operator API</a></li>
       </ul>
     </div>
 
@@ -79,34 +79,27 @@
     <div class="content__main prose">
 
       <div class="page-eyebrow">Documentation</div>
-      <h1 class="page-title">Multi&#8209;channel messaging for <em>small businesses</em>, in one Cloudflare Worker.</h1>
+      <h1 class="page-title">Automatic WhatsApp replies for <em>small businesses</em>, in one Cloudflare Worker.</h1>
       <p class="page-lede">
-        Concierge connects WhatsApp, Instagram, catch&#8209;all email, and a unified Discord inbox. AI or static auto&#8209;replies, glob&#8209;pattern routing rules, and prepaid credit billing. Self&#8209;host on Cloudflare or use the hosted service.
+        Concierge answers your customers in your own voice, and hands the conversation to a person the moment it shouldn&rsquo;t decide alone &mdash; a price, a promise, anything outside what you told it to talk about. Self&#8209;host on Cloudflare or use the hosted service.
       </p>
 
       <div class="page-meta">
         <span><b>License</b> AGPL&#8209;3.0</span>
         <span><b>Runtime</b> Rust + WebAssembly</span>
-        <span><b>Storage</b> D1 · KV · Workers AI · Queues</span>
+        <span><b>Frontend</b> Elm</span>
+        <span><b>Storage</b> D1 &middot; KV</span>
       </div>
 
       <!-- HERO PIPELINE -->
       <div class="hero">
-        <div class="hero__caption">The unified pipeline · channels → worker → actions</div>
+        <div class="hero__caption">One inbound message &middot; three possible endings</div>
         <div class="pipeline">
           <div class="pipeline__col">
-            <div class="pipeline__col-label">Inbound channels</div>
+            <div class="pipeline__col-label">Inbound</div>
             <div class="pipeline__node">
               <span class="pipeline__node-dot wa"></span>
               <span class="pipeline__node-text"><b>WhatsApp</b><span>POST /webhook/whatsapp</span></span>
-            </div>
-            <div class="pipeline__node">
-              <span class="pipeline__node-dot ig"></span>
-              <span class="pipeline__node-text"><b>Instagram</b><span>POST /webhook/instagram</span></span>
-            </div>
-            <div class="pipeline__node">
-              <span class="pipeline__node-dot em"></span>
-              <span class="pipeline__node-text"><b>Email (catch&#8209;all)</b><span>email() handler</span></span>
             </div>
           </div>
 
@@ -118,29 +111,28 @@
           <div class="pipeline__core">
             <div class="pipeline__core-title">Concierge Worker</div>
             <div class="pipeline__core-step"><span class="num">01</span><span><b>InboundMessage</b> &nbsp;normalize</span></div>
-            <div class="pipeline__core-step"><span class="num">02</span><span>Tenant lookup &amp; <b>credit check</b></span></div>
-            <div class="pipeline__core-step"><span class="num">03</span><span>Reply rules &middot; keyword + embedding match</span></div>
-            <div class="pipeline__core-step"><span class="num">04</span><span>Persona + envelope + multi&#8209;turn history</span></div>
+            <div class="pipeline__core-step"><span class="num">02</span><span>Injection scan &middot; <b>credit check</b></span></div>
+            <div class="pipeline__core-step"><span class="num">03</span><span>Persona + envelope + multi&#8209;turn history</span></div>
+            <div class="pipeline__core-step"><span class="num">04</span><span><b>Risk gate</b> &middot; withhold or send</span></div>
             <div class="pipeline__core-step"><span class="num">05</span><span>Metadata to D1 &middot; <em class="serif">no content</em></span></div>
           </div>
 
           <div class="pipeline__connector">
             <div class="pipeline__connector-line"></div>
-            <div class="pipeline__connector-label">Dispatch</div>
+            <div class="pipeline__connector-label">Outcome</div>
           </div>
 
           <div class="pipeline__col">
-            <div class="pipeline__col-label">Outbound actions</div>
-            <div class="pipeline__action"><b>Canned reply</b><span>Static text. Free, no AI call.</span></div>
-            <div class="pipeline__action"><b>AI reply</b><span>Workers AI · llama&#8209;4&#8209;scout · persona + rule prompt</span></div>
-            <div class="pipeline__action"><b>Forward to Discord</b><span>Embed with Reply / Approve / Drop buttons</span></div>
-            <div class="pipeline__action"><b>Forward email</b><span>Reverse&#8209;alias keeps replies routing back</span></div>
+            <div class="pipeline__col-label">Outcomes</div>
+            <div class="pipeline__action"><b>Canned reply</b><span>Your text, verbatim. Free, no AI call.</span></div>
+            <div class="pipeline__action"><b>AI reply</b><span>Workers AI &middot; llama&#8209;4&#8209;scout &middot; one credit</span></div>
+            <div class="pipeline__action"><b>Withheld &rarr; handoff</b><span>Holding sentence out, email to you</span></div>
           </div>
         </div>
       </div>
 
       <p>
-        Concierge is one Cloudflare Worker, deployed once, that absorbs every customer message you receive and decides what to do with it, instantly. Below is the shortest path through the docs depending on where you&rsquo;re starting.
+        Concierge is one Cloudflare Worker, deployed once, that answers every WhatsApp message your business receives &mdash; or decides not to, and fetches you. Below is the shortest path through the docs depending on where you&rsquo;re starting.
       </p>
 
       <!-- NAV CARDS -->
@@ -149,46 +141,46 @@
           <div class="card__head">
             <span class="card__chip">01</span>
             <span class="card__title">How it works</span>
-            <span class="card__arrow">→</span>
+            <span class="card__arrow">&rarr;</span>
           </div>
-          <p class="card__desc">The unified pipeline, channel by channel. Read this before touching <code>wrangler.toml</code>.</p>
-          <div class="card__foot"><span>5&nbsp;min read</span><span>·</span><span>diagram + flow per channel</span></div>
+          <p class="card__desc">The pipeline end to end, and the risk gate that decides whether a draft is sent at all. Read this before touching <code>wrangler.toml</code>.</p>
+          <div class="card__foot"><span>5&nbsp;min read</span><span>&middot;</span><span>diagram + flow</span></div>
         </a>
         <a href="architecture.html" class="card">
           <div class="card__head">
             <span class="card__chip">02</span>
             <span class="card__title">Architecture</span>
-            <span class="card__arrow">→</span>
+            <span class="card__arrow">&rarr;</span>
           </div>
-          <p class="card__desc">Channels, AI pipeline, persona safety queue, reply buffer DO, storage layout, auth.</p>
+          <p class="card__desc">The Worker and the Elm app, API conventions, the safety queue, the reply buffer, storage layout, auth.</p>
           <div class="card__foot"><span>technical reference</span></div>
         </a>
         <a href="deployment.html" class="card">
           <div class="card__head">
             <span class="card__chip">03</span>
             <span class="card__title">Deployment</span>
-            <span class="card__arrow">→</span>
+            <span class="card__arrow">&rarr;</span>
           </div>
           <p class="card__desc">From <code>git clone</code> to your first auto&#8209;reply. Cloudflare resources, secrets, Access policies.</p>
-          <div class="card__foot"><span>20&nbsp;min</span><span>·</span><span>requires Cloudflare + Meta</span></div>
+          <div class="card__foot"><span>20&nbsp;min</span><span>&middot;</span><span>requires Cloudflare + Meta</span></div>
         </a>
         <a href="configuration.html" class="card">
           <div class="card__head">
             <span class="card__chip">04</span>
             <span class="card__title">Configuration reference</span>
-            <span class="card__arrow">→</span>
+            <span class="card__arrow">&rarr;</span>
           </div>
-          <p class="card__desc">Every <code>wrangler secret</code> key, env var, binding, redirect URI, and webhook URL. Bookmark this.</p>
-          <div class="card__foot"><span>reference</span><span>·</span><span>14 secrets · 6 env vars</span></div>
+          <p class="card__desc">Every secret, variable, binding, redirect URI and webhook URL &mdash; and the ones earlier revisions needed but no longer do. Bookmark this.</p>
+          <div class="card__foot"><span>reference</span><span>&middot;</span><span>9 secrets &middot; 6 env vars</span></div>
         </a>
       </div>
 
       <!-- DEPLOY CALLOUT -->
       <div class="callout callout--tip">
-        <div class="callout__icon">★</div>
+        <div class="callout__icon">&#9733;</div>
         <div class="callout__body">
           <strong>Don&rsquo;t want to self&#8209;host?</strong>
-          <p><a href="https://concierge.calculon.tech">concierge.calculon.tech</a> runs this exact stack as a managed service. Sign up, connect your channels, and start auto&#8209;replying in minutes. <span class="mono faint">prepaid credit packs · email subdomains</span>.</p>
+          <p><a href="https://concierge.calculon.tech">concierge.calculon.tech</a> runs this exact stack as a managed service. Sign up, connect your number, and start auto&#8209;replying in minutes. <span class="mono faint">prepaid credits &middot; no subscription</span>.</p>
         </div>
       </div>
 
@@ -196,102 +188,110 @@
       <div class="table-wrap">
         <div class="table-wrap__head">
           <b>Surface area</b><span>What ships in the box</span>
-          <span class="count">15 modules</span>
+          <span class="count">10 modules</span>
         </div>
         <table class="docs">
           <tbody>
             <tr>
               <td><code>WhatsApp auto&#8209;reply</code></td>
-              <td>Rule&#8209;routed canned or AI reply on every incoming WhatsApp message. Embedded Signup wires phone numbers to your shared WABA in one click.</td>
+              <td>A canned message or an AI reply on every incoming WhatsApp message. Embedded Signup wires customer phone numbers to your shared WABA in one click; they keep their number and their existing threads.</td>
             </tr>
             <tr>
-              <td><code>Instagram DM auto&#8209;reply</code></td>
-              <td>Per&#8209;account OAuth via Facebook Login. Page tokens encrypted in KV, rotated daily by the cron.</td>
-            </tr>
-            <tr>
-              <td><code>Reply rules</code></td>
-              <td>Per&#8209;channel ordered list. Keyword matchers (case&#8209;insensitive substring) and embedding matchers (BGE cosine similarity) route to canned text or an AI prompt. Mandatory default rule.</td>
-            </tr>
-            <tr>
-              <td><code>Persona builder</code></td>
-              <td>Tenant&#8209;wide AI persona via guided builder (voice archetype, business, <em>goal</em>, catch&#8209;phrases, off&#8209;topics, <em>handoff conditions</em>), a curated archetype copied from the platform&rsquo;s D1 catalog, or raw prompt. Every change runs through an async safety classifier before AI replies resume.</td>
-            </tr>
-            <tr>
-              <td><code>Prompt envelope</code></td>
-              <td>Every AI reply is sandwiched by a fixed preamble + postamble (in <code>src/prompt.rs</code>) that establishes the operating manual, jailbreak rails, and the universal handoff sentinel. Tenant content sits in the editable middle.</td>
-            </tr>
-            <tr>
-              <td><code>Conversation sessions</code></td>
-              <td>Per&#8209;customer threads carry a stable <code>conversation_id</code>, recent message history, and any active handoff state. A tenant&#8209;tunable idle gap (default 6&nbsp;h) starts a fresh conversation; a tenant&#8209;tunable history cap (default 20 turns) bounds the multi&#8209;turn context fed to the AI.</td>
+              <td><code>Risk gate</code></td>
+              <td>A draft that quotes a price, makes a commitment, strays past the persona&rsquo;s stated boundaries, or comes out a suspicious length is <strong>never sent</strong>. The customer gets a holding sentence, the tenant is emailed with the reason. Always on; nothing to configure and nothing to staff.</td>
             </tr>
             <tr>
               <td><code>Human handoff</code></td>
-              <td>The model can emit <code>[[HANDOFF]]</code> when triggers in the postamble or persona conditions fire (confusion, customer asks for a person, medical / legal / financial / safety territory). The pipeline strips the token, switches to a holding&#8209;pattern voice for the cooldown (default 60&nbsp;min), then goes silent. Tenant is paged once via the configured approval channels.</td>
+              <td>The model can also ask for a person itself with <code>[[HANDOFF]]</code>, triggered by the postamble&rsquo;s universal conditions or the tenant&rsquo;s own. Either way the pipeline switches to a holding&#8209;pattern voice for the cooldown (default 60&nbsp;min), then goes silent, and emails the tenant exactly once.</td>
             </tr>
             <tr>
-              <td><code>Live demo chat</code></td>
-              <td>Public welcome page hosts an interactive chat where visitors roleplay as a customer of a sample business. Persona picker pulls from the safety&#8209;approved D1 archetype catalog; a "View prompt" panel reveals the exact envelope sent to the model. Real customer messages never arrive here.</td>
+              <td><code>Persona builder</code></td>
+              <td>A tenant&#8209;wide AI voice from a guided form over a platform&#8209;curated archetype (voice, business, hours, <em>goal</em>, catch&#8209;phrases, off&#8209;topics, <em>never say</em>, <em>handoff conditions</em>) or a raw prompt for power users. Every change runs through an async safety classifier before AI replies resume.</td>
             </tr>
             <tr>
-              <td><code>Email routing</code></td>
-              <td>Catch&#8209;all on <code>cncg.email</code> subdomains. Rules match on <em>from</em>, <em>to</em>, <em>subject</em>, <em>body</em>, <em>has_attachment</em>. Last&#8209;match&#8209;wins by priority.</td>
+              <td><code>Prompt envelope</code></td>
+              <td>Every AI reply is sandwiched by a fixed preamble + postamble (in <code>src/prompt.rs</code>) carrying the operating manual, jailbreak rails and the handoff sentinel. Tenant content sits in the editable middle, and all three parts are shown in the UI.</td>
             </tr>
             <tr>
-              <td><code>Discord relay</code></td>
-              <td>Unified inbox in Discord. Messages from any channel arrive as embeds with <span class="kbd">Reply</span> <span class="kbd">Approve</span> <span class="kbd">Drop</span>.</td>
+              <td><code>Conversation sessions</code></td>
+              <td>Per&#8209;customer threads carry a stable <code>conversation_id</code>, recent history, and any active handoff state. A tunable idle gap (default 6&nbsp;h) starts a fresh conversation; a tunable cap (default 20 turns) bounds the context fed to the model.</td>
             </tr>
             <tr>
-              <td><code>Slash commands</code></td>
-              <td><code>/status</code>, <code>/domains</code>, <code>/rules</code> for managing your tenant from Discord.</td>
+              <td><code>Reply batching</code></td>
+              <td>A Durable Object holds inbound messages for a tunable window (default 5&nbsp;s) so a burst of three short messages gets one considered answer instead of three.</td>
+            </tr>
+            <tr>
+              <td><code>Interactive demo</code></td>
+              <td>The landing page hosts a live chat where visitors roleplay as a customer of a sample business. <strong>View the prompt</strong> reveals the exact middle sent to the model. Rate&#8209;limited per IP and globally per day. Real customer messages never arrive here.</td>
             </tr>
             <tr>
               <td><code>Onboarding wizard</code></td>
-              <td>5&#8209;step guided setup at <code>/dashboard/wizard</code> for new tenants.</td>
-            </tr>
-            <tr>
-              <td><code>Localization</code></td>
-              <td>Per&#8209;tenant BCP&#8209;47 locale (<code>en-IN</code>, <code>en-US</code>) drives Indian&#8209;vs&#8209;Western number grouping via icu4x; fluent&#8209;rs FTL files for drop&#8209;in new languages.</td>
-            </tr>
-            <tr>
-              <td><code>Management panel</code></td>
-              <td>Operator dashboard at <code>/manage/*</code> behind Cloudflare Access. Tenant CRUD, billing, audit logs.</td>
+              <td>Four steps at <code>/wizard</code>: business details, connect WhatsApp, choose a voice, go live. The voice stays editable afterwards from the dashboard.</td>
             </tr>
             <tr>
               <td><code>Billing</code></td>
-              <td>Prepaid reply credits via Razorpay. Optimistic deduction, restored on failure.</td>
+              <td>Prepaid reply credits via Razorpay, any quantity, no tiers. Optimistic deduction, restored on failure. Credits are granted by the webhook and by nothing else.</td>
             </tr>
           </tbody>
         </table>
       </div>
 
+      <div class="callout callout--note">
+        <div class="callout__icon">i</div>
+        <div class="callout__body">
+          <strong>What was cut, and why it&rsquo;s worth knowing</strong>
+          <p>Earlier revisions carried Instagram DMs, a Discord relay with an approval inbox, inbound email on <code>cncg.email</code> subdomains with glob routing rules, a per&#8209;channel reply&#8209;rule engine with embedding matchers, and an approval queue. All of it was removed to reach a launchable surface. If you are reading older commits, blog posts or screenshots, that is what you are looking at.</p>
+        </div>
+      </div>
+
       <h2 id="gallery">A look at the app</h2>
       <p>
-        Live captures of the public site, regenerated from the running Worker by <code>npm run screenshots</code>. Each page is captured at desktop (1280&times;800) and mobile (375&times;812) widths so layout regressions show up against a baseline. The same script also runs a layout sanity check (page&nbsp;overflow + nav clipping) and exits non&#8209;zero on a fail, so re&#8209;running it serves as a smoke test for the marketing surface.
+        A selection, regenerated by <code>npm run screenshots</code> &mdash; which captures every screen into <code>doc/screenshots/</code>, including the wizard and dashboard views not shown here. Each is taken against stubbed API fixtures with fixed numbers, so a diff in these files means the UI changed rather than that the seeded pricing or a rolled demo persona did. Desktop is 1280&times;800, mobile 375&times;812. The signed&#8209;in screens are included &mdash; they were never capturable before the frontend talked to a JSON API.
       </p>
       <h3 class="gallery__heading">Desktop</h3>
       <div class="gallery">
         <a href="screenshots/home.png" class="gallery__tile">
-          <img src="screenshots/home.png" alt="Concierge welcome page at desktop width" loading="lazy">
-          <div class="gallery__cap"><b>Welcome</b><span>/ &middot; 1280&times;800</span></div>
+          <img src="screenshots/home.png" alt="Concierge landing page at desktop width" loading="lazy">
+          <div class="gallery__cap"><b>Landing</b><span>/ &middot; 1280&times;800</span></div>
         </a>
         <a href="screenshots/demo.png" class="gallery__tile">
-          <img src="screenshots/demo.png" alt="The hero phone activated into a live demo chat, centre-stage on a dimmed page" loading="lazy">
-          <div class="gallery__cap"><b>Live demo</b><span>tap the phone to chat</span></div>
+          <img src="screenshots/demo.png" alt="The interactive demo mid-conversation with a sample florist" loading="lazy">
+          <div class="gallery__cap"><b>Interactive demo</b><span>you&rsquo;re the customer</span></div>
         </a>
         <a href="screenshots/demo-prompt.png" class="gallery__tile">
-          <img src="screenshots/demo-prompt.png" alt="The how-it-works reference modal showing the full system-prompt envelope" loading="lazy">
-          <div class="gallery__cap"><b>Under the hood</b><span>full system prompt</span></div>
+          <img src="screenshots/demo-prompt.png" alt="The demo's prompt panel showing the exact middle sent to the model" loading="lazy">
+          <div class="gallery__cap"><b>Under the hood</b><span>the prompt, verbatim</span></div>
+        </a>
+        <a href="screenshots/wizard-basics.png" class="gallery__tile">
+          <img src="screenshots/wizard-basics.png" alt="Step one of the onboarding wizard, business details" loading="lazy">
+          <div class="gallery__cap"><b>Onboarding</b><span>step 1 of 4</span></div>
+        </a>
+        <a href="screenshots/wizard-persona.png" class="gallery__tile">
+          <img src="screenshots/wizard-persona.png" alt="The wizard's voice picker" loading="lazy">
+          <div class="gallery__cap"><b>Choosing a voice</b><span>step 3 of 4</span></div>
+        </a>
+        <a href="screenshots/dashboard.png" class="gallery__tile">
+          <img src="screenshots/dashboard.png" alt="The tenant dashboard overview" loading="lazy">
+          <div class="gallery__cap"><b>Dashboard</b><span>/dashboard</span></div>
+        </a>
+        <a href="screenshots/dashboard-persona-editor.png" class="gallery__tile">
+          <img src="screenshots/dashboard-persona-editor.png" alt="The persona editor with the guided builder open" loading="lazy">
+          <div class="gallery__cap"><b>Persona editor</b><span>guided or raw prompt</span></div>
+        </a>
+        <a href="screenshots/dashboard-billing.png" class="gallery__tile">
+          <img src="screenshots/dashboard-billing.png" alt="The credits page with the purchase slider" loading="lazy">
+          <div class="gallery__cap"><b>Credits</b><span>/dashboard/billing</span></div>
         </a>
         <a href="screenshots/login.png" class="gallery__tile">
-          <img src="screenshots/login.png" alt="Sign-in page with Google, Facebook, and WhatsApp brand buttons" loading="lazy">
-          <div class="gallery__cap"><b>Sign in</b><span>/auth/login</span></div>
+          <img src="screenshots/login.png" alt="Sign-in page" loading="lazy">
+          <div class="gallery__cap"><b>Sign in</b><span>/login</span></div>
         </a>
         <a href="screenshots/features.png" class="gallery__tile">
-          <img src="screenshots/features.png" alt="Features marketing page" loading="lazy">
+          <img src="screenshots/features.png" alt="Features page" loading="lazy">
           <div class="gallery__cap"><b>Features</b><span>/features</span></div>
         </a>
         <a href="screenshots/pricing.png" class="gallery__tile">
-          <img src="screenshots/pricing.png" alt="Pricing marketing page" loading="lazy">
+          <img src="screenshots/pricing.png" alt="Pricing page" loading="lazy">
           <div class="gallery__cap"><b>Pricing</b><span>/pricing</span></div>
         </a>
         <a href="screenshots/terms.png" class="gallery__tile">
@@ -302,50 +302,50 @@
       <h3 class="gallery__heading">Mobile</h3>
       <div class="gallery gallery--mobile">
         <a href="screenshots/home-mobile.png" class="gallery__tile gallery__tile--mobile">
-          <img src="screenshots/home-mobile.png" alt="Welcome page at mobile width" loading="lazy">
-          <div class="gallery__cap"><b>Welcome</b><span>/ &middot; 375&times;812</span></div>
+          <img src="screenshots/home-mobile.png" alt="Landing page at mobile width" loading="lazy">
+          <div class="gallery__cap"><b>Landing</b><span>/ &middot; 375&times;812</span></div>
         </a>
         <a href="screenshots/demo-mobile.png" class="gallery__tile gallery__tile--mobile">
-          <img src="screenshots/demo-mobile.png" alt="The live demo running full-screen on mobile, like a native app" loading="lazy">
-          <div class="gallery__cap"><b>Live demo</b><span>full-screen app</span></div>
+          <img src="screenshots/demo-mobile.png" alt="The interactive demo on a phone" loading="lazy">
+          <div class="gallery__cap"><b>Interactive demo</b><span>full-width chat</span></div>
+        </a>
+        <a href="screenshots/wizard-basics-mobile.png" class="gallery__tile gallery__tile--mobile">
+          <img src="screenshots/wizard-basics-mobile.png" alt="The wizard's first step on a phone" loading="lazy">
+          <div class="gallery__cap"><b>Onboarding</b><span>step 1 of 4</span></div>
+        </a>
+        <a href="screenshots/dashboard-mobile.png" class="gallery__tile gallery__tile--mobile">
+          <img src="screenshots/dashboard-mobile.png" alt="The dashboard on a phone" loading="lazy">
+          <div class="gallery__cap"><b>Dashboard</b><span>/dashboard</span></div>
         </a>
         <a href="screenshots/login-mobile.png" class="gallery__tile gallery__tile--mobile">
           <img src="screenshots/login-mobile.png" alt="Sign-in page at mobile width" loading="lazy">
-          <div class="gallery__cap"><b>Sign in</b><span>/auth/login</span></div>
-        </a>
-        <a href="screenshots/features-mobile.png" class="gallery__tile gallery__tile--mobile">
-          <img src="screenshots/features-mobile.png" alt="Features page at mobile width" loading="lazy">
-          <div class="gallery__cap"><b>Features</b><span>/features</span></div>
+          <div class="gallery__cap"><b>Sign in</b><span>/login</span></div>
         </a>
         <a href="screenshots/pricing-mobile.png" class="gallery__tile gallery__tile--mobile">
           <img src="screenshots/pricing-mobile.png" alt="Pricing page at mobile width" loading="lazy">
           <div class="gallery__cap"><b>Pricing</b><span>/pricing</span></div>
         </a>
-        <a href="screenshots/terms-mobile.png" class="gallery__tile gallery__tile--mobile">
-          <img src="screenshots/terms-mobile.png" alt="Terms page at mobile width" loading="lazy">
-          <div class="gallery__cap"><b>Legal</b><span>/terms &middot; /privacy</span></div>
-        </a>
       </div>
 
       <h2 id="model">Architecture model</h2>
       <p>
-        Concierge runs as a single Worker. State lives in Cloudflare primitives: <strong>D1</strong> for append&#8209;only message metadata and billing, <strong>KV</strong> for tenant config and conversation context, <strong>Workers AI</strong> for reply generation and BGE embeddings, and <strong>Queues</strong> for the persona safety classifier. Inbound email is routed through Cloudflare Email Routing&rsquo;s <code>send_to_worker</code> action; outbound email uses the <code>EMAIL</code> binding.
+        Concierge runs as a single Worker serving a JSON API, plus an Elm single&#8209;page app compiled to one static asset. State lives in Cloudflare primitives: <strong>D1</strong> for append&#8209;only message metadata, billing and the archetype catalog; <strong>KV</strong> for tenant config, sessions and conversation state; <strong>Workers AI</strong> for reply generation and the safety classifier; <strong>Queues</strong> for persona safety jobs; a <strong>Durable Object</strong> for the reply buffer. Email is outbound only, through the <code>EMAIL</code> binding, and carries nothing but handoff notifications.
       </p>
       <p>
-        Tokens are encrypted at rest with AES&#8209;256&#8209;GCM using a single <code>ENCRYPTION_KEY</code>. Message <em>content</em> is never persisted: only metadata (channel, direction, sender, recipient, timestamp). The reverse&#8209;alias system for email replies stores enough information in KV to route a reply back to the original sender, then expires.
+        Nothing stores a per&#8209;tenant access token, so there is no secret whose rotation forces customers to reconnect &mdash; WhatsApp uses one platform token. Message <em>content</em> is never persisted: only metadata (channel, direction, sender, recipient, timestamp, and what was done with it).
       </p>
 
       <div class="callout callout--note">
         <div class="callout__icon">i</div>
         <div class="callout__body">
           <strong>What gets stored</strong>
-          <p>Inbound message bodies pass through the Worker but are never written to D1 or KV. AI replies are generated synchronously and discarded after send. Only metadata (channel, direction, sender, recipient, timestamp) lands in D1. A <code>/data-deletion</code> endpoint wipes that metadata; account-wide deletion is on the admin Settings page.</p>
+          <p>Inbound bodies pass through the Worker and are never written to D1. Replies are generated from in&#8209;memory data and discarded after send. Recent conversation turns <em>do</em> live in KV, because multi&#8209;turn context needs them, and are cleared by the idle gap. A <code>/data-deletion</code> endpoint wipes the metadata; full account deletion is on the dashboard&rsquo;s Settings tab.</p>
         </div>
       </div>
 
       <h2 id="getting-started">Getting started</h2>
       <p>
-        <strong>Self&#8209;host:</strong> deploy the Worker, then walk the <a href="deployment.html">deployment guide</a>. You&rsquo;ll need a Cloudflare account (Workers, D1, KV, Queues, Email Routing), a Meta Developer app, and a Discord application. Razorpay is optional.
+        <strong>Self&#8209;host:</strong> deploy the Worker, then walk the <a href="deployment.html">deployment guide</a>. You&rsquo;ll need a Cloudflare account (Workers, D1, KV, Queues, Durable Objects, Workers AI, Email Service), a Meta Developer app with the WhatsApp product, a Google OAuth client, and a Razorpay account if you intend to charge anyone.
       </p>
 
       <div class="codeblock">
@@ -367,22 +367,21 @@
 <span class="tok-c"># 3. apply migrations &middot; D1 schema</span>
 <span class="tok-k">wrangler</span> d1 migrations apply concierge <span class="tok-v">--remote</span>
 
-<span class="tok-c"># 4. deploy &middot; webhooks, Access, Discord wired in the deployment guide</span>
+<span class="tok-c"># 4. deploy &middot; builds the Elm frontend, then the wasm</span>
 <span class="tok-k">wrangler</span> deploy</code></pre>
       </div>
 
       <p>
-        <strong>Hosted:</strong> sign in at <a href="https://concierge.calculon.tech">concierge.calculon.tech</a>, run the onboarding wizard, and you&rsquo;re live on a shared <code>cncg.email</code> address. The hosted service runs the same code as this repo: the difference is that we own the WABA, the Discord app, and the email domain.
+        <strong>Hosted:</strong> sign in at <a href="https://concierge.calculon.tech">concierge.calculon.tech</a>, run the onboarding wizard, and you&rsquo;re answering messages. The hosted service runs the same code as this repo; the difference is that we own the WhatsApp Business Account your number attaches to.
       </p>
 
       <h2 id="stack">Built with</h2>
       <ul>
         <li><a href="https://workers.cloudflare.com/">Cloudflare Workers</a>: Rust compiled to WebAssembly via <code>worker-rs</code>.</li>
-        <li><strong>Cloudflare D1, KV, Workers AI, Queues, Email Routing</strong>: the entire data plane.</li>
-        <li><strong>Meta Graph API</strong>: WhatsApp Business, Instagram, Facebook Login.</li>
-        <li><strong>Discord Interactions API</strong>: slash commands, button callbacks, modal submissions.</li>
-        <li><strong>icu4x + fluent&#8209;rs</strong>: number/currency formatting and translation message bundles.</li>
-        <li><strong>Razorpay</strong>: payment gateway for paid credit packs and email subdomain subscriptions.</li>
+        <li><a href="https://elm-lang.org/">Elm</a>: the frontend, one <code>Browser.application</code> compiled to a single bundle.</li>
+        <li><strong>Cloudflare D1, KV, Workers AI, Queues, Durable Objects, Email Service</strong>: the entire data plane.</li>
+        <li><strong>Meta Graph API</strong>: WhatsApp Business messaging and Embedded Signup.</li>
+        <li><strong>Razorpay</strong>: prepaid credit purchases and the sign&#8209;up verification charge.</li>
       </ul>
 
       <!-- PAGER -->
