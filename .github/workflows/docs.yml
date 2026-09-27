@@ -34,6 +34,13 @@ jobs:
           name: ananthb
           authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
 
+      # build.rs hashes public/app.js for the shell's integrity attributes, so
+      # the frontend has to exist before the crate will compile at all --
+      # including a docs build, which never reaches rustdoc without it. elm
+      # comes from the devShell, so no npm install is needed here.
+      - name: Build frontend (required by build.rs)
+        run: nix develop -c ./scripts/build-frontend.sh
+
       - name: Build API documentation
         run: nix develop -c cargo doc --no-deps
 
