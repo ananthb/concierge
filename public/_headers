@@ -21,16 +21,30 @@
   Referrer-Policy: strict-origin-when-cross-origin
   Content-Security-Policy: default-src 'self'; script-src 'self' https://checkout.razorpay.com https://connect.facebook.net; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https://www.facebook.com https://graph.facebook.com https://*.facebook.com https://api.razorpay.com; frame-src https://www.facebook.com https://*.facebook.com https://api.razorpay.com https://checkout.razorpay.com; base-uri 'self'; form-action 'self' https://accounts.google.com; object-src 'none'
 
-# The bundle and the stylesheets change name only when their content does — the
-# CSS carries an integrity hash in the shell, and app.js is rebuilt on every
-# deploy. Long-lived caching is safe for both.
+# Caching.
+#
+# The stylesheets and the bundle are served under fixed names, and the shell
+# pins each one with an `integrity` hash. Those two facts together rule out
+# `immutable`: a returning visitor would keep last deploy's `components.css`
+# while the HTML asked for this deploy's hash, the browser would reject every
+# file that didn't match, and the page would render with no styles at all —
+# silently, because an SRI rejection logs to the console and nothing else.
+# Revalidation costs a conditional request that answers 304 when nothing
+# changed, which is the right trade for an asset that cannot be versioned by
+# name.
 /app.js
-  Cache-Control: public, max-age=31536000, immutable
+  Cache-Control: public, max-age=0, must-revalidate
 
 /boot.js
-  Cache-Control: public, max-age=31536000, immutable
+  Cache-Control: public, max-age=0, must-revalidate
 
 /css/*
+  Cache-Control: public, max-age=0, must-revalidate
+
+# Fonts carry no integrity hash and their content is fixed for a given file
+# name, so they are the one asset class that can safely be pinned. They are
+# also the largest thing the page loads.
+/fonts/*
   Cache-Control: public, max-age=31536000, immutable
 
 # The prerendered pages are regenerated on every deploy and are the first thing

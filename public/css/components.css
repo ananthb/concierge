@@ -1,772 +1,203 @@
-/* Auth/login shell: a tight centered column. Generous top margin on
-   desktop, tightened on mobile so the page doesn't float halfway
-   down a phone viewport with all the actual controls cut off. */
-.auth-shell{max-width:360px;margin:64px auto 32px;padding:0 16px;text-align:center}
-@media(max-width:600px){.auth-shell{margin-top:32px}}
-/* Dev-only login shortcut card. Dashed border + cream-2 fill signals
-   "this isn't a real prod control" without yelling. */
-.dev-login-card{text-align:left;background:var(--cream-2);border-style:dashed}
-.dev-login-row{align-items:center}
-.dev-login-row .input{min-width:180px}
-.skip-link:focus,.skip-link:focus-visible{left:8px}
-/* Connection-status rows on /manage. The dot sits inline with the
-   status text so the indicator reads as part of the status, not as a
-   separate column. Error/warn rows get a soft tint to make problems
-   easy to spot at a glance; the Docs pill links to the public page
-   covering that integration when one exists. */
-.health-status { display:inline-flex; align-items:center; gap:8px; flex-wrap:wrap; }
-.health-status .dot { flex:none; }
-.health-docs { color:var(--ink-2); text-decoration:none; font-size:11px;
-  font-weight:600; letter-spacing:.04em; text-transform:uppercase;
-  padding:4px 10px; border-radius:999px; background:var(--cream-2);
-  border:1px solid var(--hair); white-space:nowrap;
-  display:inline-flex; align-items:center; }
-.health-docs:hover { background:var(--paper); border-color:var(--hair-2); color:var(--ink); }
-tr.row-error { background:var(--danger-soft); }
-tr.row-error td { border-bottom-color:#E0A097; }
-tr.row-warn { background:#FCE8D5; }
-tr.row-warn td { border-bottom-color:#E9BC8D; }
-@media (max-width:720px) {
-  .table-stack tr.row-error { background:var(--danger-soft); border-color:#E0A097; }
-  .table-stack tr.row-warn { background:#FCE8D5; border-color:#E9BC8D; }
-}
-/* Mobile tap-target floor: matches the 36px rule the layout suite
-   enforces on .btn.sm so the Docs pill stays comfortably pressable. */
-@media (max-width:600px) {
-  .health-docs { min-height:36px; padding:6px 14px; font-size:12px; }
-}
-/* Stacked-list row used by /manage/rules and /dashboard/approvals:
-   reorder/identity column, expandable label column, actions column.
-   Stacks vertically on phones so action buttons don't get crammed
-   against the right edge. */
-.rule-row,.approval-row{padding:14px 18px;border-bottom:1px solid var(--hair)}
-.rule-row{display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:center}
-@media(max-width:720px){
-  .rule-row{grid-template-columns:1fr;gap:8px;padding:12px 14px}
-  .approval-row{padding:14px}
-}
-/* Banner-style success/error toasts used by management forms and the
-   copy-to-clipboard helper. Scoped to `div.*` so they don't bleed into
-   smaller `.error` / `.success` modifiers on other elements (e.g.
-   `<span class="dot error">` on /manage's connection-status panel,
-   which only wants the dot colour from `.dot.error`, not 1rem of
-   padding). All current consumers render `<div class="error">…</div>`
-   / `<div class="success">…</div>`. */
-div.success { background:#E8F0DE; color:#3E5A26; padding:1rem; border-radius:var(--r-sm); margin-bottom:1rem; animation: fadeOut 3s ease 2s forwards; }
-@keyframes fadeOut { to { opacity: 0; height: 0; padding: 0; margin: 0; overflow: hidden; } }
-div.error { background:#FCE8D5; color:#8A4B14; padding:1rem; border-radius:var(--r-sm); margin-bottom:1rem; }
-/* Tables */
-.table-wrap {
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
-}
-table { width: 100%; border-collapse: collapse; }
-th, td {
-  padding: 0.6rem 0.75rem;
-  text-align: left;
-  border-bottom: 1px solid var(--hair);
-  white-space: nowrap;
-}
-/* Card-list fallback for tables that read row-by-row (tenants, audit,
-   archetypes). Opt in by adding `table-stack` to the wrapping
-   `.table-wrap`; each <td> needs a `data-label="…"` so the column name
-   shows alongside the value once the header collapses. Above 720px the
-   original table layout is unchanged. */
-@media (max-width:720px) {
-  .table-wrap.table-stack { overflow-x:visible; }
-  .table-stack table, .table-stack thead, .table-stack tbody,
-  .table-stack tr, .table-stack td, .table-stack th { display:block; width:auto; }
-  .table-stack thead { position:absolute; left:-9999px; top:auto; }
-  .table-stack tr { border:1px solid var(--hair); border-radius:10px;
-    padding:10px 12px; margin-bottom:8px; background:var(--paper); }
-  .table-stack td { display:flex; justify-content:space-between;
-    gap:12px; padding:6px 0; border:0; white-space:normal;
-    word-break:break-word; min-width:0; }
-  .table-stack td::before { content:attr(data-label);
-    font-weight:600; color:var(--ink-2);
-    font-size:11px; letter-spacing:.04em; text-transform:uppercase;
-    flex:none; }
-  .table-stack td:not([data-label])::before { content:""; display:none; }
-  /* Row-leading heading cell: pattern used by editable tables where
-     each row is a labeled record (e.g. the /manage/billing pricing
-     editor). Renders the cell as a full-width card title with a
-     hairline divider instead of the flex justify-between row used
-     for value cells. */
-  .table-stack .row-heading { display:block; padding:0 0 8px; margin-bottom:8px;
-    border-bottom:1px solid var(--hair); text-align:left; }
-}
-th {
-  background: var(--cream-2);
-  font-weight: 600;
-  font-size: 0.85rem;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-  color: var(--muted);
-}
-td { font-size: 0.9rem; }
-code {
-  background: var(--cream-2);
-  padding: 0.15rem 0.4rem;
-  border-radius: 3px;
-  font-family: var(--f-mono);
-  font-size: 0.85em;
-}
-/* Management page header: eyebrow + title + optional back link + right slot */
-.manage-header { margin-bottom:20px; }
-.manage-header .back { display:inline-block; font-size:13px; color:var(--muted);
-  text-decoration:none; margin-bottom:10px; }
-.manage-header .back:hover { color:var(--ink); }
-.manage-header .header-row { display:flex; align-items:flex-end;
-  justify-content:space-between; gap:16px; flex-wrap:wrap; }
-.manage-header .header-title { min-width:0; flex:1 1 auto; }
-.manage-header .header-actions { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
-.manage-header .header-subtitle { color:var(--muted); font-size:14px; margin:6px 0 0; }
+/* Components for the Elm frontend: the landing page and its demo, the
+   wizard, the dashboard, and the static marketing pages. */
 
-/* Empty state — single shape used by every list */
-.empty-state { padding:36px 24px; text-align:center; color:var(--muted); }
-.empty-state .empty-headline { color:var(--ink-2); font-size:15px; font-weight:500; margin:0 0 4px; }
-.empty-state .empty-sub { color:var(--muted); font-size:13px; margin:0 auto; max-width:420px; }
-.empty-state .empty-cta { margin-top:14px; }
-/* Global toast region — fixed top-right, aria-live=polite, replaces
-   per-form #toast / #grant-replies-toast / #pricing-toast etc. */
-.toast-region { position:fixed; top:80px; right:24px; z-index:50;
-  display:flex; flex-direction:column; gap:8px; max-width:360px; pointer-events:none; }
-.toast-region:empty { display:none; }
-.toast-region > * { pointer-events:auto; box-shadow:var(--shadow-2);
-  margin-bottom:0; }
-@media(max-width:600px) {
-  .toast-region { top:auto; bottom:16px; left:16px; right:16px; max-width:none; }
-}
-/* Segmented tab control. Used to flip between modes inside a single
-   card (e.g. tenant grant Replies/Addresses, billing schedule
-   frequency/day). The "active" segment gets paper background; the
-   rest stay flush with the card's outer fill. */
-.seg-tabs { display:inline-flex; gap:0; padding:3px; background:var(--cream-2);
-  border:1px solid var(--hair); border-radius:999px; }
-.seg-tabs button { background:transparent; border:none; cursor:pointer;
-  padding:6px 12px; font:500 13px var(--f-body); color:var(--muted);
-  border-radius:999px; transition:background .15s ease, color .15s ease; }
-.seg-tabs button:hover { color:var(--ink); }
-.seg-tabs button.active { background:var(--paper); color:var(--ink);
-  box-shadow:0 1px 0 rgba(27,24,20,.06); }
-.seg-tabs button:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+/* ── Shared ──────────────────────────────────────────────────────────── */
 
-/* Form section grouping (used by the archetype editor and any other
-   long form). Section eyebrow + thin top divider; first section has no
-   divider. */
-.form-section { margin-top:24px; padding-top:20px;
-  border-top:1px solid var(--hair); }
-.form-section:first-of-type { margin-top:0; padding-top:0; border-top:none; }
-.form-section .section-eyebrow { font-family:var(--f-mono);
-  font-size:11px; letter-spacing:.18em; text-transform:uppercase;
-  color:var(--accent-2); margin:0 0 4px; }
-.form-section .section-help { color:var(--muted); font-size:13px;
-  margin:0 0 14px; max-width:560px; line-height:1.5; }
-/* Top-of-page progress bar — visible during any in-flight HTMX
-   request, fixed across the management panel. The wiring (event
-   listeners that toggle .visible) lives in `manage_shell`. */
-.htmx-top-progress { position:fixed; top:0; left:0; right:0; height:2px;
-  background:linear-gradient(90deg, var(--accent), var(--accent-2), var(--accent));
-  background-size:200% 100%; opacity:0; pointer-events:none; z-index:60;
-  transition:opacity .15s ease; }
-.htmx-top-progress.visible { opacity:1; animation:htmx-progress-slide 1.2s linear infinite; }
-@keyframes htmx-progress-slide {
-  0% { background-position:100% 0; }
-  100% { background-position:-100% 0; }
-}
+/* Inline message. `Ui.banner` emits the kind as a second class, so the
+   variants below are `.banner.error` and friends. */
+.banner { display:block; padding:12px 16px; margin:0 0 18px; border-radius:var(--r-md);
+  border:1px solid var(--hair-2); background:var(--paper);
+  font-size:14px; line-height:1.55; color:var(--ink-2); }
+.banner.error { border-color:var(--danger); background:var(--danger-soft); color:var(--danger-2); }
+.banner.success { border-color:var(--ok); background:linear-gradient(135deg,var(--paper),#E8F0DE); color:var(--ok); }
+.banner.info { border-color:var(--accent); background:linear-gradient(135deg,var(--paper),var(--accent-soft)); color:var(--ink-2); }
 
-/* Skeleton placeholders. Used during slow HTMX swaps where waiting
-   on opaque content (e.g. demo persona preview) deserves more than a
-   spinner. The shimmer is a moving gradient across a hair-coloured
-   block; size/shape is dictated by the wrapping element. */
-.skeleton { position:relative; overflow:hidden; background:var(--cream-2);
-  border-radius:8px; }
-.skeleton::after { content:""; position:absolute; inset:0;
-  background:linear-gradient(90deg, transparent, rgba(255,255,255,.6), transparent);
-  background-size:200% 100%; animation:skeleton-shimmer 1.4s ease-in-out infinite; }
-@keyframes skeleton-shimmer {
-  0% { background-position:100% 0; }
-  100% { background-position:-100% 0; }
-}
-.skeleton-card { padding:14px; background:var(--paper); border:1px solid var(--hair);
-  border-radius:var(--r-md); margin-bottom:8px; }
-.skeleton-line { height:12px; margin-bottom:8px; }
-.skeleton-line:last-child { margin-bottom:0; }
-.skeleton-line.w-30 { width:30%; }
-.skeleton-line.w-50 { width:50%; }
-.skeleton-line.w-70 { width:70%; }
-.skeleton-line.w-90 { width:90%; }
-
-/* Themed confirmation dialog — replaces the browser-native confirm()
-   that hx-confirm uses by default. Listener in manage_shell intercepts
-   `htmx:confirm`, populates this dialog, and calls
-   `evt.detail.issueRequest()` once the user accepts. */
-dialog.manage-confirm { padding:0; border:none; background:transparent;
-  max-width:440px; width:calc(100% - 32px); }
-dialog.manage-confirm::backdrop { background:rgba(27,24,20,.45);
-  backdrop-filter:blur(2px); }
-dialog.manage-confirm .confirm-card { background:var(--paper);
-  border:1px solid var(--hair); border-radius:var(--r-lg);
-  box-shadow:var(--shadow-2); padding:22px 24px; }
-dialog.manage-confirm .confirm-eyebrow { font-family:var(--f-mono);
-  font-size:11px; letter-spacing:.18em; text-transform:uppercase;
-  color:var(--muted); margin:0 0 8px; }
-dialog.manage-confirm .confirm-msg { color:var(--ink); font-size:15px;
-  line-height:1.5; margin:0 0 18px; white-space:pre-wrap; }
-dialog.manage-confirm .confirm-actions { display:flex; gap:10px;
-  justify-content:flex-end; flex-wrap:wrap; }
-.avatar { width:30px; height:30px; border-radius:50%; background:var(--plum); color:#fff;
-  display:inline-flex; align-items:center; justify-content:center; font-size:13px;
-  border:0; cursor:pointer; padding:0; }
-.avatar:hover { background:var(--ink); }
-.avatar:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
-.acct-menu { position:relative; }
-.acct-pop { position:absolute; right:0; top:calc(100% + 8px); min-width:180px;
-  background:var(--paper); border:1px solid var(--hair); border-radius:var(--r-md);
-  box-shadow:var(--shadow-2); padding:6px; z-index:50; display:flex; flex-direction:column; }
-.acct-pop a { display:block; padding:8px 12px; border-radius:8px; color:var(--ink);
-  text-decoration:none; font-size:14px; }
-.acct-pop a:hover, .acct-pop a:focus-visible { background:var(--cream-2); outline:none; }
-/* Channels grid */
-.channels-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); gap:16px; }
-/* "How it works" step grid on /features. CSS counter renders a giant
-   serif italic numeral in the corner of each card so the section
-   reads as a sequenced flow rather than another grid of cards.
-   Falls back to the regular layout on browsers without counter
-   support (functionally identical to .channels-grid). */
-.steps-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:16px; counter-reset:step; }
-.steps-grid > .card { position:relative; counter-increment:step; overflow:hidden; }
-.steps-grid > .card::before {
-  content:counter(step);
-  position:absolute; top:-18px; right:6px;
-  font-family:var(--f-display); font-style:italic;
-  font-size:110px; line-height:1; color:var(--accent);
-  opacity:.12; pointer-events:none; user-select:none;
-}
-.steps-grid > .card > * { position:relative; z-index:1; }
-/* /pricing two-column on desktop: slider takes 60%, the "what costs a
-   credit?" bullets take 40%. Stacks at 900px so the slider gets the
-   full width on tablets and phones. */
-.pricing-row { display:grid; grid-template-columns:1fr; gap:24px; margin:24px 0; }
-@media(min-width:900px){.pricing-row{grid-template-columns:3fr 2fr; align-items:start}}
-.channel { background:var(--paper); border:1px solid var(--hair); border-radius:var(--r-lg);
-  padding:22px; position:relative; overflow:hidden;
-  display:flex; flex-direction:column; gap:12px; min-height:220px;
-  box-shadow:var(--shadow-1); transition:all .3s ease; }
-.channel.is-connected { border-color:var(--sage); background:linear-gradient(180deg,var(--paper),#F4EBD9); }
-.channel-head { display:flex; align-items:center; gap:10px; }
-.channel-mark { width:40px; height:40px; border-radius:10px; background:var(--ink); color:var(--cream);
-  display:flex; align-items:center; justify-content:center; }
-.channel-name { font-weight:600; font-size:16px; }
-.channel-body { flex:1; color:var(--ink-2); font-size:14px; }
-.note { margin-top:26px; padding:16px 18px; background:var(--cream-2);
-  border:1px dashed var(--hair-2); border-radius:var(--r-md); display:flex; gap:12px; align-items:center; }
-.note-icon { font-size:22px; }
-
-/* Admin pick */
-.admin-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(340px,1fr)); gap:18px; }
-.admin-card { text-align:left; cursor:pointer; padding:22px; background:var(--paper);
-  border:1px solid var(--hair); border-radius:var(--r-lg); min-height:260px;
-  box-shadow:var(--shadow-1); font:inherit; color:inherit; transition:all .2s ease; }
-.admin-card:hover { transform:translateY(-2px); box-shadow:var(--shadow-2); }
-.admin-card.selected { border:2px solid var(--accent);
-  background:var(--paper); box-shadow: inset 0 0 0 1px var(--accent-soft), var(--shadow-2); }
-.admin-mark { width:54px; height:54px; border-radius:14px; background:var(--ink); color:var(--cream);
-  display:flex; align-items:center; justify-content:center; }
-.mini-preview { margin-top:14px; border:1px solid var(--hair); border-radius:10px; overflow:hidden; background:#FFF; }
-.mini-head { padding:8px 12px; background:var(--cream-2); border-bottom:1px solid var(--hair); font-size:11px; }
-.mini-row { padding:8px 12px; display:flex; gap:10px; align-items:center; }
-.mini-ava { width:22px; height:22px; border-radius:50%; flex-shrink:0; }
-.mini-body { flex:1; font-size:13px; }
-
-/* Recent-activity list shown on tenant detail. Tighter than the
-   audit table — each row is one line with an inline chevron and an
-   on-demand details pane below. */
-.recent-list { display:flex; flex-direction:column; }
-.recent-row { padding:10px 0; border-top:1px solid var(--hair); }
-.recent-row:first-child { border-top:none; padding-top:0; }
-.recent-row .expand-pane { margin-top:8px; padding:10px 12px;
-  border-radius:8px; background:var(--cream-2); }
-
-/* Expand-pane: shared body for the audit-table detail row and the
-   recent-activity inline expander. Visual is identical so JSON dumps
-   look the same wherever they show up. */
-.expand-pane { padding:12px 20px 16px; background:var(--paper);
-  border-top:1px dashed var(--hair-2); }
-.expand-pane pre { margin:0; padding:10px 12px; background:var(--cream-2);
-  border-radius:8px; font-family:var(--f-mono); font-size:12px;
-  line-height:1.55; color:var(--ink-2); white-space:pre-wrap;
-  word-break:break-word; max-height:320px; overflow:auto; }
-.expand-pane-empty { color:var(--muted); font-size:12px;
-  font-family:var(--f-mono); }
-.row-expand { background:none; border:1px solid transparent;
-  border-radius:6px; cursor:pointer; padding:2px 6px;
-  color:var(--muted); font-size:14px; line-height:1;
-  transition:transform .15s ease, color .15s ease, background .15s ease; }
-.row-expand:hover { color:var(--ink); background:rgba(27,24,20,.04); }
-.row-expand.open { transform:rotate(180deg); color:var(--ink); }
-/* Audit detail <tr>: the colspan'd cell carries the expand-pane.
-   No grid; rely on table layout. */
-table tr.audit-detail > td { padding:0; background:var(--paper);
-  border-bottom:1px solid var(--hair); }
-
-/* Welcome form */
-.welcome { display:grid; grid-template-columns:minmax(0,1fr) 360px; gap:60px; align-items:center; }
-@media(max-width:900px){.welcome{grid-template-columns:1fr;gap:32px}}
-.welcome-form { display:flex; gap:10px; flex-wrap:wrap; margin-top:22px; }
-.welcome-form .input { max-width:240px; }
-.display { font-family:var(--f-display); font-size:clamp(40px,4.5vw,60px); line-height:1.06; letter-spacing:-0.02em; margin:0 0 16px; }
-.display em { color:var(--accent); font-style:italic; }
-.hero-caret { display:inline-block; width:0.06em; height:0.86em; margin-left:0.04em; vertical-align:-0.08em; background:currentColor; animation:hero-caret-blink 0.85s steps(2,jump-none) infinite; }
-@keyframes hero-caret-blink { 0%,49%{opacity:1} 50%,100%{opacity:0} }
-.hero-select { background:var(--accent); color:var(--cream); border-radius:2px; -webkit-box-decoration-break:clone; box-decoration-break:clone; padding:0 0.04em; }
-.hero-select em { color:inherit; }
-@media (prefers-reduced-motion: reduce) { .hero-caret, .hero-select { display:none; background:transparent; color:inherit; } }
-
-/* Hero headline as a click target for the chat demo. */
-.hero-clickable { cursor:pointer; transition:color .2s ease; outline:none; border-radius:6px; }
-.hero-clickable:hover, .hero-clickable:focus-visible { color:var(--accent-2); }
-.hero-clickable:focus-visible { outline:2px solid var(--accent); outline-offset:6px; }
-
-/* Live-demo chat modal (welcome page). */
-.chat-controls { display:flex; align-items:flex-end; gap:10px; margin:0 0 6px; flex-wrap:wrap; }
-.chat-persona-label { display:flex; flex-direction:column; gap:4px; flex:1 1 220px; min-width:180px; }
-.chat-persona-label .eyebrow { font-size:11px; }
-/* Tighter padding + min-width for the chat-modal persona picker.
-   The chevron itself is inherited from the global `.select:not([multiple])`
-   rule near the top of this stylesheet. */
-.chat-persona-select { padding:8px 36px 8px 12px; min-width:180px; }
-/* Multi-line input for the demo chat: proper textarea sized for a
-   sentence or two, but without the mono font and tall min-height the
-   global .textarea uses for prompt-editing fields. */
-.chat-input {
-  flex:1 1 auto; min-height:64px; max-height:160px;
-  padding:10px 12px; resize:vertical; font-family:var(--f-body);
-  background:#fff; border:1px solid var(--hair-2); border-radius:var(--r-sm);
-  font-size:14px; color:var(--ink); outline:none; line-height:1.4;
-  transition:border-color .15s ease, box-shadow .15s ease;
-}
-.chat-input:focus { border-color:var(--accent); box-shadow:0 0 0 4px var(--accent-soft); }
-.chat-form { align-items:flex-end; }
-.chat-persona-desc { margin:0 0 8px; }
-/* Single scroll region holding the prompt panel + the message list.
-   `min-height:0` is the flex-shrink unlock; without it the form gets
-   pushed off the card when the prompt panel is open. */
-.chat-scroll { flex:1 1 auto; min-height:0; overflow-y:auto; padding:0; display:flex; flex-direction:column; gap:10px; scroll-behavior:smooth; }
-/* "You're chatting as a customer of …" framing card + channel hint shown
-   below the persona picker. The card explains the roleplay frame and
-   lists the sample business's profile (type, city, hours, goal); the
-   hint below reminds the visitor that real customer messages would
-   arrive on WhatsApp / IG / Discord / email, never in this chat box. */
-.chat-business-card { background:var(--paper); border:1px solid var(--hair);
-  border-left:3px solid var(--accent); border-radius:8px;
-  padding:10px 14px; margin:6px 0 8px; font-size:13px; line-height:1.45; }
-/* Tenants can give a business an arbitrarily long, unspaced name; break
-   anywhere so the card doesn't get pushed past the phone frame. */
-.chat-business-card .roleplay { color:var(--ink); margin:0 0 6px;
-  overflow-wrap:anywhere; }
-.chat-business-card .roleplay strong { color:var(--ink); }
-.chat-business-card .biz-meta { display:flex; flex-wrap:wrap; gap:4px 14px;
-  color:var(--muted); font-size:12px; margin:0; min-width:0; }
-/* Direct-child only: the goal cell carries its own wrapping rules below
-   and contains a nested span we *do* want to wrap. */
-.chat-business-card .biz-meta > span { white-space:nowrap; min-width:0; }
-.chat-business-card .biz-meta b { color:var(--ink-2); font-weight:600;
-  letter-spacing:.04em; text-transform:uppercase; font-size:10px; margin-right:4px; }
-/* Goal often runs long (free-text + URL). Take a full row, wrap
-   freely, and let long URLs break across lines so the card doesn't
-   overflow on narrow viewports. */
-.chat-business-card .biz-meta .biz-goal { white-space:normal;
-  overflow-wrap:anywhere; flex-basis:100%; }
-.chat-business-card .biz-goal-link { color:var(--ink); text-decoration:underline;
-  text-decoration-style:dotted; margin-left:6px; overflow-wrap:anywhere;
-  word-break:break-all; max-width:100%; display:inline-block;
-  vertical-align:bottom; }
-.chat-channels-note { color:var(--muted); font-size:12px; line-height:1.45;
-  margin:8px 0 0; padding:8px 10px; background:var(--cream-2);
-  border:1px dashed var(--hair); border-radius:8px; }
-/* Handoff chip: sits above the channels-note once the demo flips into
-   holding-pattern mode. Pure UX theater in the demo (no real human
-   gets paged); same shape we'll show in the tenant dashboard once
-   the real-channel side ships. */
-.chat-handoff-chip { display:flex; align-items:center; gap:8px;
-  margin:6px 0 0; padding:8px 10px; font-size:12px; line-height:1.45;
-  color:var(--ink-2); background:rgba(241,158,28,.08);
-  border:1px solid var(--accent); border-radius:8px; }
-.chat-handoff-dot { width:8px; height:8px; border-radius:50%;
-  background:var(--accent); flex-shrink:0; box-shadow:0 0 0 4px rgba(241,158,28,.18); }
-/* Sign-up CTA that replaces the input form once the visitor crosses
-   the turn limit or the open-modal timer fires. */
-.chat-cta { display:flex; align-items:center; justify-content:space-between;
-  gap:14px; margin-top:12px; padding:14px 16px; background:var(--cream-2);
-  border:1px solid var(--accent); border-radius:10px; }
-.chat-cta-text { display:flex; flex-direction:column; gap:2px; line-height:1.4; }
-.chat-cta-text strong { color:var(--ink); font-size:14px; }
-.chat-cta-text span { color:var(--ink-2); font-size:13px; }
-.chat-cta .btn { flex:none; }
-@media (max-width:520px) {
-  .chat-cta { flex-direction:column; align-items:stretch; text-align:left; }
-  .chat-cta .btn { align-self:flex-start; }
-}
-.chat-prompt-panel { background:var(--cream-2); border:1px solid var(--hair); border-radius:10px; padding:12px 14px; flex:none; }
-.chat-prompt-body { margin:0; padding:8px 10px; border-radius:6px; font-family:var(--f-mono); font-size:12px; line-height:1.55; color:var(--ink-2); white-space:pre-wrap; word-break:break-word; }
-.chat-prompt-body + .chat-prompt-body { margin-top:6px; }
-.chat-prompt-fixed { background:rgba(27,24,20,.06); border-left:3px solid var(--hair-2); }
-.chat-prompt-middle { background:var(--paper); border-left:3px solid var(--accent); }
-
-/* Persona admin preview: three-section envelope. The card around it is
-   ink-on-cream, so these variants tune for that dark backdrop. */
-.prompt-preview { margin:0; padding:8px 10px; border-radius:6px; font-family:var(--f-mono); font-size:12px; line-height:1.55; color:var(--cream); white-space:pre-wrap; word-break:break-word; }
-.prompt-preview + .prompt-preview { margin-top:6px; }
-.prompt-preview-fixed { background:rgba(245,239,228,.06); border-left:3px solid rgba(245,239,228,.18); opacity:.8; }
-.prompt-preview-middle { background:rgba(245,239,228,.10); border-left:3px solid var(--accent); }
-/* Read-only "what gets appended to your text" peek shown directly under
-   the editable area on the persona admin page. Lives on the light card
-   background, so it picks up cream tones (vs. the dark prompt-preview
-   pane below which mirrors the visitor demo's terminal aesthetic). */
-.postamble-peek { background:var(--cream-2); border:1px solid var(--hair);
-  border-left:3px solid var(--accent); border-radius:6px; padding:10px 12px; }
-.postamble-peek-body { margin:0; font-family:var(--f-mono); font-size:12px;
-  line-height:1.55; color:var(--ink-2); white-space:pre-wrap; word-break:break-word; }
-/* Pricing table on /manage/billing: caps the table at a comfortable
-   reading width so cells don't balloon into stretched columns when
-   only one or two currencies are configured. Overrides the global
-   `table { width:100% }` for this specific surface. */
-.pricing-table { max-width:880px; }
-.pricing-table table { width:auto; min-width:100%; }
-@media (max-width:720px) {
-  .pricing-table { max-width:none; }
-}
-/* Inside `.chat-scroll`. The wrapper handles overflow; this is just the
-   bubble layout. */
-.chat-messages { flex:1 1 auto; min-height:80px; padding:8px 2px; display:flex; flex-direction:column; gap:10px; }
-.chat-msg { padding:10px 14px; border-radius:14px; max-width:85%; line-height:1.45; font-size:14px; white-space:pre-wrap; word-break:break-word; }
-.chat-msg.user { align-self:flex-end; background:var(--ink); color:var(--cream); border-bottom-right-radius:4px; }
-.chat-msg.assistant { align-self:flex-start; background:var(--cream-2); color:var(--ink); border-bottom-left-radius:4px; }
-.chat-thinking { align-self:flex-start; color:var(--muted); font-size:13px; font-style:italic; padding:0 6px; }
-.chat-error { color:var(--accent-2); font-size:13px; padding:4px 2px 0; }
-.fineprint { margin-top:18px; color:var(--muted); font-size:12px; }
-
-/* Bottom-sheet modal: dim overlay + a card pinned to the bottom edge.
-   Overlay padding follows --page-pad so it tightens on mobile like
-   page shells; card padding follows --card-pad. The max-height uses
-   100dvh so landscape phones don't clip the chat scroll region (80vh
-   on a 375h viewport leaves 300px, which doesn't fit the persona
-   picker + form + reply feed). */
-.modal-overlay { position:fixed; inset:0; z-index:1200;
-  background:rgba(0,0,0,.4); display:flex;
-  align-items:flex-end; justify-content:center;
-  padding:var(--page-pad); }
-.modal-card { background:var(--paper); border:1px solid var(--hair);
-  border-radius:var(--r-lg); box-shadow:var(--shadow-2);
-  max-width:560px; width:100%;
-  display:flex; flex-direction:column;
-  padding:var(--card-pad);
-  max-height:min(80vh, calc(100dvh - 80px));
-  margin-bottom:max(var(--page-pad), env(safe-area-inset-bottom)); }
-.modal-close { width:36px; height:36px; padding:0;
-  display:inline-flex; align-items:center; justify-content:center;
-  font-size:22px; line-height:1; }
-
-/* Hero phone notification stack: a modern phone-shaped card sitting in
-   the welcome aside. Status bar across the top, a short feed of
-   inbound messages from each channel below, each with a sender,
-   one-line snippet, and a handled-state tag. Replaces the older
-   paper-postcard illustration. */
-.hero-phone { position:relative; display:flex; justify-content:center; }
-.phone-frame { width:100%; max-width:340px; padding:14px 14px 12px;
-  background:#fff; border:1px solid var(--hair); border-radius:28px;
-  box-shadow:var(--shadow-2);
-  display:flex; flex-direction:column; gap:12px; }
-.phone-bar { display:flex; justify-content:space-between; align-items:center;
-  padding:0 8px 2px; font-family:var(--f-mono); font-size:11px;
-  color:var(--ink-2); letter-spacing:.04em; }
-.phone-bar-dots { display:inline-flex; gap:4px; align-items:center; }
-.phone-bar-dots i { display:inline-block; width:4px; height:4px;
-  border-radius:50%; background:var(--ink-2); }
-.phone-header { padding:0 8px 8px; border-bottom:1px solid var(--hair); }
-.phone-feed { list-style:none; margin:0; padding:0;
-  display:flex; flex-direction:column; gap:8px; }
-.phone-notif { display:grid; grid-template-columns:36px 1fr; gap:12px;
-  padding:10px 12px; background:var(--cream);
-  border:1px solid var(--hair); border-radius:14px; }
-.phone-channel { width:36px; height:36px; border-radius:10px;
-  display:flex; align-items:center; justify-content:center;
-  color:#fff; font-family:var(--f-mono); font-size:11px; font-weight:600;
-  letter-spacing:.04em; }
-.phone-channel.ch-wa { background:#25D366; }
-.phone-channel.ch-ig { background:linear-gradient(135deg,#f09433,#dc2743 50%,#bc1888); }
-.phone-channel.ch-dc { background:#5865F2; }
-.phone-channel.ch-em { background:var(--ink-2); font-size:14px; }
-.phone-meta { display:flex; justify-content:space-between;
-  align-items:baseline; gap:8px; font-size:13px; }
-.phone-meta b { color:var(--ink); font-weight:600; }
-.phone-meta span { color:var(--muted); font-family:var(--f-mono);
-  font-size:11px; }
-.phone-msg { margin:2px 0 6px; color:var(--ink-2); font-size:13px;
-  line-height:1.4; white-space:nowrap; overflow:hidden;
-  text-overflow:ellipsis; }
-.phone-tag { display:inline-flex; align-items:center; gap:5px;
-  font-family:var(--f-mono); font-size:10px; letter-spacing:.12em;
-  text-transform:uppercase; color:var(--muted); }
-.phone-tag::before { display:inline-block; line-height:1; }
-.phone-tag.ok { color:var(--ok); }
-.phone-tag.ok::before { content:"\2713"; font-size:11px; }
-.phone-tag.fwd { color:var(--accent-2); }
-.phone-tag.fwd::before { content:"\2192"; font-size:11px; }
-.phone-foot { display:flex; justify-content:space-between;
-  padding:2px 8px 0; font-family:var(--f-mono); font-size:10px;
-  letter-spacing:.12em; text-transform:uppercase; color:var(--muted); }
-/* The phone IS the demo. Idle, it's the notification illustration and
-   one big activation button (role=button); tap it and the whole frame
-   becomes a live chat. The frame is `position:relative` so the wipe
-   overlay can clip to the screen; when active it lifts to a fixed,
-   centred "phone on a dimmed backdrop" (full-screen on mobile, so it
-   reads as being *inside* the app). */
-.phone-frame { position:relative; }
-.phone-idle { display:flex; flex-direction:column; gap:12px;
-  width:100%; padding:0; margin:0; background:none; border:0;
-  text-align:left; color:inherit; font:inherit; }
-[role="button"].phone-idle { cursor:pointer; }
-.phone-idle:focus-visible { outline:2px solid var(--accent);
-  outline-offset:6px; border-radius:18px; }
-/* Resting hover affordance on the whole frame while idle. */
-.hero-phone:not(.active) .phone-frame { transition:transform .2s ease, box-shadow .2s ease; }
-.hero-phone:not(.active) .phone-frame:hover { transform:translateY(-3px);
-  box-shadow:0 6px 0 rgba(27,24,20,.05), 0 20px 40px rgba(27,24,20,.12); }
-/* "tap to try" cue pinned under the notifications. */
-.phone-try { display:flex; align-items:center; justify-content:space-between;
-  gap:10px; margin-top:4px; padding:9px 14px;
-  background:var(--cream); border:1px solid var(--hair); border-radius:999px;
-  font-size:13px; color:var(--muted); letter-spacing:.01em;
-  transition:border-color .2s ease, color .2s ease, background .2s ease; }
-.phone-try-go { flex:none; color:var(--accent); font-weight:700;
-  transition:transform .2s ease; }
-.hero-phone:not(.active) .phone-frame:hover .phone-try { background:#fff;
-  border-color:var(--accent); color:var(--ink); }
-.hero-phone:not(.active) .phone-frame:hover .phone-try-go { transform:translateX(3px); }
-
-/* Dimmed backdrop behind the activated phone (sibling of the frame, so
-   the frame's own transform doesn't trap this fixed element). */
-.phone-backdrop { position:fixed; inset:0; z-index:1000; background:rgba(0,0,0,.45); }
-
-/* Activated frame: centre stage on a backdrop. Padding/gap drop to zero
-   so the chat fills the screen; the inner sections carry their own. The
-   open animation is a short hinge-flip: the phone tilts up from the
-   backdrop on an X axis with real perspective + depth (translateZ), so
-   it reads as a slab swinging toward you rather than a flat scale-in. */
-.phone-frame.active { position:fixed; z-index:1001; top:50%; left:50%;
-  transform:translate(-50%,-50%);
-  width:min(390px, calc(100vw - 32px)); height:min(680px, calc(100dvh - 48px));
-  max-width:none; padding:0; gap:0; overflow:hidden;
-  transform-origin:50% 100%;
-  animation:phone-flip .5s cubic-bezier(.2,.75,.25,1); }
-@keyframes phone-flip {
-  0% { opacity:0;
-    transform:translate(-50%,-50%) perspective(1200px) rotateX(-38deg) translateZ(-80px) scale(.94);
-    box-shadow:0 50px 90px rgba(27,24,20,.04); }
-  55% { opacity:1; }
-  100% { opacity:1;
-    transform:translate(-50%,-50%) perspective(1200px) rotateX(0) translateZ(0) scale(1);
-    box-shadow:0 30px 70px rgba(27,24,20,.28); }
-}
-
-/* The concierge "wipe": a brand-coloured panel that sweeps top-to-bottom
-   across the screen as the phone activates, hiding the swap from
-   notifications to chat. ~480ms, one pass. */
-.phone-wipe { position:absolute; inset:0; z-index:5; pointer-events:none;
-  display:flex; align-items:center; justify-content:center;
-  background:linear-gradient(135deg, var(--accent), var(--accent-2));
-  border-radius:inherit;
-  animation:phone-wipe .9s cubic-bezier(.4,0,.2,1) forwards; }
-/* The brand mark lands as an app icon: a cream chip carrying the logo
-   glyph, so it reads on the accent wipe (the logo's own disc is accent
-   and would otherwise vanish into the background). It holds on screen
-   for a clear beat mid-sweep so the mark is legible, not a flicker. */
-.phone-wipe-mark { display:flex; align-items:center; justify-content:center;
-  width:84px; height:84px; border-radius:22px; background:var(--cream);
-  box-shadow:0 10px 30px rgba(27,24,20,.25);
-  animation:phone-wipe-mark .9s ease forwards; }
-.phone-wipe-mark svg { width:52px; height:52px; }
-@keyframes phone-wipe {
-  0% { transform:translateY(-101%); }
-  30%,68% { transform:translateY(0); }
-  100% { transform:translateY(101%); }
-}
-@keyframes phone-wipe-mark {
-  0%,16% { opacity:0; transform:scale(.82); }
-  34%,62% { opacity:1; transform:scale(1); }
-  100% { opacity:0; transform:scale(1.05); }
-}
-
-/* Generic phone status bar across the top of the activated chat: live
-   clock on the left, signal / wi-fi / battery glyphs on the right. Drawn
-   from scratch (ascending bars, an arc, a capped cell) so it reads as "a
-   phone" without copying iOS's pill or Android's exact iconography. */
-.phone-statusbar { display:flex; align-items:center; justify-content:space-between;
-  flex:none; padding:9px 18px 5px;
-  font-family:var(--f-mono); font-size:12px; font-weight:600;
-  letter-spacing:.02em; color:var(--ink); }
-.phone-statusbar .phone-status-icons { display:inline-flex; align-items:center; gap:7px; }
-.phone-sig { display:inline-flex; align-items:flex-end; gap:2px; height:11px; }
-.phone-sig i { width:3px; background:var(--ink); border-radius:1px; }
-.phone-sig i:nth-child(1) { height:4px; }
-.phone-sig i:nth-child(2) { height:6px; }
-.phone-sig i:nth-child(3) { height:8px; }
-.phone-sig i:nth-child(4) { height:11px; }
-.phone-wifi { display:block; width:15px; height:11px; color:var(--ink); }
-.phone-batt { position:relative; box-sizing:border-box;
-  width:23px; height:11px; padding:1.5px;
-  border:1.5px solid var(--ink); border-radius:3px; }
-.phone-batt::after { content:""; position:absolute; right:-3px; top:50%;
-  transform:translateY(-50%); width:2px; height:4px;
-  background:var(--ink); border-radius:0 1px 1px 0; }
-.phone-batt i { display:block; height:100%; width:72%;
-  background:var(--ink); border-radius:1px; }
-
-/* In-phone chat surface: header / how-line / scroll / composer, stacked
-   to fill the activated frame. */
-.phone-chat { display:flex; flex-direction:column; height:100%; min-height:0; }
-.phone-chat-head { display:flex; align-items:center; gap:10px;
-  padding:14px 14px 10px; border-bottom:1px solid var(--hair); flex:none; }
-.phone-chat-dot { flex:none; width:9px; height:9px; border-radius:50%;
-  background:var(--ok); box-shadow:0 0 0 4px rgba(62,127,74,.16); }
-.phone-persona { flex:1 1 auto; min-width:0; padding:7px 30px 7px 12px;
-  font-size:13px; }
-.phone-x { flex:none; width:30px; height:30px; padding:0;
-  display:inline-flex; align-items:center; justify-content:center;
-  font-size:20px; line-height:1; background:none; border:0; cursor:pointer;
-  color:var(--muted); border-radius:8px; transition:color .15s, background .15s; }
-.phone-x:hover { color:var(--ink); background:rgba(27,24,20,.05); }
-.phone-how { margin:0; padding:10px 14px 0; flex:none;
-  font-size:12px; line-height:1.45; color:var(--muted); }
-/* <button> styled as an inline dotted-underline link (the "how this
-   works" affordance opening the reference modal). */
-.linklike { background:none; border:0; padding:0; font:inherit; cursor:pointer;
-  color:var(--ink); text-decoration:underline; text-decoration-style:dotted;
-  text-underline-offset:2px; }
-.linklike:hover { color:var(--accent-2); }
-.linklike:disabled { color:var(--muted); cursor:default; text-decoration:none; }
-.phone-biz { margin:10px 14px 0; }
-.phone-scroll { flex:1 1 auto; min-height:0; padding:12px 14px; }
-.phone-handoff { margin:6px 14px 0; }
-.phone-chat .chat-error { padding:4px 14px 0; }
-.phone-form { display:flex; align-items:flex-end; gap:8px; flex:none;
-  padding:10px 12px; border-top:1px solid var(--hair); background:var(--paper); }
-.phone-input { flex:1 1 auto; min-height:42px; max-height:104px;
-  padding:9px 12px; }
-.phone-send { flex:none; width:42px; height:42px; padding:0; border-radius:50%;
-  display:inline-flex; align-items:center; justify-content:center; }
-.phone-cta { margin:0; border-radius:0; border:0; border-top:1px solid var(--accent); }
-
-/* Mobile: the activated phone fills the viewport so it reads as being
-   "inside" the app — edge to edge, no radius, safe-area aware. */
-@media (max-width:560px) {
-  .phone-frame.active { top:0; left:0; transform:none;
-    width:100vw; height:100dvh; max-height:none;
-    border-radius:0; border:0; animation:phone-fade .3s ease; }
-  .phone-statusbar { padding-top:max(9px, env(safe-area-inset-top)); }
-  .phone-form { padding-bottom:max(10px, env(safe-area-inset-bottom)); }
-}
-@keyframes phone-fade { from { opacity:0; } to { opacity:1; } }
-
-@media (prefers-reduced-motion: reduce) {
-  .phone-frame.active { animation:none; }
-  .phone-wipe { display:none; }
-  .hero-phone:not(.active) .phone-frame:hover { transform:none; box-shadow:var(--shadow-2); }
-  .hero-phone:not(.active) .phone-frame:hover .phone-try-go { transform:none; }
-}
-
-/* Terminal */
-.terminal { background:#0F0D0B; color:#D9D0BD; border-radius:16px; padding:20px;
-  font-family:var(--f-mono); font-size:13px; line-height:1.7; min-height:380px;
-  border:1px solid #2A2520; margin-top:8px; }
-.term-chrome { display:flex; gap:10px; align-items:center; margin-bottom:14px;
-  padding-bottom:10px; border-bottom:1px dashed #2A2520; }
-.term-dot { display:inline-block; width:12px; height:12px; border-radius:50%; }
-.term-title { margin-left:12px; color:#8A7E6B; }
-.term-idle { color:#8A7E6B; }
-.term-row { display:grid; grid-template-columns:70px 140px 1fr; gap:12px; }
-.t-t { color:#8A7E6B; }
-.t-tag { color:var(--accent); }
-
-/* Banner */
-.banner { display:flex; justify-content:space-between; align-items:center;
-  padding:18px 28px; background:linear-gradient(90deg,var(--accent-soft),transparent 60%);
-  border-bottom:1px solid var(--hair); }
-
-/* Legal pages */
-.legal { max-width:720px; margin:0 auto; padding:48px 28px 64px; }
-.legal h1 { font-family:var(--f-display); font-size:clamp(32px,5vw,48px); letter-spacing:-0.02em; margin:0 0 4px; }
-.legal h2 { font-size:1.1rem; margin:2rem 0 .5rem; color:var(--ink-2); }
-.legal p, .legal ul { margin-bottom:1rem; color:var(--ink-2); line-height:1.7; }
-.legal ul { padding-left:1.5rem; }
-@media(max-width:600px){ .legal { padding:28px 16px 40px; } }
-
-/* HTMX loading state. Buttons dim and lock during their own request,
-   and any nested `.spinner` reveals + spins. The .htmx-indicator class
-   is HTMX's stock convention: hidden by default, shown during request. */
-.htmx-request .btn { opacity: 0.7; pointer-events: none; }
-.spinner { display:inline-block; width:12px; height:12px;
-  border:2px solid currentColor; border-top-color:transparent;
-  border-radius:50%; vertical-align:-2px; }
-.htmx-indicator { display:none; }
-.htmx-request .htmx-indicator,
-.htmx-request.htmx-indicator,
-.is-loading .htmx-indicator { display:inline-block; }
-.htmx-request .spinner.htmx-indicator,
-.is-loading .spinner.htmx-indicator { animation:spin .7s linear infinite; }
-.btn.is-loading { opacity:.7; pointer-events:none; }
+/* The loading state for a whole panel. The old rule only span when an
+   `.htmx-request` ancestor was present; nothing sets that now, so it
+   animates on its own. */
+.spinner { display:block; width:22px; height:22px; margin:48px auto;
+  border:2px solid var(--hair-2); border-top-color:var(--accent); border-radius:50%;
+  animation:spin .7s linear infinite; }
 @keyframes spin { to { transform:rotate(360deg); } }
+@media (prefers-reduced-motion:reduce) { .spinner { animation-duration:2.4s; } }
 
-/* ── Site chrome: header nav + footer links ──────────────────────────────
-   These carry classes the Elm frontend introduced (`.nav-link`,
-   `.footer-links`), which replaced the `.btn.sm` anchors the old templates
-   used. Without rules they were bare anchors: visually plain, and only
-   ~18px tall, which is well under a usable tap target on a phone.
+/* Status chip. */
+.pill { display:inline-flex; align-items:center; gap:6px; padding:3px 10px;
+  border-radius:999px; border:1px solid var(--hair-2); background:var(--cream-2);
+  font-family:var(--f-mono); font-size:11px; letter-spacing:.04em; color:var(--muted); }
+.pill-ok { border-color:var(--ok); color:var(--ok); background:#EDF4E9; }
+.pill-warn { border-color:var(--warn); color:var(--warn); background:#FBEFE0; }
 
-   The `min-height` is what keeps `tests/app.spec.ts`'s 36px tap-target
-   audit passing. It's a floor, not a look — the padding is what you see.
-   36px is below the iOS HIG's 44px, but these sit in the chrome rather
-   than in the primary flow, and the audit exempts the brand lockup for
-   the same reason.                                                       */
-.site-header .site-nav { display:flex; align-items:center; gap:4px; }
+/* Prompt blocks. These carry their own dark background so they read the
+   same on the landing page's light panel and inside a dashboard card. */
+.prompt-preview { margin:0; padding:10px 12px; border-radius:var(--r-sm);
+  background:var(--ink); color:var(--cream); border-left:3px solid transparent;
+  font-family:var(--f-mono); font-size:12px; line-height:1.6;
+  white-space:pre-wrap; word-break:break-word; overflow-x:auto; }
+.prompt-preview + .prompt-preview { margin-top:6px; }
+/* The fixed bookends are context, not the tenant's text: dimmed so the
+   editable middle reads as the thing they own. */
+.prompt-preview-fixed { opacity:.72; border-left-color:rgba(245,239,228,.25); }
+.prompt-preview-middle { border-left-color:var(--accent); }
 
-.nav-link {
-  display:inline-flex;
-  align-items:center;
-  min-height:36px;
-  padding:6px 10px;
-  border-radius:var(--r-sm);
-  color:var(--ink-2);
-  font-size:14px;
-  text-decoration:none;
-}
-.nav-link:hover { background:var(--paper); color:var(--ink); }
+/* ── Site chrome ─────────────────────────────────────────────────────── */
+
+/* `.nav-link` and `.footer-links` came in with the Elm frontend. The
+   min-height is the tap-target floor `tests/app.spec.ts` audits; the
+   padding is what you actually see. */
+.nav-link { display:inline-flex; align-items:center; min-height:36px; padding:6px 10px;
+  border-radius:var(--r-sm); color:var(--ink-2); font-size:14px; text-decoration:none; }
+.nav-link:hover { background:var(--cream-2); color:var(--ink); }
 .nav-link:focus-visible { outline:2px solid var(--accent); outline-offset:1px; }
 
-.footer-links {
-  display:flex;
-  flex-wrap:wrap;
-  align-items:center;
-  justify-content:center;
-  gap:4px 12px;
-  margin:0 0 6px;
-  padding:0;
-  list-style:none;
-}
-.footer-links a {
-  display:inline-flex;
-  align-items:center;
-  min-height:36px;
-  padding:0 6px;
-  color:var(--muted);
-  text-decoration:underline;
-  text-underline-offset:2px;
-}
+.footer-links { display:flex; flex-wrap:wrap; align-items:center; justify-content:center;
+  gap:4px 12px; margin:0 0 8px; padding:0; list-style:none; }
+.footer-links a { display:inline-flex; align-items:center; min-height:36px; padding:0 6px;
+  color:var(--muted); text-decoration:underline; text-underline-offset:2px; }
 .footer-links a:hover { color:var(--ink); }
 .footer-links a:focus-visible { outline:2px solid var(--accent); outline-offset:1px; }
-
-/* The privacy note under the links. Narrower than the page so it reads as
-   a caption rather than body copy. */
 .footer-note { max-width:64ch; margin:0 auto; font-size:12px; line-height:1.7; }
+
+/* ── Landing ─────────────────────────────────────────────────────────── */
+
+.landing { display:flex; flex-direction:column; gap:56px; }
+.hero { max-width:44ch; }
+.hero h1 { margin:0 0 16px; }
+.hero-sub { margin:0 0 24px; max-width:56ch; font-size:18px; line-height:1.6; color:var(--ink-2); }
+.hero-actions { display:flex; flex-wrap:wrap; gap:12px; }
+.hero-nudge { margin:20px 0 0; font-family:var(--f-mono); font-size:12px;
+  letter-spacing:.06em; color:var(--muted); }
+
+.demo-picker-sub { margin:0 0 20px; color:var(--muted); }
+.persona-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr));
+  gap:14px; margin:0; padding:0; list-style:none; }
+.persona-card { width:100%; height:100%; text-align:left; padding:18px;
+  border:1px solid var(--hair); border-radius:var(--r-md); background:var(--paper);
+  box-shadow:var(--shadow-1); font-family:var(--f-body); cursor:pointer;
+  transition:border-color .15s ease, box-shadow .15s ease, transform .15s ease; }
+.persona-card:hover { border-color:var(--accent); box-shadow:var(--shadow-2); transform:translateY(-2px); }
+.persona-card:focus-visible { outline:none; border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft); }
+.persona-card h3 { margin:0 0 6px; font-size:16px; color:var(--ink); }
+.persona-card p { margin:0; font-size:13.5px; line-height:1.55; color:var(--muted); }
+
+/* The demo conversation. A single card that owns its own rows, so the
+   transcript can scroll while the head and composer stay put. */
+.demo-chat { max-width:680px; background:var(--paper); border:1px solid var(--hair);
+  border-radius:var(--r-lg); box-shadow:var(--shadow-2); overflow:hidden; }
+.demo-chat-head { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between;
+  gap:12px; padding:16px 18px; border-bottom:1px solid var(--hair); background:var(--cream-2); }
+.demo-chat-head h2 { margin:0 0 6px; font-size:17px; }
+.demo-chat-head-actions { display:flex; flex-wrap:wrap; gap:8px; }
+
+.demo-transcript { display:flex; flex-direction:column; gap:10px;
+  padding:18px; max-height:420px; overflow-y:auto; background:var(--cream); }
+.bubble { max-width:80%; padding:10px 14px; border-radius:16px;
+  font-size:14.5px; line-height:1.5; white-space:pre-wrap; word-break:break-word; }
+.bubble-assistant { align-self:flex-start; background:var(--paper);
+  border:1px solid var(--hair); border-bottom-left-radius:5px; }
+.bubble-user { align-self:flex-end; background:var(--ink); color:var(--cream);
+  border-bottom-right-radius:5px; }
+/* Three dots while the model is answering. */
+.bubble-typing { display:flex; gap:5px; align-items:center; padding:14px; }
+.bubble-typing span { width:6px; height:6px; border-radius:50%; background:var(--muted);
+  animation:typing 1.2s ease-in-out infinite; }
+.bubble-typing span:nth-child(2) { animation-delay:.15s; }
+.bubble-typing span:nth-child(3) { animation-delay:.3s; }
+@keyframes typing { 0%,60%,100% { opacity:.25; } 30% { opacity:1; } }
+@media (prefers-reduced-motion:reduce) { .bubble-typing span { animation:none; opacity:.5; } }
+
+.demo-composer { display:flex; gap:10px; padding:14px 18px;
+  border-top:1px solid var(--hair); background:var(--paper); }
+.demo-input { flex:1; min-width:0; }
+.demo-cta { display:flex; flex-direction:column; align-items:center; gap:12px;
+  padding:22px 18px; border-top:1px solid var(--hair); text-align:center; }
+.demo-cta p { margin:0; color:var(--ink-2); max-width:44ch; }
+
+/* "View the prompt" drawer. */
+.prompt-panel { padding:16px 18px; border-bottom:1px solid var(--hair); background:var(--cream-2); }
+.prompt-panel-note { margin:0 0 10px; font-size:13px; line-height:1.6; color:var(--muted); }
+
+.steps { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr));
+  gap:18px; margin:0; padding:0; list-style:none; }
+.step { padding:18px; border:1px solid var(--hair); border-radius:var(--r-md); background:var(--paper); }
+.step h3 { margin:0 0 6px; font-size:16px; }
+.step p { margin:0; font-size:14px; line-height:1.6; color:var(--muted); }
+
+/* ── Wizard ──────────────────────────────────────────────────────────── */
+
+.wizard-progress { display:flex; flex-wrap:wrap; gap:8px 18px;
+  margin:0; padding:0; list-style:none; }
+.wizard-progress li { display:flex; align-items:center; gap:8px;
+  font-size:13px; color:var(--muted); }
+.wizard-step-index { display:inline-flex; align-items:center; justify-content:center;
+  width:24px; height:24px; border-radius:50%; border:1px solid var(--hair-2);
+  font-family:var(--f-mono); font-size:11px; }
+.wizard-progress .is-current { color:var(--ink); font-weight:600; }
+.wizard-progress .is-current .wizard-step-index { background:var(--accent); border-color:var(--accent); color:#fff; }
+.wizard-progress .is-done { color:var(--ink-2); }
+.wizard-progress .is-done .wizard-step-index { background:var(--ink); border-color:var(--ink); color:var(--cream); }
+.wizard-step h1 { font-size:clamp(26px,3.6vw,38px); }
+.wizard-actions { display:flex; flex-wrap:wrap; gap:12px; margin-top:24px; }
+/* Back sits left, the advancing action right. */
+.wizard-actions .btn-primary { margin-left:auto; }
+
+.connected-list { display:flex; flex-direction:column; gap:10px; margin:0; padding:0; list-style:none; }
+.connected-item { display:flex; flex-wrap:wrap; align-items:center; gap:10px;
+  padding:12px 14px; border:1px solid var(--hair); border-radius:var(--r-md); background:var(--cream-2); }
+.connected-name { font-weight:600; }
+.connected-phone { font-family:var(--f-mono); font-size:13px; color:var(--muted); }
+.connected-item .pill { margin-left:auto; }
+
+/* ── Dashboard ───────────────────────────────────────────────────────── */
+
+.dashboard { display:flex; flex-direction:column; gap:20px; }
+.dashboard h1 { margin:0; }
+.tabs { display:flex; flex-wrap:wrap; gap:4px; margin:0; padding:0 0 2px;
+  list-style:none; border-bottom:1px solid var(--hair); }
+.tab { display:inline-flex; align-items:center; min-height:40px; padding:8px 14px;
+  color:var(--muted); font-size:14px; text-decoration:none;
+  border-bottom:2px solid transparent; margin-bottom:-1px; }
+.tab:hover { color:var(--ink); }
+.tab.is-active { color:var(--ink); border-bottom-color:var(--accent); font-weight:600; }
+
+.balance { margin:0 0 4px; font-family:var(--f-display); font-size:38px; line-height:1.1; color:var(--ink); }
+.ledger { display:flex; flex-direction:column; gap:0; margin:0; padding:0; list-style:none; }
+.ledger li { display:flex; flex-wrap:wrap; align-items:baseline; gap:10px;
+  padding:10px 0; border-bottom:1px dashed var(--hair); font-size:14px; }
+.ledger li:last-child { border-bottom:0; }
+.ledger li > :first-child { font-family:var(--f-mono); min-width:5ch; }
+.ledger li > :last-child { margin-left:auto; font-size:12px; }
+
+/* Live prompt preview beside the persona editor. */
+.preview-panel { border:1px solid var(--hair); border-radius:var(--r-lg);
+  background:var(--cream-2); padding:16px 18px; }
+.preview-panel-head { display:flex; flex-wrap:wrap; align-items:center;
+  justify-content:space-between; gap:12px; margin-bottom:12px; }
+.preview-panel-head h2 { margin:0; font-size:16px; }
+
+/* ── Static pages ────────────────────────────────────────────────────── */
+
+.price-cards { margin:0 0 28px; }
+.price-cards__inner { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:16px; }
+.price-card { padding:24px; border:1px solid var(--hair); border-radius:var(--r-lg);
+  background:var(--paper); box-shadow:var(--shadow-1); }
+.price-card h2 { margin:0 0 8px; font-size:16px; }
+.price { font-family:var(--f-display); font-size:34px; line-height:1.1; color:var(--ink); }
+.price-card .price { display:block; margin:0 0 2px; }
+.price-notes { color:var(--ink-2); line-height:1.7; }
+.price-notes li { margin-bottom:6px; }
+
+.feature-list { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr));
+  gap:20px; margin-bottom:28px; }
+.feature { padding:20px; border:1px solid var(--hair); border-radius:var(--r-md); background:var(--paper); }
+.feature h2 { margin:0 0 8px; font-size:17px; }
+.feature p { margin:0; color:var(--muted); line-height:1.65; }
+
+.page-cta { display:flex; flex-wrap:wrap; gap:12px; align-items:center; }
+.page-legal { max-width:720px; }
+.page-legal h2 { font-size:18px; margin:32px 0 8px; }
+.page-legal p, .page-legal ul { color:var(--ink-2); line-height:1.75; }
+.page-404 { text-align:center; padding-top:80px; }
+.page-404 .page-cta { justify-content:center; }
+.page-login { max-width:520px; text-align:center; }
+.page-login .page-cta { justify-content:center; }
