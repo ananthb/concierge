@@ -1,4 +1,4 @@
-import { test } from '@playwright/test';
+import { test, expect } from '@playwright/test';
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 
@@ -377,4 +377,112 @@ test('capture dashboard-mobile.png', async ({ page }) => {
   await page.locator('.dashboard .card').first().waitFor();
   await settle(page);
   await capture(page, 'dashboard-mobile.png', MOBILE);
+});
+
+/**
+ * Every class the app renders must have a rule behind it.
+ *
+ * This is the check that was missing when the Elm frontend shipped. The
+ * views were written against class names the stylesheets never defined —
+ * `.hero`, `.steps`, `.persona-card`, `.field`, `.tabs`, eighty-odd of them —
+ * and nothing caught it. The markup assertions passed, because the markup was
+ * right. The stylesheet assertions passed, because the files loaded and
+ * applied. The page just had no layout: full-bleed text, list bullets, cards
+ * that weren't cards.
+ *
+ * Rendering the screens is the only way to see it, which is why this lives
+ * beside the screenshots and reuses their stubs rather than reading the Elm
+ * source. A class that never reaches the DOM is not this test's business.
+ */
+
+/**
+ * Structural hooks: wrappers that exist to be targeted from a parent's rule
+ * (`.landing > *` spacing) or to name a page for a future override. They
+ * carry no rule of their own by design.
+ */
+const STRUCTURAL = new Set([
+  'demo-picker',
+  'how-it-works',
+  'page-features',
+  'page-pricing',
+]);
+
+async function unstyledClasses(page: import('@playwright/test').Page): Promise<string[]> {
+  const undefinedClasses = await page.evaluate(() => {
+    const defined = new Set<string>();
+    const walk = (rules: CSSRuleList) => {
+      for (const rule of Array.from(rules)) {
+        const styleRule = rule as CSSStyleRule & { cssRules?: CSSRuleList };
+        if (styleRule.selectorText) {
+          for (const match of styleRule.selectorText.matchAll(/\.([A-Za-z_][\w-]*)/g)) {
+            defined.add(match[1]);
+          }
+        }
+        // @media and @supports hold their own rule lists.
+        if (styleRule.cssRules) walk(styleRule.cssRules);
+      }
+    };
+    for (const sheet of Array.from(document.styleSheets)) {
+      try {
+        walk(sheet.cssRules);
+      } catch {
+        // A sheet we can't read isn't one of ours.
+      }
+    }
+
+    const used = new Set<string>();
+    for (const el of Array.from(document.querySelectorAll('[class]'))) {
+      for (const name of Array.from(el.classList)) used.add(name);
+    }
+    return Array.from(used).filter((name) => !defined.has(name)).sort();
+  });
+  return undefinedClasses;
+}
+
+async function expectFullyStyled(page: import('@playwright/test').Page) {
+  const unstyled = (await unstyledClasses(page)).filter((c) => !STRUCTURAL.has(c));
+  expect(
+    unstyled,
+    `classes rendered with no CSS rule anywhere:\n  ${unstyled.join('\n  ')}`,
+  ).toEqual([]);
+}
+
+test('landing has a rule for every class it renders', async ({ page }) => {
+  await stubPublic(page);
+  await page.goto('/');
+  await page.locator('.landing').waitFor();
+  await expectFullyStyled(page);
+});
+
+test('the demo conversation has a rule for every class it renders', async ({ page }) => {
+  await stubPublic(page);
+  await openDemoConversation(page);
+  // The prompt drawer and the typing bubble are the two states with classes
+  // of their own that the transcript alone doesn't render.
+  await page.getByRole('button', { name: /View the prompt/ }).click();
+  await page.locator('.prompt-panel').waitFor();
+  await expectFullyStyled(page);
+});
+
+for (const path of ['/pricing', '/features', '/terms', '/privacy']) {
+  test(`${path} has a rule for every class it renders`, async ({ page }) => {
+    await stubPublic(page);
+    await page.goto(path);
+    await page.locator('.page').waitFor();
+    await expectFullyStyled(page);
+  });
+}
+
+test('the wizard has a rule for every class it renders', async ({ page }) => {
+  await stubWizard(page, 'basics');
+  await page.goto('/wizard');
+  await page.locator('.wizard-step').waitFor();
+  await expectFullyStyled(page);
+});
+
+test('the dashboard has a rule for every class it renders', async ({ page }) => {
+  await stubSignedIn(page);
+  await page.goto('/dashboard');
+  await page.locator('.dashboard .card').first().waitFor();
+  await expectFullyStyled(page);
 });
