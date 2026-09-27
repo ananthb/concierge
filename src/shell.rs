@@ -61,9 +61,62 @@ pub fn html() -> String {
   // discover for itself: the viewport width, so the first render isn't a
   // desktop layout that immediately reflows on a phone. Everything else
   // comes from GET /api/bootstrap.
-  Elm.Main.init({{
+  var app = Elm.Main.init({{
     node: document.getElementById('app'),
     flags: {{ width: window.innerWidth }}
+  }});
+
+  // Razorpay's checkout is a hosted modal its own SDK opens, so it has to be
+  // a port rather than a redirect. The SDK is loaded on demand: most sessions
+  // never reach billing, and the CSP already allows the origin.
+  //
+  // Every outcome — success, failure, dismissal — sends one message back, so
+  // the Elm side always leaves its "working" state. A success is still only a
+  // claim at this point; the app confirms it against POST /api/billing/verify,
+  // and credits are granted by the Razorpay webhook.
+  app.ports.openCheckout.subscribe(function (order) {{
+    function done(result) {{
+      app.ports.paymentOutcome.send({{
+        orderId: result.orderId || order.order_id || '',
+        paymentId: result.paymentId || '',
+        signature: result.signature || '',
+        error: result.error || ''
+      }});
+    }}
+
+    function open() {{
+      try {{
+        new Rzp({{
+          key: order.key_id,
+          order_id: order.order_id,
+          amount: order.amount,
+          currency: order.currency,
+          name: 'Concierge',
+          handler: function (r) {{
+            done({{
+              orderId: r.razorpay_order_id,
+              paymentId: r.razorpay_payment_id,
+              signature: r.razorpay_signature
+            }});
+          }},
+          modal: {{ ondismiss: function () {{ done({{}}); }} }}
+        }}).open();
+      }} catch (e) {{
+        done({{ error: 'Could not open the payment window.' }});
+      }}
+    }}
+
+    var Rzp = window.Razorpay;
+    if (Rzp) {{ open(); return; }}
+
+    var s = document.createElement('script');
+    s.src = 'https://checkout.razorpay.com/v1/checkout.js';
+    s.nonce = '{nonce}';
+    s.onload = function () {{ Rzp = window.Razorpay; open(); }};
+    s.onerror = function () {{
+      done({{ error: 'Could not reach the payment provider.' }});
+    }};
+    document.head.appendChild(s);
   }});
 </script>
 </body>

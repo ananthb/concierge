@@ -11,7 +11,7 @@ import { test, expect } from './_helpers/fixtures';
  * the wrapper stops swapping placeholders, CI fails.
  */
 
-const PAGES = ['/', '/auth/login', '/features', '/pricing'];
+const PAGES = ['/', '/login', '/features', '/pricing'];
 
 const NONCE_RE = /nonce-([A-Za-z0-9+/=_-]+)/;
 
@@ -41,6 +41,10 @@ for (const path of PAGES) {
     const scriptSrc = csp.split(';').map((d) => d.trim()).find((d) => d.startsWith('script-src'));
     expect(scriptSrc).toBeTruthy();
     expect(scriptSrc, 'script-src must not allow unsafe-inline').not.toMatch(/'unsafe-inline'/);
+    // Alpine.js needed `new Function()` to evaluate its `x-show="a === b"`
+    // attributes, so the policy carried 'unsafe-eval' for its sake. Elm
+    // evaluates nothing at runtime, so it's gone — and must stay gone.
+    expect(scriptSrc, "script-src must not allow unsafe-eval").not.toMatch(/'unsafe-eval'/);
   });
 
   test(`${path} — every inline <script>/<style> carries a nonce`, async ({ request }) => {
@@ -59,8 +63,9 @@ for (const path of PAGES) {
 
   test(`${path} — no CSP violations at runtime`, async ({ page, consoleErrors }) => {
     await page.goto(path);
-    // Give scripts a beat to run + Alpine to initialize.
-    await page.waitForTimeout(800);
+    // Wait for Elm to mount rather than sleeping: a violation that blocked
+    // the bundle would otherwise pass as "no violations yet".
+    await page.locator('#app').locator('*').first().waitFor();
     const cspViolations = consoleErrors.filter((e) => e.startsWith('csp:'));
     expect(cspViolations).toEqual([]);
   });

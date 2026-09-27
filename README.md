@@ -4,7 +4,7 @@
 
 # Concierge
 
-Automated customer messaging for small businesses. Auto-replies across WhatsApp, Instagram DMs, and email. Managed email subdomains on `cncg.email`. Unified Discord inbox for everything that needs a human.
+Automatic WhatsApp replies for small businesses. Answers in your voice, and hands the conversation to a person the moment it shouldn't decide alone.
 
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/ananthb/concierge)
 
@@ -12,31 +12,87 @@ Automated customer messaging for small businesses. Auto-replies across WhatsApp,
 
 ## Hosted Service
 
-Don't want to self-host? [concierge.calculon.tech](https://concierge.calculon.tech) runs this exact stack as a managed service. Sign up, connect your channels, and start auto-replying in minutes. 100 free replies every month.
+Don't want to self-host? [concierge.calculon.tech](https://concierge.calculon.tech) runs this exact stack as a managed service. Sign up, connect your number, and start auto-replying in minutes.
 
 ## Features
 
-- **WhatsApp Auto-Reply**: rule-routed canned or AI replies via Meta Business API
-- **Instagram DM Auto-Reply**: connect your business account, reply automatically
-- **Reply Rules**: per-channel ordered rules (keyword matchers and embedding-based intent matchers), each routing to canned text or an AI prompt; mandatory default fallback per channel
-- **Persona Builder**: tenant-wide AI persona via guided builder (voice archetype, business name + type, goal, catch-phrases, off-topic boundaries, handoff conditions), curated archetype copied from a platform-managed D1 catalog, or raw prompt. Every change is run past a safety classifier asynchronously via Cloudflare Queues; AI replies stay blocked tenant-wide until the new prompt is approved
-- **Prompt Envelope**: every AI reply is wrapped by a fixed preamble + postamble (defined in `src/prompt.rs`) that establishes the operating manual, jailbreak rails, and the universal handoff sentinel. Tenant content lives in the editable middle and never reaches the model alone
-- **Conversation Sessions**: per-customer threads carry a stable `conversation_id`, recent message history, and any active handoff state. A configurable idle gap (default 6 h) wipes history and starts a fresh conversation; a configurable max-history-messages cap (default 20) bounds the multi-turn context fed to the AI
-- **Human Handoff**: the model can flag a turn with `[[HANDOFF]]` (universal triggers in the postamble + tenant-specific conditions in the persona). The pipeline strips the token, switches to a holding-pattern voice for follow-ups within the cooldown (default 60 min), then goes silent. The tenant is paged once via the existing approval-notification channels (Discord embed and/or immediate email)
-- **Live Demo Chat**: the public welcome page hosts an interactive demo where visitors roleplay as a customer of a sample business and see the AI reply in real time. Persona picker pulls from the safety-approved D1 archetype catalog; a "View prompt" panel reveals the exact envelope being sent to the model. Real customer messages still arrive on WhatsApp / IG / email / Discord — never on this chat box
-- **Inbound Email (forward-only)**: each tenant creates `name@cncg.email` addresses and forwards their existing mail to them from whatever provider already hosts it. Concierge auto-replies to the original sender and Cc/Bccs the tenant's team. Nothing is required in the tenant's DNS -- no MX changes, no mail migration, no domain delegation
-- **Discord Relay**: unified inbox. Messages from any channel land in Discord with Reply/Approve/Drop buttons. Reply in Discord and it flows back to the customer
-- **Lead Capture Forms**: embeddable phone number forms that trigger WhatsApp messages
-- **Onboarding Wizard**: guided setup (business info, channels, notifications, persona archetype, billing)
-- **Notification Preferences**: configurable approval + digest delivery via Discord and/or Email with batching frequency
-- **Localized**: per-tenant BCP-47 locale (`en-IN` and `en-US` shipped) drives Indian-vs-Western number grouping (₹1,00,000 vs $100,000) via icu4x; translation backbone uses fluent-rs FTL files for drop-in new languages. AI-generated reply content stays English regardless of UI locale
-- **Management Panel**: Cloudflare Access-protected admin for tenant management, billing, audit log
-- **Billing**: flat prepaid credits (₹0.10 / $0.001 per AI reply, 100 included every month). Static auto-replies don't consume credits. Buy any quantity (slider, no tiers, no packs). Email is billed the same way -- per reply, with no per-address or subscription charge, and no cap on addresses. All prices live in `global_settings` and are editable from the management panel
+- **WhatsApp auto-reply**: inbound messages get a canned message or an AI reply, via the Meta Business API. You keep your number; nothing changes for the people already messaging you.
+- **Persona builder**: a tenant-wide AI voice, built from a guided form over a platform-curated archetype (voice, business name and type, goal, catch-phrases, off-topic boundaries, handoff conditions) or written as a raw prompt. Every change is run past a safety classifier asynchronously via Cloudflare Queues; AI replies stay blocked tenant-wide until the new prompt is approved.
+- **Prompt envelope**: every AI reply is wrapped by a fixed preamble + postamble (`src/prompt.rs`) that establishes the operating manual, jailbreak rails, and the universal handoff sentinel. Tenant content lives in the editable middle and never reaches the model alone. All three parts are visible in the UI.
+- **Risk gate**: a draft that quotes a price, makes a commitment, comes out an odd length, or strays past the persona's stated boundaries is never sent. The customer gets a holding sentence, the conversation enters handoff, and the tenant is emailed with the reason. Always on; nothing to configure.
+- **Human handoff**: the model can also ask for a person itself by emitting `[[HANDOFF]]`. Either way the pipeline switches to a holding-pattern voice for follow-ups within the cooldown (default 60 min), then goes silent, and pages the tenant once by email.
+- **Conversation sessions**: per-customer threads carry a stable `conversation_id`, recent history, and any active handoff state. A configurable idle gap (default 6 h) wipes history and starts a fresh conversation; a max-history cap (default 20) bounds the multi-turn context.
+- **Reply batching**: a configurable wait (default 5 s) after the latest inbound message lets customers finish typing, so a burst of three messages gets one considered answer instead of three.
+- **Interactive demo**: the landing page hosts a live chat where visitors roleplay as a customer of a sample business. "View the prompt" reveals the exact middle being sent to the model. Personas come from the safety-approved archetype catalog. Real customer messages still arrive on WhatsApp — never on this chat box.
+- **Onboarding wizard**: four steps — business details, connect WhatsApp, choose a voice, go live.
+- **Billing**: flat prepaid credits (₹0.10 / $0.001 per AI reply). Canned replies are free. Buy any quantity — no tiers, no packs. All prices live in `global_settings` and are editable through the operator API.
 - **Metadata-only logging**: message bodies pass through the Worker but are never written to durable storage. Only channel, direction, sender, recipient, and timestamp are persisted. A `/data-deletion` endpoint wipes the metadata that is stored.
+
+Instagram DMs, the Discord relay and inbound email were part of earlier revisions and were cut to get to a launchable surface. The pipeline still dispatches on a `Channel` enum, so adding one back is a variant plus an arm rather than a re-plumb.
+
+## Architecture
+
+- [Cloudflare Workers](https://workers.cloudflare.com/) — Rust compiled to WebAssembly, serving a JSON API
+- [Elm](https://elm-lang.org/) — the frontend, compiled to a single `public/app.js`
+- [Cloudflare D1](https://developers.cloudflare.com/d1/) — SQLite for metadata logs, billing, the archetype catalog
+- [Cloudflare KV](https://developers.cloudflare.com/kv/) — account configs, sessions, conversation state
+- [Cloudflare Workers AI](https://developers.cloudflare.com/workers-ai/) — reply generation and the safety classifier
+- [Cloudflare Queues](https://developers.cloudflare.com/queues/) — asynchronous persona safety checks
+- [Cloudflare Durable Objects](https://developers.cloudflare.com/durable-objects/) — the reply buffer that batches quick-fire messages
+- [Cloudflare Email Service](https://developers.cloudflare.com/email-service/) — outbound handoff notifications
+- Meta WhatsApp Business API
+- [Razorpay](https://razorpay.com/) — payments
+
+### How the two halves meet
+
+The Worker owns `/api/*`, the webhooks, and the OAuth redirects. Everything else gets the SPA shell (`src/shell.rs`), and the Elm app takes over.
+
+Auth is a session cookie, and only a session cookie. The SPA and the Worker are always on the same origin, so the `HttpOnly; Secure; SameSite=Lax` cookie set by `/auth/callback` rides along on every request — there is no token to store or attach. State-changing calls must also carry `X-Concierge-Request`, which a cross-origin caller cannot set without a preflight the Worker never grants; that pair replaces the CSRF token the old HTML forms posted.
+
+**The marketing pages are not server-side rendered.** A crawler that doesn't run JavaScript sees an empty `<div id="app">`. This was a deliberate trade for shipping speed; the fix is a build-time prerender of `/`, `/pricing` and `/features` into static assets, which needs no frontend change.
+
+## Development
+
+```sh
+direnv allow          # or: nix develop
+npm ci
+npm run build:frontend   # compile Elm to public/app.js
+dev                      # local worker + migrations + /api/manage bypass
+```
+
+Then open http://localhost:8787.
+
+| Command | What it does |
+|---|---|
+| `npm run build:frontend` | Compile the Elm app with `--optimize` |
+| `npm run build:frontend:dev` | Same, without `--optimize` (allows `Debug.log`) |
+| `dev` | Local server with migrations applied and the operator-API bypass on |
+| `wrangler dev` | Plain dev server; `/api/manage/*` will 403 |
+| `npm test` | Playwright suite |
+| `npm run screenshots` | Recapture `doc/screenshots/` — every screen, against stubbed API fixtures |
+| `elm-test` | Frontend unit tests (run from `frontend/`) |
+| `nix flake check` | cargo fmt, clippy, tests, and elm-format |
+
+`wrangler dev` and `wrangler deploy` both run `scripts/build-worker.sh`, which builds the frontend before the wasm — so a deploy can't ship a shell that loads a missing `app.js`.
+
+### Layout
+
+```
+src/            the Worker
+  api/          JSON endpoints — the frontend's only interface
+  shell.rs      the one HTML document
+  pipeline.rs   inbound message → reply
+  risk.rs       the gate that withholds a draft
+  prompt.rs     the fixed envelope every AI reply is wrapped in
+frontend/       the Elm app
+  src/Api.elm   every request and decoder, in one place
+  src/Page/     one module per screen
+public/         static assets: app.js, CSS
+```
 
 ## Deploy
 
-See the **[Deploy guide](https://ananthb.github.io/concierge/deployment.html)** for step-by-step instructions on forking and deploying your own instance to Cloudflare.
+See the **[Deploy guide](https://ananthb.github.io/concierge/deployment.html)** for step-by-step instructions on forking and deploying your own instance.
 
 CI/CD is handled by **Cloudflare Builds** (Workers CI), which builds and deploys directly from this repo without needing GitHub Actions or Nix.
 
@@ -44,34 +100,11 @@ To wire up your fork:
 
 1. In the Cloudflare dashboard, create a Worker named (e.g.) `concierge` and connect this repo under **Settings → Builds**.
    - **Build command:** leave default (CF Builds runs `npm install` from `package.json`)
-   - **Deploy command:** `npm run deploy` (defined in `package.json`; installs `worker-build` then runs `wrangler deploy`)
-2. Bind a D1 database (`DB`), KV namespace (`KV`), Workers AI (`AI`), Email Routing send-binding (`EMAIL`), Durable Objects (`REPLY_BUFFER` → `ReplyBufferDO`, `APPROVALS_DO` → `ApprovalsDO`), and Queues (`SAFETY_QUEUE` producer + `concierge-safety` / `concierge-safety-dlq` consumers) under **Settings → Bindings**. Names must match the `binding` values in [`wrangler.toml`](wrangler.toml).
-3. Set runtime variables and secrets under **Settings → Variables and Secrets**. The full list is documented at the bottom of [`wrangler.toml`](wrangler.toml).
-4. Push to `main`. Cloudflare Builds runs the build command, then `wrangler deploy`, which picks up `[build] command = "worker-build --release"` from `wrangler.toml` to compile the Rust crate to WASM.
-
-## Architecture
-
-- [Cloudflare Workers](https://workers.cloudflare.com/) (Rust compiled to WebAssembly)
-- [Cloudflare D1](https://developers.cloudflare.com/d1/) (SQLite for metadata logs and billing)
-- [Cloudflare KV](https://developers.cloudflare.com/kv/) (account configs, sessions, billing state)
-- [Cloudflare Workers AI](https://developers.cloudflare.com/workers-ai/) (AI auto-replies)
-- [Cloudflare Email Routing](https://developers.cloudflare.com/email-routing/) (inbound email handling)
-- [Cloudflare Email Service](https://developers.cloudflare.com/email-service/) (outbound delivery to arbitrary recipients via the `send_email` binding's structured API)
-- Meta WhatsApp Business API + Instagram Graph API
-- Discord Interactions API (slash commands + cross-channel relay)
-- Razorpay (one-shot credit purchases + email subdomain subscriptions)
-
-## Development
-
-```bash
-nix develop        # enter dev shell with all tools (Nix-only; CI does not use Nix)
-cargo test         # run tests
-wrangler dev       # local dev server
-wrangler deploy    # deploy to Cloudflare
-```
-
-Nix is for local convenience only. Cloudflare Builds installs the same toolchain via rustup, which reads the channel from [`rust-toolchain.toml`](rust-toolchain.toml).
+   - **Deploy command:** `npm run deploy`
+2. Bind a D1 database (`DB`), KV namespace (`KV`), Workers AI (`AI`), the Email Service send-binding (`EMAIL`), a Durable Object (`REPLY_BUFFER` → `ReplyBufferDO`), and Queues (`SAFETY_QUEUE` producer + `concierge-safety` / `concierge-safety-dlq` consumers) under **Settings → Bindings**. Names must match the `binding` values in [`wrangler.toml`](wrangler.toml).
+3. Set runtime variables and secrets under **Settings → Variables and Secrets**. The full list is at the bottom of [`wrangler.toml`](wrangler.toml).
+4. Push to `main`.
 
 ## License
 
-[AGPL-3.0](LICENSE)
+[AGPL-3.0](LICENSE).

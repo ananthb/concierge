@@ -3,6 +3,8 @@
   "version": "0.0.0",
   "private": true,
   "scripts": {
+    "build:frontend": "./scripts/build-frontend.sh",
+    "build:frontend:dev": "./scripts/build-frontend.sh dev",
     "deploy": "wrangler deploy --var CF_ACCESS_TEAM:\"$CF_ACCESS_TEAM\" --var CF_ACCESS_AUD:\"$CF_ACCESS_AUD\" --var PUBLIC_BASE_URL:\"$PUBLIC_BASE_URL\" --var EMAIL_DOMAIN:\"$EMAIL_DOMAIN\" --var WHATSAPP_WABA_ID:\"$WHATSAPP_WABA_ID\" --var WHATSAPP_SIGNUP_CONFIG_ID:\"$WHATSAPP_SIGNUP_CONFIG_ID\"",
     "dev": "wrangler dev",
     "test": "playwright test",
@@ -11,6 +13,7 @@
   },
   "devDependencies": {
     "@playwright/test": "~1.63.0",
+    "elm": "0.19.2-0",
     "wrangler": "^4"
   }
 }

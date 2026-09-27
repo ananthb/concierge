@@ -22,6 +22,43 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  frontend:
+    name: Elm (format, build, test)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: DeterminateSystems/nix-installer-action@main
+
+      - uses: cachix/cachix-action@v17
+        with:
+          name: ananthb
+          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
+
+      # elm resolves its package registry over the network, which a nix
+      # sandbox doesn't have — so the build runs here rather than as a flake
+      # check. `elm-stuff` is the resolved-package cache.
+      - name: Cache elm packages
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.elm
+            frontend/elm-stuff
+          key: elm-${{ runner.os }}-${{ hashFiles('frontend/elm.json') }}
+          restore-keys: elm-${{ runner.os }}-
+
+      - name: elm-format
+        run: nix develop --command elm-format --validate frontend/src
+
+      # --optimize is the gate that matters: it refuses any Debug.* call, so
+      # a stray Debug.log can't reach production.
+      - name: Build frontend
+        run: nix develop --command ./scripts/build-frontend.sh
+
+      - name: elm-test
+        run: nix develop --command bash -c 'cd frontend && elm-test'
+
   playwright:
     name: Playwright (browser tests)
     runs-on: ubuntu-latest
@@ -107,7 +144,7 @@ jobs:
       # Unit tests run on the host target. Anything touching js-sys (the
       # `now_iso` helper, every worker binding) panics there with "cannot
       # call wasm-bindgen imported functions on non-wasm targets", so the
-      # suite covers pure logic: parsers, prompt assembly, templates,
+      # suite covers pure logic: parsers, prompt assembly, the risk gate,
       # wire-format round-trips.
       - name: cargo test
         run: nix develop --command cargo test --lib

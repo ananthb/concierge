@@ -1,15 +1,27 @@
 #!/usr/bin/env bash
-# wrangler [build].command — wraps `worker-build --release` with a
-# rustup + cargo bootstrap for environments that don't have a Rust
-# toolchain on PATH (e.g. Cloudflare Workers Builds, which runs
-# `npx wrangler versions upload` directly without going through the
-# `npm run deploy` script that does the same bootstrap inline).
+# wrangler [build].command — builds both halves of the app:
+#   1. the Elm frontend into public/app.js
+#   2. the Rust worker into wasm, via worker-build
+#
+# Wraps `worker-build --release` with a rustup + cargo bootstrap for
+# environments that don't have a Rust toolchain on PATH (e.g. Cloudflare
+# Workers Builds, which runs `npx wrangler versions upload` directly
+# without going through the `npm run deploy` script that does the same
+# bootstrap inline).
+#
+# The frontend is built first: the worker serves public/ as static assets,
+# and a deploy that shipped the wasm without a matching app.js would serve
+# a shell that loads a 404.
 #
 # Local dev hits the short-circuit at the top of this script because
 # the nix devShell already provides `worker-build`; CI flows through
 # the full path on a cold cache (~30–60s once, then the cargo cache
 # keeps it instant).
 set -euo pipefail
+
+cd "$(dirname "$0")/.."
+
+./scripts/build-frontend.sh
 
 if ! command -v worker-build >/dev/null 2>&1; then
     if ! command -v cargo >/dev/null 2>&1; then
