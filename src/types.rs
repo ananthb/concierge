@@ -344,7 +344,7 @@ pub struct InboundMessage {
 /// Concierge doesn't have a formal "thread" object. A Session is the
 /// soft equivalent. A conversation is considered ended once the
 /// customer has been silent for the tenant's effective idle gap (see
-/// [`crate::prompt::DEFAULT_CONVERSATION_IDLE_GAP_MINS`] and
+/// `prompt::DEFAULT_CONVERSATION_IDLE_GAP_MINS` and
 /// [`ConversationConfig`]): the next inbound after that gap starts a
 /// fresh conversation (any in-progress handoff state is wiped, and
 /// the message history is cleared). Within the gap, all inbound from
@@ -417,7 +417,7 @@ impl ConversationRole {
 pub struct HandoffState {
     /// RFC3339 timestamp of the AI turn that emitted the handoff
     /// token. Used to compute the cooldown window (see
-    /// [`crate::prompt::DEFAULT_HANDOFF_COOLDOWN_MINS`] and the
+    /// `prompt::DEFAULT_HANDOFF_COOLDOWN_MINS` and the
     /// per-tenant override in [`ConversationConfig`]).
     pub signaled_at: String,
     /// One-shot guard so additional customer messages inside the
@@ -434,17 +434,17 @@ pub struct HandoffState {
 pub struct ConversationConfig {
     /// How long the customer can stay silent before the next inbound
     /// is treated as a fresh conversation. Falls back to
-    /// [`crate::prompt::DEFAULT_CONVERSATION_IDLE_GAP_MINS`].
+    /// `prompt::DEFAULT_CONVERSATION_IDLE_GAP_MINS`.
     #[serde(default)]
     pub idle_gap_mins: Option<u32>,
     /// How long after a handoff signal we keep replying with the
     /// holding-pattern voice before going silent. Falls back to
-    /// [`crate::prompt::DEFAULT_HANDOFF_COOLDOWN_MINS`].
+    /// `prompt::DEFAULT_HANDOFF_COOLDOWN_MINS`.
     #[serde(default)]
     pub handoff_cooldown_mins: Option<u32>,
     /// How many recent turns we keep as chat context for the AI.
     /// Falls back to
-    /// [`crate::prompt::DEFAULT_CONVERSATION_MAX_MESSAGES`].
+    /// `prompt::DEFAULT_CONVERSATION_MAX_MESSAGES`.
     #[serde(default)]
     pub max_history_messages: Option<u32>,
 }
@@ -749,7 +749,7 @@ pub struct PersonaBuilder {
     pub hours: String,
     /// The single outcome the AI should drive customers toward
     /// (e.g. "book a delivery slot"). Optional but strongly encouraged.
-    /// When blank, [`crate::personas::generate`] emits a default
+    /// When blank, `personas::generate` emits a default
     /// "answer the question and let them know a human will follow up"
     /// goal so every prompt has a concrete endpoint.
     #[serde(default)]
