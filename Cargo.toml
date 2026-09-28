@@ -23,7 +23,7 @@ web-sys = { version = "0.3", features = ["Crypto", "SubtleCrypto", "CryptoKey"] 
 urlencoding = "2"
 sha2 = "0.11"
 hmac = "0.13"
-base64 = "0.22"
+base64 = "0.23"
 subtle = "2.6"
 
 # Locale resolution only: unic-langid for BCP-47 tag handling,
@@ -40,7 +40,7 @@ accept-language = "3"
 # shell embeds for every stylesheet and both scripts.
 [build-dependencies]
 sha2 = "0.11"
-base64 = "0.22"
+base64 = "0.23"
 
 [profile.release]
 opt-level = "s"
