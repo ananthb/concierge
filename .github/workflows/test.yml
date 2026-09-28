@@ -131,7 +131,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # Same nix devShell the playwright job uses, so the toolchain that
       # runs the tests is the one pinned in flake.lock.
