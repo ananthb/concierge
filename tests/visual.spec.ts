@@ -486,3 +486,133 @@ test('the dashboard has a rule for every class it renders', async ({ page }) => 
   await page.locator('.dashboard .card').first().waitFor();
   await expectFullyStyled(page);
 });
+
+/**
+ * The operator console.
+ *
+ * Stubbed like every other screen here, and worth capturing for the same
+ * reason: nothing else renders it. `/api/manage/*` answers to a Cloudflare
+ * Access JWT, so a real session can't reach it and the screenshot job has no
+ * way to produce one.
+ */
+async function stubManage(page: import('@playwright/test').Page) {
+  await stubPublic(page, false);
+  await stub(page, '**/api/manage/overview', {
+    actor: 'operator@example.com',
+    tenant_count: 42,
+    health: {
+      overall: 'ok',
+      generated_at: '2026-09-29T09:00:00Z',
+      deep: true,
+      checks: [
+        { name: 'WhatsApp', status: 'ok', detail: 'Token and WABA id set.' },
+        { name: 'Razorpay', status: 'warn', detail: 'Webhook secret missing.' },
+      ],
+    },
+  });
+  await stub(page, '**/api/manage/pricing', {
+    min_credits: 100,
+    max_credits: 100000,
+    max_credits_ceiling: 1000000,
+    amounts: [
+      { concept: 'unit_price_milli', currency: 'INR', amount: 10000 },
+      { concept: 'unit_price_milli', currency: 'USD', amount: 100 },
+    ],
+    concepts: [
+      {
+        wire: 'unit_price_milli',
+        label: 'Per AI reply',
+        unit_caption: 'Thousandths of a paisa / cent',
+        is_milli: true,
+      },
+    ],
+    currencies: ['INR', 'USD'],
+  });
+  await stub(page, '**/api/manage/demo', {
+    config: {
+      enabled: true,
+      persona_generation_prompt: 'Write four small Indian businesses…',
+      regeneration_cadence_mins: 60,
+      idle_timeout_secs: 120,
+      max_user_turns: 8,
+    },
+    generated_at: '2026-09-29T08:30:00Z',
+    default_prompt: 'Write four small Indian businesses…',
+  });
+  await stub(page, '**/api/manage/tenants*', {
+    tenants: [
+      {
+        id: 'ten_1',
+        email: 'asha@petalsandstems.in',
+        name: 'Petals & Stems',
+        plan: 'paid',
+        currency: 'INR',
+        created_at: '2026-09-01T10:00:00Z',
+      },
+    ],
+  });
+  await stub(page, '**/api/manage/audit*', {
+    entries: [
+      {
+        created_at: '2026-09-29T09:10:00Z',
+        actor_email: 'operator@example.com',
+        action: 'update_pricing',
+        resource_type: 'pricing',
+        resource_id: null,
+      },
+    ],
+    has_more: false,
+  });
+}
+
+test('capture manage.png', async ({ page }) => {
+  await stubManage(page);
+  await page.goto('/manage');
+  await page.locator('.manage .card').first().waitFor();
+  await settle(page);
+  await capture(page, 'manage.png', DESKTOP);
+});
+
+test('capture manage-pricing.png', async ({ page }) => {
+  await stubManage(page);
+  await page.goto('/manage');
+  await page.getByRole('button', { name: 'Pricing' }).click();
+  await page.locator('.rate-table').waitFor();
+  await settle(page);
+  await capture(page, 'manage-pricing.png', DESKTOP);
+});
+
+test('the console has a rule for every class it renders', async ({ page }) => {
+  await stubManage(page);
+  await page.goto('/manage');
+  await page.locator('.manage .card').first().waitFor();
+  await expectFullyStyled(page);
+  // The tabs render different markup per panel, so each one is its own
+  // chance to ship an unstyled class.
+  for (const tab of ['Pricing', 'Demo', 'Tenants', 'Audit']) {
+    await page.getByRole('button', { name: tab }).click();
+    await page.locator('.manage .card').first().waitFor();
+    await expectFullyStyled(page);
+  }
+});
+
+/**
+ * Access denial is the state every visitor without an operator JWT sees, so
+ * it has to read as an explanation rather than as a broken page.
+ */
+test('the console explains itself when Access has not let you in', async ({ page }) => {
+  await stubPublic(page, false);
+  await page.route('**/api/manage/**', (route) =>
+    route.fulfill({
+      status: 403,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        error: { code: 'access_required', message: 'This endpoint requires Cloudflare Access.' },
+      }),
+    }),
+  );
+  await page.goto('/manage');
+  await expect(page.getByText('This console needs Cloudflare Access')).toBeVisible();
+  // Not the generic failure banner.
+  await expect(page.locator('.banner.error')).toHaveCount(0);
+});

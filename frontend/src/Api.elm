@@ -1,6 +1,9 @@
 module Api exposing
-    ( ApiError(..)
+    ( AdminDemo
+    , AdminPricing
+    , ApiError(..)
     , Archetype
+    , AuditEntry
     , Billing
     , Bootstrap
     , Business
@@ -11,14 +14,21 @@ module Api exposing
     , DemoConfig
     , DemoPersona
     , DemoReply
+    , Health
+    , HealthCheck
     , Order
+    , Overview
     , Persona
     , PersonaBuilder
     , Pricing
+    , PricingAmount
+    , PricingConcept
     , Reply
     , Session
     , Settings
     , Signup
+    , TenantDetail
+    , TenantRow
     , WhatsAppAccount
     , Wizard
     , WizardPersona
@@ -26,21 +36,32 @@ module Api exposing
     , completeWizard
     , delete
     , deleteAccount
+    , deleteTenant
     , demoChat
     , emptyBuilder
     , errorMessage
     , get
+    , getAdminDemo
+    , getAdminPricing
     , getArchetypes
+    , getAudit
     , getBilling
     , getBootstrap
+    , getOverview
     , getPersona
     , getSettings
+    , getTenantDetail
     , getWhatsApp
     , getWizard
+    , grantReplies
     , isUnauthenticated
+    , listTenants
     , post
     , previewPersona
     , put
+    , rerollDemo
+    , saveAdminDemo
+    , saveAdminPricing
     , saveBasics
     , saveConversation
     , saveLocale
@@ -78,6 +99,7 @@ import Http
 import Json.Decode as D exposing (Decoder)
 import Json.Encode as E
 import RemoteData exposing (RemoteData)
+import Url
 
 
 
@@ -1072,6 +1094,337 @@ boundsDecoder =
         (D.field "idle_gap_mins" D.int)
         (D.field "handoff_cooldown_mins" D.int)
         (D.field "max_history_messages" D.int)
+
+
+
+-- OPERATOR
+
+
+{-| `/api/manage/*`.
+
+Authenticated by the Cloudflare Access JWT rather than the session cookie, so
+these calls carry no credential of their own — `CF_Authorization` rides along
+like any other cookie. A caller without it gets `access_required`, which the
+console renders as an explanation rather than as a failure.
+
+-}
+type alias Overview =
+    { actor : String
+    , tenantCount : Int
+    , health : Health
+    }
+
+
+type alias Health =
+    { overall : String
+    , checks : List HealthCheck
+    }
+
+
+type alias HealthCheck =
+    { name : String
+    , status : String
+    , detail : String
+    }
+
+
+type alias AdminPricing =
+    { minCredits : Int
+    , maxCredits : Int
+    , maxCreditsCeiling : Int
+    , amounts : List PricingAmount
+    , concepts : List PricingConcept
+    , currencies : List String
+    }
+
+
+type alias PricingAmount =
+    { concept : String
+    , currency : String
+    , amount : Int
+    }
+
+
+type alias PricingConcept =
+    { wire : String
+    , label : String
+    , unitCaption : String
+    , isMilli : Bool
+    }
+
+
+type alias AdminDemo =
+    { enabled : Bool
+    , personaGenerationPrompt : String
+    , regenerationCadenceMins : Int
+    , idleTimeoutSecs : Int
+    , maxUserTurns : Int
+    , generatedAt : Maybe String
+    , defaultPrompt : String
+    }
+
+
+type alias TenantRow =
+    { id : String
+    , email : String
+    , name : Maybe String
+    , plan : String
+    , currency : String
+    , createdAt : String
+    }
+
+
+type alias TenantDetail =
+    { tenant : TenantRow
+    , balance : Int
+    , repliesUsed : Int
+    , onboardingComplete : Bool
+    , whatsappNumbers : List String
+    , audit : List AuditEntry
+    }
+
+
+type alias AuditEntry =
+    { at : String
+    , actor : String
+    , action : String
+    , resourceType : String
+    , resourceId : Maybe String
+    }
+
+
+getOverview : (Data Overview -> msg) -> Cmd msg
+getOverview =
+    get "/api/manage/overview" overviewDecoder
+
+
+getAdminPricing : (Data AdminPricing -> msg) -> Cmd msg
+getAdminPricing =
+    get "/api/manage/pricing" adminPricingDecoder
+
+
+{-| Amounts are sent as the full list rather than as a diff: the operator
+edits a table, and a partial update would leave the rows nobody touched at
+whatever the server last had, which is the same thing with more ways to go
+wrong.
+-}
+saveAdminPricing :
+    { minCredits : Int, maxCredits : Int, amounts : List PricingAmount }
+    -> (Data AdminPricing -> msg)
+    -> Cmd msg
+saveAdminPricing fields =
+    put "/api/manage/pricing"
+        (E.object
+            [ ( "min_credits", E.int fields.minCredits )
+            , ( "max_credits", E.int fields.maxCredits )
+            , ( "amounts"
+              , E.list
+                    (\a ->
+                        E.object
+                            [ ( "concept", E.string a.concept )
+                            , ( "currency", E.string a.currency )
+                            , ( "amount", E.int a.amount )
+                            ]
+                    )
+                    fields.amounts
+              )
+            ]
+        )
+        adminPricingDecoder
+
+
+getAdminDemo : (Data AdminDemo -> msg) -> Cmd msg
+getAdminDemo =
+    get "/api/manage/demo" adminDemoDecoder
+
+
+saveAdminDemo : AdminDemo -> (Data AdminDemo -> msg) -> Cmd msg
+saveAdminDemo demo =
+    put "/api/manage/demo"
+        (E.object
+            [ ( "enabled", E.bool demo.enabled )
+            , ( "persona_generation_prompt", E.string demo.personaGenerationPrompt )
+            , ( "regeneration_cadence_mins", E.int demo.regenerationCadenceMins )
+            , ( "idle_timeout_secs", E.int demo.idleTimeoutSecs )
+            , ( "max_user_turns", E.int demo.maxUserTurns )
+            ]
+        )
+        -- PUT answers the saved config alone, without the `generated_at` and
+        -- `default_prompt` the GET carries, so the response is decoded back
+        -- into the fields the caller already holds.
+        (demoConfigDecoder demo.generatedAt demo.defaultPrompt)
+
+
+rerollDemo : (Data () -> msg) -> Cmd msg
+rerollDemo =
+    post "/api/manage/demo/reroll" (E.object []) (D.succeed ())
+
+
+listTenants : String -> (Data (List TenantRow) -> msg) -> Cmd msg
+listTenants query =
+    get ("/api/manage/tenants" ++ queryString [ ( "q", query ) ])
+        (D.field "tenants" (D.list tenantRowDecoder))
+
+
+getTenantDetail : String -> (Data TenantDetail -> msg) -> Cmd msg
+getTenantDetail id =
+    get ("/api/manage/tenants/" ++ id) tenantDetailDecoder
+
+
+grantReplies : String -> { count : Int, expiresDays : Maybe Int } -> (Data () -> msg) -> Cmd msg
+grantReplies id fields =
+    post ("/api/manage/tenants/" ++ id ++ "/grant-replies")
+        (E.object
+            (( "count", E.int fields.count )
+                :: (case fields.expiresDays of
+                        Just days ->
+                            [ ( "expires_in_days", E.int days ) ]
+
+                        Nothing ->
+                            []
+                   )
+            )
+        )
+        (D.succeed ())
+
+
+deleteTenant : String -> (Data () -> msg) -> Cmd msg
+deleteTenant id =
+    delete ("/api/manage/tenants/" ++ id) (E.object []) (D.succeed ())
+
+
+getAudit : { actor : String, action : String } -> (Data (List AuditEntry) -> msg) -> Cmd msg
+getAudit filters =
+    get
+        ("/api/manage/audit"
+            ++ queryString [ ( "actor", filters.actor ), ( "action", filters.action ) ]
+        )
+        (D.field "entries" (D.list auditDecoder))
+
+
+{-| Build a query string from the pairs whose value isn't blank. Values are
+percent-encoded, because an operator searching for "a+b@example.com" would
+otherwise send a space.
+-}
+queryString : List ( String, String ) -> String
+queryString pairs =
+    case List.filter (\( _, v ) -> String.trim v /= "") pairs of
+        [] ->
+            ""
+
+        kept ->
+            "?"
+                ++ String.join "&"
+                    (List.map (\( k, v ) -> k ++ "=" ++ Url.percentEncode (String.trim v)) kept)
+
+
+overviewDecoder : Decoder Overview
+overviewDecoder =
+    D.map3 Overview
+        (D.field "actor" D.string)
+        (D.field "tenant_count" D.int)
+        (D.field "health" healthDecoder)
+
+
+healthDecoder : Decoder Health
+healthDecoder =
+    D.map2 Health
+        (D.field "overall" D.string)
+        (D.field "checks" (D.list healthCheckDecoder))
+
+
+healthCheckDecoder : Decoder HealthCheck
+healthCheckDecoder =
+    D.map3 HealthCheck
+        (D.field "name" D.string)
+        (D.field "status" D.string)
+        (D.field "detail" D.string)
+
+
+adminPricingDecoder : Decoder AdminPricing
+adminPricingDecoder =
+    D.map6 AdminPricing
+        (D.field "min_credits" D.int)
+        (D.field "max_credits" D.int)
+        (D.field "max_credits_ceiling" D.int)
+        (D.field "amounts" (D.list pricingAmountDecoder))
+        (D.field "concepts" (D.list pricingConceptDecoder))
+        (D.field "currencies" (D.list D.string))
+
+
+pricingAmountDecoder : Decoder PricingAmount
+pricingAmountDecoder =
+    D.map3 PricingAmount
+        (D.field "concept" D.string)
+        (D.field "currency" D.string)
+        (D.field "amount" D.int)
+
+
+pricingConceptDecoder : Decoder PricingConcept
+pricingConceptDecoder =
+    D.map4 PricingConcept
+        (D.field "wire" D.string)
+        (D.field "label" D.string)
+        (D.field "unit_caption" D.string)
+        (D.field "is_milli" D.bool)
+
+
+adminDemoDecoder : Decoder AdminDemo
+adminDemoDecoder =
+    D.field "generated_at" (D.nullable D.string)
+        |> D.andThen
+            (\generatedAt ->
+                D.field "default_prompt" D.string
+                    |> D.andThen
+                        (\defaultPrompt ->
+                            D.field "config" (demoConfigDecoder generatedAt defaultPrompt)
+                        )
+            )
+
+
+demoConfigDecoder : Maybe String -> String -> Decoder AdminDemo
+demoConfigDecoder generatedAt defaultPrompt =
+    D.map5 (\a b c d e -> AdminDemo a b c d e generatedAt defaultPrompt)
+        (D.field "enabled" D.bool)
+        (D.field "persona_generation_prompt" D.string)
+        (D.field "regeneration_cadence_mins" D.int)
+        (D.field "idle_timeout_secs" D.int)
+        (D.field "max_user_turns" D.int)
+
+
+tenantRowDecoder : Decoder TenantRow
+tenantRowDecoder =
+    D.map6 TenantRow
+        (D.field "id" D.string)
+        (D.field "email" D.string)
+        (D.field "name" (D.nullable D.string))
+        (D.field "plan" D.string)
+        (D.field "currency" D.string)
+        (D.field "created_at" D.string)
+
+
+tenantDetailDecoder : Decoder TenantDetail
+tenantDetailDecoder =
+    D.map6 TenantDetail
+        (D.field "tenant" tenantRowDecoder)
+        -- `TenantBilling` carries the ledger, not a balance: the number the
+        -- operator wants is the sum of what is left, and the server has
+        -- already dropped expired entries via `refresh_billing`.
+        (D.at [ "billing", "credits" ] (D.list (D.field "amount" D.int)) |> D.map List.sum)
+        (D.at [ "billing", "replies_used" ] D.int)
+        (D.at [ "onboarding", "completed" ] D.bool)
+        (D.field "whatsapp" (D.list (D.field "phone_number" D.string)))
+        (D.field "audit" (D.list auditDecoder))
+
+
+auditDecoder : Decoder AuditEntry
+auditDecoder =
+    D.map5 AuditEntry
+        (D.field "created_at" D.string)
+        (D.field "actor_email" D.string)
+        (D.field "action" D.string)
+        (D.field "resource_type" D.string)
+        (D.field "resource_id" (D.nullable D.string))
 
 
 
