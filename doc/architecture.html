@@ -257,7 +257,7 @@
 <h2>Limits and known constraints</h2>
 <ul>
   <li><strong>The prerendered pages are committed</strong>, because Cloudflare Builds has no browser. CI gates on them being current, but a deploy from a branch that skipped CI could ship stale marketing HTML.</li>
-  <li><strong>The operator API has no UI.</strong> <code>/api/manage/*</code> is complete, but <code>/manage</code> in the app says so rather than rendering a panel.</li>
+  <li><strong>The archetype catalog has no UI.</strong> The console at <code>/manage</code> covers pricing, the demo, tenants and the audit log; editing a voice archetype re-runs the persona safety queue, so it is still a <code>curl</code> job.</li>
   <li><strong>WhatsApp has no message-history API</strong>, so the reply buffer relies on its own DO state to reconstruct bursts.</li>
   <li><strong>Cloudflare Email Service requires sender domains to be onboarded</strong> in the dashboard before sends succeed. Handoff emails come from one fixed address, so this is a one-time step.</li>
   <li><strong>No per-message body storage.</strong> A conversation web-view would need a schema change and a privacy-policy update.</li>

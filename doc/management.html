@@ -86,10 +86,12 @@
 <div class="callout callout--warn">
   <div class="callout__icon">!</div>
   <div class="callout__body">
-    <strong>There is no UI for this yet.</strong>
-    <p>Earlier revisions had a server-rendered panel at <code>/manage</code> with tenant tables, a pricing matrix and an archetype editor. The endpoints below are complete and are what that panel called, but nothing renders them &mdash; <code>/manage</code> in the app says so rather than showing a blank page. Drive them with <code>curl</code> through an Access service token, or build the views.</p>
+    <strong>Access has to cover the page as well as the API.</strong>
+    <p>The console at <code>/manage</code> is part of the single-page app, so it is served by the same shell as every other route. If the Access application only covers <code>/api/manage*</code>, the page itself loads for anyone &mdash; every panel on it then reports <code>access_required</code>, which is not a leak but is not a door either. Point Access at both <code>/manage*</code> and <code>/api/manage*</code>.</p>
   </div>
 </div>
+
+<p>The console covers the overview and health rollup, pricing, the landing-page demo (including a manual reroll), tenant search with grant and delete, and the audit log. The archetype catalog is the one endpoint group with no view yet: editing a voice re-runs the persona safety queue, and that is worth its own pass rather than a form bolted onto this one.</p>
 
 <h2 id="auth">Authentication</h2>
 
