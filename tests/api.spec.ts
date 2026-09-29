@@ -22,6 +22,7 @@ const PROTECTED_GETS = [
   '/api/persona',
   '/api/archetypes',
   '/api/billing',
+  '/api/settings',
 ];
 
 test.describe('bootstrap', () => {
@@ -121,6 +122,7 @@ test.describe('request header', () => {
     ['POST', '/api/persona/preview'],
     ['DELETE', '/api/session'],
     ['DELETE', '/api/account'],
+    ['PUT', '/api/settings'],
   ];
 
   for (const [method, path] of mutations) {

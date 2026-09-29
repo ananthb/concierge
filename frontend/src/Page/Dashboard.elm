@@ -35,6 +35,10 @@ type alias Model =
     , persona : Api.Data Api.Persona
     , billing : Api.Data Api.Billing
 
+    -- The conversation window and the locale pair, on the Settings tab.
+    , settings : Api.Data Api.Settings
+    , settingsForm : SettingsForm
+
     -- The archetype catalog, for the voice picker. Operator-managed, so it's
     -- fetched rather than hardcoded — a fifth voice appears here without a
     -- frontend change.
@@ -57,6 +61,47 @@ type alias Model =
     , saving : Bool
     , notice : Maybe ( String, String )
     }
+
+
+{-| The Settings tab's form.
+
+The three timing knobs are held as strings because they are text inputs and
+an empty box is meaningful: it means "no override, use the default". Parsing
+to `Maybe Int` happens on save, so a half-typed "1" never briefly becomes a
+saved value of 1.
+
+-}
+type alias SettingsForm =
+    { idleGap : String
+    , cooldown : String
+    , history : String
+    , locale : String
+    , currency : String
+    }
+
+
+emptySettingsForm : SettingsForm
+emptySettingsForm =
+    { idleGap = "", cooldown = "", history = "", locale = "", currency = "" }
+
+
+{-| Fill the form from what the server holds. An unset override stays an
+empty box rather than showing the default, so saving an untouched form is a
+no-op instead of pinning today's default.
+-}
+formFromSettings : Api.Settings -> SettingsForm
+formFromSettings s =
+    { idleGap = maybeIntToString s.conversation.idleGapMins
+    , cooldown = maybeIntToString s.conversation.handoffCooldownMins
+    , history = maybeIntToString s.conversation.maxHistoryMessages
+    , locale = s.locale
+    , currency = s.currency
+    }
+
+
+maybeIntToString : Maybe Int -> String
+maybeIntToString =
+    Maybe.map String.fromInt >> Maybe.withDefault ""
 
 
 {-| Local state for the persona editor.
@@ -126,6 +171,8 @@ init tab =
             , channels = NotAsked
             , persona = NotAsked
             , billing = NotAsked
+            , settings = NotAsked
+            , settingsForm = emptySettingsForm
             , archetypes = NotAsked
             , editing = Nothing
             , personaForm = Nothing
@@ -184,7 +231,11 @@ fetchFor tab model =
                 Cmd.none
 
         Settings ->
-            Cmd.none
+            if RemoteData.isNotAsked model.settings then
+                Api.getSettings GotSettings
+
+            else
+                Cmd.none
 
 
 {-| Move to another tab, keeping whatever data is already loaded.
@@ -230,6 +281,13 @@ type Msg
     | GotOrder (Api.Data Api.Order)
     | PaymentCame Ports.PaymentOutcome
     | PaymentConfirmed (Api.Data ())
+    | GotSettings (Api.Data Api.Settings)
+    | SetTiming (SettingsForm -> SettingsForm)
+    | SaveTiming
+    | SetLocaleField String
+    | SetCurrencyField String
+    | SaveLocale
+    | SavedSettings (Api.Data Api.Settings)
     | SetDeleteConfirm String
     | CloseAccount
     | AccountClosed (Api.Data ())
@@ -509,6 +567,104 @@ update msg model =
                     }
                     PaymentConfirmed
                 )
+
+        GotSettings result ->
+            ( { model
+                | settings = result
+                , settingsForm =
+                    case result of
+                        Success settings ->
+                            formFromSettings settings
+
+                        _ ->
+                            model.settingsForm
+              }
+            , Cmd.none
+            )
+
+        SetTiming change ->
+            ( { model | settingsForm = change model.settingsForm }, Cmd.none )
+
+        SaveTiming ->
+            case model.settings of
+                Success settings ->
+                    let
+                        form =
+                            model.settingsForm
+
+                        -- An empty box clears the override; anything that
+                        -- isn't a number keeps what the server already has,
+                        -- so a typo can't silently reset a knob to default.
+                        read text stored =
+                            if String.trim text == "" then
+                                Nothing
+
+                            else
+                                case String.toInt (String.trim text) of
+                                    Just n ->
+                                        Just n
+
+                                    Nothing ->
+                                        stored
+
+                        conversation =
+                            settings.conversation
+                    in
+                    ( { model | saving = True, notice = Nothing }
+                    , Api.saveConversation
+                        { conversation
+                            | idleGapMins = read form.idleGap conversation.idleGapMins
+                            , handoffCooldownMins = read form.cooldown conversation.handoffCooldownMins
+                            , maxHistoryMessages = read form.history conversation.maxHistoryMessages
+                        }
+                        SavedSettings
+                    )
+
+                _ ->
+                    ( model, Cmd.none )
+
+        SetLocaleField tag ->
+            let
+                form =
+                    model.settingsForm
+            in
+            ( { model | settingsForm = { form | locale = tag } }, Cmd.none )
+
+        SetCurrencyField code ->
+            let
+                form =
+                    model.settingsForm
+            in
+            ( { model | settingsForm = { form | currency = code } }, Cmd.none )
+
+        SaveLocale ->
+            ( { model | saving = True, notice = Nothing }
+            , Api.saveLocale
+                { locale = model.settingsForm.locale
+                , currency = model.settingsForm.currency
+                }
+                SavedSettings
+            )
+
+        SavedSettings result ->
+            case result of
+                Success settings ->
+                    ( { model
+                        | saving = False
+                        , settings = Success settings
+                        , settingsForm = formFromSettings settings
+                        , notice = Just ( "success", "Saved." )
+                      }
+                    , Cmd.none
+                    )
+
+                Failure err ->
+                    ( { model | saving = False, notice = Just ( "error", Api.errorMessage err ) }
+                    , Cmd.none
+                    )
+
+                _ ->
+                    ( model, Cmd.none )
 
         SetDeleteConfirm value ->
             ( { model | deleteConfirm = value, notice = Nothing }, Cmd.none )
@@ -1215,6 +1371,119 @@ totalFor credits milliPrice =
     (credits * milliPrice + 500) // 1000
 
 
+{-| The conversation window.
+
+Three knobs the pipeline has always honoured and nothing could set. Each box
+is empty when the account has no override, with the default shown as the
+placeholder — so the form reads "leave it alone unless you mean it", and
+emptying a box puts that knob back on the default.
+
+-}
+timingCard : Model -> Api.Settings -> Html Msg
+timingCard model settings =
+    let
+        c =
+            settings.conversation
+
+        form =
+            model.settingsForm
+
+        knob id label hint value bound change =
+            Ui.field
+                { id = id
+                , label = label
+                , value = value
+                , hint =
+                    hint
+                        ++ " Default "
+                        ++ String.fromInt bound
+                        ++ "; leave empty to use it."
+                , required = False
+                , onInput = \v -> SetTiming (change v)
+                }
+    in
+    Ui.card
+        [ h2 [] [ text "Conversation timing" ]
+        , p [ class "muted" ]
+            [ text "How Concierge decides where one conversation ends and the next begins." ]
+        , knob "idle_gap_mins"
+            "Minutes of silence before a new conversation"
+            "After this long without a message, the next one starts fresh — no earlier context."
+            form.idleGap
+            c.defaults.idleGapMins
+            (\v f -> { f | idleGap = v })
+        , knob "handoff_cooldown_mins"
+            "Minutes to keep holding after a handoff"
+            "Once a conversation is handed to you, Concierge answers in the holding voice for this long, then goes quiet."
+            form.cooldown
+            c.defaults.handoffCooldownMins
+            (\v f -> { f | cooldown = v })
+        , knob "max_history_messages"
+            "Recent messages sent to the AI"
+            "More context costs more per reply and can drown the instructions."
+            form.history
+            c.defaults.maxHistoryMessages
+            (\v f -> { f | history = v })
+        , div [ class "card-actions" ]
+            [ Ui.button
+                { label = "Save timing"
+                , onClick = SaveTiming
+                , primary = True
+                , busy = model.saving
+                }
+            ]
+        ]
+
+
+localeCard : Model -> Api.Settings -> Html Msg
+localeCard model settings =
+    Ui.card
+        [ h2 [] [ text "Language and currency" ]
+        , p [ class "muted" ]
+            [ text "What your dashboard and invoices are written in. Your customers always get replies in the voice you set, whatever this says." ]
+        , div [ class "field" ]
+            [ Html.label [] [ text "Language" ]
+            , div [ class "choice-row" ]
+                (List.map
+                    (\tag ->
+                        Html.button
+                            [ classList [ ( "choice", True ), ( "is-selected", model.settingsForm.locale == tag ) ]
+                            , Html.Attributes.type_ "button"
+                            , onClick (SetLocaleField tag)
+                            ]
+                            [ text tag ]
+                    )
+                    settings.locales
+                )
+            ]
+        , div [ class "field" ]
+            [ Html.label [] [ text "Currency" ]
+            , div [ class "choice-row" ]
+                (List.map
+                    (\code ->
+                        Html.button
+                            [ classList [ ( "choice", True ), ( "is-selected", model.settingsForm.currency == code ) ]
+                            , Html.Attributes.type_ "button"
+                            , onClick (SetCurrencyField code)
+                            ]
+                            [ text code ]
+                    )
+                    settings.currencies
+                )
+            ]
+        , p [ class "hint" ]
+            [ text "Changing currency changes what you're billed in from your next purchase. Credits you already hold keep their value." ]
+        , div [ class "card-actions" ]
+            [ Ui.button
+                { label = "Save language"
+                , onClick = SaveLocale
+                , primary = True
+                , busy = model.saving
+                }
+            ]
+        ]
+
+
 settingsTab : Api.Session -> Model -> Html Msg
 settingsTab session model =
     let
@@ -1222,7 +1491,14 @@ settingsTab session model =
             String.toLower (String.trim model.deleteConfirm) == String.toLower session.email
     in
     section []
-        [ Ui.card
+        [ Ui.remote model.settings
+            (\settings ->
+                div []
+                    [ timingCard model settings
+                    , localeCard model settings
+                    ]
+            )
+        , Ui.card
             [ h2 [] [ text "Account" ]
             , p [] [ text session.email ]
             , p [ class "muted" ]

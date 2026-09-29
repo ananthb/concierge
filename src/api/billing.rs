@@ -97,24 +97,6 @@ pub async fn handle(mut req: Request, env: Env, rest: &[&str]) -> Result<Respons
             })
         }
 
-        // Change the display currency. Affects what future orders are
-        // quoted in, so it's a tenant record write, not a UI preference.
-        (Method::Put, ["currency"]) => {
-            let body = match super::read_json(&mut req).await {
-                Ok(b) => b,
-                Err(r) => return r,
-            };
-            let currency = crate::locale::Currency::parse(&super::field(&body, "currency"));
-            if let Some(mut tenant) = storage::get_tenant(&db, &tenant_id).await? {
-                if tenant.currency != currency {
-                    tenant.currency = currency;
-                    tenant.updated_at = crate::helpers::now_iso();
-                    storage::save_tenant(&db, &tenant).await?;
-                }
-            }
-            super::no_content()
-        }
-
         // Buy credits.
         (Method::Post, ["checkout"]) => {
             let body = match super::read_json(&mut req).await {
