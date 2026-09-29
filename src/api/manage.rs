@@ -9,6 +9,10 @@
 //! demo both read it), the demo config, pricing, tenant administration, the
 //! audit trail, and the schema reseed. The richer HTML panel that used to
 //! live at `/manage` is not reproduced endpoint-for-endpoint.
+//!
+//! `Page.Manage` in the frontend is the console over these. It does not
+//! cover the archetype endpoints, which is why they read as write-only from
+//! the UI side.
 
 use serde::Serialize;
 use worker::*;
