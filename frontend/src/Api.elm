@@ -4,6 +4,8 @@ module Api exposing
     , Billing
     , Bootstrap
     , Business
+    , Conversation
+    , ConversationBounds
     , Credit
     , Data
     , DemoConfig
@@ -15,6 +17,7 @@ module Api exposing
     , Pricing
     , Reply
     , Session
+    , Settings
     , Signup
     , WhatsAppAccount
     , Wizard
@@ -31,6 +34,7 @@ module Api exposing
     , getBilling
     , getBootstrap
     , getPersona
+    , getSettings
     , getWhatsApp
     , getWizard
     , isUnauthenticated
@@ -38,6 +42,8 @@ module Api exposing
     , previewPersona
     , put
     , saveBasics
+    , saveConversation
+    , saveLocale
     , savePersona
     , savePersonaStep
     , saveWhatsApp
@@ -958,6 +964,114 @@ creditDecoder =
         (D.field "amount" D.int)
         (D.field "source" D.string)
         (D.field "expires_at" (D.nullable D.string))
+
+
+
+-- SETTINGS
+
+
+{-| The conversation window and the locale pair.
+
+Each knob is a `Maybe`: `Nothing` is "no override, use the default", which is
+the state most accounts should stay in. The view shows `defaults` as the
+input's placeholder rather than pre-filling it, so an untouched form saves
+nothing and clearing a box returns that knob to the default.
+
+-}
+type alias Settings =
+    { conversation : Conversation
+    , locale : String
+    , currency : String
+    , locales : List String
+    , currencies : List String
+    }
+
+
+type alias Conversation =
+    { idleGapMins : Maybe Int
+    , handoffCooldownMins : Maybe Int
+    , maxHistoryMessages : Maybe Int
+    , defaults : ConversationBounds
+    , min : ConversationBounds
+    , max : ConversationBounds
+    }
+
+
+type alias ConversationBounds =
+    { idleGapMins : Int
+    , handoffCooldownMins : Int
+    , maxHistoryMessages : Int
+    }
+
+
+getSettings : (Data Settings -> msg) -> Cmd msg
+getSettings =
+    get "/api/settings" settingsDecoder
+
+
+{-| Save the window. `Nothing` encodes as JSON `null`, which is how the API
+distinguishes "clear this override" from "leave it alone" — an absent field
+is the latter, so every knob is always sent.
+-}
+saveConversation : Conversation -> (Data Settings -> msg) -> Cmd msg
+saveConversation conversation =
+    put "/api/settings"
+        (E.object
+            [ ( "conversation"
+              , E.object
+                    [ ( "idle_gap_mins", maybeInt conversation.idleGapMins )
+                    , ( "handoff_cooldown_mins", maybeInt conversation.handoffCooldownMins )
+                    , ( "max_history_messages", maybeInt conversation.maxHistoryMessages )
+                    ]
+              )
+            ]
+        )
+        settingsDecoder
+
+
+saveLocale : { locale : String, currency : String } -> (Data Settings -> msg) -> Cmd msg
+saveLocale fields =
+    put "/api/settings"
+        (E.object
+            [ ( "locale", E.string fields.locale )
+            , ( "currency", E.string fields.currency )
+            ]
+        )
+        settingsDecoder
+
+
+maybeInt : Maybe Int -> E.Value
+maybeInt =
+    Maybe.map E.int >> Maybe.withDefault E.null
+
+
+settingsDecoder : Decoder Settings
+settingsDecoder =
+    D.map5 Settings
+        (D.field "conversation" conversationDecoder)
+        (D.field "locale" D.string)
+        (D.field "currency" D.string)
+        (D.field "locales" (D.list D.string))
+        (D.field "currencies" (D.list D.string))
+
+
+conversationDecoder : Decoder Conversation
+conversationDecoder =
+    D.map6 Conversation
+        (D.field "idle_gap_mins" (D.nullable D.int))
+        (D.field "handoff_cooldown_mins" (D.nullable D.int))
+        (D.field "max_history_messages" (D.nullable D.int))
+        (D.field "defaults" boundsDecoder)
+        (D.field "min" boundsDecoder)
+        (D.field "max" boundsDecoder)
+
+
+boundsDecoder : Decoder ConversationBounds
+boundsDecoder =
+    D.map3 ConversationBounds
+        (D.field "idle_gap_mins" D.int)
+        (D.field "handoff_cooldown_mins" D.int)
+        (D.field "max_history_messages" D.int)
 
 
 
