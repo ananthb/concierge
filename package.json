@@ -13,7 +13,7 @@
     "prerender": "playwright test --project=prerender"
   },
   "devDependencies": {
-    "@playwright/test": "~1.63.0",
+    "@playwright/test": "~1.64.0",
     "wrangler": "^4"
   },
   "dependencies": {
