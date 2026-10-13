@@ -238,15 +238,10 @@ pub async fn handle(mut req: Request, env: Env, rest: &[&str]) -> Result<Respons
         }
 
         // Seal the wizard.
+        //
+        // Billing is deactivated (dormant), so there is no card-verification
+        // gate here any more. The only requirement is a connected channel.
         (Method::Post, ["complete"]) => {
-            let tenant = get_tenant(&db, &tenant_id).await?.unwrap_or_default();
-            if tenant.plan.is_metered() && tenant.verified_at.is_none() {
-                return super::error(
-                    "unverified",
-                    "Verify your account before finishing setup.",
-                    402,
-                );
-            }
             let has_wa = !list_whatsapp_accounts(&kv, &tenant_id).await?.is_empty();
             let has_email = !list_email_accounts(&kv, &tenant_id).await?.is_empty();
             if !has_wa && !has_email {

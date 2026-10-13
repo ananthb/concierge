@@ -819,7 +819,6 @@ tabs current =
             [ ( Overview, Route.Dashboard, "Overview" )
             , ( Channels, Route.DashboardChannels, "Channels" )
             , ( Persona, Route.DashboardPersona, "Voice" )
-            , ( Billing, Route.DashboardBilling, "Credits" )
             , ( Settings, Route.DashboardSettings, "Settings" )
             ]
         )
