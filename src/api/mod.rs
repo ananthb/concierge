@@ -28,6 +28,7 @@ mod account;
 mod billing;
 mod bootstrap;
 mod demo;
+mod email;
 mod manage;
 mod persona;
 mod whatsapp;
@@ -72,6 +73,7 @@ pub async fn handle(req: Request, env: Env, path: &str) -> Result<Response> {
 
         // --- signed-in app --------------------------------------------
         ["whatsapp", rest @ ..] => whatsapp::handle(req, env, rest).await,
+        ["email", rest @ ..] => email::handle(req, env, rest).await,
         ["persona", rest @ ..] => persona::handle(req, env, rest).await,
         ["archetypes"] if method == Method::Get => persona::list_archetypes_handler(req, env).await,
         ["billing", rest @ ..] => billing::handle(req, env, rest).await,

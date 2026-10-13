@@ -1,7 +1,10 @@
-//! Outbound email only.
+//! Email channel: inbound via Cloudflare Email Routing, outbound via
+//! Cloudflare Email Service.
 //!
-//! Inbound email (Cloudflare Email Routing → `forward`/`handler`/`mime`)
-//! was cut with the email channel. What remains is the send path used to
-//! page a tenant when a conversation is handed off to a human.
+//! `inbound` parses a `ForwardableEmailMessage` into the shared pipeline;
+//! `mime` extracts the body from raw RFC 5322 bytes; `send` is the
+//! structured-message outbound path.
 
+pub mod inbound;
+pub mod mime;
 pub mod send;
