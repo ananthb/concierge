@@ -199,6 +199,7 @@ async function stubWizard(page: import('@playwright/test').Page, step: string, e
       safety_status: 'pending',
     },
     whatsapp: [WHATSAPP_ACCOUNT],
+    email: [],
     signup: { app_id: 'app-1', config_id: 'config-1', state: 'nonce' },
     launch: {
       verified: false,
