@@ -49,6 +49,9 @@ async fn lookup_wait_seconds(kv: &kv::KvStore, msg: &InboundMessage) -> Result<u
         Channel::WhatsApp => get_whatsapp_account(kv, &msg.channel_account_id)
             .await?
             .map(|a| a.auto_reply),
+        Channel::Email => get_email_account(kv, &msg.channel_account_id)
+            .await?
+            .map(|a| a.auto_reply),
     };
     Ok(cfg.map(|c| c.wait_seconds).unwrap_or(0))
 }
@@ -97,6 +100,9 @@ async fn handle_auto_reply(
 ) -> Result<()> {
     let config = match msg.channel {
         Channel::WhatsApp => get_whatsapp_account(kv, &msg.channel_account_id)
+            .await?
+            .map(|a| a.auto_reply),
+        Channel::Email => get_email_account(kv, &msg.channel_account_id)
             .await?
             .map(|a| a.auto_reply),
     };

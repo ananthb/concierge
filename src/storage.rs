@@ -1,7 +1,7 @@
 use wasm_bindgen::JsValue;
 use worker::*;
 
-use crate::types::{CreditEntry, Tenant, TenantBilling, WhatsAppAccount};
+use crate::types::{CreditEntry, EmailAccount, Tenant, TenantBilling, WhatsAppAccount};
 
 // ============================================================================
 // Tenant D1 Operations
@@ -669,6 +669,164 @@ pub async fn get_whatsapp_account_by_phone(
 }
 
 // ============================================================================
+// Email Account KV Operations
+// ============================================================================
+//
+// One record per connected custom domain (see `types::EmailAccount`).
+// Storage mirrors the WhatsApp accounts: a primary record by id, a
+// per-tenant list index, and reverse indexes the inbound handler reads.
+//
+// The reverse index resolves a recipient `to` address to exactly one
+// account, so inbound routing is two KV reads at most:
+//   * `email_addr:<local@domain>` — a specific address wins;
+//   * `email_domain:<domain>`     — the domain catch-all otherwise.
+// A domain owned by two tenants would collide on the domain key; the API
+// refuses to connect a domain another tenant already holds.
+
+fn email_addr_key(address: &str) -> String {
+    format!("email_addr:{}", address.trim().to_ascii_lowercase())
+}
+
+fn email_domain_key(domain: &str) -> String {
+    format!("email_domain:{}", domain.trim().to_ascii_lowercase())
+}
+
+/// Domain → owning tenant. One tenant per domain: a second tenant
+/// connecting the same domain would have its catch-all overwrite the
+/// first's, so the API refuses before saving.
+fn email_domain_owner_key(domain: &str) -> String {
+    format!("email_domain_owner:{}", domain.trim().to_ascii_lowercase())
+}
+
+/// The tenant that has claimed `domain`, if any.
+pub async fn email_domain_owner(kv: &kv::KvStore, domain: &str) -> Result<Option<String>> {
+    kv.get(&email_domain_owner_key(domain))
+        .text()
+        .await
+        .map_err(|e| Error::from(e.to_string()))
+        .map(|o| o.filter(|s| !s.is_empty()))
+}
+
+pub async fn get_email_account(kv: &kv::KvStore, id: &str) -> Result<Option<EmailAccount>> {
+    kv.get(&format!("email:{}", id))
+        .json::<EmailAccount>()
+        .await
+        .map_err(|e| Error::from(e.to_string()))
+}
+
+pub async fn save_email_account(kv: &kv::KvStore, account: &EmailAccount) -> Result<()> {
+    kv.put(&format!("email:{}", account.id), account)?
+        .execute()
+        .await?;
+    if !account.tenant_id.is_empty() {
+        kv.put(
+            &format!("tenant:{}:email:{}", account.tenant_id, account.id),
+            "",
+        )?
+        .execute()
+        .await?;
+    }
+    if !account.domain.is_empty() {
+        // Claim the domain for this tenant (one tenant per domain).
+        kv.put(&email_domain_owner_key(&account.domain), &account.tenant_id)?
+            .execute()
+            .await?;
+        if account.local_part.is_empty() {
+            kv.put(&email_domain_key(&account.domain), &account.id)?
+                .execute()
+                .await?;
+        } else {
+            let address = format!("{}@{}", account.local_part, account.domain);
+            kv.put(&email_addr_key(&address), &account.id)?
+                .execute()
+                .await?;
+        }
+    }
+    Ok(())
+}
+
+pub async fn delete_email_account(kv: &kv::KvStore, tenant_id: &str, id: &str) -> Result<()> {
+    // Load first so the reverse index can be cleaned up.
+    if let Some(account) = get_email_account(kv, id).await? {
+        if !account.domain.is_empty() {
+            if account.local_part.is_empty() {
+                kv.delete(&email_domain_key(&account.domain)).await?;
+            } else {
+                let address = format!("{}@{}", account.local_part, account.domain);
+                kv.delete(&email_addr_key(&address)).await?;
+            }
+            // Release the domain only when this tenant has no other account
+            // left on it.
+            let still_owned = list_email_accounts(kv, &account.tenant_id)
+                .await?
+                .into_iter()
+                .any(|a| a.id != account.id && a.domain == account.domain);
+            if !still_owned {
+                kv.delete(&email_domain_owner_key(&account.domain)).await?;
+            }
+        }
+    }
+    kv.delete(&format!("email:{}", id)).await?;
+    if !tenant_id.is_empty() {
+        kv.delete(&format!("tenant:{}:email:{}", tenant_id, id))
+            .await?;
+    }
+    Ok(())
+}
+
+pub async fn list_email_accounts(kv: &kv::KvStore, tenant_id: &str) -> Result<Vec<EmailAccount>> {
+    let prefix = format!("tenant:{}:email:", tenant_id);
+    let list = kv
+        .list()
+        .prefix(prefix.clone())
+        .execute()
+        .await
+        .map_err(|e| Error::from(e.to_string()))?;
+
+    let mut accounts = Vec::new();
+    for key in list.keys {
+        let account_id = key.name.strip_prefix(&prefix).unwrap_or("").to_string();
+        if account_id.is_empty() {
+            continue;
+        }
+        if let Some(account) = get_email_account(kv, &account_id).await? {
+            accounts.push(account);
+        }
+    }
+    accounts.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
+    Ok(accounts)
+}
+
+/// Resolve an inbound recipient address to the email account that owns it.
+///
+/// A specific address index (`hello@acme.com`) beats the domain catch-all,
+/// so a tenant can point one mailbox at its own reply config while the
+/// rest of the domain rides the catch-all. Returns `None` when the address
+/// belongs to no connected account, which the handler treats as "not ours".
+pub async fn resolve_email_account_id(kv: &kv::KvStore, to: &str) -> Result<Option<String>> {
+    let to = to.trim().to_ascii_lowercase();
+    let exact = kv
+        .get(&email_addr_key(&to))
+        .text()
+        .await
+        .map_err(|e| Error::from(e.to_string()))?;
+    if let Some(id) = exact.filter(|s| !s.is_empty()) {
+        return Ok(Some(id));
+    }
+
+    let domain = match to.rsplit_once('@') {
+        Some((_, d)) if !d.is_empty() => d,
+        _ => return Ok(None),
+    };
+    let id = kv
+        .get(&email_domain_key(domain))
+        .text()
+        .await
+        .map_err(|e| Error::from(e.to_string()))?;
+    Ok(id.filter(|s| !s.is_empty()))
+}
+
+// ============================================================================
 // Delete All Tenant Data
 // ============================================================================
 
@@ -677,6 +835,12 @@ pub async fn delete_tenant_data(kv: &kv::KvStore, db: &D1Database, tenant_id: &s
     let wa_accounts = list_whatsapp_accounts(kv, tenant_id).await?;
     for account in &wa_accounts {
         delete_whatsapp_account(kv, tenant_id, &account.id).await?;
+    }
+
+    // Delete email accounts + routing indexes
+    let email_accounts = list_email_accounts(kv, tenant_id).await?;
+    for account in &email_accounts {
+        delete_email_account(kv, tenant_id, &account.id).await?;
     }
 
     // Delete D1 data: messages + billing. Payments and audit_log are kept for dispute and tax records.

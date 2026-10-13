@@ -100,6 +100,68 @@ pub struct WhatsAppAccount {
     pub updated_at: String,
 }
 
+// ============================================================================
+// Email Account Resource
+// ============================================================================
+
+/// A tenant's connected custom email domain.
+///
+/// Inbound mail for `domain` (any local part, or the single address below)
+/// is routed by Cloudflare Email Routing to the Worker's `email` handler,
+/// matched back to this account, and answered by the same pipeline as
+/// WhatsApp. Outbound replies are sent through Cloudflare Email Service
+/// from `local_part@domain`, threaded onto the original message.
+///
+/// One account per (tenant, address). `domain` is the routing key: mail to
+/// any local part on it lands on the tenant's catch-all when no
+/// per-address account claims it first.
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct EmailAccount {
+    pub id: String,
+    pub tenant_id: String,
+    /// Human label, e.g. "Sales inbox".
+    pub name: String,
+    /// Custom domain the tenant owns and has onboarded, e.g. "acme.com".
+    /// Lowercased on save; used for routing and as the send domain.
+    pub domain: String,
+    /// Local part replies are sent from, e.g. "hello". Empty means the
+    /// domain catch-all (`*@domain`) and replies go from `support@domain`.
+    #[serde(default)]
+    pub local_part: String,
+    /// Display name on outbound mail, e.g. "Acme Support".
+    #[serde(default)]
+    pub from_name: String,
+    pub auto_reply: ReplyConfig,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+impl EmailAccount {
+    /// Local part outbound mail is actually sent from. Falls back to
+    /// `support` so a catch-all account still has a concrete From.
+    pub fn effective_local_part(&self) -> &str {
+        if self.local_part.is_empty() {
+            "support"
+        } else {
+            &self.local_part
+        }
+    }
+
+    /// Full address replies are sent from, e.g. "hello@acme.com".
+    pub fn from_address(&self) -> String {
+        format!("{}@{}", self.effective_local_part(), self.domain)
+    }
+
+    /// RFC 5322 From header value, with a display name when one is set.
+    pub fn from_header(&self) -> String {
+        if self.from_name.is_empty() {
+            self.from_address()
+        } else {
+            format!("{} <{}>", self.from_name, self.from_address())
+        }
+    }
+}
+
 /// Per-channel reply behaviour: one response for every inbound message.
 ///
 /// The ordered rule list (keyword and embedding matchers, per-rule approval
@@ -256,14 +318,14 @@ pub struct IncomingMessage {
 
 /// Inbound channel a message arrived on.
 ///
-/// WhatsApp is the only one at launch; Instagram, Email and Discord were
-/// cut. The enum stays (rather than being erased) because the D1 `channel`
-/// column, the conversation key and the pipeline all carry it, and adding
-/// a channel back should be a variant plus an arm.
+/// WhatsApp and Email are the two channels; Instagram and Discord were
+/// cut. The enum is what the D1 `channel` column, the conversation key
+/// and the pipeline all carry, so a new channel is a variant plus an arm.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum Channel {
     WhatsApp,
+    Email,
 }
 
 impl Channel {
@@ -273,6 +335,7 @@ impl Channel {
     pub fn as_str(&self) -> &'static str {
         match self {
             Channel::WhatsApp => "whatsapp",
+            Channel::Email => "email",
         }
     }
 
@@ -280,6 +343,7 @@ impl Channel {
     pub fn label(&self) -> &'static str {
         match self {
             Channel::WhatsApp => "WhatsApp",
+            Channel::Email => "Email",
         }
     }
 }
@@ -992,6 +1056,47 @@ mod tests {
         // strings; the pipeline relies on these wire values.
         assert_eq!(ConversationRole::User.as_wire(), "user");
         assert_eq!(ConversationRole::Assistant.as_wire(), "assistant");
+    }
+
+    #[test]
+    fn channel_wire_strings_are_stable() {
+        assert_eq!(Channel::WhatsApp.as_str(), "whatsapp");
+        assert_eq!(Channel::Email.as_str(), "email");
+    }
+
+    #[test]
+    fn email_account_from_address_uses_local_part() {
+        let account = EmailAccount {
+            id: "e1".into(),
+            tenant_id: "t1".into(),
+            name: "Sales".into(),
+            domain: "acme.com".into(),
+            local_part: "hello".into(),
+            from_name: "Acme Sales".into(),
+            auto_reply: ReplyConfig::default(),
+            created_at: String::new(),
+            updated_at: String::new(),
+        };
+        assert_eq!(account.from_address(), "hello@acme.com");
+        assert_eq!(account.from_header(), "Acme Sales <hello@acme.com>");
+    }
+
+    #[test]
+    fn email_account_catch_all_falls_back_to_support() {
+        let account = EmailAccount {
+            id: "e1".into(),
+            tenant_id: "t1".into(),
+            name: String::new(),
+            domain: "acme.com".into(),
+            local_part: String::new(),
+            from_name: String::new(),
+            auto_reply: ReplyConfig::default(),
+            created_at: String::new(),
+            updated_at: String::new(),
+        };
+        assert_eq!(account.from_address(), "support@acme.com");
+        // No display name: the header is the bare address.
+        assert_eq!(account.from_header(), "support@acme.com");
     }
 }
 

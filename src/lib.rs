@@ -1,10 +1,12 @@
 //! # Concierge
 //!
-//! Messaging automation for small businesses: WhatsApp auto-replies.
+//! Messaging automation for small businesses: WhatsApp and email replies.
 //!
 //! This is a Cloudflare Worker built with Rust + WebAssembly. It handles:
 //!
 //! - **WhatsApp webhooks**: incoming messages trigger auto-replies (static or AI)
+//! - **Inbound email**: Cloudflare Email Routing feeds the Worker's `email`
+//!   event for every connected custom domain
 //! - **JSON API**: `/api/*`, the only interface the frontend has
 //! - **OAuth**: Google sign-in
 //!
@@ -14,10 +16,13 @@
 //!
 //! ## Architecture
 //!
-//! - `types`: Core data structures (Tenant, WhatsAppAccount)
+//! - `types`: Core data structures (Tenant, WhatsAppAccount, EmailAccount)
 //! - `storage`: Cloudflare KV and D1 operations
 //! - `api`: JSON endpoints, the frontend's only interface
 //! - `ai`: Cloudflare Workers AI integration for auto-reply generation
+//! - `channel`: per-channel send adapters; `whatsapp`, `email`
+//! - `email`: inbound Email Routing handler (`email::inbound`) and the
+//!   outbound Email Service send path (`email::send`)
 //! - `whatsapp`: Meta Graph API client for sending WhatsApp messages
 //! - `crypto`: AES-256-GCM encryption and HMAC-SHA256 verification
 //! - `helpers`: ID generation, HTML escaping, CORS, template interpolation
@@ -317,4 +322,12 @@ async fn queue_handler(
     _ctx: Context,
 ) -> Result<()> {
     safety_queue::handle_batch(batch, env).await
+}
+
+/// Inbound email. Cloudflare Email Routing delivers mail for every
+/// connected custom domain here; we resolve the recipient to a tenant
+/// account and run it through the shared pipeline. See `src/email/inbound.rs`.
+#[event(email)]
+async fn email_handler(message: ForwardableEmailMessage, env: Env, _ctx: Context) -> Result<()> {
+    email::inbound::handle(message, env).await
 }

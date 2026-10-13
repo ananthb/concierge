@@ -26,6 +26,10 @@ hmac = "0.13"
 base64 = "0.22"
 subtle = "2.6"
 
+# Inbound mail body extraction: Cloudflare hands us raw RFC 5322 bytes,
+# and we need the text part to feed the pipeline.
+mail-parser = "0.9"
+
 # Locale resolution only: unic-langid for BCP-47 tag handling,
 # accept-language for parsing the request header.
 #

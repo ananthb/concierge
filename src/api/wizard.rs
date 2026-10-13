@@ -31,6 +31,9 @@ struct WizardView {
     persona: PersonaView,
     /// Connected WhatsApp numbers. Empty means the channels step is unmet.
     whatsapp: Vec<super::whatsapp::AccountView>,
+    /// Connected custom email domains. Either channel satisfies the
+    /// channels step.
+    email: Vec<super::email::AccountView>,
     /// Meta Embedded Signup parameters, or `None` when the operator hasn't
     /// configured WhatsApp signup on this deploy.
     signup: Option<super::whatsapp::SignupView>,
@@ -121,13 +124,14 @@ pub async fn handle(mut req: Request, env: Env, rest: &[&str]) -> Result<Respons
             view(&env, &kv, &db, &tenant_id, &state).await
         }
 
-        // Leave the channels step. Refuses while no number is connected:
-        // WhatsApp is the product, so an account with no number attached
-        // has nothing to launch.
+        // Leave the channels step. Refuses while no channel is connected:
+        // the product is answering enquiries, so an account with nothing
+        // attached has nothing to launch.
         (Method::Post, ["channels", "done"]) => {
-            let accounts = list_whatsapp_accounts(&kv, &tenant_id).await?;
-            if accounts.is_empty() {
-                return super::invalid("Connect a WhatsApp number to continue.");
+            let has_wa = !list_whatsapp_accounts(&kv, &tenant_id).await?.is_empty();
+            let has_email = !list_email_accounts(&kv, &tenant_id).await?.is_empty();
+            if !has_wa && !has_email {
+                return super::invalid("Connect WhatsApp or a custom email domain to continue.");
             }
             state.step = advance(state.step, OnboardingStep::Persona);
             save_onboarding(&kv, &tenant_id, &state).await?;
@@ -243,8 +247,12 @@ pub async fn handle(mut req: Request, env: Env, rest: &[&str]) -> Result<Respons
                     402,
                 );
             }
-            if list_whatsapp_accounts(&kv, &tenant_id).await?.is_empty() {
-                return super::invalid("Connect a WhatsApp number before finishing.");
+            let has_wa = !list_whatsapp_accounts(&kv, &tenant_id).await?.is_empty();
+            let has_email = !list_email_accounts(&kv, &tenant_id).await?.is_empty();
+            if !has_wa && !has_email {
+                return super::invalid(
+                    "Connect WhatsApp or a custom email domain before finishing.",
+                );
             }
 
             state.completed = true;
@@ -277,6 +285,7 @@ async fn view(
     state: &OnboardingState,
 ) -> Result<Response> {
     let accounts = list_whatsapp_accounts(kv, tenant_id).await?;
+    let email_accounts = list_email_accounts(kv, tenant_id).await?;
     let tenant = get_tenant(db, tenant_id).await?.unwrap_or_default();
     let locale = crate::locale::Locale::from_tenant(&tenant.locale, Some(tenant.currency));
     let cfg = get_pricing(db).await;
@@ -313,6 +322,10 @@ async fn view(
         whatsapp: accounts
             .iter()
             .map(super::whatsapp::AccountView::from)
+            .collect(),
+        email: email_accounts
+            .iter()
+            .map(super::email::AccountView::from)
             .collect(),
         signup: super::whatsapp::SignupView::resolve(env, kv, tenant_id).await?,
         launch: LaunchView {

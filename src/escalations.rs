@@ -93,7 +93,7 @@ async fn dispatch_email(
     };
     let from_addr = format!("noreply@{email_domain}");
 
-    let channel_label = inbound_channel.as_str();
+    let channel_label = inbound_channel.label();
     let dashboard_url = format!("{base_url}/dashboard");
     // Two ways to get here: the model asked for a human, or the risk gate
     // withheld a draft. The tenant needs to know which, because in the

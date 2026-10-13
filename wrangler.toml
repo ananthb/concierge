@@ -111,10 +111,18 @@ max_retries = 3
 dead_letter_queue = "concierge-safety-dlq"
 
 # ============================================================================
-# Outbound email: used only to page a tenant when a conversation is handed
-# off to a human. Inbound Email Routing (the `email` handler and the
-# name@cncg.email addresses) was cut with the email channel, so no MX or
-# routing rules are needed any more — just the send binding.
+# Email channel.
+#
+# Outbound: the `EMAIL` send binding replies to customers from the tenant's
+# own domain (see `src/channel/email.rs`) and pages tenants on handoff.
+#
+# Inbound: Cloudflare Email Routing delivers mail for every connected
+# custom domain to the Worker's `email` event (`src/email/inbound.rs`),
+# which resolves the recipient to a tenant account and runs the shared
+# pipeline. Routing rules live on each zone, not here — the tenant enables
+# Email Routing (Cloudflare creates the MX/SPF/DKIM/DMARC records) and
+# routes the domain or its catch-all to this Worker. The `/api/email`
+# endpoints and `wizard` channels step surface the required DNS.
 # ============================================================================
 [[send_email]]
 name = "EMAIL"
