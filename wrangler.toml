@@ -125,16 +125,16 @@ dead_letter_queue = "concierge-safety-dlq"
 # the scoped token bound below. The domain must be a zone in this account.
 #
 # The token is NOT an environment variable: it lives in the account Secrets
-# Store (`tf/cloudflare/sites/secrets.tf`) and is bound by store id. Fill in
-# `store_id` once that store exists; the id is a Terraform output.
+# Store (`tf/cloudflare/sites/secrets.tf`, secret `CLOUDFLARE_API_TOKEN`) and
+# is bound by store id. The store id is a Terraform output.
 # ============================================================================
 [[send_email]]
 name = "EMAIL"
 
-# [[secrets_store_secrets]]
-# binding = "CF_API_TOKEN"
-# store_id = "<Secrets Store id from tf/cloudflare/sites>"
-# secret_name = "CLOUDFLARE_API_TOKEN"
+[[secrets_store_secrets]]
+binding = "CF_API_TOKEN"
+store_id = "b05909cc85d54c9ca0b124bd2f557444"
+secret_name = "CLOUDFLARE_API_TOKEN"
 
 [vars]
 ENVIRONMENT = "production"
