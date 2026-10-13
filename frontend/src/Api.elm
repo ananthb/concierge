@@ -9,6 +9,9 @@ module Api exposing
     , DemoConfig
     , DemoPersona
     , DemoReply
+    , EmailAccount
+    , EmailOverview
+    , EmailSetup
     , Order
     , Persona
     , PersonaBuilder
@@ -21,8 +24,10 @@ module Api exposing
     , WizardPersona
     , channelsDone
     , completeWizard
+    , connectEmail
     , delete
     , deleteAccount
+    , deleteEmail
     , demoChat
     , emptyBuilder
     , errorMessage
@@ -30,6 +35,7 @@ module Api exposing
     , getArchetypes
     , getBilling
     , getBootstrap
+    , getEmail
     , getPersona
     , getWhatsApp
     , getWizard
@@ -38,6 +44,7 @@ module Api exposing
     , previewPersona
     , put
     , saveBasics
+    , saveEmail
     , savePersona
     , savePersonaStep
     , saveWhatsApp
@@ -433,6 +440,7 @@ type alias Wizard =
     , business : Business
     , persona : WizardPersona
     , whatsapp : List WhatsAppAccount
+    , email : List EmailAccount
     , signup : Maybe Signup
     , launch : Launch
     }
@@ -541,15 +549,19 @@ completeWizard =
 
 wizardDecoder : Decoder Wizard
 wizardDecoder =
-    D.map8 Wizard
+    D.map8
+        (\step steps completed business persona whatsapp email signup launch ->
+            Wizard step steps completed business persona whatsapp email signup launch
+        )
         (D.field "step" D.string)
         (D.field "steps" (D.list D.string))
         (D.field "completed" D.bool)
         (D.field "business" businessDecoder)
         (D.field "persona" wizardPersonaDecoder)
         (D.field "whatsapp" (D.list whatsAppDecoder))
+        (D.field "email" (D.list emailDecoder))
         (D.field "signup" (D.nullable signupDecoder))
-        (D.field "launch" launchDecoder)
+        |> D.andThen (\f -> D.map f (D.field "launch" launchDecoder))
 
 
 businessDecoder : Decoder Business
@@ -663,6 +675,116 @@ replyDecoder =
         (D.field "mode" D.string)
         (D.field "text" D.string)
         (D.field "wait_seconds" D.int)
+
+
+
+-- EMAIL
+
+
+{-| A connected custom email domain. Inbound mail for `domain` is answered by
+the same pipeline as WhatsApp; replies go out from `fromAddress`.
+-}
+type alias EmailAccount =
+    { id : String
+    , name : String
+    , domain : String
+    , localPart : String
+    , fromName : String
+    , fromAddress : String
+    , reply : Reply
+    , createdAt : String
+    }
+
+
+{-| DNS the tenant must have in place. Cloudflare Email Routing creates it on
+a zone it manages; the records are shown for another provider.
+-}
+type alias EmailSetup =
+    { mxHosts : List String
+    , spf : String
+    , note : String
+    }
+
+
+type alias EmailOverview =
+    { accounts : List EmailAccount
+    , setup : EmailSetup
+    }
+
+
+getEmail : (Data EmailOverview -> msg) -> Cmd msg
+getEmail =
+    get "/api/email" emailOverviewDecoder
+
+
+{-| Connect a domain. An empty `localPart` claims the domain catch-all.
+-}
+connectEmail :
+    { domain : String, localPart : String, name : String, fromName : String }
+    -> (Data EmailAccount -> msg)
+    -> Cmd msg
+connectEmail args =
+    post "/api/email"
+        (E.object
+            [ ( "domain", E.string args.domain )
+            , ( "local_part", E.string args.localPart )
+            , ( "name", E.string args.name )
+            , ( "from_name", E.string args.fromName )
+            ]
+        )
+        emailDecoder
+
+
+saveEmail : String -> { name : String, fromName : String, reply : Reply } -> (Data EmailAccount -> msg) -> Cmd msg
+saveEmail id args =
+    put ("/api/email/" ++ id)
+        (E.object
+            [ ( "name", E.string args.name )
+            , ( "from_name", E.string args.fromName )
+            , ( "reply"
+              , E.object
+                    [ ( "enabled", E.bool args.reply.enabled )
+                    , ( "mode", E.string args.reply.mode )
+                    , ( "text", E.string args.reply.text )
+                    , ( "wait_seconds", E.int args.reply.waitSeconds )
+                    ]
+              )
+            ]
+        )
+        emailDecoder
+
+
+deleteEmail : String -> (Data () -> msg) -> Cmd msg
+deleteEmail id =
+    delete ("/api/email/" ++ id) (E.object []) (D.succeed ())
+
+
+emailDecoder : Decoder EmailAccount
+emailDecoder =
+    D.map8 EmailAccount
+        (D.field "id" D.string)
+        (D.field "name" D.string)
+        (D.field "domain" D.string)
+        (D.field "local_part" D.string)
+        (D.field "from_name" D.string)
+        (D.field "from_address" D.string)
+        (D.field "reply" replyDecoder)
+        (D.field "created_at" D.string)
+
+
+emailSetupDecoder : Decoder EmailSetup
+emailSetupDecoder =
+    D.map3 EmailSetup
+        (D.field "mx_hosts" (D.list D.string))
+        (D.field "spf" D.string)
+        (D.field "note" D.string)
+
+
+emailOverviewDecoder : Decoder EmailOverview
+emailOverviewDecoder =
+    D.map2 EmailOverview
+        (D.field "accounts" (D.list emailDecoder))
+        (D.field "setup" emailSetupDecoder)
 
 
 
