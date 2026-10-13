@@ -115,7 +115,7 @@ pub async fn handle(mut req: Request, env: Env, rest: &[&str]) -> Result<Respons
                 Ok(b) => b,
                 Err(r) => return r,
             };
-            connect(&kv, &tenant_id, &body).await
+            connect(&env, &kv, &tenant_id, &body).await
         }
 
         (Method::Put, [id]) => {
@@ -166,7 +166,12 @@ pub async fn handle(mut req: Request, env: Env, rest: &[&str]) -> Result<Respons
     }
 }
 
-async fn connect(kv: &kv::KvStore, tenant_id: &str, body: &serde_json::Value) -> Result<Response> {
+async fn connect(
+    env: &Env,
+    kv: &kv::KvStore,
+    tenant_id: &str,
+    body: &serde_json::Value,
+) -> Result<Response> {
     let domain = normalize_domain(&super::field(body, "domain"));
     if !is_valid_domain(&domain) {
         return super::invalid("Enter a domain like acme.com.");
@@ -208,6 +213,15 @@ async fn connect(kv: &kv::KvStore, tenant_id: &str, body: &serde_json::Value) ->
         updated_at: now,
     };
     save_email_account(kv, &account).await?;
+
+    // Best-effort wiring: point the zone's Email Routing catch-all at this
+    // Worker. A failure (the domain isn't a zone in this account, or the token
+    // is missing) is logged and does not block the connection -- the domain is
+    // recorded regardless, and the dashboard still shows the DNS to add.
+    if let Err(e) = crate::email::onboarding::enable_inbound(env, &account.domain).await {
+        worker::console_log!("Email onboarding failed for {}: {:?}", account.domain, e);
+    }
+
     super::json(&AccountView::from(&account))
 }
 
