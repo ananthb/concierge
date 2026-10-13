@@ -35,6 +35,10 @@ pub fn calculate_total(credits: i64, milli_price: i64) -> i64 {
 /// balance returns `false` and the reply is skipped. When `false` (free
 /// / complimentary), we still bump `replies_used` and consume from any
 /// existing balance, but always return `true` so the reply ships.
+///
+/// Dormant: the pipeline no longer calls this (billing is deactivated), so
+/// the item is retained for a possible re-enable rather than deleted.
+#[allow(dead_code)]
 pub async fn try_deduct(db: &D1Database, tenant_id: &str, metered: bool) -> Result<bool> {
     let mut billing = storage::get_tenant_billing(db, tenant_id).await?;
     prune_expired(&mut billing);
@@ -62,6 +66,9 @@ pub async fn try_deduct(db: &D1Database, tenant_id: &str, metered: bool) -> Resu
 
 /// Restore one reply credit after a failed send.
 /// Adds as a non-expiring purchase credit for simplicity.
+///
+/// Dormant: see [`try_deduct`]. Retained for a possible re-enable.
+#[allow(dead_code)]
 pub async fn restore_credit(db: &D1Database, tenant_id: &str) -> Result<()> {
     let mut billing = storage::get_tenant_billing(db, tenant_id).await?;
     billing.credits.push(CreditEntry {

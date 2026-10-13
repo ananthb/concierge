@@ -4,7 +4,6 @@
 use worker::*;
 
 use crate::ai;
-use crate::billing;
 use crate::channel;
 use crate::helpers::generate_id;
 use crate::storage::*;
@@ -293,16 +292,10 @@ async fn handle_auto_reply(
         return Ok(());
     }
 
-    if is_ai {
-        let metered = crate::storage::get_tenant(db, &msg.tenant_id)
-            .await?
-            .map(|t| t.plan.is_metered())
-            .unwrap_or(true);
-        if !billing::try_deduct(db, &msg.tenant_id, metered).await? {
-            console_log!("Tenant {} out of AI-reply credits, skipping", msg.tenant_id);
-            return Ok(());
-        }
-    }
+    // Billing is deactivated (dormant): AI replies are never metered and
+    // never blocked on a credit balance. `src/billing` and the credit ledger
+    // remain in the tree for a possible re-enable, but the pipeline no longer
+    // touches them.
 
     // Build the chat history we'll hand to the model: prior turns
     // (capped) plus the new inbound as the latest user turn. The same
@@ -379,9 +372,6 @@ async fn handle_auto_reply(
                 Ok(r) => r,
                 Err(e) => {
                     console_log!("AI auto-reply error: {:?}", e);
-                    if let Err(re) = billing::restore_credit(db, &msg.tenant_id).await {
-                        console_log!("Failed to restore credit: {:?}", re);
-                    }
                     return Ok(());
                 }
             }
@@ -396,11 +386,6 @@ async fn handle_auto_reply(
     let new_handoff = stripped.handoff && matches!(handoff_mode, HandoffMode::None);
 
     if reply.is_empty() {
-        if is_ai {
-            if let Err(e) = billing::restore_credit(db, &msg.tenant_id).await {
-                console_log!("Failed to restore credit: {:?}", e);
-            }
-        }
         return Ok(());
     }
 
@@ -452,11 +437,6 @@ async fn handle_auto_reply(
         channel::send_reply(&msg.channel, env, &msg.raw_metadata, &msg.sender, &reply).await
     {
         console_log!("Auto-reply send error: {:?}", e);
-        if is_ai {
-            if let Err(re) = billing::restore_credit(db, &msg.tenant_id).await {
-                console_log!("Failed to restore credit: {:?}", re);
-            }
-        }
         return Ok(());
     }
 

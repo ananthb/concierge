@@ -14,7 +14,6 @@ local until you press the button that advances the step.
 -}
 
 import Api
-import Format
 import Html exposing (Html, div, h1, h2, li, ol, p, section, span, text, ul)
 import Html.Attributes exposing (attribute, class, classList)
 import Html.Events
@@ -752,39 +751,19 @@ safetyNote status =
 
 launchStep : Model -> Api.Wizard -> Html Msg
 launchStep model wizard =
-    let
-        l =
-            wizard.launch
-    in
     section [ class "wizard-step" ]
-        [ h1 [] [ text "One last thing" ]
-        , Ui.card
-            [ h2 [] [ text "What you'll pay" ]
-            , p []
-                [ text "Every AI reply costs "
-                , span [ class "price" ]
-                    [ text (Format.milliRate "en-IN" l.currency l.unitPriceMilli) ]
-                , text ". Canned replies are free, and you're never charged for a message Concierge decides not to answer."
-                ]
-            ]
-        , if l.metered && not l.verified then
-            Ui.card
-                [ h2 [] [ text "Verify your card" ]
-                , p []
-                    [ text "We charge "
-                    , span [ class "price" ]
-                        [ text (Format.money "en-IN" l.currency l.verificationAmount) ]
-                    , text " and refund it straight away. It's how we keep throwaway signups out."
-                    ]
-                , Ui.linkButton
-                    { label = "Verify now"
-                    , url = "/dashboard/billing"
-                    , primary = True
-                    }
-                ]
+        [ h1 [] [ text "You're set" ]
+        , p [ class "step-sub" ]
+            [ text
+                (if String.isEmpty wizard.business.name then
+                    "Concierge will start answering on the channels you connected."
 
-          else
-            text ""
+                 else
+                    "Concierge will start answering for "
+                        ++ wizard.business.name
+                        ++ " on the channels you connected."
+                )
+            ]
         , div [ class "wizard-actions" ]
             [ Ui.button
                 { label = "Back"
