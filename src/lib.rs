@@ -33,6 +33,7 @@ mod ai;
 mod api;
 mod billing;
 mod channel;
+mod cloudflare;
 mod crypto;
 mod dev_bypass;
 mod durable_objects;

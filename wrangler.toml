@@ -119,16 +119,27 @@ dead_letter_queue = "concierge-safety-dlq"
 # Inbound: Cloudflare Email Routing delivers mail for every connected
 # custom domain to the Worker's `email` event (`src/email/inbound.rs`),
 # which resolves the recipient to a tenant account and runs the shared
-# pipeline. Routing rules live on each zone, not here — the tenant enables
-# Email Routing (Cloudflare creates the MX/SPF/DKIM/DMARC records) and
-# routes the domain or its catch-all to this Worker. The `/api/email`
-# endpoints and `wizard` channels step surface the required DNS.
+# pipeline. On connect, the Worker wires the zone itself
+# (`src/email/onboarding.rs`): it enables Email Routing (which creates the
+# MX/SPF/DKIM/DMARC records) and points the catch-all at this Worker, using
+# the scoped token bound below. The domain must be a zone in this account.
+#
+# The token is NOT an environment variable: it lives in the account Secrets
+# Store (`tf/cloudflare/sites/secrets.tf`) and is bound by store id. Fill in
+# `store_id` once that store exists; the id is a Terraform output.
 # ============================================================================
 [[send_email]]
 name = "EMAIL"
 
+# [[secrets_store_secrets]]
+# binding = "CF_API_TOKEN"
+# store_id = "<Secrets Store id from tf/cloudflare/sites>"
+# secret_name = "CLOUDFLARE_API_TOKEN"
+
 [vars]
 ENVIRONMENT = "production"
+# Account the Worker's Cloudflare API calls are scoped to (`src/cloudflare.rs`).
+CLOUDFLARE_ACCOUNT_ID = "59b9363d35105560f2df047c995be5a2"
 
 # Uncomment, push, POST /manage/reseed, then re-comment and push again.
 # Value must be the D1 database name; see src/management/reseed.rs.
