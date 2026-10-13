@@ -1,6 +1,6 @@
 module Page.Wizard exposing (Model, Msg, init, update, view)
 
-{-| The onboarding wizard: basics, connect WhatsApp, pick a persona, launch.
+{-| The onboarding wizard: basics, connect a channel, pick a persona, launch.
 
 The server owns which step you're on. Every advance is a write that validates
 the step being left, and the response carries the new step — so this module
@@ -37,6 +37,12 @@ type alias Model =
     , goalUrl : String
     , handoffText : String
 
+    -- The connect-an-email-domain form on the channels step.
+    , emailDomain : String
+    , emailLocalPart : String
+    , emailName : String
+    , emailFromName : String
+
     -- Set while a mutation is in flight so buttons can't be double-fired.
     , saving : Bool
 
@@ -53,6 +59,10 @@ init =
       , goal = ""
       , goalUrl = ""
       , handoffText = ""
+      , emailDomain = ""
+      , emailLocalPart = ""
+      , emailName = ""
+      , emailFromName = ""
       , saving = False
       , problem = Nothing
       }
@@ -87,6 +97,12 @@ type Msg
     | EditGoalUrl String
     | EditHandoff String
     | SavePersona
+    | SetEmailDomain String
+    | SetEmailLocalPart String
+    | SetEmailName String
+    | SetEmailFromName String
+    | ConnectEmail
+    | ConnectedEmail (Api.Data Api.EmailAccount)
     | ChannelsDone
     | GoBack String
     | Finish
@@ -147,6 +163,52 @@ update msg model =
                 }
                 GotWizard
             )
+
+        SetEmailDomain value ->
+            ( { model | emailDomain = value }, Cmd.none )
+
+        SetEmailLocalPart value ->
+            ( { model | emailLocalPart = value }, Cmd.none )
+
+        SetEmailName value ->
+            ( { model | emailName = value }, Cmd.none )
+
+        SetEmailFromName value ->
+            ( { model | emailFromName = value }, Cmd.none )
+
+        ConnectEmail ->
+            ( { model | saving = True, problem = Nothing }
+            , Api.connectEmail
+                { domain = model.emailDomain
+                , localPart = model.emailLocalPart
+                , name = model.emailName
+                , fromName = model.emailFromName
+                }
+                ConnectedEmail
+            )
+
+        ConnectedEmail result ->
+            case result of
+                Success _ ->
+                    -- Clear the form and re-read the wizard so the connected
+                    -- domain shows up and the step can advance.
+                    ( { model
+                        | saving = True
+                        , emailDomain = ""
+                        , emailLocalPart = ""
+                        , emailName = ""
+                        , emailFromName = ""
+                      }
+                    , Api.getWizard GotWizard
+                    )
+
+                Failure err ->
+                    ( { model | saving = False, problem = Just (Api.errorMessage err) }
+                    , Cmd.none
+                    )
+
+                _ ->
+                    ( model, Cmd.none )
 
         ChannelsDone ->
             ( { model | saving = True, problem = Nothing }, Api.channelsDone GotWizard )
@@ -274,7 +336,7 @@ stepLabel step =
             "Your business"
 
         "channels" ->
-            "Connect WhatsApp"
+            "Connect"
 
         "persona" ->
             "Choose a voice"
@@ -412,61 +474,142 @@ entityPicker current =
 channelsStep : Model -> Api.Wizard -> Html Msg
 channelsStep model wizard =
     section [ class "wizard-step" ]
-        [ h1 [] [ text "Connect your WhatsApp number" ]
+        [ h1 [] [ text "Connect how customers reach you" ]
         , p [ class "step-sub" ]
-            [ text "You'll go through Meta's own signup. Keep your existing number — nothing changes for the people who already message you." ]
-        , if List.isEmpty wizard.whatsapp then
-            Ui.card
-                [ case wizard.signup of
-                    Just signup ->
-                        div []
-                            [ p [] [ text "Meta will ask you to pick the business and number to connect." ]
-
-                            -- The Embedded Signup SDK owns this button: it
-                            -- opens Meta's dialog and redirects back to
-                            -- /whatsapp/signup/*, which is a server route.
-                            -- Rendering it as a plain link keeps the flow
-                            -- working even when the SDK fails to load.
-                            , Ui.linkButton
-                                { label = "Connect with Meta"
-                                , url = signupUrl signup
-                                , primary = True
-                                }
-                            ]
-
-                    Nothing ->
-                        Ui.banner "info"
-                            "WhatsApp signup isn't configured on this deployment yet. Ask your operator to set META_APP_ID and WHATSAPP_SIGNUP_CONFIG_ID."
-                ]
+            [ text "Answer WhatsApp messages, email to your own domain, or both. You can add the other later from your dashboard." ]
+        , whatsappBlock wizard
+        , emailBlock model wizard
+        , if List.isEmpty wizard.whatsapp && List.isEmpty wizard.email then
+            text ""
 
           else
-            div []
-                [ ul [ class "connected-list" ]
-                    (List.map
-                        (\account ->
-                            li [ class "connected-item" ]
-                                [ span [ class "connected-name" ] [ text account.name ]
-                                , span [ class "connected-phone" ] [ text account.phoneNumber ]
-                                , span [ class "pill pill-ok" ] [ text "Connected" ]
-                                ]
-                        )
-                        wizard.whatsapp
-                    )
-                , div [ class "wizard-actions" ]
-                    [ Ui.button
-                        { label = "Back"
-                        , onClick = GoBack "basics"
-                        , primary = False
-                        , busy = model.saving
-                        }
-                    , Ui.button
-                        { label = "Continue"
-                        , onClick = ChannelsDone
-                        , primary = True
-                        , busy = model.saving
-                        }
-                    ]
+            div [ class "wizard-actions" ]
+                [ Ui.button
+                    { label = "Back"
+                    , onClick = GoBack "basics"
+                    , primary = False
+                    , busy = model.saving
+                    }
+                , Ui.button
+                    { label = "Continue"
+                    , onClick = ChannelsDone
+                    , primary = True
+                    , busy = model.saving
+                    }
                 ]
+        ]
+
+
+whatsappBlock : Api.Wizard -> Html Msg
+whatsappBlock wizard =
+    Ui.card
+        [ h2 [] [ text "WhatsApp" ]
+        , if List.isEmpty wizard.whatsapp then
+            case wizard.signup of
+                Just signup ->
+                    div []
+                        [ p [] [ text "You'll go through Meta's own signup. Keep your existing number — nothing changes for the people who already message you." ]
+
+                        -- The Embedded Signup SDK owns this button: it
+                        -- opens Meta's dialog and redirects back to
+                        -- /whatsapp/signup/*, which is a server route.
+                        -- Rendering it as a plain link keeps the flow
+                        -- working even when the SDK fails to load.
+                        , Ui.linkButton
+                            { label = "Connect with Meta"
+                            , url = signupUrl signup
+                            , primary = True
+                            }
+                        ]
+
+                Nothing ->
+                    Ui.banner "info"
+                        "WhatsApp signup isn't configured on this deployment yet. Ask your operator to set META_APP_ID and WHATSAPP_SIGNUP_CONFIG_ID."
+
+          else
+            ul [ class "connected-list" ]
+                (List.map
+                    (\account ->
+                        li [ class "connected-item" ]
+                            [ span [ class "connected-name" ] [ text account.name ]
+                            , span [ class "connected-phone" ] [ text account.phoneNumber ]
+                            , span [ class "pill pill-ok" ] [ text "Connected" ]
+                            ]
+                    )
+                    wizard.whatsapp
+                )
+        ]
+
+
+emailBlock : Model -> Api.Wizard -> Html Msg
+emailBlock model wizard =
+    Ui.card
+        [ h2 [] [ text "Email on your own domain" ]
+        , if List.isEmpty wizard.email then
+            text ""
+
+          else
+            ul [ class "connected-list" ]
+                (List.map
+                    (\account ->
+                        li [ class "connected-item" ]
+                            [ span [ class "connected-name" ]
+                                [ text
+                                    (if String.isEmpty account.name then
+                                        account.fromAddress
+
+                                     else
+                                        account.name
+                                    )
+                                ]
+                            , span [ class "connected-phone" ] [ text account.fromAddress ]
+                            , span [ class "pill pill-ok" ] [ text "Connected" ]
+                            ]
+                    )
+                    wizard.email
+                )
+        , p [ class "muted" ]
+            [ text "Enter a domain you own. We'll show you the DNS records to add before it can receive mail." ]
+        , Ui.field
+            { id = "email-domain"
+            , label = "Domain"
+            , value = model.emailDomain
+            , hint = "e.g. acme.com"
+            , required = True
+            , onInput = SetEmailDomain
+            }
+        , Ui.field
+            { id = "email-local"
+            , label = "Address"
+            , value = model.emailLocalPart
+            , hint = "Optional. Leave blank to answer every address on the domain."
+            , required = False
+            , onInput = SetEmailLocalPart
+            }
+        , Ui.field
+            { id = "email-name"
+            , label = "Label"
+            , value = model.emailName
+            , hint = "Just for you, e.g. Sales inbox."
+            , required = False
+            , onInput = SetEmailName
+            }
+        , Ui.field
+            { id = "email-from-name"
+            , label = "From name"
+            , value = model.emailFromName
+            , hint = "Shown to customers, e.g. Acme Support."
+            , required = False
+            , onInput = SetEmailFromName
+            }
+        , div [ class "card-actions" ]
+            [ Ui.button
+                { label = "Connect domain"
+                , onClick = ConnectEmail
+                , primary = True
+                , busy = model.saving
+                }
+            ]
         ]
 
 

@@ -32,6 +32,7 @@ type Tab
 type alias Model =
     { tab : Tab
     , channels : Api.Data { accounts : List Api.WhatsAppAccount, signup : Maybe Api.Signup }
+    , email : Api.Data Api.EmailOverview
     , persona : Api.Data Api.Persona
     , billing : Api.Data Api.Billing
 
@@ -43,6 +44,14 @@ type alias Model =
     -- Local edits, keyed by the account being edited. Only one at a time,
     -- which matches the UI: you expand one number's settings.
     , editing : Maybe ( String, Api.Reply )
+
+    -- Same, for an email domain's reply config.
+    , emailEditing : Maybe ( String, Api.Reply )
+
+    -- The connect-an-email-domain form.
+    , emailForm : EmailForm
+    , emailFormOpen : Bool
+    , emailSaving : Bool
 
     -- Open persona form. `Nothing` means the tab is in read-only mode.
     , personaForm : Maybe PersonaForm
@@ -56,6 +65,25 @@ type alias Model =
     , deleteConfirm : String
     , saving : Bool
     , notice : Maybe ( String, String )
+    }
+
+
+{-| Local state for the connect-an-email-domain form.
+-}
+type alias EmailForm =
+    { domain : String
+    , localPart : String
+    , name : String
+    , fromName : String
+    }
+
+
+emptyEmailForm : EmailForm
+emptyEmailForm =
+    { domain = ""
+    , localPart = ""
+    , name = ""
+    , fromName = ""
     }
 
 
@@ -124,10 +152,15 @@ init tab =
         model =
             { tab = tab
             , channels = NotAsked
+            , email = NotAsked
             , persona = NotAsked
             , billing = NotAsked
             , archetypes = NotAsked
             , editing = Nothing
+            , emailEditing = Nothing
+            , emailForm = emptyEmailForm
+            , emailFormOpen = False
+            , emailSaving = False
             , personaForm = Nothing
             , preview = NotAsked
             , creditsToBuy = 0
@@ -146,18 +179,10 @@ fetchFor : Tab -> Model -> Cmd Msg
 fetchFor tab model =
     case tab of
         Overview ->
-            if RemoteData.isNotAsked model.channels then
-                Api.getWhatsApp GotChannels
-
-            else
-                Cmd.none
+            channelsCmds model
 
         Channels ->
-            if RemoteData.isNotAsked model.channels then
-                Api.getWhatsApp GotChannels
-
-            else
-                Cmd.none
+            channelsCmds model
 
         Persona ->
             -- Both, in parallel: the editor can't render its voice picker
@@ -187,6 +212,24 @@ fetchFor tab model =
             Cmd.none
 
 
+{-| The channel list is WhatsApp plus email; both tabs that show it fetch both.
+-}
+channelsCmds : Model -> Cmd Msg
+channelsCmds model =
+    Cmd.batch
+        [ if RemoteData.isNotAsked model.channels then
+            Api.getWhatsApp GotChannels
+
+          else
+            Cmd.none
+        , if RemoteData.isNotAsked model.email then
+            Api.getEmail GotEmail
+
+          else
+            Cmd.none
+        ]
+
+
 {-| Move to another tab, keeping whatever data is already loaded.
 
 Exposed as a function rather than by opening up `Msg`, so `Main` can drive a
@@ -212,6 +255,21 @@ type Msg
     | CancelEdit
     | SaveReply
     | SavedReply (Api.Data Api.WhatsAppAccount)
+    | GotEmail (Api.Data Api.EmailOverview)
+    | OpenEmailForm
+    | CancelEmailForm
+    | CancelEmailEdit
+    | SetEmailDomain String
+    | SetEmailLocalPart String
+    | SetEmailName String
+    | SetEmailFromName String
+    | ConnectEmail
+    | ConnectedEmail (Api.Data Api.EmailAccount)
+    | EditEmailReply String Api.Reply
+    | SaveEmailReply
+    | SavedEmailReply (Api.Data Api.EmailAccount)
+    | DeleteEmail String
+    | DeletedEmail (Api.Data ())
     | GotArchetypes (Api.Data (List Api.Archetype))
     | OpenPersonaEditor
     | ClosePersonaEditor
@@ -452,6 +510,136 @@ update msg model =
                 _ ->
                     ( model, Cmd.none )
 
+        GotEmail result ->
+            ( { model | email = result }, Cmd.none )
+
+        OpenEmailForm ->
+            ( { model | emailFormOpen = True, emailForm = emptyEmailForm, notice = Nothing }, Cmd.none )
+
+        CancelEmailForm ->
+            ( { model | emailFormOpen = False, emailForm = emptyEmailForm }, Cmd.none )
+
+        CancelEmailEdit ->
+            ( { model | emailEditing = Nothing }, Cmd.none )
+
+        SetEmailDomain value ->
+            ( { model | emailForm = (\f -> { f | domain = value }) model.emailForm }, Cmd.none )
+
+        SetEmailLocalPart value ->
+            ( { model | emailForm = (\f -> { f | localPart = value }) model.emailForm }, Cmd.none )
+
+        SetEmailName value ->
+            ( { model | emailForm = (\f -> { f | name = value }) model.emailForm }, Cmd.none )
+
+        SetEmailFromName value ->
+            ( { model | emailForm = (\f -> { f | fromName = value }) model.emailForm }, Cmd.none )
+
+        ConnectEmail ->
+            ( { model | emailSaving = True, notice = Nothing }
+            , Api.connectEmail
+                { domain = model.emailForm.domain
+                , localPart = model.emailForm.localPart
+                , name = model.emailForm.name
+                , fromName = model.emailForm.fromName
+                }
+                ConnectedEmail
+            )
+
+        ConnectedEmail result ->
+            case result of
+                Success _ ->
+                    ( { model
+                        | emailSaving = False
+                        , emailForm = emptyEmailForm
+                        , emailFormOpen = False
+                        , notice = Just ( "success", "Domain connected. Add the DNS records to start receiving." )
+                      }
+                    , Api.getEmail GotEmail
+                    )
+
+                Failure err ->
+                    ( { model | emailSaving = False, notice = Just ( "error", Api.errorMessage err ) }
+                    , Cmd.none
+                    )
+
+                _ ->
+                    ( model, Cmd.none )
+
+        EditEmailReply id reply ->
+            ( { model | emailEditing = Just ( id, reply ), notice = Nothing }, Cmd.none )
+
+        SaveEmailReply ->
+            case ( model.emailEditing, model.email ) of
+                ( Just ( id, reply ), Success { accounts } ) ->
+                    let
+                        ( name, fromName ) =
+                            accounts
+                                |> List.filter (\a -> a.id == id)
+                                |> List.head
+                                |> Maybe.map (\a -> ( a.name, a.fromName ))
+                                |> Maybe.withDefault ( "", "" )
+                    in
+                    ( { model | emailSaving = True }
+                    , Api.saveEmail id { name = name, fromName = fromName, reply = reply } SavedEmailReply
+                    )
+
+                _ ->
+                    ( model, Cmd.none )
+
+        SavedEmailReply result ->
+            case result of
+                Success account ->
+                    ( { model
+                        | emailSaving = False
+                        , emailEditing = Nothing
+                        , notice = Just ( "success", "Saved." )
+                        , email =
+                            RemoteData.map
+                                (\o ->
+                                    { o
+                                        | accounts =
+                                            List.map
+                                                (\a ->
+                                                    if a.id == account.id then
+                                                        account
+
+                                                    else
+                                                        a
+                                                )
+                                                o.accounts
+                                    }
+                                )
+                                model.email
+                      }
+                    , Cmd.none
+                    )
+
+                Failure err ->
+                    ( { model | emailSaving = False, notice = Just ( "error", Api.errorMessage err ) }
+                    , Cmd.none
+                    )
+
+                _ ->
+                    ( model, Cmd.none )
+
+        DeleteEmail id ->
+            ( { model | emailSaving = True, notice = Nothing }, Api.deleteEmail id DeletedEmail )
+
+        DeletedEmail result ->
+            case result of
+                Success _ ->
+                    ( { model | emailSaving = False, notice = Just ( "success", "Domain disconnected." ) }
+                    , Api.getEmail GotEmail
+                    )
+
+                Failure err ->
+                    ( { model | emailSaving = False, notice = Just ( "error", Api.errorMessage err ) }
+                    , Cmd.none
+                    )
+
+                _ ->
+                    ( model, Cmd.none )
+
         SetCredits raw ->
             ( { model | creditsToBuy = String.toInt raw |> Maybe.withDefault model.creditsToBuy }
             , Cmd.none
@@ -629,7 +817,7 @@ tabs current =
                     ]
             )
             [ ( Overview, Route.Dashboard, "Overview" )
-            , ( Channels, Route.DashboardChannels, "WhatsApp" )
+            , ( Channels, Route.DashboardChannels, "Channels" )
             , ( Persona, Route.DashboardPersona, "Voice" )
             , ( Billing, Route.DashboardBilling, "Credits" )
             , ( Settings, Route.DashboardSettings, "Settings" )
@@ -639,76 +827,323 @@ tabs current =
 
 overviewTab : Model -> Html Msg
 overviewTab model =
-    Ui.remote model.channels <|
-        \{ accounts } ->
-            section []
-                [ if List.isEmpty accounts then
-                    Ui.card
-                        [ h2 [] [ text "No number connected" ]
-                        , p [] [ text "Concierge can't answer anything until a WhatsApp number is attached." ]
-                        , Ui.linkButton
-                            { label = "Connect WhatsApp"
-                            , url = Route.toPath Route.DashboardChannels
-                            , primary = True
-                            }
-                        ]
-
-                  else
-                    Ui.card
-                        [ h2 [] [ text "Answering on" ]
-                        , ul [ class "connected-list" ]
-                            (List.map
-                                (\a ->
-                                    li [ class "connected-item" ]
-                                        [ span [ class "connected-name" ] [ text a.name ]
-                                        , span [ class "connected-phone" ] [ text a.phoneNumber ]
-                                        , span
-                                            [ classList
-                                                [ ( "pill", True )
-                                                , ( "pill-ok", a.reply.enabled )
-                                                , ( "pill-warn", not a.reply.enabled )
-                                                ]
-                                            ]
-                                            [ text
-                                                (if a.reply.enabled then
-                                                    "Auto-reply on"
-
-                                                 else
-                                                    "Auto-reply off"
-                                                )
-                                            ]
-                                        ]
-                                )
-                                accounts
-                            )
-                        ]
+    section []
+        [ Ui.remote model.channels (overviewWhatsApp model)
+        , Ui.remote model.email (overviewEmail model)
+        , if channelsEmpty model then
+            Ui.card
+                [ h2 [] [ text "Nothing connected yet" ]
+                , p [] [ text "Concierge can't answer anything until you connect WhatsApp or a custom email domain." ]
+                , Ui.linkButton
+                    { label = "Connect a channel"
+                    , url = Route.toPath Route.DashboardChannels
+                    , primary = True
+                    }
                 ]
+
+          else
+            text ""
+        ]
+
+
+overviewWhatsApp : Model -> { accounts : List Api.WhatsAppAccount, signup : Maybe Api.Signup } -> Html Msg
+overviewWhatsApp _ data =
+    if List.isEmpty data.accounts then
+        text ""
+
+    else
+        Ui.card
+            [ h2 [] [ text "Answering on WhatsApp" ]
+            , ul [ class "connected-list" ]
+                (List.map
+                    (\a ->
+                        li [ class "connected-item" ]
+                            [ span [ class "connected-name" ] [ text a.name ]
+                            , span [ class "connected-phone" ] [ text a.phoneNumber ]
+                            , replyPill a.reply.enabled
+                            ]
+                    )
+                    data.accounts
+                )
+            ]
+
+
+overviewEmail : Model -> Api.EmailOverview -> Html Msg
+overviewEmail _ data =
+    if List.isEmpty data.accounts then
+        text ""
+
+    else
+        Ui.card
+            [ h2 [] [ text "Answering on email" ]
+            , ul [ class "connected-list" ]
+                (List.map
+                    (\a ->
+                        li [ class "connected-item" ]
+                            [ span [ class "connected-name" ] [ text a.fromAddress ]
+                            , replyPill a.reply.enabled
+                            ]
+                    )
+                    data.accounts
+                )
+            ]
+
+
+replyPill : Bool -> Html msg
+replyPill enabled =
+    span
+        [ classList
+            [ ( "pill", True )
+            , ( "pill-ok", enabled )
+            , ( "pill-warn", not enabled )
+            ]
+        ]
+        [ text
+            (if enabled then
+                "Auto-reply on"
+
+             else
+                "Auto-reply off"
+            )
+        ]
+
+
+{-| True only when both channel lists have loaded and are empty — so the
+"connect a channel" prompt doesn't flash while they're still loading.
+-}
+channelsEmpty : Model -> Bool
+channelsEmpty model =
+    let
+        whatsAppEmpty =
+            case model.channels of
+                Success d ->
+                    List.isEmpty d.accounts
+
+                _ ->
+                    False
+
+        emailEmpty =
+            case model.email of
+                Success d ->
+                    List.isEmpty d.accounts
+
+                _ ->
+                    False
+    in
+    whatsAppEmpty && emailEmpty
 
 
 channelsTab : Model -> Html Msg
 channelsTab model =
-    Ui.remote model.channels <|
-        \{ accounts, signup } ->
-            section []
-                (if List.isEmpty accounts then
-                    [ Ui.card
-                        [ h2 [] [ text "Connect your WhatsApp number" ]
-                        , case signup of
-                            Just _ ->
-                                Ui.linkButton
-                                    { label = "Connect with Meta"
-                                    , url = "/wizard"
-                                    , primary = True
-                                    }
+    section []
+        [ Ui.remote model.channels (whatsappSection model)
+        , Ui.remote model.email (emailSection model)
+        , Ui.remote model.email (\o -> setupCard o.setup)
+        ]
 
-                            Nothing ->
-                                Ui.banner "info" "WhatsApp signup isn't configured on this deployment."
+
+whatsappSection : Model -> { accounts : List Api.WhatsAppAccount, signup : Maybe Api.Signup } -> Html Msg
+whatsappSection model data =
+    div []
+        [ h2 [] [ text "WhatsApp" ]
+        , if List.isEmpty data.accounts then
+            Ui.card
+                [ case data.signup of
+                    Just _ ->
+                        Ui.linkButton
+                            { label = "Connect with Meta"
+                            , url = "/wizard"
+                            , primary = True
+                            }
+
+                    Nothing ->
+                        Ui.banner "info" "WhatsApp signup isn't configured on this deployment."
+                ]
+
+          else
+            div [] (List.map (accountCard model) data.accounts)
+        ]
+
+
+emailSection : Model -> Api.EmailOverview -> Html Msg
+emailSection model overview =
+    div []
+        [ h2 [] [ text "Email" ]
+        , if List.isEmpty overview.accounts then
+            text ""
+
+          else
+            div [] (List.map (emailCard model) overview.accounts)
+        , if model.emailFormOpen then
+            emailForm model
+
+          else
+            Ui.button
+                { label = "Connect a domain"
+                , onClick = OpenEmailForm
+                , primary = False
+                , busy = False
+                }
+        ]
+
+
+emailForm : Model -> Html Msg
+emailForm model =
+    Ui.card
+        [ h2 [] [ text "Connect a domain" ]
+        , Ui.field
+            { id = "email-domain"
+            , label = "Domain"
+            , value = model.emailForm.domain
+            , hint = "e.g. acme.com"
+            , required = True
+            , onInput = SetEmailDomain
+            }
+        , Ui.field
+            { id = "email-local"
+            , label = "Address"
+            , value = model.emailForm.localPart
+            , hint = "Optional. Leave blank to answer every address on the domain."
+            , required = False
+            , onInput = SetEmailLocalPart
+            }
+        , Ui.field
+            { id = "email-name"
+            , label = "Label"
+            , value = model.emailForm.name
+            , hint = "Just for you, e.g. Sales inbox."
+            , required = False
+            , onInput = SetEmailName
+            }
+        , Ui.field
+            { id = "email-from-name"
+            , label = "From name"
+            , value = model.emailForm.fromName
+            , hint = "Shown to customers, e.g. Acme Support."
+            , required = False
+            , onInput = SetEmailFromName
+            }
+        , div [ class "card-actions" ]
+            [ Ui.button { label = "Cancel", onClick = CancelEmailForm, primary = False, busy = False }
+            , Ui.button { label = "Connect", onClick = ConnectEmail, primary = True, busy = model.emailSaving }
+            ]
+        ]
+
+
+setupCard : Api.EmailSetup -> Html Msg
+setupCard setup =
+    Ui.card
+        [ h2 [] [ text "DNS for email" ]
+        , p [ class "muted" ] [ text setup.note ]
+        , pre [ class "prompt-preview" ]
+            [ text
+                (String.join "\n"
+                    (List.map (\mx -> "MX  " ++ mx) setup.mxHosts
+                        ++ [ "TXT " ++ setup.spf ]
+                    )
+                )
+            ]
+        ]
+
+
+emailCard : Model -> Api.EmailAccount -> Html Msg
+emailCard model account =
+    let
+        editing =
+            case model.emailEditing of
+                Just ( id, reply ) ->
+                    if id == account.id then
+                        Just reply
+
+                    else
+                        Nothing
+
+                Nothing ->
+                    Nothing
+    in
+    Ui.card
+        [ h2 [] [ text account.fromAddress ]
+        , if String.isEmpty account.name then
+            text ""
+
+          else
+            p [ class "muted" ] [ text account.name ]
+        , case editing of
+            Just reply ->
+                div []
+                    [ Ui.toggle
+                        { id = "email-reply-enabled"
+                        , label = "Reply automatically to new messages"
+                        , checked = reply.enabled
+                        , onCheck = \v -> EditEmailReply account.id { reply | enabled = v }
+                        }
+                    , modePicker (EditEmailReply account.id) reply
+                    , Ui.textarea
+                        { id = "email-reply-text"
+                        , label =
+                            if reply.mode == "prompt" then
+                                "What should the AI do?"
+
+                            else
+                                "Message to send"
+                        , value = reply.text
+                        , hint =
+                            if reply.mode == "prompt" then
+                                "This sits after your voice prompt. One credit per reply."
+
+                            else
+                                "Sent word for word. Costs nothing."
+                        , rows = 4
+                        , onInput = \v -> EditEmailReply account.id { reply | text = v }
+                        }
+                    , Ui.field
+                        { id = "email-wait"
+                        , label = "Wait before replying (seconds)"
+                        , value = String.fromInt reply.waitSeconds
+                        , hint = ""
+                        , required = False
+                        , onInput =
+                            \v ->
+                                EditEmailReply account.id
+                                    { reply | waitSeconds = String.toInt v |> Maybe.withDefault reply.waitSeconds }
+                        }
+                    , div [ class "card-actions" ]
+                        [ Ui.button { label = "Cancel", onClick = CancelEmailEdit, primary = False, busy = False }
+                        , Ui.button { label = "Save", onClick = SaveEmailReply, primary = True, busy = model.emailSaving }
                         ]
                     ]
 
-                 else
-                    List.map (accountCard model) accounts
-                )
+            Nothing ->
+                div []
+                    [ p []
+                        [ text
+                            (if account.reply.enabled then
+                                if account.reply.mode == "prompt" then
+                                    "Answering with AI."
+
+                                else
+                                    "Sending a fixed reply."
+
+                             else
+                                "Not replying."
+                            )
+                        ]
+                    , div [ class "card-actions" ]
+                        [ Ui.button
+                            { label = "Edit replies"
+                            , onClick = EditEmailReply account.id account.reply
+                            , primary = False
+                            , busy = False
+                            }
+                        , Ui.button
+                            { label = "Disconnect"
+                            , onClick = DeleteEmail account.id
+                            , primary = False
+                            , busy = model.emailSaving
+                            }
+                        ]
+                    ]
+        ]
 
 
 accountCard : Model -> Api.WhatsAppAccount -> Html Msg
@@ -738,7 +1173,7 @@ accountCard model account =
                         , checked = reply.enabled
                         , onCheck = \v -> EditReply account.id { reply | enabled = v }
                         }
-                    , modePicker account.id reply
+                    , modePicker (EditReply account.id) reply
                     , Ui.textarea
                         { id = "reply-text"
                         , label =
@@ -799,8 +1234,8 @@ accountCard model account =
         ]
 
 
-modePicker : String -> Api.Reply -> Html Msg
-modePicker id reply =
+modePicker : (Api.Reply -> Msg) -> Api.Reply -> Html Msg
+modePicker onChange reply =
     div [ class "field" ]
         [ Html.label [] [ text "Reply with" ]
         , div [ class "choice-row" ]
@@ -809,7 +1244,7 @@ modePicker id reply =
                     Html.button
                         [ classList [ ( "choice", True ), ( "is-selected", reply.mode == wire ) ]
                         , Html.Attributes.type_ "button"
-                        , onClick (EditReply id { reply | mode = wire })
+                        , onClick (onChange { reply | mode = wire })
                         ]
                         [ text label_ ]
                 )
