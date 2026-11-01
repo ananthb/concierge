@@ -31,6 +31,7 @@ mod demo;
 mod email;
 mod manage;
 mod persona;
+mod settings;
 mod whatsapp;
 mod wizard;
 
@@ -77,6 +78,10 @@ pub async fn handle(req: Request, env: Env, path: &str) -> Result<Response> {
         ["persona", rest @ ..] => persona::handle(req, env, rest).await,
         ["archetypes"] if method == Method::Get => persona::list_archetypes_handler(req, env).await,
         ["billing", rest @ ..] => billing::handle(req, env, rest).await,
+
+        // Conversation window + locale. Readable and writable by the
+        // tenant; the operator API does not duplicate these.
+        ["settings", rest @ ..] => settings::handle(req, env, rest).await,
 
         // --- operator (Cloudflare Access) -----------------------------
         ["manage", rest @ ..] => manage::handle(req, env, rest).await,
