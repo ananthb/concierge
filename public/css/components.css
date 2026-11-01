@@ -201,3 +201,30 @@
 .page-404 .page-cta { justify-content:center; }
 .page-login { max-width:520px; text-align:center; }
 .page-login .page-cta { justify-content:center; }
+
+/* ── Operator console ────────────────────────────────────────────────── */
+
+/* Wider than a tenant page: the pricing and audit tables want the room,
+   and nobody reads this one on a phone. */
+.manage { max-width: 1180px; }
+
+.rate-table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+.rate-table th {
+  text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair);
+  font-family: var(--f-mono); font-size: 11px; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--muted); font-weight: 500; }
+.rate-table td { padding: 10px; border-bottom: 1px solid var(--hair); vertical-align: top; }
+.rate-table tr:last-child td { border-bottom: 0; }
+/* The amount inputs sit in a column of their own and shouldn't stretch to
+   the table's width the way a `.field` input does. */
+.rate-table input { width: 12ch; padding: 8px 10px; border: 1px solid var(--hair-2);
+  border-radius: var(--r-sm); background: var(--paper); color: var(--ink);
+  font-family: var(--f-mono); font-size: 14px; }
+.rate-table input:focus { outline: none; border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft); }
+.rate-table .hint { margin-top: 4px; }
+
+/* The console's tab strip is buttons rather than links, since the tabs
+   aren't routes. Same look as the dashboard's. */
+.manage .tab { background: none; border: 0; cursor: pointer;
+  font-family: var(--f-body); border-bottom: 2px solid transparent; }

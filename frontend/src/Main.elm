@@ -26,6 +26,7 @@ import Html exposing (Html, div, main_, text)
 import Html.Attributes exposing (class)
 import Page.Dashboard as Dashboard
 import Page.Landing as Landing
+import Page.Manage as Manage
 import Page.Static as Static
 import Page.Wizard as Wizard
 import RemoteData exposing (RemoteData(..))
@@ -72,6 +73,7 @@ type Page
     = LandingPage Landing.Model
     | WizardPage Wizard.Model
     | DashboardPage Dashboard.Model
+    | ManagePage Manage.Model
     | Stateless
 
 
@@ -98,6 +100,7 @@ type Msg
     | LandingMsg Landing.Msg
     | WizardMsg Wizard.Msg
     | DashboardMsg Dashboard.Msg
+    | ManageMsg Manage.Msg
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -188,6 +191,18 @@ update msg model =
                 _ ->
                     ( model, Cmd.none )
 
+        ManageMsg sub ->
+            case model.page of
+                ManagePage console ->
+                    let
+                        ( updated, cmd ) =
+                            Manage.update sub console
+                    in
+                    ( { model | page = ManagePage updated }, Cmd.map ManageMsg cmd )
+
+                _ ->
+                    ( model, Cmd.none )
+
 
 markOnboarded : Api.Session -> Api.Session
 markOnboarded session =
@@ -246,6 +261,21 @@ enterRoute route model =
 
         Route.DashboardSettings ->
             dashboardRoute Dashboard.Settings settled
+
+        -- No session check: the credential here is the Access JWT, which
+        -- this app can't see. The page asks the API and renders whatever it
+        -- says, including the refusal.
+        Route.Manage ->
+            case model.page of
+                ManagePage _ ->
+                    ( settled, Cmd.none )
+
+                _ ->
+                    let
+                        ( console, cmd ) =
+                            Manage.init
+                    in
+                    ( { settled | page = ManagePage console }, Cmd.map ManageMsg cmd )
 
         _ ->
             ( { settled | page = Stateless }, Cmd.none )
@@ -373,11 +403,12 @@ content model =
             Static.notFound
 
         Route.Manage ->
-            -- The operator console is API-only for now: /api/manage/* is
-            -- complete but has no UI. Say so instead of rendering an empty
-            -- page.
-            div [ class "page" ]
-                [ text "The operations console has no interface yet. Its endpoints live under /api/manage/." ]
+            case model.page of
+                ManagePage console ->
+                    Html.map ManageMsg (Manage.view console)
+
+                _ ->
+                    text ""
 
         -- Everything below needs the payload. The copy on these pages still
         -- renders immediately; only the values wait.
