@@ -146,7 +146,7 @@ jobs:
       # worker-build's wasm artifacts, this one with host-target test
       # binaries. Sharing a key would have them evict each other.
       - name: Cache cargo build
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.cargo/registry
