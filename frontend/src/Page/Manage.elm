@@ -24,7 +24,7 @@ an operator console, and a route per tab would mean five more entries in
 
 import Api
 import Format
-import Html exposing (Html, div, h1, h2, h3, li, p, section, span, table, tbody, td, text, th, thead, tr, ul)
+import Html exposing (Html, div, h1, h2, h3, label, li, p, section, span, table, tbody, td, text, th, thead, tr, ul)
 import Html.Attributes exposing (class, classList)
 import Html.Events exposing (onClick)
 import RemoteData exposing (RemoteData(..))
@@ -39,6 +39,7 @@ type Tab
     = Overview
     | Pricing
     | Demo
+    | Archetypes
     | Tenants
     | Audit
 
@@ -48,6 +49,7 @@ type alias Model =
     , overview : Api.Data Api.Overview
     , pricing : Api.Data Api.AdminPricing
     , demo : Api.Data Api.AdminDemo
+    , archetypes : Api.Data (List Api.AdminArchetype)
     , tenants : Api.Data (List Api.TenantRow)
     , audit : Api.Data (List Api.AuditEntry)
 
@@ -56,6 +58,8 @@ type alias Model =
     -- what the operator typed.
     , pricingForm : PricingForm
     , demoForm : Maybe Api.AdminDemo
+    , archetypeForm : Maybe ArchetypeForm
+    , archetypeDelete : Maybe String
     , tenantQuery : String
     , selected : Api.Data Api.TenantDetail
     , grantCount : String
@@ -91,16 +95,68 @@ type alias AmountField =
     }
 
 
+{-| The catalog editor's text. Chip lists are newline-delimited while
+editing, the same as the persona form: a textarea is the right control for
+"one per line", and converting on save keeps every keystroke from
+restructuring a list.
+-}
+type alias ArchetypeForm =
+    { slug : String
+    , label : String
+    , description : String
+    , voicePrompt : String
+    , greeting : String
+    , catchPhrases : String
+    , offTopics : String
+    , never : String
+    , handoffConditions : String
+    , isNew : Bool
+    }
+
+
+emptyArchetypeForm : ArchetypeForm
+emptyArchetypeForm =
+    { slug = ""
+    , label = ""
+    , description = ""
+    , voicePrompt = ""
+    , greeting = ""
+    , catchPhrases = ""
+    , offTopics = ""
+    , never = ""
+    , handoffConditions = ""
+    , isNew = True
+    }
+
+
+formFromArchetype : Api.AdminArchetype -> ArchetypeForm
+formFromArchetype row =
+    { slug = row.slug
+    , label = row.label
+    , description = row.description
+    , voicePrompt = row.voicePrompt
+    , greeting = row.greeting
+    , catchPhrases = String.join "\n" row.catchPhrases
+    , offTopics = String.join "\n" row.offTopics
+    , never = row.never
+    , handoffConditions = String.join "\n" row.handoffConditions
+    , isNew = False
+    }
+
+
 init : ( Model, Cmd Msg )
 init =
     ( { tab = Overview
       , overview = Loading
       , pricing = NotAsked
       , demo = NotAsked
+      , archetypes = NotAsked
       , tenants = NotAsked
       , audit = NotAsked
       , pricingForm = { minCredits = "", maxCredits = "", amounts = [] }
       , demoForm = Nothing
+      , archetypeForm = Nothing
+      , archetypeDelete = Nothing
       , tenantQuery = ""
       , selected = NotAsked
       , grantCount = ""
@@ -132,6 +188,17 @@ type Msg
     | SaveDemo
     | RerollDemo
     | Rerolled (Api.Data ())
+    | GotArchetypes (Api.Data (List Api.AdminArchetype))
+    | NewArchetype
+    | OpenArchetype Api.AdminArchetype
+    | CloseArchetype
+    | EditArchetype (ArchetypeForm -> ArchetypeForm)
+    | SaveArchetype
+    | SavedArchetype (Api.Data Api.AdminArchetype)
+    | AskDeleteArchetype String
+    | CancelDeleteArchetype
+    | DeleteArchetype String
+    | DeletedArchetype (Api.Data ())
     | SetTenantQuery String
     | SearchTenants
     | GotTenants (Api.Data (List Api.TenantRow))
@@ -305,6 +372,102 @@ update msg model =
                 _ ->
                     ( model, Cmd.none )
 
+        GotArchetypes result ->
+            ( { model | archetypes = result }, Cmd.none )
+
+        NewArchetype ->
+            ( { model
+                | archetypeForm = Just emptyArchetypeForm
+                , archetypeDelete = Nothing
+                , notice = Nothing
+              }
+            , Cmd.none
+            )
+
+        OpenArchetype row ->
+            ( { model
+                | archetypeForm = Just (formFromArchetype row)
+                , archetypeDelete = Nothing
+                , notice = Nothing
+              }
+            , Cmd.none
+            )
+
+        CloseArchetype ->
+            ( { model | archetypeForm = Nothing }, Cmd.none )
+
+        EditArchetype change ->
+            ( { model | archetypeForm = Maybe.map change model.archetypeForm }, Cmd.none )
+
+        SaveArchetype ->
+            case Maybe.map validateArchetype model.archetypeForm of
+                Just (Ok row) ->
+                    ( { model | saving = True, notice = Nothing }
+                    , Api.saveAdminArchetype row SavedArchetype
+                    )
+
+                Just (Err message) ->
+                    ( { model | notice = Just ( "error", message ) }, Cmd.none )
+
+                Nothing ->
+                    ( model, Cmd.none )
+
+        SavedArchetype result ->
+            case result of
+                Success row ->
+                    ( { model
+                        | saving = False
+                        , archetypeForm = Nothing
+                        , archetypeDelete = Nothing
+                        , archetypes = Loading
+                        , notice =
+                            Just
+                                ( "success"
+                                , "Saved " ++ row.slug ++ ". Its safety check is queued; if the voice prompt changed, tenants using it stay paused until the check approves it and they re-save their persona."
+                                )
+                      }
+                    , Api.getAdminArchetypes GotArchetypes
+                    )
+
+                Failure err ->
+                    ( { model | saving = False, notice = Just ( "error", Api.errorMessage err ) }
+                    , Cmd.none
+                    )
+
+                _ ->
+                    ( model, Cmd.none )
+
+        AskDeleteArchetype slug ->
+            ( { model | archetypeDelete = Just slug, notice = Nothing }, Cmd.none )
+
+        CancelDeleteArchetype ->
+            ( { model | archetypeDelete = Nothing }, Cmd.none )
+
+        DeleteArchetype slug ->
+            ( { model | saving = True, notice = Nothing }
+            , Api.deleteAdminArchetype slug DeletedArchetype
+            )
+
+        DeletedArchetype result ->
+            case result of
+                Success () ->
+                    ( { model
+                        | saving = False
+                        , archetypeDelete = Nothing
+                        , archetypes = Loading
+                        , notice = Just ( "success", "Deleted the voice." )
+                      }
+                    , Api.getAdminArchetypes GotArchetypes
+                    )
+
+                Failure err ->
+                    ( { model | saving = False, notice = Just ( "error", Api.errorMessage err ) }
+                    , Cmd.none
+                    )
+
+                _ ->
+                    ( model, Cmd.none )
+
         SetTenantQuery value ->
             ( { model | tenantQuery = value }, Cmd.none )
 
@@ -450,6 +613,13 @@ fetchFor tab model =
             else
                 Cmd.none
 
+        Archetypes ->
+            if RemoteData.isNotAsked model.archetypes then
+                Api.getAdminArchetypes GotArchetypes
+
+            else
+                Cmd.none
+
         Tenants ->
             if RemoteData.isNotAsked model.tenants then
                 Api.listTenants "" GotTenants
@@ -490,6 +660,9 @@ view model =
             Demo ->
                 demoTab model
 
+            Archetypes ->
+                archetypesTab model
+
             Tenants ->
                 tenantsTab model
 
@@ -515,6 +688,7 @@ tabs current =
             [ ( Overview, "Overview" )
             , ( Pricing, "Pricing" )
             , ( Demo, "Demo" )
+            , ( Archetypes, "Archetypes" )
             , ( Tenants, "Tenants" )
             , ( Audit, "Audit" )
             ]
@@ -824,6 +998,291 @@ numberField id label hint value change =
                         change (String.toInt v |> Maybe.withDefault value) d
                     )
         }
+
+
+archetypesTab : Model -> Html Msg
+archetypesTab model =
+    panel model.archetypes <|
+        \rows ->
+            section []
+                [ Ui.card
+                    [ h2 [] [ text "Voice catalog" ]
+                    , p [ class "muted" ]
+                        [ text "The voices the tenant persona picker and the landing-page demo read from. Every write re-runs the safety check before the row can be used again." ]
+                    , div [ class "card-actions" ]
+                        [ Ui.button
+                            { label = "Add a voice"
+                            , onClick = NewArchetype
+                            , primary = True
+                            , busy = False
+                            }
+                        ]
+                    ]
+                , case model.archetypeForm of
+                    Just form ->
+                        archetypeFormCard model form
+
+                    Nothing ->
+                        text ""
+                , case model.archetypeDelete of
+                    Just slug ->
+                        Ui.card
+                            [ h2 [] [ text ("Delete " ++ slug ++ "?") ]
+                            , p []
+                                [ text "Removes it from the tenant picker and the demo. Tenants already using it lose its voice prompt, and their AI replies stay paused until they choose another voice and re-save." ]
+                            , div [ class "card-actions" ]
+                                [ Html.button
+                                    [ class "btn btn-danger"
+                                    , Html.Attributes.type_ "button"
+                                    , Html.Attributes.disabled model.saving
+                                    , onClick (DeleteArchetype slug)
+                                    ]
+                                    [ text "Delete permanently" ]
+                                , Ui.button
+                                    { label = "Cancel"
+                                    , onClick = CancelDeleteArchetype
+                                    , primary = False
+                                    , busy = False
+                                    }
+                                ]
+                            ]
+
+                    Nothing ->
+                        text ""
+                , archetypeList rows
+                ]
+
+
+archetypeList : List Api.AdminArchetype -> Html Msg
+archetypeList rows =
+    if List.isEmpty rows then
+        Ui.card [ p [ class "muted" ] [ text "No voices in the catalog yet." ] ]
+
+    else
+        Ui.card
+            [ h2 [] [ text "In the catalog" ]
+            , table [ class "rate-table" ]
+                [ thead []
+                    [ tr []
+                        [ th [] [ text "Voice" ]
+                        , th [] [ text "Slug" ]
+                        , th [] [ text "Safety" ]
+                        , th [] [ text "Updated" ]
+                        , th [] [ text "" ]
+                        ]
+                    ]
+                , tbody []
+                    (List.map archetypeRow (List.sortBy .label rows))
+                ]
+            ]
+
+
+archetypeRow : Api.AdminArchetype -> Html Msg
+archetypeRow row =
+    tr []
+        [ td []
+            [ text row.label
+            , p [ class "hint" ] [ text row.description ]
+            ]
+        , td [ class "mono" ] [ text row.slug ]
+        , td []
+            [ safetyPill row.safetyStatus
+            , case row.safetyReason of
+                Just reason ->
+                    p [ class "hint" ] [ text reason ]
+
+                Nothing ->
+                    text ""
+            ]
+        , td [ class "mono" ]
+            [ text (Maybe.withDefault "—" (Maybe.map (String.left 10) row.updatedAt)) ]
+        , td []
+            [ div [ class "card-actions" ]
+                [ Html.button
+                    [ class "btn btn-ghost"
+                    , Html.Attributes.type_ "button"
+                    , onClick (OpenArchetype row)
+                    ]
+                    [ text "Edit" ]
+                , Html.button
+                    [ class "btn btn-ghost"
+                    , Html.Attributes.type_ "button"
+                    , onClick (AskDeleteArchetype row.slug)
+                    ]
+                    [ text "Delete" ]
+                ]
+            ]
+        ]
+
+
+safetyPill : String -> Html Msg
+safetyPill status =
+    span
+        [ classList
+            [ ( "pill", True )
+            , ( "pill-ok", status == "approved" )
+            , ( "pill-warn", status /= "approved" )
+            ]
+        ]
+        [ text status ]
+
+
+archetypeFormCard : Model -> ArchetypeForm -> Html Msg
+archetypeFormCard model form =
+    Ui.card
+        [ h2 []
+            [ text
+                (if form.isNew then
+                    "New voice"
+
+                 else
+                    "Edit " ++ form.slug
+                )
+            ]
+        , if form.isNew then
+            Ui.field
+                { id = "archetype_slug"
+                , label = "Slug"
+                , value = form.slug
+                , hint = "Lowercase letters, digits and hyphens. It is the key, so it cannot be changed later."
+                , required = True
+                , onInput = \v -> EditArchetype (\f -> { f | slug = v })
+                }
+
+          else
+            div [ class "field" ]
+                [ label [] [ text "Slug" ]
+                , p [ class "mono" ] [ text form.slug ]
+                , p [ class "hint" ] [ text "The slug is the key; create a new row to change it." ]
+                ]
+        , Ui.field
+            { id = "archetype_label"
+            , label = "Label"
+            , value = form.label
+            , hint = "Shown in the tenant picker."
+            , required = True
+            , onInput = \v -> EditArchetype (\f -> { f | label = v })
+            }
+        , Ui.field
+            { id = "archetype_description"
+            , label = "Description"
+            , value = form.description
+            , hint = "One sentence, shown under the label."
+            , required = True
+            , onInput = \v -> EditArchetype (\f -> { f | description = v })
+            }
+        , Ui.textarea
+            { id = "archetype_voice"
+            , label = "Voice prompt"
+            , value = form.voicePrompt
+            , hint = "The editable middle the persona builder layers the tenant's own details over."
+            , rows = 10
+            , onInput = \v -> EditArchetype (\f -> { f | voicePrompt = v })
+            }
+        , Ui.textarea
+            { id = "archetype_greeting"
+            , label = "Greeting"
+            , value = form.greeting
+            , hint = "The first message in the demo conversation."
+            , rows = 3
+            , onInput = \v -> EditArchetype (\f -> { f | greeting = v })
+            }
+        , Ui.textarea
+            { id = "archetype_catch"
+            , label = "Catch-phrases"
+            , value = form.catchPhrases
+            , hint = "One per line."
+            , rows = 4
+            , onInput = \v -> EditArchetype (\f -> { f | catchPhrases = v })
+            }
+        , Ui.textarea
+            { id = "archetype_off"
+            , label = "Off-topics"
+            , value = form.offTopics
+            , hint = "One per line. The persona declines these."
+            , rows = 4
+            , onInput = \v -> EditArchetype (\f -> { f | offTopics = v })
+            }
+        , Ui.field
+            { id = "archetype_never"
+            , label = "Never"
+            , value = form.never
+            , hint = "Optional line the prompt must never cross."
+            , required = False
+            , onInput = \v -> EditArchetype (\f -> { f | never = v })
+            }
+        , Ui.textarea
+            { id = "archetype_handoff"
+            , label = "Handoff conditions"
+            , value = form.handoffConditions
+            , hint = "One per line. When one matches, the conversation goes to a human."
+            , rows = 4
+            , onInput = \v -> EditArchetype (\f -> { f | handoffConditions = v })
+            }
+        , p [ class "hint" ]
+            [ text "Saving resets the safety verdict to pending. If the voice prompt changes, tenants using this row stay paused until the check approves it and they re-save their persona." ]
+        , div [ class "card-actions" ]
+            [ Ui.button
+                { label = "Save voice"
+                , onClick = SaveArchetype
+                , primary = True
+                , busy = model.saving
+                }
+            , Ui.button
+                { label = "Cancel"
+                , onClick = CloseArchetype
+                , primary = False
+                , busy = False
+                }
+            ]
+        ]
+
+
+validateArchetype : ArchetypeForm -> Result String Api.AdminArchetype
+validateArchetype form =
+    let
+        slug =
+            String.toLower (String.trim form.slug)
+    in
+    if String.isEmpty slug then
+        Err "Slug is required."
+
+    else if not (String.all (\c -> Char.isLower c || Char.isDigit c || c == '-') slug) then
+        Err "Slug can only contain lowercase letters, digits and hyphens."
+
+    else
+        case missingRequired [ ( "Label", form.label ), ( "Description", form.description ), ( "Voice prompt", form.voicePrompt ), ( "Greeting", form.greeting ) ] of
+            Just name ->
+                Err (name ++ " is required.")
+
+            Nothing ->
+                Ok
+                    { slug = slug
+                    , label = String.trim form.label
+                    , description = String.trim form.description
+                    , voicePrompt = String.trim form.voicePrompt
+                    , greeting = String.trim form.greeting
+                    , catchPhrases = textToChips form.catchPhrases
+                    , offTopics = textToChips form.offTopics
+                    , never = String.trim form.never
+                    , handoffConditions = textToChips form.handoffConditions
+                    , safetyStatus = "pending"
+                    , safetyReason = Nothing
+                    , updatedAt = Nothing
+                    }
+
+
+missingRequired : List ( String, String ) -> Maybe String
+missingRequired fields =
+    fields
+        |> List.filter (\( _, value ) -> String.trim value == "")
+        |> List.head
+        |> Maybe.map Tuple.first
+
+
+textToChips : String -> List String
+textToChips =
+    String.lines >> List.map String.trim >> List.filter (not << String.isEmpty)
 
 
 tenantsTab : Model -> Html Msg

@@ -1,5 +1,6 @@
 module Api exposing
-    ( AdminDemo
+    ( AdminArchetype
+    , AdminDemo
     , AdminPricing
     , ApiError(..)
     , Archetype
@@ -40,12 +41,14 @@ module Api exposing
     , connectEmail
     , delete
     , deleteAccount
+    , deleteAdminArchetype
     , deleteEmail
     , deleteTenant
     , demoChat
     , emptyBuilder
     , errorMessage
     , get
+    , getAdminArchetypes
     , getAdminDemo
     , getAdminPricing
     , getArchetypes
@@ -66,6 +69,7 @@ module Api exposing
     , previewPersona
     , put
     , rerollDemo
+    , saveAdminArchetype
     , saveAdminDemo
     , saveAdminPricing
     , saveBasics
@@ -1286,6 +1290,25 @@ type alias AdminDemo =
     }
 
 
+{-| A catalog row as the operator API returns it: every field, including the
+safety verdict and timestamps the tenant-facing `Archetype` hides.
+-}
+type alias AdminArchetype =
+    { slug : String
+    , label : String
+    , description : String
+    , voicePrompt : String
+    , greeting : String
+    , catchPhrases : List String
+    , offTopics : List String
+    , never : String
+    , handoffConditions : List String
+    , safetyStatus : String
+    , safetyReason : Maybe String
+    , updatedAt : Maybe String
+    }
+
+
 type alias TenantRow =
     { id : String
     , email : String
@@ -1353,6 +1376,38 @@ saveAdminPricing fields =
             ]
         )
         adminPricingDecoder
+
+
+getAdminArchetypes : (Data (List AdminArchetype) -> msg) -> Cmd msg
+getAdminArchetypes =
+    get "/api/manage/archetypes"
+        (D.field "archetypes" (D.list adminArchetypeDecoder))
+
+
+{-| Create or replace one row. The slug is the key, so it lives in the URL
+rather than the body; the response is the row as written, with its safety
+verdict reset to pending.
+-}
+saveAdminArchetype : AdminArchetype -> (Data AdminArchetype -> msg) -> Cmd msg
+saveAdminArchetype row =
+    put ("/api/manage/archetypes/" ++ row.slug)
+        (E.object
+            [ ( "label", E.string row.label )
+            , ( "description", E.string row.description )
+            , ( "voice_prompt", E.string row.voicePrompt )
+            , ( "greeting", E.string row.greeting )
+            , ( "catch_phrases", E.list E.string row.catchPhrases )
+            , ( "off_topics", E.list E.string row.offTopics )
+            , ( "never", E.string row.never )
+            , ( "handoff_conditions", E.list E.string row.handoffConditions )
+            ]
+        )
+        adminArchetypeDecoder
+
+
+deleteAdminArchetype : String -> (Data () -> msg) -> Cmd msg
+deleteAdminArchetype slug =
+    delete ("/api/manage/archetypes/" ++ slug) (E.object []) (D.succeed ())
 
 
 getAdminDemo : (Data AdminDemo -> msg) -> Cmd msg
@@ -1512,6 +1567,50 @@ demoConfigDecoder generatedAt defaultPrompt =
         (D.field "regeneration_cadence_mins" D.int)
         (D.field "idle_timeout_secs" D.int)
         (D.field "max_user_turns" D.int)
+
+
+adminArchetypeDecoder : Decoder AdminArchetype
+adminArchetypeDecoder =
+    D.map8
+        (\slug label description voicePrompt greeting catchPhrases offTopics never ->
+            { slug = slug
+            , label = label
+            , description = description
+            , voicePrompt = voicePrompt
+            , greeting = greeting
+            , catchPhrases = catchPhrases
+            , offTopics = offTopics
+            , never = never
+            , handoffConditions = []
+            , safetyStatus = "pending"
+            , safetyReason = Nothing
+            , updatedAt = Nothing
+            }
+        )
+        (D.field "slug" D.string)
+        (D.field "label" D.string)
+        (D.field "description" D.string)
+        (D.field "voice_prompt" D.string)
+        (D.field "greeting" D.string)
+        (D.field "catch_phrases" (D.list D.string))
+        (D.field "off_topics" (D.list D.string))
+        (D.field "never" D.string)
+        |> D.andThen
+            (\row ->
+                D.map4
+                    (\handoff status reason updated ->
+                        { row
+                            | handoffConditions = handoff
+                            , safetyStatus = status
+                            , safetyReason = reason
+                            , updatedAt = updated
+                        }
+                    )
+                    (D.field "handoff_conditions" (D.list D.string))
+                    (D.at [ "safety", "status" ] D.string)
+                    (D.at [ "safety", "vague_reason" ] (D.nullable D.string))
+                    (D.field "updated_at" (D.nullable D.string))
+            )
 
 
 tenantRowDecoder : Decoder TenantRow

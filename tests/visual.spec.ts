@@ -540,6 +540,48 @@ async function stubManage(page: import('@playwright/test').Page) {
     generated_at: '2026-09-29T08:30:00Z',
     default_prompt: 'Write four small Indian businesses…',
   });
+  await stub(page, '**/api/manage/archetypes*', {
+    archetypes: [
+      {
+        slug: 'friendly',
+        label: 'Friendly neighbourhood',
+        description: 'Warm and familiar. Good for a shop that knows its regulars.',
+        voice_prompt: 'Voice: warm, kind, conversational. Speak like a shopkeeper who knows the customer.',
+        greeting: 'Hi there! Welcome in — how can I help?',
+        catch_phrases: ['no worries', 'happy to help'],
+        off_topics: ['politics', 'medical advice'],
+        never: 'Never quote a price or promise a delivery date.',
+        handoff_conditions: ['the customer asks for a quote', 'the customer is upset'],
+        safety: {
+          status: 'approved',
+          checked_prompt_hash: 'abc123',
+          checked_at: '2026-09-20T09:00:00Z',
+          vague_reason: null,
+        },
+        created_at: '2026-09-01T09:00:00Z',
+        updated_at: '2026-09-20T09:00:00Z',
+      },
+      {
+        slug: 'concise',
+        label: 'Brief and businesslike',
+        description: 'Confirms what is possible and defers the rest.',
+        voice_prompt: 'Voice: concise and professional. Confirm what is possible, ask for the missing detail.',
+        greeting: 'Thanks for reaching out. How can we help today?',
+        catch_phrases: ['of course'],
+        off_topics: ['politics'],
+        never: 'Never quote a price.',
+        handoff_conditions: ['the customer asks for a quote'],
+        safety: {
+          status: 'pending',
+          checked_prompt_hash: null,
+          checked_at: null,
+          vague_reason: null,
+        },
+        created_at: '2026-09-25T09:00:00Z',
+        updated_at: '2026-09-28T09:00:00Z',
+      },
+    ],
+  });
   await stub(page, '**/api/manage/tenants*', {
     tenants: [
       {
@@ -583,6 +625,15 @@ test('capture manage-pricing.png', async ({ page }) => {
   await capture(page, 'manage-pricing.png', DESKTOP);
 });
 
+test('capture manage-archetypes.png', async ({ page }) => {
+  await stubManage(page);
+  await page.goto('/manage');
+  await page.getByRole('button', { name: 'Archetypes' }).click();
+  await page.locator('.rate-table').waitFor();
+  await settle(page);
+  await capture(page, 'manage-archetypes.png', DESKTOP);
+});
+
 test('the console has a rule for every class it renders', async ({ page }) => {
   await stubManage(page);
   await page.goto('/manage');
@@ -590,11 +641,18 @@ test('the console has a rule for every class it renders', async ({ page }) => {
   await expectFullyStyled(page);
   // The tabs render different markup per panel, so each one is its own
   // chance to ship an unstyled class.
-  for (const tab of ['Pricing', 'Demo', 'Tenants', 'Audit']) {
+  for (const tab of ['Pricing', 'Demo', 'Archetypes', 'Tenants', 'Audit']) {
     await page.getByRole('button', { name: tab }).click();
     await page.locator('.manage .card').first().waitFor();
     await expectFullyStyled(page);
   }
+
+  // The editor is only reachable after a click, so the sweep above never
+  // sees its markup.
+  await page.getByRole('button', { name: 'Archetypes' }).click();
+  await page.getByRole('button', { name: 'Add a voice' }).click();
+  await page.locator('#archetype_slug').waitFor();
+  await expectFullyStyled(page);
 });
 
 /**
