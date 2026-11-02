@@ -10,9 +10,10 @@
 //! audit trail, and the schema reseed. The richer HTML panel that used to
 //! live at `/manage` is not reproduced endpoint-for-endpoint.
 //!
-//! `Page.Manage` in the frontend is the console over these. It does not
-//! cover the archetype endpoints, which is why they read as write-only from
-//! the UI side.
+//! `Page.Manage` in the frontend is the console over these, including the
+//! catalog editor. A catalog write is a two-step change: the row goes back to
+//! pending and a safety job is queued, so the operator sees why the new voice
+//! is not live yet.
 
 use serde::Serialize;
 use worker::*;

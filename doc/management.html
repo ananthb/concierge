@@ -91,7 +91,7 @@
   </div>
 </div>
 
-<p>The console covers the overview and health rollup, pricing, the landing-page demo (including a manual reroll), tenant search with grant and delete, and the audit log. The archetype catalog is the one endpoint group with no view yet: editing a voice re-runs the persona safety queue, and that is worth its own pass rather than a form bolted onto this one.</p>
+<p>The console covers the overview and health rollup, pricing, the landing-page demo (including a manual reroll), the archetype catalog, tenant search with grant and delete, and the audit log. Editing a voice resets its safety verdict and queues a fresh check. If the voice prompt changed, tenants using that row stay paused until the check approves the new prompt and they re-save their persona; the editor says so instead of implying the change is live.</p>
 
 <h2 id="auth">Authentication</h2>
 

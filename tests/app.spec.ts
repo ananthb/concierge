@@ -319,6 +319,40 @@ test.describe('demo chat', () => {
   });
 });
 
+test.describe('operator console', () => {
+  test('an operator can add and delete a voice from the catalog', async ({ page, consoleErrors }) => {
+    const slug = `test-voice-${Date.now()}`;
+
+    await page.goto('/manage');
+    await page.getByRole('button', { name: 'Archetypes' }).click();
+
+    // The seeded catalog from migration 0001.
+    await expect(page.locator('.manage .rate-table')).toBeVisible();
+
+    await page.getByRole('button', { name: 'Add a voice' }).click();
+    await page.getByLabel('Slug').fill(slug);
+    await page.getByLabel('Label').fill('Test voice');
+    await page.getByLabel('Description').fill('A voice created by the test suite.');
+    await page.getByLabel('Voice prompt').fill('Voice: matter-of-fact.');
+    await page.getByLabel('Greeting').fill('Hello from the test suite.');
+    await page.getByRole('button', { name: 'Save voice' }).click();
+
+    await expect(page.locator('.banner.success')).toContainText(slug);
+
+    // Saving re-reads the catalog; the row is pending until the safety queue
+    // approves the voice, which is why it must not look selectable yet.
+    const row = page.locator('.manage .rate-table tr', { hasText: slug });
+    await expect(row).toBeVisible();
+    await expect(row.locator('.pill')).toHaveText('pending');
+
+    await row.getByRole('button', { name: 'Delete' }).click();
+    await page.getByRole('button', { name: 'Delete permanently' }).click();
+    await expect(row).toHaveCount(0);
+
+    expect(consoleErrors, consoleErrors.join('\n')).toEqual([]);
+  });
+});
+
 test.describe('mobile ergonomics', () => {
   test('landing page tap targets clear the floor at 375px', async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 812 });
