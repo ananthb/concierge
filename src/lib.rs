@@ -1,31 +1,6 @@
 //! # Concierge
 //!
-//! Messaging automation for small businesses: WhatsApp and email replies.
-//!
-//! This is a Cloudflare Worker built with Rust + WebAssembly. It handles:
-//!
-//! - **WhatsApp webhooks**: incoming messages trigger auto-replies (static or AI)
-//! - **Inbound email**: Cloudflare Email Routing feeds the Worker's `email`
-//!   event for every connected custom domain
-//! - **JSON API**: `/api/*`, the only interface the frontend has
-//! - **OAuth**: Google sign-in
-//!
-//! The UI is an Elm single-page app in `frontend/`, compiled to
-//! `public/app.js` and served by Cloudflare's asset handler. The Worker
-//! serves the SPA shell for every non-API, non-webhook route.
-//!
-//! ## Architecture
-//!
-//! - `types`: Core data structures (Tenant, WhatsAppAccount, EmailAccount)
-//! - `storage`: Cloudflare KV and D1 operations
-//! - `api`: JSON endpoints, the frontend's only interface
-//! - `ai`: Cloudflare Workers AI integration for auto-reply generation
-//! - `channel`: per-channel send adapters; `whatsapp`, `email`
-//! - `email`: inbound Email Routing handler (`email::inbound`) and the
-//!   outbound Email Service send path (`email::send`)
-//! - `whatsapp`: Meta Graph API client for sending WhatsApp messages
-//! - `crypto`: AES-256-GCM encryption and HMAC-SHA256 verification
-//! - `helpers`: ID generation, HTML escaping, CORS, template interpolation
+//! WhatsApp auto-reply platform for small businesses.
 
 use worker::*;
 
@@ -33,7 +8,6 @@ mod ai;
 mod api;
 mod billing;
 mod channel;
-mod cloudflare;
 mod crypto;
 mod dev_bypass;
 mod durable_objects;
@@ -42,14 +16,11 @@ mod escalations;
 mod handlers;
 mod helpers;
 mod locale;
-mod management;
-mod personas;
 mod pipeline;
 mod prompt;
 mod risk;
 mod safety;
 mod safety_queue;
-mod scheduled;
 mod shell;
 mod storage;
 mod types;
@@ -58,10 +29,9 @@ mod whatsapp;
 pub use durable_objects::ReplyBufferDO;
 pub use types::*;
 
-/// Meta Graph API version used across all Facebook/WhatsApp/Instagram API calls.
+/// Meta Graph API version used across all Facebook/WhatsApp API calls.
 pub const META_API_VERSION: &str = "v21.0";
 
-// Static assets embedded at compile time
 const LOGO_SVG: &str = include_str!("../assets/logo.svg");
 const WEBMANIFEST: &str = include_str!("../assets/site.webmanifest");
 const BROWSERCONFIG: &str = include_str!("../assets/browserconfig.xml");
@@ -72,32 +42,6 @@ const LOGO_192: &[u8] = include_bytes!("../assets/logo-192.png");
 const LOGO_512: &[u8] = include_bytes!("../assets/logo-512.png");
 const MSTILE_150: &[u8] = include_bytes!("../assets/mstile-150x150.png");
 
-/// Add security headers to an HTML response.
-///
-/// This must stay in lockstep with `public/_headers`, which states the same
-/// policy for the prerendered marketing pages. Those are served straight off
-/// Cloudflare's asset handler and never reach this code, so a change here
-/// alone would leave them on the old policy. `tests/csp.spec.ts` asserts the
-/// two agree.
-///
-/// CSP rationale (per directive):
-/// - **script-src**: `'self'` and nothing else of ours. There is no inline
-///   script anywhere — initialisation lives in `/boot.js` — so no nonce and
-///   no `'unsafe-inline'` are needed, which is tighter than the nonce-based
-///   policy this replaced. `'unsafe-eval'` went with Alpine.js, which needed
-///   `new Function()` to evaluate its `x-show="a === b"` attributes; Elm
-///   evaluates nothing at runtime.
-/// - **style-src**: keeps `'unsafe-inline'` for Elm's `style` attributes,
-///   which a nonce could not have covered either.
-/// - **script-src / connect-src / frame-src** allow `connect.facebook.net`
-///   and `*.facebook.com` for WhatsApp Embedded Signup (the SDK aborts
-///   silently when its login dialog and impression telemetry are blocked,
-///   which is how the WhatsApp button once mysteriously "cancelled" in
-///   production) and `checkout.razorpay.com` / `api.razorpay.com` for the
-///   payment checkout.
-///
-/// `is_dev` mirrors `dev_bypass::active(env)`. When true, form-action allows
-/// localhost + 127.0.0.1 and img-src allows `blob:`.
 fn add_security_headers(resp: &mut Response, is_dev: bool) -> Result<()> {
     let headers = resp.headers_mut();
     headers.set("X-Frame-Options", "DENY")?;
@@ -143,8 +87,6 @@ fn serve_png(body: &[u8]) -> Result<Response> {
 #[event(fetch)]
 async fn fetch(req: Request, env: Env, _ctx: Context) -> Result<Response> {
     console_error_panic_hook::set_once();
-    // Captured before `env` is consumed so add_security_headers can pick the
-    // dev vs. prod CSP profile.
     let is_dev = dev_bypass::active(&env);
     let mut resp = handle_request(req, env).await?;
     let is_html = resp
@@ -154,38 +96,20 @@ async fn fetch(req: Request, env: Env, _ctx: Context) -> Result<Response> {
         .flatten()
         .is_some_and(|ct| ct.contains("text/html"));
     if is_html {
-        // Headers only. The body used to be rewritten here to substitute a
-        // per-request CSP nonce; with initialisation moved to `/boot.js`
-        // there is no inline script to nonce, so the response passes through
-        // untouched.
         add_security_headers(&mut resp, is_dev)?;
     }
     Ok(resp)
 }
 
-/// Serve the SPA shell.
-///
-/// Answers with the requested status so a route the frontend treats as "not
-/// found" still returns 404 to a crawler or a monitor, rather than a 200 with
-/// an error rendered inside it.
 fn serve_shell(status: u16) -> Result<Response> {
     let headers = Headers::new();
     headers.set("Content-Type", "text/html; charset=utf-8")?;
-    // Not cached: the shell is cheap to regenerate and caching it would pin a
-    // stale set of CSS integrity hashes across a deploy. `/app.js` and the
-    // prerendered pages are the cacheable parts, handled by the asset layer.
     headers.set("Cache-Control", "no-store")?;
     Ok(Response::ok(shell::html())?
         .with_status(status)
         .with_headers(headers))
 }
 
-/// Routes the Elm app owns. Anything here is served the shell; the app reads
-/// the URL and renders the matching page.
-///
-/// Listed explicitly rather than falling through on everything so a typo'd
-/// path still 404s instead of silently rendering the app's own not-found page
-/// under a 200.
 fn is_app_route(path: &str) -> bool {
     matches!(
         path,
@@ -197,10 +121,10 @@ fn is_app_route(path: &str) -> bool {
             | "/login"
             | "/wizard"
             | "/dashboard"
-            | "/manage"
+            | "/dashboard/channels"
+            | "/dashboard/billing"
+            | "/dashboard/settings"
     ) || path.starts_with("/wizard/")
-        || path.starts_with("/dashboard/")
-        || path.starts_with("/manage/")
 }
 
 async fn handle_request(req: Request, env: Env) -> Result<Response> {
@@ -208,9 +132,6 @@ async fn handle_request(req: Request, env: Env) -> Result<Response> {
     let path = url.path();
     let method = req.method();
 
-    // PUBLIC_BASE_URL is required on every response path: OAuth redirect URIs
-    // and handoff emails all need an absolute URL outside a request context.
-    // Refuse to serve anything without it rather than silently degrade.
     let public_base = env
         .var("PUBLIC_BASE_URL")
         .map(|v| v.to_string())
@@ -226,13 +147,10 @@ async fn handle_request(req: Request, env: Env) -> Result<Response> {
     let host = url.host_str().unwrap_or("");
     let req_base = format!("{}://{}", url.scheme(), host);
 
-    // Embedded static assets. These are `include_bytes!`d rather than served
-    // from `public/` because they're referenced from the manifest and from
-    // emails, so a missing asset should be a build failure, not a 404.
     match path {
         "/robots.txt" => {
             let body = format!(
-                "User-agent: *\nAllow: /\nAllow: /features\nAllow: /pricing\nAllow: /terms\nAllow: /privacy\nDisallow: /api\nDisallow: /dashboard\nDisallow: /wizard\nDisallow: /manage\nDisallow: /auth\nDisallow: /webhook\nDisallow: /whatsapp\n\nSitemap: {req_base}/sitemap.txt\n"
+                "User-agent: *\nAllow: /\nAllow: /features\nAllow: /pricing\nAllow: /terms\nAllow: /privacy\nDisallow: /api\nDisallow: /dashboard\nDisallow: /wizard\nDisallow: /auth\nDisallow: /webhook\nDisallow: /whatsapp\n\nSitemap: {req_base}/sitemap.txt\n"
             );
             return serve_text(&body, "text/plain");
         }
@@ -255,16 +173,10 @@ async fn handle_request(req: Request, env: Env) -> Result<Response> {
         _ => {}
     }
 
-    // The JSON API. Checked before anything else that could shadow it, and
-    // before the essentials gate below: an unconfigured deploy should give the
-    // frontend a JSON error it can render, not an HTML maintenance page it
-    // would fail to decode.
     if path == "/api" || path.starts_with("/api/") {
         return api::handle(req, env, path).await;
     }
 
-    // Webhooks. Counterparties retry on 5xx, so these must answer even while
-    // the rest of the deploy is misconfigured.
     if path == "/webhook/razorpay" && method == Method::Post {
         return billing::webhook::handle_razorpay_webhook(req, env).await;
     }
@@ -272,15 +184,10 @@ async fn handle_request(req: Request, env: Env) -> Result<Response> {
         return handlers::handle_webhook(req, env, path, method).await;
     }
 
-    // Facebook's data-deletion callback: a fixed contract with Meta.
     if path == "/data-deletion" {
         return handlers::handle_data_deletion(req, env, method).await;
     }
 
-    // Routes that can't function without secrets get a maintenance response
-    // when essentials are missing. Marketing routes, webhooks, /health and
-    // /api/manage (Cloudflare Access protected: how the operator recovers)
-    // are unaffected.
     let needs_essentials = path.starts_with("/auth") || path.starts_with("/whatsapp/signup");
     if needs_essentials && !handlers::health::essentials_missing(&env).is_empty() {
         let headers = Headers::new();
@@ -289,33 +196,22 @@ async fn handle_request(req: Request, env: Env) -> Result<Response> {
         return Ok(Response::error("Temporarily unavailable", 503)?.with_headers(headers));
     }
 
-    // Google OAuth: browser redirects, not API calls.
     if path.starts_with("/auth/") {
         return handlers::handle_auth(req, env, path, method).await;
     }
 
-    // WhatsApp Embedded Signup callback: Meta redirects the browser here.
     if path.starts_with("/whatsapp/signup/") {
         return handlers::handle_whatsapp_signup(req, env, path, method).await;
     }
 
-    // Everything the frontend owns.
     if is_app_route(path) {
         return serve_shell(200);
     }
 
-    // Unknown path. Still the shell, so the user gets the app's own
-    // not-found page with working navigation rather than a bare string — but
-    // under a 404 so crawlers and monitors see the truth.
     serve_shell(404)
 }
 
-#[event(scheduled)]
-async fn scheduled_handler(event: ScheduledEvent, env: Env, ctx: ScheduleContext) {
-    scheduled::handle_scheduled(event, env, ctx).await;
-}
-
-/// Persona safety classifier consumer. See `src/safety_queue.rs`.
+/// Content safety classifier consumer. See `src/safety_queue.rs`.
 #[event(queue)]
 async fn queue_handler(
     batch: MessageBatch<safety_queue::SafetyJob>,
@@ -323,12 +219,4 @@ async fn queue_handler(
     _ctx: Context,
 ) -> Result<()> {
     safety_queue::handle_batch(batch, env).await
-}
-
-/// Inbound email. Cloudflare Email Routing delivers mail for every
-/// connected custom domain here; we resolve the recipient to a tenant
-/// account and run it through the shared pipeline. See `src/email/inbound.rs`.
-#[event(email)]
-async fn email_handler(message: ForwardableEmailMessage, env: Env, _ctx: Context) -> Result<()> {
-    email::inbound::handle(message, env).await
 }

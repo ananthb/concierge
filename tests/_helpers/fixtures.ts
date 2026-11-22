@@ -45,3 +45,19 @@ export async function waitForBoot(page: import('@playwright/test').Page) {
     () => (window as unknown as { __conciergeBooted?: boolean }).__conciergeBooted === true,
   );
 }
+
+/**
+ * Sign in via `POST /auth/dev-login` (active when `DEV_MODE=1`).
+ * Stores the `HttpOnly` session cookie in `request`'s cookie jar.
+ */
+export async function devLogin(
+  request: import('@playwright/test').APIRequestContext,
+  email = `test-${Date.now()}@local.test`,
+): Promise<string> {
+  const resp = await request.post('/auth/dev-login', {
+    data: { email },
+    maxRedirects: 0,
+  });
+  expect(resp.status(), 'dev-login should redirect with session cookie').toBe(302);
+  return email;
+}

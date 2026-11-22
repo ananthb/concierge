@@ -2,37 +2,27 @@ use serde::Serialize;
 use worker::*;
 
 const DEFAULT_MODEL: &str = "@cf/meta/llama-4-scout-17b-16e-instruct";
-const DEFAULT_FAST_MODEL: &str = "@cf/meta/llama-3.1-8b-instruct-fast";
-/// Hardcoded model for the demo persona business-detail generator.
-/// Kimi K2.6's strength is structured JSON output, which is exactly
-/// what that endpoint asks for. Not env-overrideable: the demo and
-/// pipeline chat paths share the configurable `AI_MODEL` so the demo
-/// faithfully represents production behavior; the persona generator is
-/// the one place where a different model is justified.
-const PERSONA_GEN_MODEL: &str = "@cf/moonshotai/kimi-k2.6";
+const DEFAULT_INJECTION_MODEL: &str = "@cf/meta/prompt-guard-2-86m";
 
 fn get_model(env: &Env) -> String {
     env.var("AI_MODEL")
+        .ok()
         .map(|v| v.to_string())
-        .unwrap_or_else(|_| DEFAULT_MODEL.to_string())
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| DEFAULT_MODEL.to_string())
 }
 
-fn get_fast_model(env: &Env) -> String {
-    env.var("AI_FAST_MODEL")
+fn get_injection_model(env: &Env) -> String {
+    env.var("AI_INJECTION_MODEL")
+        .ok()
         .map(|v| v.to_string())
-        .unwrap_or_else(|_| DEFAULT_FAST_MODEL.to_string())
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| DEFAULT_INJECTION_MODEL.to_string())
 }
 
 #[derive(Serialize)]
 struct AiRequest {
     messages: Vec<Message>,
-    /// Optional output cap. Only set for callers that need a long
-    /// structured reply (e.g. the demo persona generator that returns
-    /// a JSON array of N businesses). Skipped from the wire when None
-    /// so existing chat callers continue to send the exact request
-    /// shape they always have, dodging the "Workers AI rejects
-    /// unrecognized request keys" footgun for model bindings that
-    /// don't accept `max_tokens`.
     #[serde(skip_serializing_if = "Option::is_none")]
     max_tokens: Option<u32>,
 }
@@ -43,24 +33,17 @@ struct Message {
     content: String,
 }
 
+#[derive(Serialize)]
+struct PromptGuardRequest {
+    text: String,
+}
+
 // ============================================================================
 // AI Response Generation
 // ============================================================================
 
 /// Generate a multi-turn chat reply. The caller passes the actual
-/// `(role, content)` history and we forward it verbatim. Used by the
-/// public `/demo/chat` endpoint AND the main
-/// pipeline (which hands over the conversation history stored on the
-/// `Session`).
-///
-/// Caller is expected to keep replies short via the system prompt; we
-/// don't pass `max_tokens` because some Workers AI model bindings
-/// reject unrecognized request keys.
-///
-/// Empty history is allowed but unusual: the model will see only the
-/// system prompt and have nothing to reply to. The pipeline always
-/// appends the inbound that just arrived before calling, so this
-/// degenerate case is reserved for tests / smoke checks.
+/// `(role, content)` history and we forward it verbatim.
 pub async fn generate_chat_reply(
     env: &Env,
     system_prompt: &str,
@@ -94,105 +77,78 @@ pub async fn generate_chat_reply(
     }
 }
 
-/// Generate the demo persona JSON array via Kimi K2.6. Hardcoded
-/// model: this is the one call where structured-output quality is
-/// load-bearing and the cost (cache-absorbed) is small. `max_tokens`
-/// is set high because the reply is a JSON array with one entry per
-/// archetype; the chat model's default ~256-token cap truncates it
-/// mid-string after three entries.
-///
-/// Sends the instructions and the archetype list as a single user
-/// message rather than a system + user pair. Some Workers AI model
-/// bindings (Kimi K2.6 in particular) ignore system messages and
-/// fall through to a generic conversational reply (`"Thank you for
-/// your message."`). Inlining keeps the contract robust across model
-/// swaps.
-pub async fn generate_persona_businesses(
-    env: &Env,
-    system_prompt: &str,
-    user_prompt: &str,
-    max_tokens: u32,
-) -> Result<String> {
-    if crate::dev_bypass::active(env) {
-        // Count `:` occurrences in the user prompt as a rough proxy
-        // for "number of archetypes the caller listed". The persona
-        // generator concatenates `label: description` lines, so the
-        // colon count is one per archetype.
-        let n = user_prompt.matches(':').count().max(1);
-        return Ok(crate::dev_bypass::stub_persona_businesses(n));
+// ============================================================================
+// Prompt Injection Detection (@cf/meta/prompt-guard-2-86m)
+// ============================================================================
+
+/// Check if a message looks like a prompt injection or jailbreak attempt.
+/// Returns `true` if injection is detected. Fails closed (`true` on error).
+pub async fn is_prompt_injection(env: &Env, text: &str) -> bool {
+    if crate::dev_bypass::active(env) || text.trim().len() < 10 {
+        return false;
     }
-    let combined = format!("{system_prompt}\n\n{user_prompt}");
-    let messages = vec![Message {
-        role: "user".to_string(),
-        content: combined,
-    }];
-    let request = AiRequest {
-        messages,
-        max_tokens: Some(max_tokens),
+
+    let model = get_injection_model(env);
+    let ai = match env.ai("AI") {
+        Ok(a) => a,
+        Err(_) => return true,
     };
-    let reply = run_ai_model(env, PERSONA_GEN_MODEL, &request).await?;
-    let trimmed = reply.trim();
-    if trimmed.is_empty() {
-        Err(Error::from("AI returned empty chat response"))
-    } else {
-        Ok(trimmed.to_string())
+
+    let req = PromptGuardRequest {
+        text: text.to_string(),
+    };
+    let result: std::result::Result<serde_json::Value, _> = ai.run(&model, &req).await;
+    match result {
+        Ok(val) => parse_prompt_guard_verdict(&val),
+        Err(e) => {
+            console_log!("Prompt guard error: {:?}", e);
+            true
+        }
     }
 }
 
-// ============================================================================
-// Prompt Injection Detection
-// ============================================================================
-
-/// Check if a message looks like a prompt injection attempt.
-/// Returns true if injection is detected. Fails closed (returns true on error).
-pub async fn is_prompt_injection(env: &Env, text: &str) -> bool {
-    if crate::dev_bypass::active(env) {
-        return false;
-    }
-    let model = get_fast_model(env);
-    // Skip very short messages
-    if text.len() < 10 {
-        return false;
-    }
-
-    let request = AiRequest {
-        messages: vec![
-            Message {
-                role: "system".to_string(),
-                content: crate::prompt::INJECTION_SCANNER.to_string(),
-            },
-            Message {
-                role: "user".to_string(),
-                content: text.to_string(),
-            },
-        ],
-        max_tokens: None,
+/// Parse Cloudflare Workers AI `@cf/meta/prompt-guard-2-86m` classification
+/// output. Returns `true` (injection detected / fail-closed) if any entry has a
+/// malicious/injection/jailbreak label with `score >= 0.5`, OR if no recognized
+/// benign/malicious label is present.
+pub(crate) fn parse_prompt_guard_verdict(val: &serde_json::Value) -> bool {
+    let items: Vec<&serde_json::Value> = if let Some(arr) = val.as_array() {
+        arr.iter().collect()
+    } else if let Some(arr) = val.get("result").and_then(|v| v.as_array()) {
+        arr.iter().collect()
+    } else if let Some(arr) = val.get("response").and_then(|v| v.as_array()) {
+        arr.iter().collect()
+    } else if let Some(obj) = val.get("result").filter(|v| v.is_object()) {
+        vec![obj]
+    } else if let Some(obj) = val.get("response").filter(|v| v.is_object()) {
+        vec![obj]
+    } else if val.is_object() {
+        vec![val]
+    } else {
+        return true;
     };
 
-    let ai = match env.ai("AI") {
-        Ok(a) => a,
-        Err(_) => return true, // fail closed
-    };
-
-    // Pass the struct directly. See `run_ai_model` for the JS Map vs Object trap.
-    let result: std::result::Result<serde_json::Value, _> = ai.run(&model, &request).await;
-    match result {
-        Ok(response) => {
-            let answer = response
-                .as_str()
-                .or_else(|| {
-                    response
-                        .get("response")
-                        .and_then(|r: &serde_json::Value| r.as_str())
-                })
-                .unwrap_or("YES");
-            answer.trim().to_uppercase().starts_with("YES")
-        }
-        Err(e) => {
-            console_log!("Injection scanner error: {:?}", e);
-            true // fail closed
+    let mut saw_recognized = false;
+    for item in items {
+        let Some(label) = item.get("label").and_then(|v| v.as_str()) else {
+            continue;
+        };
+        let Some(score) = item.get("score").and_then(|v| v.as_f64()) else {
+            continue;
+        };
+        let upper = label.trim().to_ascii_uppercase();
+        if upper.contains("MALICIOUS") || upper.contains("INJECTION") || upper.contains("JAILBREAK")
+        {
+            saw_recognized = true;
+            if score >= 0.5 {
+                return true;
+            }
+        } else if upper == "BENIGN" || upper == "SAFE" {
+            saw_recognized = true;
         }
     }
+
+    !saw_recognized
 }
 
 // ============================================================================
@@ -202,32 +158,19 @@ pub async fn is_prompt_injection(env: &Env, text: &str) -> bool {
 async fn run_ai_model(env: &Env, model: &str, request: &AiRequest) -> Result<String> {
     let ai = env.ai("AI")?;
 
-    // CRITICAL: pass the `AiRequest` struct directly to `ai.run`. Round-tripping
-    // through `serde_json::Value` and then handing the resulting Value to the
-    // worker-rs binding makes `serde_wasm_bindgen` serialize the inner
-    // `Map<String, Value>` as a JavaScript `Map` (the ES6 `new Map(...)` type)
-    // rather than a plain Object. Workers AI's input schema validates against a
-    // plain Object, sees no own properties on the Map, and returns:
-    //   AiError 5006: oneOf at '/' not met, 0 matches: required properties at
-    //   '/' are 'prompt', 'messages', 'requests'.
-    // Serializing the struct directly emits a real Object via `serialize_struct`.
+    // Pass the typed `AiRequest` struct directly so `serde_wasm_bindgen`
+    // emits a plain JS Object rather than a Map.
     let response: serde_json::Value = ai
         .run(model, request)
         .await
         .map_err(|e| Error::from(format!("AI model error: {:?}", e)))?;
 
-    // Workers AI text-generation responses come back in a few shapes
-    // depending on the model family. Probe each one in priority order;
-    // log the unknown shape if none match so the wrapper can be
-    // extended for new models.
     if let Some(s) = response.as_str() {
         return Ok(s.to_string());
     }
     if let Some(s) = response.get("response").and_then(|r| r.as_str()) {
         return Ok(s.to_string());
     }
-    // OpenAI-compatible chat-completions shape (Kimi K2.x, gpt-oss):
-    //   { "choices": [ { "message": { "content": "…" } } ] }
     if let Some(s) = response
         .get("choices")
         .and_then(|c| c.get(0))
@@ -237,11 +180,9 @@ async fn run_ai_model(env: &Env, model: &str, request: &AiRequest) -> Result<Str
     {
         return Ok(s.to_string());
     }
-    // OpenAI Responses-API shape: { "output_text": "…" }.
     if let Some(s) = response.get("output_text").and_then(|s| s.as_str()) {
         return Ok(s.to_string());
     }
-    // Workers AI sometimes wraps the body under `result`.
     if let Some(s) = response
         .get("result")
         .and_then(|r| r.get("response"))
@@ -258,4 +199,53 @@ async fn run_ai_model(env: &Env, model: &str, request: &AiRequest) -> Result<Str
     Err(Error::from(format!(
         "AI model {model} returned unrecognized response shape"
     )))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn prompt_guard_benign_passes() {
+        let val = json!([
+            { "label": "BENIGN", "score": 0.99 },
+            { "label": "MALICIOUS", "score": 0.01 }
+        ]);
+        assert!(!parse_prompt_guard_verdict(&val));
+    }
+
+    #[test]
+    fn prompt_guard_malicious_or_injection_or_jailbreak_blocks() {
+        for label in ["MALICIOUS", "INJECTION", "JAILBREAK", "malicious"] {
+            let val = json!([
+                { "label": "BENIGN", "score": 0.1 },
+                { "label": label, "score": 0.5 }
+            ]);
+            assert!(
+                parse_prompt_guard_verdict(&val),
+                "expected injection for {label}"
+            );
+        }
+    }
+
+    #[test]
+    fn prompt_guard_handles_result_and_response_wrappers() {
+        assert!(!parse_prompt_guard_verdict(&json!({
+            "result": [{ "label": "BENIGN", "score": 0.98 }]
+        })));
+        assert!(parse_prompt_guard_verdict(&json!({
+            "response": [{ "label": "INJECTION", "score": 0.87 }]
+        })));
+    }
+
+    #[test]
+    fn prompt_guard_fails_closed_on_unrecognized_shapes() {
+        assert!(parse_prompt_guard_verdict(&json!(null)));
+        assert!(parse_prompt_guard_verdict(&json!([])));
+        assert!(parse_prompt_guard_verdict(&json!({})));
+        assert!(parse_prompt_guard_verdict(&json!([
+            { "label": "UNKNOWN", "score": 0.99 }
+        ])));
+    }
 }

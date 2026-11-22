@@ -6,36 +6,23 @@ use crate::locale::Currency;
 // Tenant Types
 // ============================================================================
 
-/// Tenant subscription tier. Pricing pages (`templates/management.rs`)
-/// match on this enum; rate-limit/quota logic that needs a plan branch
-/// adds a method here so adding a tier doesn't fan out across files.
+/// Tenant subscription tier.
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, Default, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum Plan {
-    /// Complimentary account: usage is tracked (replies_used increments,
-    /// dashboards still show a balance) but the credit gate is skipped
-    /// and Razorpay CTAs are hidden. Operators flip selected tenants to
-    /// Free from the management panel.
+    /// Complimentary account: usage is tracked (`replies_used` increments)
+    /// without blocking on a zero balance.
     Free,
-    /// Standard pay-per-credit account.
+    /// Standard prepaid pay-per-reply account.
     #[default]
     Paid,
 }
 
 impl Plan {
-    pub const ALL: &'static [Plan] = &[Plan::Free, Plan::Paid];
-
     pub fn as_str(self) -> &'static str {
         match self {
             Plan::Free => "free",
             Plan::Paid => "paid",
-        }
-    }
-
-    pub fn label(self) -> &'static str {
-        match self {
-            Plan::Free => "Free",
-            Plan::Paid => "Paid",
         }
     }
 
@@ -47,9 +34,7 @@ impl Plan {
         }
     }
 
-    /// Whether the credit balance gates outbound replies. Free accounts
-    /// still consume credits when present, but never get blocked when
-    /// the balance hits zero.
+    /// Whether the credit balance gates outbound replies.
     pub fn is_metered(self) -> bool {
         matches!(self, Plan::Paid)
     }
@@ -64,24 +49,59 @@ pub struct Tenant {
     pub facebook_id: Option<String>,
     #[serde(default)]
     pub plan: Plan,
-    /// BCP-47 locale tag, e.g. "en-IN", "en-US". Drives UI grouping and
-    /// (in Phase 2) translated copy. Currency below is a separate override
-    /// that lets a tenant see prices in INR while reading English-IN copy.
     #[serde(default = "default_locale")]
     pub locale: String,
     #[serde(default)]
     pub currency: Currency,
-    /// Set the first time we observe a captured Razorpay payment for this
-    /// tenant. The sign-up wizard charges a small refundable verification
-    /// amount; this flips on success and gates wizard "Finish".
-    #[serde(default)]
-    pub verified_at: Option<String>,
     pub created_at: String,
     pub updated_at: String,
 }
 
 fn default_locale() -> String {
     "en-IN".to_string()
+}
+
+// ============================================================================
+// Content Safety State
+// ============================================================================
+
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum SafetyStatus {
+    #[default]
+    Pending,
+    Approved,
+    Rejected,
+}
+
+impl SafetyStatus {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            SafetyStatus::Pending => "pending",
+            SafetyStatus::Approved => "approved",
+            SafetyStatus::Rejected => "rejected",
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+pub struct SafetyState {
+    #[serde(default)]
+    pub status: SafetyStatus,
+    #[serde(default)]
+    pub content_hash: Option<String>,
+    #[serde(default)]
+    pub checked_at: Option<String>,
+    #[serde(default)]
+    pub vague_reason: Option<String>,
+}
+
+impl SafetyState {
+    /// True iff safety has approved the exact current content (no hash drift).
+    pub fn is_approved_for(&self, content: &str) -> bool {
+        matches!(self.status, SafetyStatus::Approved)
+            && self.content_hash.as_deref() == Some(crate::helpers::sha256_hex(content).as_str())
+    }
 }
 
 // ============================================================================
@@ -95,88 +115,23 @@ pub struct WhatsAppAccount {
     pub name: String,
     pub phone_number: String,
     pub phone_number_id: String,
+    #[serde(default)]
+    pub waba_id: Option<String>,
     pub auto_reply: ReplyConfig,
+    #[serde(default)]
+    pub canned_safety: SafetyState,
     pub created_at: String,
     pub updated_at: String,
 }
 
-// ============================================================================
-// Email Account Resource
-// ============================================================================
-
-/// A tenant's connected custom email domain.
-///
-/// Inbound mail for `domain` (any local part, or the single address below)
-/// is routed by Cloudflare Email Routing to the Worker's `email` handler,
-/// matched back to this account, and answered by the same pipeline as
-/// WhatsApp. Outbound replies are sent through Cloudflare Email Service
-/// from `local_part@domain`, threaded onto the original message.
-///
-/// One account per (tenant, address). `domain` is the routing key: mail to
-/// any local part on it lands on the tenant's catch-all when no
-/// per-address account claims it first.
-#[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct EmailAccount {
-    pub id: String,
-    pub tenant_id: String,
-    /// Human label, e.g. "Sales inbox".
-    pub name: String,
-    /// Custom domain the tenant owns and has onboarded, e.g. "acme.com".
-    /// Lowercased on save; used for routing and as the send domain.
-    pub domain: String,
-    /// Local part replies are sent from, e.g. "hello". Empty means the
-    /// domain catch-all (`*@domain`) and replies go from `support@domain`.
-    #[serde(default)]
-    pub local_part: String,
-    /// Display name on outbound mail, e.g. "Acme Support".
-    #[serde(default)]
-    pub from_name: String,
-    pub auto_reply: ReplyConfig,
-    pub created_at: String,
-    pub updated_at: String,
-}
-
-impl EmailAccount {
-    /// Local part outbound mail is actually sent from. Falls back to
-    /// `support` so a catch-all account still has a concrete From.
-    pub fn effective_local_part(&self) -> &str {
-        if self.local_part.is_empty() {
-            "support"
-        } else {
-            &self.local_part
-        }
-    }
-
-    /// Full address replies are sent from, e.g. "hello@acme.com".
-    pub fn from_address(&self) -> String {
-        format!("{}@{}", self.effective_local_part(), self.domain)
-    }
-
-    /// RFC 5322 From header value, with a display name when one is set.
-    pub fn from_header(&self) -> String {
-        if self.from_name.is_empty() {
-            self.from_address()
-        } else {
-            format!("{} <{}>", self.from_name, self.from_address())
-        }
-    }
-}
-
-/// Per-channel reply behaviour: one response for every inbound message.
-///
-/// The ordered rule list (keyword and embedding matchers, per-rule approval
-/// policy) was cut. Every inbound now takes the same path: `Canned` sends
-/// verbatim, `Prompt` runs the persona through the LLM.
+/// Per-channel reply configuration.
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct ReplyConfig {
     pub enabled: bool,
-    /// What to send. Was `default_rule`, the mandatory fallback that in
-    /// practice handled nearly every message anyway.
-    #[serde(default = "default_response", alias = "default_rule")]
+    #[serde(default = "default_response")]
     pub response: ReplyResponse,
     /// Seconds to wait after the latest inbound message before replying.
-    /// Lets users finish typing and groups multi-message bursts into one
-    /// AI call. 0 = reply immediately (no buffering).
+    /// 0 = reply immediately (no buffering).
     #[serde(default = "default_wait_seconds")]
     pub wait_seconds: u32,
 }
@@ -184,7 +139,7 @@ pub struct ReplyConfig {
 impl Default for ReplyConfig {
     fn default() -> Self {
         Self {
-            enabled: false,
+            enabled: true,
             response: default_response(),
             wait_seconds: default_wait_seconds(),
         }
@@ -192,48 +147,36 @@ impl Default for ReplyConfig {
 }
 
 impl ReplyConfig {
-    /// Read the response text without unwrapping the enum.
-    pub fn default_text(&self) -> &str {
-        match &self.response {
-            ReplyResponse::Canned { text } | ReplyResponse::Prompt { text } => text,
-        }
-    }
-
-    /// True when the response is static text (no LLM, no credit).
-    pub fn default_is_canned(&self) -> bool {
+    /// True when the response is static text (`Canned`).
+    pub fn is_canned(&self) -> bool {
         matches!(self.response, ReplyResponse::Canned { .. })
     }
 
-    /// Set the response from an API payload. `mode` is the wire value
-    /// ("canned" / "prompt" / legacy "static" / "ai").
-    pub fn set_default_response(&mut self, mode: &str, text: String) {
-        self.response = match mode {
-            "ai" | "prompt" => ReplyResponse::Prompt { text },
-            _ => ReplyResponse::Canned { text },
-        };
+    /// Canned text when `Canned`, empty string when `Ai`.
+    pub fn canned_text(&self) -> &str {
+        match &self.response {
+            ReplyResponse::Ai => "",
+            ReplyResponse::Canned { text } => text,
+        }
     }
 }
 
-/// Default response for a channel that hasn't been customized: run the
-/// persona through the LLM with a generic instruction.
 pub fn default_response() -> ReplyResponse {
-    ReplyResponse::Prompt {
-        text: "Reply to the customer's message helpfully.".to_string(),
-    }
+    ReplyResponse::Ai
 }
 
 pub fn default_wait_seconds() -> u32 {
-    5
+    3
 }
 
-/// What to send when a rule matches.
-#[derive(Serialize, Deserialize, Clone, Debug)]
-#[serde(tag = "kind", rename_all = "snake_case")]
+/// What to send when an inbound message arrives.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[serde(tag = "mode", rename_all = "snake_case")]
 pub enum ReplyResponse {
-    /// Send this text verbatim. No AI call, no credit.
+    /// Use the single small-business core persona via Workers AI.
+    Ai,
+    /// Send this static text verbatim. Costs 1 reply credit.
     Canned { text: String },
-    /// Append this prompt to the persona prompt and run the main LLM.
-    Prompt { text: String },
 }
 
 // ============================================================================
@@ -249,6 +192,7 @@ pub struct WhatsAppWebhook {
 
 #[derive(Debug, Deserialize)]
 pub struct WebhookEntry {
+    #[allow(dead_code)]
     pub id: String,
     #[serde(default)]
     pub changes: Vec<WebhookChange>,
@@ -262,6 +206,7 @@ pub struct WebhookChange {
 
 #[derive(Debug, Deserialize)]
 pub struct WebhookValue {
+    #[allow(dead_code)]
     pub messaging_product: String,
     pub metadata: WebhookMetadata,
     #[serde(default)]
@@ -272,6 +217,7 @@ pub struct WebhookValue {
 
 #[derive(Debug, Deserialize)]
 pub struct WebhookMetadata {
+    #[allow(dead_code)]
     pub display_phone_number: String,
     pub phone_number_id: String,
 }
@@ -291,8 +237,10 @@ pub struct ContactProfile {
 pub struct WhatsAppMessage {
     pub from: String,
     pub id: String,
+    #[allow(dead_code)]
     pub timestamp: String,
     #[serde(rename = "type")]
+    #[allow(dead_code)]
     pub message_type: String,
     #[serde(default)]
     pub text: Option<TextMessage>,
@@ -303,47 +251,33 @@ pub struct TextMessage {
     pub body: String,
 }
 
-#[derive(Debug, Clone)]
-pub struct IncomingMessage {
-    pub from: String,
-    pub sender_name: String,
-    pub text: String,
-    pub message_id: String,
-    pub timestamp: String,
-}
-
 // ============================================================================
 // Unified Messaging Types
 // ============================================================================
 
-/// Inbound channel a message arrived on.
+/// Inbound messaging channel.
 ///
-/// WhatsApp and Email are the two channels; Instagram and Discord were
-/// cut. The enum is what the D1 `channel` column, the conversation key
-/// and the pipeline all carry, so a new channel is a variant plus an arm.
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
-#[serde(rename_all = "snake_case")]
+/// WhatsApp-only today; `Discord` and `Telegram` are planned extensions that
+/// plug in by adding a variant, a `channel/` adapter, and a KV lookup arm in
+/// `storage::get_channel_reply_config`.
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
 pub enum Channel {
     WhatsApp,
-    Email,
 }
 
 impl Channel {
-    /// Lowercase wire form used by the D1 `channel` column and inside
-    /// API/webhook payloads. Diverges from serde's snake_case form (which
-    /// would emit "whats_app"); keep both intact.
+    /// Lowercase wire form used by the D1 `channel` column and inside KV keys.
     pub fn as_str(&self) -> &'static str {
         match self {
             Channel::WhatsApp => "whatsapp",
-            Channel::Email => "email",
         }
     }
 
-    /// Display label used in the UI.
+    /// Display label used in notifications.
     pub fn label(&self) -> &'static str {
         match self {
             Channel::WhatsApp => "WhatsApp",
-            Channel::Email => "Email",
         }
     }
 }
@@ -365,16 +299,16 @@ impl MessageDirection {
     }
 }
 
-/// What was done with a message after the pipeline routed it. Stored on
-/// the `messages` row so an operator can audit which path fired.
+/// Outcome recorded on a `messages` row.
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum MessageAction {
     /// Auto-reply sent.
     AutoReply,
-    /// Draft tripped the risk gate: nothing was sent to the customer and
-    /// the tenant was paged to take the conversation over.
+    /// Draft tripped the risk gate: holding sentence sent and tenant paged.
     HandedOff,
+    /// Reply suppressed because the tenant had no remaining reply credits.
+    NoCredits,
 }
 
 impl MessageAction {
@@ -382,6 +316,7 @@ impl MessageAction {
         match self {
             MessageAction::AutoReply => "auto_reply",
             MessageAction::HandedOff => "handed_off",
+            MessageAction::NoCredits => "no_credits",
         }
     }
 }
@@ -394,6 +329,10 @@ pub struct InboundMessage {
     pub sender: String,
     pub sender_name: Option<String>,
     pub recipient: String,
+    /// Destination identifier for replies (phone number for WhatsApp; decoupled
+    /// so Discord `channel_id` / Telegram `chat_id` fit without pipeline changes).
+    #[serde(default)]
+    pub reply_to: String,
     pub body: String,
     pub has_attachment: bool,
     pub tenant_id: String,
@@ -401,62 +340,36 @@ pub struct InboundMessage {
     pub raw_metadata: serde_json::Value,
 }
 
-/// Per-customer conversation session. Stable-keyed by
-/// `(tenant_id, channel, channel_account_id, sender)` (see
-/// `storage::save_session`).
-///
-/// Concierge doesn't have a formal "thread" object. A Session is the
-/// soft equivalent. A conversation is considered ended once the
-/// customer has been silent for the tenant's effective idle gap (see
-/// `prompt::DEFAULT_CONVERSATION_IDLE_GAP_MINS` and
-/// [`ConversationConfig`]): the next inbound after that gap starts a
-/// fresh conversation (any in-progress handoff state is wiped, and
-/// the message history is cleared). Within the gap, all inbound from
-/// the same sender belong to the same conversation regardless of
-/// length.
-///
-/// Sessions are the only conversation state: the per-approval
-/// `ConversationContext` record went with the approval queue.
+impl InboundMessage {
+    /// Conversation routing key for this inbound message.
+    /// For WhatsApp this is `reply_to` (the customer's `sender` number).
+    pub fn conversation_key(&self) -> String {
+        if self.reply_to.is_empty() {
+            self.sender.clone()
+        } else {
+            self.reply_to.clone()
+        }
+    }
+}
+
+/// Per-customer conversation session.
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct Session {
-    /// RFC3339 timestamp of the most recent inbound message we
-    /// processed for this thread. Updated on every inbound, including
-    /// during the post-cooldown silent window. As long as the
-    /// customer keeps pinging within the idle gap, the thread stays
-    /// bound to the same conversation (and the same handoff record,
-    /// if any).
     #[serde(default)]
     pub last_inbound_at: String,
-    /// In-progress handoff sub-state. `None` for a normal conversation;
-    /// populated once the AI signals a handoff. Cleared at conversation
-    /// boundaries (idle gap exceeded).
     #[serde(default)]
     pub handoff: Option<HandoffState>,
-    /// Stable id for the active conversation. Bumped when the idle-gap
-    /// fires and a fresh conversation starts. Stamped onto every D1
-    /// `messages` row written for this thread so an audit log can
-    /// reconstruct who said what to whom in which conversation.
     #[serde(default)]
     pub conversation_id: String,
-    /// Bounded list of recent turns within this conversation,
-    /// forming the chat context handed back to the model on each
-    /// turn. Capped to the tenant's effective `max_history_messages`.
-    /// Cleared when a fresh conversation starts.
     #[serde(default)]
     pub messages: Vec<ConversationMessage>,
 }
 
-/// One turn inside a `Session.messages` list. Roles mirror what
-/// Workers AI expects in its `messages` array: `User` for inbound
-/// customer text, `Assistant` for outbound replies we actually sent.
-/// Drafts queued for approval are NOT recorded here: only sent
-/// outbounds become history.
+/// One turn inside a `Session.messages` list.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct ConversationMessage {
     pub role: ConversationRole,
     pub content: String,
-    /// RFC3339 timestamp of the turn. Useful for audit/diagnostics;
-    /// not currently used by the AI call itself.
     pub at: String,
 }
 
@@ -479,44 +392,23 @@ impl ConversationRole {
 /// Per-conversation handoff state. Lives inside `Session::handoff`.
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct HandoffState {
-    /// RFC3339 timestamp of the AI turn that emitted the handoff
-    /// token. Used to compute the cooldown window (see
-    /// `prompt::DEFAULT_HANDOFF_COOLDOWN_MINS` and the
-    /// per-tenant override in [`ConversationConfig`]).
     pub signaled_at: String,
-    /// One-shot guard so additional customer messages inside the
-    /// holding-pattern window don't re-page the tenant.
     #[serde(default)]
     pub notified: bool,
 }
 
-/// Per-tenant overrides for the conversation timing knobs. All fields
-/// are `Option`: a `None` means "use the global default" from
-/// `prompt::DEFAULT_*`. Lives on `OnboardingState`. Pipeline collapses
-/// the optionals into concrete numbers via [`ConversationConfig::resolve`].
+/// Per-tenant overrides for the conversation timing knobs.
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct ConversationConfig {
-    /// How long the customer can stay silent before the next inbound
-    /// is treated as a fresh conversation. Falls back to
-    /// `prompt::DEFAULT_CONVERSATION_IDLE_GAP_MINS`.
     #[serde(default)]
     pub idle_gap_mins: Option<u32>,
-    /// How long after a handoff signal we keep replying with the
-    /// holding-pattern voice before going silent. Falls back to
-    /// `prompt::DEFAULT_HANDOFF_COOLDOWN_MINS`.
     #[serde(default)]
     pub handoff_cooldown_mins: Option<u32>,
-    /// How many recent turns we keep as chat context for the AI.
-    /// Falls back to
-    /// `prompt::DEFAULT_CONVERSATION_MAX_MESSAGES`.
     #[serde(default)]
     pub max_history_messages: Option<u32>,
 }
 
 impl ConversationConfig {
-    /// Collapse the optional per-tenant overrides into concrete
-    /// numbers, falling back to the `prompt::DEFAULT_*` constants for
-    /// any field the tenant has not overridden. Pure: no KV/D1 reads.
     pub fn resolve(&self) -> ConversationWindow {
         ConversationWindow {
             idle_gap_mins: self
@@ -534,8 +426,6 @@ impl ConversationConfig {
     }
 }
 
-/// Concrete per-turn conversation window. Output of
-/// [`ConversationConfig::resolve`]; consumed by the pipeline.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ConversationWindow {
     pub idle_gap_mins: i64,
@@ -543,7 +433,7 @@ pub struct ConversationWindow {
     pub max_history_messages: u32,
 }
 
-/// Business information collected at onboarding. Used for invoicing.
+/// Business information collected at onboarding.
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct BusinessInfo {
     #[serde(default)]
@@ -553,7 +443,7 @@ pub struct BusinessInfo {
     #[serde(default)]
     pub phone: String,
     #[serde(default)]
-    pub business_type: String, // "sole_proprietorship" | "partnership" | "pvt_ltd" | "llp"
+    pub business_type: String,
     #[serde(default)]
     pub pan: String,
     #[serde(default)]
@@ -567,15 +457,8 @@ pub struct BusinessInfo {
 }
 
 /// Where a human handoff is announced.
-///
-/// Email is the only channel. The Discord relay that used to carry an
-/// embed with Approve/Reject buttons was cut along with the approval
-/// queue, and with the queue went the digest: a handoff pages the tenant
-/// the moment it happens, so there is no cadence left to configure.
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct NotificationConfig {
-    /// Email the account owner when a conversation is handed off. On by
-    /// default — a handoff nobody hears about is a dropped customer.
     #[serde(default = "default_true", alias = "approval_email")]
     pub handoff_email: bool,
 }
@@ -592,64 +475,20 @@ fn default_true() -> bool {
     true
 }
 
-#[cfg(test)]
-mod enum_tests {
-    use super::{OnboardingStep, Plan};
-
-    #[test]
-    fn onboarding_step_round_trip_and_index() {
-        for step in OnboardingStep::ALL {
-            assert_eq!(OnboardingStep::from_wire(step.as_str()), Some(step));
-        }
-        assert_eq!(OnboardingStep::from_wire("welcome"), None);
-        // Indices stay in display order, and ALL is in that order too.
-        for (i, step) in OnboardingStep::ALL.iter().enumerate() {
-            assert_eq!(step.index(), i);
-        }
-    }
-
-    #[test]
-    fn onboarding_step_accepts_the_old_replies_name() {
-        // A wizard abandoned mid-flight has "replies" persisted as its step.
-        assert_eq!(
-            OnboardingStep::from_wire("replies"),
-            Some(OnboardingStep::Persona)
-        );
-    }
-
-    #[test]
-    fn plan_from_wire_rejects_unknown() {
-        assert_eq!(Plan::from_wire("free"), Some(Plan::Free));
-        assert_eq!(Plan::from_wire("paid"), Some(Plan::Paid));
-        assert_eq!(Plan::from_wire("enterprise"), None);
-    }
-
-    #[test]
-    fn plan_is_metered_only_for_paid() {
-        assert!(Plan::Paid.is_metered());
-        assert!(!Plan::Free.is_metered());
-    }
-}
-
-/// Steps in the onboarding wizard, in display order. The wizard URL
-/// (`/wizard/<step>`) mirrors `as_str` exactly.
+/// Steps in the onboarding wizard, in display order.
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, Default, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum OnboardingStep {
     #[default]
     Basics,
     Channels,
-    Persona,
     Launch,
 }
 
 impl OnboardingStep {
-    /// Every step in display order. The frontend renders its progress bar
-    /// from this, so the wizard's shape is described in one place.
-    pub const ALL: [OnboardingStep; 4] = [
+    pub const ALL: [OnboardingStep; 3] = [
         OnboardingStep::Basics,
         OnboardingStep::Channels,
-        OnboardingStep::Persona,
         OnboardingStep::Launch,
     ];
 
@@ -657,7 +496,6 @@ impl OnboardingStep {
         match self {
             OnboardingStep::Basics => "basics",
             OnboardingStep::Channels => "channels",
-            OnboardingStep::Persona => "persona",
             OnboardingStep::Launch => "launch",
         }
     }
@@ -666,22 +504,16 @@ impl OnboardingStep {
         match s {
             "basics" => Some(OnboardingStep::Basics),
             "channels" => Some(OnboardingStep::Channels),
-            // "replies" was this step's name when it also seeded per-channel
-            // reply rules. Accepted so a half-finished wizard resumes.
-            "persona" | "replies" => Some(OnboardingStep::Persona),
             "launch" => Some(OnboardingStep::Launch),
             _ => None,
         }
     }
 
-    /// Display index used by the progress bar. Same order as the variant
-    /// definition so adding a step doesn't drift this from `as_str`.
     pub fn index(self) -> usize {
         match self {
             OnboardingStep::Basics => 0,
             OnboardingStep::Channels => 1,
-            OnboardingStep::Persona => 2,
-            OnboardingStep::Launch => 3,
+            OnboardingStep::Launch => 2,
         }
     }
 }
@@ -698,18 +530,11 @@ pub struct OnboardingState {
     #[serde(default)]
     pub conversation: ConversationConfig,
     #[serde(default)]
-    pub persona: PersonaConfig,
-    /// Default wait_seconds copied into ReplyConfig on every channel account
-    /// this tenant connects later. Per-account overrides live on each ReplyConfig.
+    pub profile_safety: SafetyState,
     #[serde(default = "default_wait_seconds")]
     pub default_wait_seconds: u32,
     #[serde(default)]
     pub completed: bool,
-    /// Tenant has dismissed the one-time banner explaining that AI replies
-    /// now pause for review when a draft mentions money or makes a commitment.
-    /// Sticky across sessions.
-    #[serde(default)]
-    pub risk_gate_banner_dismissed: bool,
 }
 
 impl Default for OnboardingState {
@@ -719,181 +544,48 @@ impl Default for OnboardingState {
             business: BusinessInfo::default(),
             notifications: NotificationConfig::default(),
             conversation: ConversationConfig::default(),
-            persona: PersonaConfig::default(),
+            profile_safety: SafetyState::default(),
             default_wait_seconds: default_wait_seconds(),
             completed: false,
-            risk_gate_banner_dismissed: false,
         }
     }
 }
 
-/// Tenant-wide AI persona used as the system prompt for every AI reply.
-/// The persona is one of three sources (Preset, Builder, Custom), never a
-/// mix, so there is exactly one source of truth for the active prompt.
-#[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct PersonaConfig {
-    pub source: PersonaSource,
-    #[serde(default)]
-    pub safety: PersonaSafety,
-}
+// ============================================================================
+// Billing Types: Reply Credits
+// ============================================================================
 
-impl Default for PersonaConfig {
-    fn default() -> Self {
-        Self {
-            source: PersonaSource::Builder(PersonaBuilder::default()),
-            safety: PersonaSafety::default(),
-        }
-    }
-}
-
-impl PersonaConfig {
-    /// The actual prompt sent to the LLM. Computed from the source on demand.
-    /// Archetype-based personas require the voice prompt fetched from D1.
-    pub fn active_prompt(&self, voice_prompt: &str) -> String {
-        self.source.active_prompt(voice_prompt)
-    }
-
-    /// SHA-256 of the active prompt, used to detect when a re-run of the
-    /// safety classifier is needed.
-    pub fn active_prompt_hash(&self, voice_prompt: &str) -> String {
-        crate::helpers::sha256_hex(&self.active_prompt(voice_prompt))
-    }
-
-    /// True if AI replies are allowed: the safety check has approved the
-    /// current prompt (no hash drift since approval).
-    pub fn is_safe_to_use(&self, voice_prompt: &str) -> bool {
-        matches!(self.safety.status, PersonaSafetyStatus::Approved)
-            && self.safety.checked_prompt_hash.as_deref()
-                == Some(self.active_prompt_hash(voice_prompt).as_str())
-    }
-}
-
-/// How a persona's editable middle is sourced. Tenants pick exactly one.
-/// `Preset` was a third variant in older revisions; tenants picking a
-/// catalog persona at onboarding now copy that row's `Builder` snapshot
-/// here directly, so a tenant's KV record is always one of these two
-/// pure-function shapes.
-#[derive(Serialize, Deserialize, Clone, Debug)]
-#[serde(tag = "kind", rename_all = "snake_case")]
-pub enum PersonaSource {
-    /// User-filled inputs the system composes through `personas::generate`.
-    Builder(PersonaBuilder),
-    /// Power-user override: raw prompt text.
-    Custom(String),
-}
-
-impl PersonaSource {
-    /// Pure: render the editable middle. The envelope (`crate::prompt::wrap`)
-    /// is added separately at the AI-call boundary.
-    pub fn active_prompt(&self, voice_prompt: &str) -> String {
-        match self {
-            PersonaSource::Builder(b) => crate::personas::generate(b, voice_prompt),
-            PersonaSource::Custom(s) => s.clone(),
-        }
-    }
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug, Default)]
-pub struct PersonaBuilder {
-    /// Reference to an entry in the `archetypes` D1 table.
-    #[serde(default)]
-    pub archetype_slug: String,
-    /// Required: the business's name (used in the generated prompt as
-    /// "Business: {biz_name}, a {biz_type}…").
-    #[serde(default)]
-    pub biz_name: String,
-    #[serde(default)]
-    pub biz_type: String,
-    #[serde(default)]
-    pub city: String,
-    /// Free-text business hours (e.g. "Tue–Sun 9am–7pm"). Optional.
-    /// Plugged into the generated prompt as a "Hours: …" line so the
-    /// AI can reference them when a customer asks "are you open?".
-    #[serde(default)]
-    pub hours: String,
-    /// The single outcome the AI should drive customers toward
-    /// (e.g. "book a delivery slot"). Optional but strongly encouraged.
-    /// When blank, `personas::generate` emits a default
-    /// "answer the question and let them know a human will follow up"
-    /// goal so every prompt has a concrete endpoint.
-    #[serde(default)]
-    pub goal: String,
-    /// Optional landing place for the goal: a relative path (`/book`) or
-    /// an absolute `https://` URL. Sanitised on save:
-    /// `javascript:`/`data:`/bare domains are rejected.
-    #[serde(default)]
-    pub goal_url: String,
-    #[serde(default)]
-    pub catch_phrases: Vec<String>,
-    #[serde(default)]
-    pub off_topics: Vec<String>,
-    #[serde(default)]
-    pub never: String,
-    /// Free-text conditions under which the AI should stop trying and
-    /// hand off to a human (e.g. "the customer is upset", "any refund
-    /// or complaint"). Optional but recommended. Rendered as a
-    /// "Hand off to a human if any of these come up: …" block. The
-    /// universal triggers (model confused, customer asks for a person,
-    /// medical/legal/financial/safety territory) live in the immutable
-    /// postamble. These are tenant-specific additions.
-    #[serde(default)]
-    pub handoff_conditions: Vec<String>,
-}
-
-/// One row in the `archetypes` D1 catalog. Curated by management, listed
-/// in the demo persona picker, and referenced by a tenant's persona
-/// config.
-#[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct Archetype {
-    pub slug: String,
-    pub label: String,
-    pub description: String,
-    pub voice_prompt: String,
-    pub greeting: String,
-    pub catch_phrases: Vec<String>,
-    pub off_topics: Vec<String>,
-    pub never: String,
-    pub handoff_conditions: Vec<String>,
-    #[serde(default)]
-    pub safety: PersonaSafety,
-    #[serde(default)]
-    pub created_at: Option<String>,
-    #[serde(default)]
-    pub updated_at: Option<String>,
-}
-
-impl Archetype {
-    /// True iff the archetype's safety verdict is Approved.
-    pub fn is_safe_to_use(&self) -> bool {
-        matches!(self.safety.status, PersonaSafetyStatus::Approved)
-    }
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug, Default)]
-pub struct PersonaSafety {
-    #[serde(default)]
-    pub status: PersonaSafetyStatus,
-    /// SHA-256 of the prompt that was last vetted. Used to detect when the
-    /// active prompt has drifted (e.g. user edited but new check hasn't
-    /// completed) and AI replies must be paused.
-    #[serde(default)]
-    pub checked_prompt_hash: Option<String>,
-    #[serde(default)]
-    pub checked_at: Option<String>,
-    /// User-facing decline reason for the Rejected case. Always vague: the
-    /// internal classifier category is logged but not exposed so users can't
-    /// iterate prompts against the classifier.
-    #[serde(default)]
-    pub vague_reason: Option<String>,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[serde(rename_all = "snake_case")]
-pub enum PersonaSafetyStatus {
-    #[default]
-    Pending,
-    Approved,
-    Rejected,
+pub enum CreditSource {
+    Purchase,
+    Grant,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct CreditEntry {
+    pub amount: i64,
+    pub source: CreditSource,
+    pub expires_at: Option<String>,
+    pub granted_at: String,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+pub struct TenantBilling {
+    #[serde(default)]
+    pub credits: Vec<CreditEntry>,
+    #[serde(default)]
+    pub replies_used: i64,
+}
+
+impl TenantBilling {
+    pub fn has_credits(&self) -> bool {
+        self.total_remaining() > 0
+    }
+
+    pub fn total_remaining(&self) -> i64 {
+        self.credits.iter().map(|e| e.amount).sum()
+    }
 }
 
 #[cfg(test)]
@@ -901,18 +593,52 @@ mod tests {
     use super::*;
 
     #[test]
+    fn onboarding_step_round_trip_and_index() {
+        for step in OnboardingStep::ALL {
+            assert_eq!(OnboardingStep::from_wire(step.as_str()), Some(step));
+        }
+        assert_eq!(OnboardingStep::from_wire("persona"), None);
+        for (i, step) in OnboardingStep::ALL.iter().enumerate() {
+            assert_eq!(step.index(), i);
+        }
+    }
+
+    #[test]
+    fn plan_from_wire_rejects_unknown() {
+        assert_eq!(Plan::from_wire("free"), Some(Plan::Free));
+        assert_eq!(Plan::from_wire("paid"), Some(Plan::Paid));
+        assert_eq!(Plan::from_wire("enterprise"), None);
+    }
+
+    #[test]
+    fn plan_is_metered_only_for_paid() {
+        assert!(Plan::Paid.is_metered());
+        assert!(!Plan::Free.is_metered());
+    }
+
+    #[test]
     fn test_reply_response_serialization() {
         let canned = ReplyResponse::Canned {
             text: "hi".to_string(),
         };
         let s = serde_json::to_string(&canned).unwrap();
-        assert!(s.contains("\"kind\":\"canned\""));
+        assert!(s.contains("\"mode\":\"canned\""));
         assert!(s.contains("\"text\":\"hi\""));
-        let prompt = ReplyResponse::Prompt {
-            text: "be helpful".to_string(),
-        };
-        let s = serde_json::to_string(&prompt).unwrap();
-        assert!(s.contains("\"kind\":\"prompt\""));
+
+        let ai = ReplyResponse::Ai;
+        let s = serde_json::to_string(&ai).unwrap();
+        assert_eq!(s, "{\"mode\":\"ai\"}");
+    }
+
+    #[test]
+    fn channel_serde_and_wire_strings_match() {
+        assert_eq!(Channel::WhatsApp.as_str(), "whatsapp");
+        assert_eq!(
+            serde_json::to_string(&Channel::WhatsApp).unwrap(),
+            "\"whatsapp\""
+        );
+        let parsed: Channel = serde_json::from_str("\"whatsapp\"").unwrap();
+        assert_eq!(parsed, Channel::WhatsApp);
     }
 
     #[test]
@@ -985,27 +711,6 @@ mod tests {
     }
 
     #[test]
-    fn conversation_config_resolve_partial_overrides_fall_back_per_field() {
-        // Only idle_gap is overridden; the other two should pick up
-        // their defaults independently.
-        let cfg = ConversationConfig {
-            idle_gap_mins: Some(45),
-            handoff_cooldown_mins: None,
-            max_history_messages: None,
-        };
-        let win = cfg.resolve();
-        assert_eq!(win.idle_gap_mins, 45);
-        assert_eq!(
-            win.handoff_cooldown_mins,
-            crate::prompt::DEFAULT_HANDOFF_COOLDOWN_MINS
-        );
-        assert_eq!(
-            win.max_history_messages,
-            crate::prompt::DEFAULT_CONVERSATION_MAX_MESSAGES
-        );
-    }
-
-    #[test]
     fn session_round_trips_with_messages_and_conversation_id() {
         let session = Session {
             last_inbound_at: "2026-05-04T12:00:00.000Z".to_string(),
@@ -1030,112 +735,5 @@ mod tests {
         assert_eq!(back.messages.len(), 2);
         assert_eq!(back.messages[0].role, ConversationRole::User);
         assert_eq!(back.messages[1].role, ConversationRole::Assistant);
-        assert_eq!(back.messages[1].content, "hello!");
-    }
-
-    #[test]
-    fn session_deserializes_legacy_records_without_messages_field() {
-        // Old KV records (pre-conversation-history) lack messages,
-        // conversation_id. With #[serde(default)] they should still
-        // load (empty list, empty id), and the pipeline will mint a
-        // fresh conversation_id on next turn.
-        let legacy_json = r#"{
-            "last_inbound_at": "2026-05-04T12:00:00.000Z",
-            "handoff": null
-        }"#;
-        let parsed: Session = serde_json::from_str(legacy_json).unwrap();
-        assert_eq!(parsed.last_inbound_at, "2026-05-04T12:00:00.000Z");
-        assert!(parsed.handoff.is_none());
-        assert!(parsed.conversation_id.is_empty());
-        assert!(parsed.messages.is_empty());
-    }
-
-    #[test]
-    fn conversation_role_wire_strings_are_stable() {
-        // Workers AI's chat schema requires "user" / "assistant" exact
-        // strings; the pipeline relies on these wire values.
-        assert_eq!(ConversationRole::User.as_wire(), "user");
-        assert_eq!(ConversationRole::Assistant.as_wire(), "assistant");
-    }
-
-    #[test]
-    fn channel_wire_strings_are_stable() {
-        assert_eq!(Channel::WhatsApp.as_str(), "whatsapp");
-        assert_eq!(Channel::Email.as_str(), "email");
-    }
-
-    #[test]
-    fn email_account_from_address_uses_local_part() {
-        let account = EmailAccount {
-            id: "e1".into(),
-            tenant_id: "t1".into(),
-            name: "Sales".into(),
-            domain: "acme.com".into(),
-            local_part: "hello".into(),
-            from_name: "Acme Sales".into(),
-            auto_reply: ReplyConfig::default(),
-            created_at: String::new(),
-            updated_at: String::new(),
-        };
-        assert_eq!(account.from_address(), "hello@acme.com");
-        assert_eq!(account.from_header(), "Acme Sales <hello@acme.com>");
-    }
-
-    #[test]
-    fn email_account_catch_all_falls_back_to_support() {
-        let account = EmailAccount {
-            id: "e1".into(),
-            tenant_id: "t1".into(),
-            name: String::new(),
-            domain: "acme.com".into(),
-            local_part: String::new(),
-            from_name: String::new(),
-            auto_reply: ReplyConfig::default(),
-            created_at: String::new(),
-            updated_at: String::new(),
-        };
-        assert_eq!(account.from_address(), "support@acme.com");
-        // No display name: the header is the bare address.
-        assert_eq!(account.from_header(), "support@acme.com");
-    }
-}
-
-// ============================================================================
-// Billing Types: Reply Credits
-// ============================================================================
-
-/// Source of a credit entry: determines expiry behavior.
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
-#[serde(rename_all = "snake_case")]
-pub enum CreditSource {
-    Purchase,
-    Grant,
-}
-
-/// A single credit ledger entry with optional expiry.
-#[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct CreditEntry {
-    pub amount: i64,
-    pub source: CreditSource,
-    pub expires_at: Option<String>, // ISO 8601, None = never expires
-    pub granted_at: String,         // ISO 8601
-}
-
-/// Tenant billing state: credit ledger with expiry support.
-#[derive(Serialize, Deserialize, Clone, Debug, Default)]
-pub struct TenantBilling {
-    #[serde(default)]
-    pub credits: Vec<CreditEntry>,
-    #[serde(default)]
-    pub replies_used: i64, // lifetime replies sent
-}
-
-impl TenantBilling {
-    pub fn has_credits(&self) -> bool {
-        self.total_remaining() > 0
-    }
-
-    pub fn total_remaining(&self) -> i64 {
-        self.credits.iter().map(|e| e.amount).sum()
     }
 }

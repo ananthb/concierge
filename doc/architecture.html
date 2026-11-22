@@ -55,7 +55,7 @@
       <div class="sidebar__group-label">Operate</div>
       <ul class="sidebar__list">
         <li><a href="billing.html"><span class="dot"></span>Billing &amp; credits</a></li>
-        <li><a href="management.html"><span class="dot"></span>Operator API</a></li>
+        
       </ul>
     </div>
     <div class="sidebar__group">
@@ -146,7 +146,7 @@
 
 <h2>AI reply pipeline</h2>
 <ul>
-  <li><strong>Inference binding:</strong> Cloudflare Workers AI <code>AI</code> binding. Default models: <code>llama-4-scout-17b-16e-instruct</code> for replies, <code>llama-3.1-8b-instruct-fast</code> for prompt-injection scanning and persona safety classification. Both configurable via <code>AI_MODEL</code> / <code>AI_FAST_MODEL</code>. The BGE embedding model went with the rule matcher.</li>
+  <li><strong>Inference binding:</strong> Cloudflare Workers AI <code>AI</code> binding. Default models: <code>llama-4-scout-17b-16e-instruct</code> for replies, <code>llama-4-scout.1-8b-instruct-fast</code> for prompt-injection scanning and persona safety classification. Both configurable via <code>AI_MODEL</code> / <code>AI_FAST_MODEL</code>. The BGE embedding model went with the rule matcher.</li>
   <li><strong>Prompt envelope:</strong> every system prompt is wrapped by <code>prompt::wrap(middle)</code>: a fixed <code>PREAMBLE</code> framing the model as a small-business reply assistant, the editable middle (the tenant's persona), and a fixed <code>POSTAMBLE</code> carrying house rules, jailbreak rails and the handoff sentinel <code>[[HANDOFF]]</code>. Both bookends are constants in <code>src/prompt.rs</code>; tenant content never reaches the model alone, and the API returns all three parts so the UI can render what-you-see-is-what-the-model-sees.</li>
   <li><strong>Persona prompt:</strong> tenant-wide, in <code>PersonaConfig.source</code> as one of two variants — <code>Builder(PersonaBuilder)</code> or <code>Custom(String)</code>, never a blend, so there is exactly one source for the active prompt. The builder carries archetype slug, business name and type, city, hours, <code>goal</code> (free text + optional sanitized URL), catch-phrases, off-topics, a <code>never</code> line, and <code>handoff_conditions</code>; <code>personas::generate</code> renders these into the middle. Curated archetypes live in the <code>archetypes</code> D1 catalog and are referenced by slug for their voice prompt, with the tenant's own fields layered over.</li>
   <li><strong>Reply config:</strong> per-channel <code>ReplyConfig { enabled, response, wait_seconds }</code>. <code>response</code> is <code>Canned { text }</code> (sent verbatim, free) or <code>Prompt { text }</code> (appended to the persona and run through the LLM, one credit). The ordered rule list with keyword and embedding matchers, and the per-rule <code>ApprovalPolicy</code>, are gone; the field is deserialized with <code>alias = "default_rule"</code> so existing records still load.</li>

@@ -1,22 +1,20 @@
-module Page.Wizard exposing (Model, Msg, init, update, view)
+module Page.Wizard exposing (Model, Msg, init, subscriptions, update, view)
 
-{-| The onboarding wizard: basics, connect a channel, pick a persona, launch.
+{-| The onboarding wizard: business basics, connect WhatsApp, launch.
 
 The server owns which step you're on. Every advance is a write that validates
 the step being left, and the response carries the new step — so this module
-never decides progression, it renders whatever `/api/wizard` last said. That's
-why there's no local `currentStep` field: two sources of truth for "where am
-I" is exactly how a wizard ends up letting someone skip a step.
-
-Form state is local and seeded from the server's copy on load. Edits stay
-local until you press the button that advances the step.
+never decides progression, it renders whatever `/api/wizard` last said.
 
 -}
 
 import Api
+import Format
 import Html exposing (Html, div, h1, h2, li, ol, p, section, span, text, ul)
 import Html.Attributes exposing (attribute, class, classList)
 import Html.Events
+import Json.Encode as E
+import Ports
 import RemoteData exposing (RemoteData(..))
 import Ui
 
@@ -26,26 +24,10 @@ import Ui
 
 
 type alias Model =
-    { wizard : Api.Data Api.Wizard
-
-    -- Local edits for the step being filled in. Seeded from the server's
-    -- copy whenever a fresh wizard arrives.
-    , basics : Api.Business
-    , personaSlug : String
-    , goal : String
-    , goalUrl : String
-    , handoffText : String
-
-    -- The connect-an-email-domain form on the channels step.
-    , emailDomain : String
-    , emailLocalPart : String
-    , emailName : String
-    , emailFromName : String
-
-    -- Set while a mutation is in flight so buttons can't be double-fired.
+    { wizard : Api.Data Api.WizardView
+    , basics : Api.Basics
     , saving : Bool
-
-    -- A validation message from the last rejected save.
+    , connectingMeta : Bool
     , problem : Maybe String
     }
 
@@ -53,34 +35,13 @@ type alias Model =
 init : ( Model, Cmd Msg )
 init =
     ( { wizard = Loading
-      , basics = emptyBusiness
-      , personaSlug = ""
-      , goal = ""
-      , goalUrl = ""
-      , handoffText = ""
-      , emailDomain = ""
-      , emailLocalPart = ""
-      , emailName = ""
-      , emailFromName = ""
+      , basics = Api.emptyBasics
       , saving = False
+      , connectingMeta = False
       , problem = Nothing
       }
     , Api.getWizard GotWizard
     )
-
-
-emptyBusiness : Api.Business
-emptyBusiness =
-    { name = ""
-    , contactName = ""
-    , phone = ""
-    , businessType = ""
-    , pan = ""
-    , gstin = ""
-    , address = ""
-    , state = ""
-    , pincode = ""
-    }
 
 
 
@@ -88,20 +49,12 @@ emptyBusiness =
 
 
 type Msg
-    = GotWizard (Api.Data Api.Wizard)
-    | EditBasics (Api.Business -> Api.Business)
+    = GotWizard (Api.Data Api.WizardView)
+    | RefreshedWizard (Api.Data Api.WizardView)
+    | EditBasics (Api.Basics -> Api.Basics)
     | SaveBasics
-    | PickPersona String
-    | EditGoal String
-    | EditGoalUrl String
-    | EditHandoff String
-    | SavePersona
-    | SetEmailDomain String
-    | SetEmailLocalPart String
-    | SetEmailName String
-    | SetEmailFromName String
-    | ConnectEmail
-    | ConnectedEmail (Api.Data Api.EmailAccount)
+    | StartMetaSignup Api.MetaSignup
+    | MetaSignupCame E.Value
     | ChannelsDone
     | GoBack String
     | Finish
@@ -114,12 +67,11 @@ update msg model =
             ( { model
                 | wizard = result
                 , saving = False
+                , connectingMeta = False
                 , problem =
                     case result of
                         Failure err ->
                             if Api.isUnauthenticated err then
-                                -- Main routes to login on this; showing a
-                                -- message too would flash and vanish.
                                 Nothing
 
                             else
@@ -132,6 +84,21 @@ update msg model =
             , Cmd.none
             )
 
+        RefreshedWizard result ->
+            case result of
+                Success wizard ->
+                    ( { model | wizard = Success wizard } |> seedForm result, Cmd.none )
+
+                Failure err ->
+                    if Api.isUnauthenticated err then
+                        ( { model | wizard = Failure err }, Cmd.none )
+
+                    else
+                        ( model, Cmd.none )
+
+                _ ->
+                    ( model, Cmd.none )
+
         EditBasics change ->
             ( { model | basics = change model.basics }, Cmd.none )
 
@@ -140,74 +107,37 @@ update msg model =
             , Api.saveBasics model.basics GotWizard
             )
 
-        PickPersona slug ->
-            ( { model | personaSlug = slug }, Cmd.none )
-
-        EditGoal value ->
-            ( { model | goal = value }, Cmd.none )
-
-        EditGoalUrl value ->
-            ( { model | goalUrl = value }, Cmd.none )
-
-        EditHandoff value ->
-            ( { model | handoffText = value }, Cmd.none )
-
-        SavePersona ->
-            ( { model | saving = True, problem = Nothing }
-            , Api.savePersonaStep
-                { archetypeSlug = model.personaSlug
-                , goal = model.goal
-                , goalUrl = model.goalUrl
-                , handoffConditions = lines model.handoffText
+        StartMetaSignup signup ->
+            ( { model | connectingMeta = True, problem = Nothing }
+            , Ports.openMetaSignup
+                { appId = signup.appId
+                , configId = signup.configId
+                , state = signup.state
                 }
-                GotWizard
             )
 
-        SetEmailDomain value ->
-            ( { model | emailDomain = value }, Cmd.none )
-
-        SetEmailLocalPart value ->
-            ( { model | emailLocalPart = value }, Cmd.none )
-
-        SetEmailName value ->
-            ( { model | emailName = value }, Cmd.none )
-
-        SetEmailFromName value ->
-            ( { model | emailFromName = value }, Cmd.none )
-
-        ConnectEmail ->
-            ( { model | saving = True, problem = Nothing }
-            , Api.connectEmail
-                { domain = model.emailDomain
-                , localPart = model.emailLocalPart
-                , name = model.emailName
-                , fromName = model.emailFromName
-                }
-                ConnectedEmail
-            )
-
-        ConnectedEmail result ->
-            case result of
-                Success _ ->
-                    -- Clear the form and re-read the wizard so the connected
-                    -- domain shows up and the step can advance.
-                    ( { model
-                        | saving = True
-                        , emailDomain = ""
-                        , emailLocalPart = ""
-                        , emailName = ""
-                        , emailFromName = ""
-                      }
+        MetaSignupCame raw ->
+            case Ports.decodeMetaSignupOutcome raw of
+                Ports.MetaSignupOk ->
+                    ( { model | connectingMeta = False, saving = True, problem = Nothing }
                     , Api.getWizard GotWizard
                     )
 
-                Failure err ->
-                    ( { model | saving = False, problem = Just (Api.errorMessage err) }
-                    , Cmd.none
+                Ports.MetaSignupCancelled ->
+                    ( { model
+                        | connectingMeta = False
+                        , problem = Just "WhatsApp signup was cancelled. Click Connect with Meta whenever you're ready."
+                      }
+                    , Api.getWizard RefreshedWizard
                     )
 
-                _ ->
-                    ( model, Cmd.none )
+                Ports.MetaSignupError errMsg ->
+                    ( { model
+                        | connectingMeta = False
+                        , problem = Just errMsg
+                      }
+                    , Api.getWizard RefreshedWizard
+                    )
 
         ChannelsDone ->
             ( { model | saving = True, problem = Nothing }, Api.channelsDone GotWizard )
@@ -219,39 +149,28 @@ update msg model =
             ( { model | saving = True, problem = Nothing }, Api.completeWizard GotWizard )
 
 
-{-| Copy the server's values into the local form fields, but only for fields
-the user hasn't started editing — a re-fetch mid-typing shouldn't wipe input.
-Since edits and fetches don't interleave in this flow (every save is a full
-round-trip), seeding on every successful load is safe and keeps it simple.
--}
-seedForm : Api.Data Api.Wizard -> Model -> Model
+seedForm : Api.Data Api.WizardView -> Model -> Model
 seedForm result model =
     case result of
         Success wizard ->
-            { model
-                | basics = wizard.business
-                , personaSlug = wizard.persona.archetypeSlug
-                , goal = wizard.persona.goal
-                , goalUrl = wizard.persona.goalUrl
-                , handoffText = String.join "\n" wizard.persona.handoffConditions
-            }
+            { model | basics = wizard.basics }
 
         _ ->
             model
 
 
-{-| Split a textarea into non-empty trimmed lines.
--}
-lines : String -> List String
-lines text_ =
-    text_
-        |> String.lines
-        |> List.map String.trim
-        |> List.filter (not << String.isEmpty)
+subscriptions : Sub Msg
+subscriptions =
+    Ports.metaSignupOutcome MetaSignupCame
 
 
 
 -- VIEW
+
+
+wizardSteps : List String
+wizardSteps =
+    [ "basics", "channels", "launch" ]
 
 
 view : Model -> Html Msg
@@ -260,7 +179,7 @@ view model =
         [ Ui.remote model.wizard (body model) ]
 
 
-body : Model -> Api.Wizard -> Html Msg
+body : Model -> Api.WizardView -> Html Msg
 body model wizard =
     div []
         [ progress wizard
@@ -277,9 +196,6 @@ body model wizard =
             "channels" ->
                 channelsStep model wizard
 
-            "persona" ->
-                personaStep model wizard
-
             "launch" ->
                 launchStep model wizard
 
@@ -288,11 +204,11 @@ body model wizard =
         ]
 
 
-progress : Api.Wizard -> Html Msg
+progress : Api.WizardView -> Html Msg
 progress wizard =
     let
         currentIndex =
-            indexOf wizard.step wizard.steps
+            indexOf wizard.step wizardSteps
     in
     ol [ class "wizard-progress" ]
         (List.indexedMap
@@ -314,7 +230,7 @@ progress wizard =
                     , span [ class "wizard-step-label" ] [ text (stepLabel step) ]
                     ]
             )
-            wizard.steps
+            wizardSteps
         )
 
 
@@ -335,10 +251,7 @@ stepLabel step =
             "Your business"
 
         "channels" ->
-            "Connect"
-
-        "persona" ->
-            "Choose a voice"
+            "Connect WhatsApp"
 
         "launch" ->
             "Go live"
@@ -360,15 +273,15 @@ basicsStep model =
     section [ class "wizard-step" ]
         [ h1 [] [ text "Tell us about your business" ]
         , p [ class "step-sub" ]
-            [ text "This is what goes on your invoices, and the name your customers will see in replies." ]
+            [ text "These details go on your invoices and help Concierge greet your WhatsApp customers properly." ]
         , Ui.card
             [ Ui.field
                 { id = "name"
                 , label = "Brand name"
-                , value = b.name
+                , value = b.brandName
                 , hint = "What customers call you."
                 , required = True
-                , onInput = \v -> EditBasics (\x -> { x | name = v })
+                , onInput = \v -> EditBasics (\x -> { x | brandName = v })
                 }
             , Ui.field
                 { id = "contact_name"
@@ -381,12 +294,12 @@ basicsStep model =
             , Ui.field
                 { id = "phone"
                 , label = "Contact phone"
-                , value = b.phone
+                , value = b.contactPhone
                 , hint = "For us to reach you — not the WhatsApp number you'll connect next."
                 , required = True
-                , onInput = \v -> EditBasics (\x -> { x | phone = v })
+                , onInput = \v -> EditBasics (\x -> { x | contactPhone = v })
                 }
-            , entityPicker b.businessType
+            , entityPicker b.entityType
             , Ui.field
                 { id = "pan"
                 , label = "PAN"
@@ -422,10 +335,10 @@ basicsStep model =
             , Ui.field
                 { id = "pincode"
                 , label = "PIN code"
-                , value = b.pincode
+                , value = b.pin
                 , hint = ""
                 , required = False
-                , onInput = \v -> EditBasics (\x -> { x | pincode = v })
+                , onInput = \v -> EditBasics (\x -> { x | pin = v })
                 }
             ]
         , div [ class "wizard-actions" ]
@@ -457,7 +370,7 @@ entityPicker current =
                     Html.button
                         [ classList [ ( "choice", True ), ( "is-selected", current == wire ) ]
                         , Html.Attributes.type_ "button"
-                        , Html.Events.onClick (EditBasics (\x -> { x | businessType = wire }))
+                        , Html.Events.onClick (EditBasics (\x -> { x | entityType = wire }))
                         ]
                         [ text label_ ]
                 )
@@ -467,63 +380,46 @@ entityPicker current =
 
 
 
--- STEP: CHANNELS
+-- STEP: CHANNELS (WHATSAPP ONLY)
 
 
-channelsStep : Model -> Api.Wizard -> Html Msg
+channelsStep : Model -> Api.WizardView -> Html Msg
 channelsStep model wizard =
     section [ class "wizard-step" ]
-        [ h1 [] [ text "Connect how customers reach you" ]
+        [ h1 [] [ text "Connect your WhatsApp Business number" ]
         , p [ class "step-sub" ]
-            [ text "Answer WhatsApp messages, email to your own domain, or both. You can add the other later from your dashboard." ]
-        , whatsappBlock wizard
-        , emailBlock model wizard
-        , if List.isEmpty wizard.whatsapp && List.isEmpty wizard.email then
-            text ""
+            [ text "Link your WhatsApp Business number through Meta Embedded Signup. Nothing changes for customers who already message you." ]
+        , whatsappBlock model wizard
+        , div [ class "wizard-actions" ]
+            ([ Ui.button
+                { label = "Back"
+                , onClick = GoBack "basics"
+                , primary = False
+                , busy = model.saving || model.connectingMeta
+                }
+             ]
+                ++ (if List.isEmpty wizard.whatsapp then
+                        []
 
-          else
-            div [ class "wizard-actions" ]
-                [ Ui.button
-                    { label = "Back"
-                    , onClick = GoBack "basics"
-                    , primary = False
-                    , busy = model.saving
-                    }
-                , Ui.button
-                    { label = "Continue"
-                    , onClick = ChannelsDone
-                    , primary = True
-                    , busy = model.saving
-                    }
-                ]
+                    else
+                        [ Ui.button
+                            { label = "Continue"
+                            , onClick = ChannelsDone
+                            , primary = True
+                            , busy = model.saving || model.connectingMeta
+                            }
+                        ]
+                   )
+            )
         ]
 
 
-whatsappBlock : Api.Wizard -> Html Msg
-whatsappBlock wizard =
+whatsappBlock : Model -> Api.WizardView -> Html Msg
+whatsappBlock model wizard =
     Ui.card
-        [ h2 [] [ text "WhatsApp" ]
+        [ h2 [] [ text "WhatsApp Business" ]
         , if List.isEmpty wizard.whatsapp then
-            case wizard.signup of
-                Just signup ->
-                    div []
-                        [ p [] [ text "You'll go through Meta's own signup. Keep your existing number — nothing changes for the people who already message you." ]
-
-                        -- The Embedded Signup SDK owns this button: it
-                        -- opens Meta's dialog and redirects back to
-                        -- /whatsapp/signup/*, which is a server route.
-                        -- Rendering it as a plain link keeps the flow
-                        -- working even when the SDK fails to load.
-                        , Ui.linkButton
-                            { label = "Connect with Meta"
-                            , url = signupUrl signup
-                            , primary = True
-                            }
-                        ]
-
-                Nothing ->
-                    Ui.banner "info"
-                        "WhatsApp signup isn't configured on this deployment yet. Ask your operator to set META_APP_ID and WHATSAPP_SIGNUP_CONFIG_ID."
+            text ""
 
           else
             ul [ class "connected-list" ]
@@ -531,243 +427,109 @@ whatsappBlock wizard =
                     (\account ->
                         li [ class "connected-item" ]
                             [ span [ class "connected-name" ] [ text account.name ]
-                            , span [ class "connected-phone" ] [ text account.phoneNumber ]
+                            , span [ class "connected-phone" ] [ text account.displayPhoneNumber ]
                             , span [ class "pill pill-ok" ] [ text "Connected" ]
                             ]
                     )
                     wizard.whatsapp
                 )
+        , case wizard.signup of
+            Just signup ->
+                div [ class "card-actions" ]
+                    [ Ui.button
+                        { label =
+                            if List.isEmpty wizard.whatsapp then
+                                "Connect with Meta"
+
+                            else
+                                "Connect another number"
+                        , onClick = StartMetaSignup signup
+                        , primary = List.isEmpty wizard.whatsapp
+                        , busy = model.connectingMeta || model.saving
+                        }
+                    ]
+
+            Nothing ->
+                if List.isEmpty wizard.whatsapp then
+                    Ui.banner "info"
+                        "WhatsApp signup isn't configured on this deployment yet. Ask your operator to set META_APP_ID and WHATSAPP_SIGNUP_CONFIG_ID."
+
+                else
+                    text ""
         ]
-
-
-emailBlock : Model -> Api.Wizard -> Html Msg
-emailBlock model wizard =
-    Ui.card
-        [ h2 [] [ text "Email on your own domain" ]
-        , if List.isEmpty wizard.email then
-            text ""
-
-          else
-            ul [ class "connected-list" ]
-                (List.map
-                    (\account ->
-                        li [ class "connected-item" ]
-                            [ span [ class "connected-name" ]
-                                [ text
-                                    (if String.isEmpty account.name then
-                                        account.fromAddress
-
-                                     else
-                                        account.name
-                                    )
-                                ]
-                            , span [ class "connected-phone" ] [ text account.fromAddress ]
-                            , span [ class "pill pill-ok" ] [ text "Connected" ]
-                            ]
-                    )
-                    wizard.email
-                )
-        , p [ class "muted" ]
-            [ text "Enter a domain you own. We'll show you the DNS records to add before it can receive mail." ]
-        , Ui.field
-            { id = "email-domain"
-            , label = "Domain"
-            , value = model.emailDomain
-            , hint = "e.g. acme.com"
-            , required = True
-            , onInput = SetEmailDomain
-            }
-        , Ui.field
-            { id = "email-local"
-            , label = "Address"
-            , value = model.emailLocalPart
-            , hint = "Optional. Leave blank to answer every address on the domain."
-            , required = False
-            , onInput = SetEmailLocalPart
-            }
-        , Ui.field
-            { id = "email-name"
-            , label = "Label"
-            , value = model.emailName
-            , hint = "Just for you, e.g. Sales inbox."
-            , required = False
-            , onInput = SetEmailName
-            }
-        , Ui.field
-            { id = "email-from-name"
-            , label = "From name"
-            , value = model.emailFromName
-            , hint = "Shown to customers, e.g. Acme Support."
-            , required = False
-            , onInput = SetEmailFromName
-            }
-        , div [ class "card-actions" ]
-            [ Ui.button
-                { label = "Connect domain"
-                , onClick = ConnectEmail
-                , primary = True
-                , busy = model.saving
-                }
-            ]
-        ]
-
-
-{-| Meta's Embedded Signup dialog URL.
-
-Built here rather than by the SDK so the button is a real link: if
-`connect.facebook.net` is blocked the flow still starts. `state` is the
-one-shot nonce the callback checks.
-
--}
-signupUrl : Api.Signup -> String
-signupUrl signup =
-    "https://www.facebook.com/v21.0/dialog/oauth"
-        ++ ("?client_id=" ++ signup.appId)
-        ++ ("&config_id=" ++ signup.configId)
-        ++ ("&state=" ++ signup.state)
-        ++ "&response_type=code&override_default_response_type=true"
-        ++ "&redirect_uri="
-        ++ percentEncodedCallback
-
-
-{-| The signup callback, percent-encoded for the `redirect_uri` parameter.
-Relative URLs aren't allowed there, so it's resolved against the current
-origin at runtime by the worker's own redirect handling.
--}
-percentEncodedCallback : String
-percentEncodedCallback =
-    "%2Fwhatsapp%2Fsignup%2Fcallback"
-
-
-
--- STEP: PERSONA
-
-
-personaStep : Model -> Api.Wizard -> Html Msg
-personaStep model wizard =
-    section [ class "wizard-step" ]
-        [ h1 [] [ text "Choose how it should sound" ]
-        , p [ class "step-sub" ]
-            [ text "Pick a starting voice. You can rewrite every word of it later from your dashboard." ]
-        , Ui.card
-            [ voicePicker model.personaSlug
-            , Ui.field
-                { id = "goal"
-                , label = "What should each conversation aim for?"
-                , value = model.goal
-                , hint = "For example: get them to book a slot, or send them to the menu."
-                , required = False
-                , onInput = EditGoal
-                }
-            , Ui.field
-                { id = "goal_url"
-                , label = "A link worth sending"
-                , value = model.goalUrl
-                , hint = "Optional. Your booking page, menu, or catalogue."
-                , required = False
-                , onInput = EditGoalUrl
-                }
-            , Ui.textarea
-                { id = "handoff"
-                , label = "When should it stop and fetch you?"
-                , value = model.handoffText
-                , hint = "One per line. Prices and commitments already stop it automatically — these are your own additions."
-                , rows = 4
-                , onInput = EditHandoff
-                }
-            ]
-        , safetyNote wizard.persona.safetyStatus
-        , div [ class "wizard-actions" ]
-            [ Ui.button
-                { label = "Back"
-                , onClick = GoBack "channels"
-                , primary = False
-                , busy = model.saving
-                }
-            , Ui.button
-                { label = "Continue"
-                , onClick = SavePersona
-                , primary = True
-                , busy = model.saving
-                }
-            ]
-        ]
-
-
-{-| The four shipped archetypes. Labels and blurbs are duplicated from the
-seeded catalog rather than fetched: the picker has to render before
-`/api/archetypes` could answer, and an operator adding a fifth archetype
-surfaces it on the dashboard's persona editor, which does fetch the catalog.
--}
-voicePicker : String -> Html Msg
-voicePicker current =
-    let
-        voices =
-            [ ( "friendly", "Friendly", "Warm and familiar, like a shopkeeper who knows you." )
-            , ( "professional", "Professional", "Brief and businesslike. Confirms what's possible." )
-            , ( "playful", "Playful", "Upbeat, a little emoji, never cutesy." )
-            , ( "formal", "Formal", "Polite and measured. Addresses customers respectfully." )
-            ]
-    in
-    div [ class "field" ]
-        [ Html.label [] [ text "Voice" ]
-        , ul [ class "voice-grid" ]
-            (List.map
-                (\( slug, label_, blurb ) ->
-                    li []
-                        [ Html.button
-                            [ classList [ ( "voice-card", True ), ( "is-selected", current == slug ) ]
-                            , Html.Attributes.type_ "button"
-                            , Html.Events.onClick (PickPersona slug)
-                            ]
-                            [ h2 [] [ text label_ ]
-                            , p [] [ text blurb ]
-                            ]
-                        ]
-                )
-                voices
-            )
-        ]
-
-
-safetyNote : String -> Html Msg
-safetyNote status =
-    case status of
-        "pending" ->
-            Ui.banner "info"
-                "We check every prompt before it's allowed to answer customers. It usually takes a few seconds."
-
-        "rejected" ->
-            Ui.banner "error"
-                "That prompt didn't pass our safety check. Try a different voice, or edit it from your dashboard."
-
-        _ ->
-            text ""
 
 
 
 -- STEP: LAUNCH
 
 
-launchStep : Model -> Api.Wizard -> Html Msg
+launchStep : Model -> Api.WizardView -> Html Msg
 launchStep model wizard =
+    let
+        unitPrice =
+            Api.unitPriceFor wizard.pricing.defaultCurrency wizard.pricing
+    in
     section [ class "wizard-step" ]
-        [ h1 [] [ text "You're set" ]
+        [ h1 [] [ text "Ready to launch" ]
         , p [ class "step-sub" ]
             [ text
-                (if String.isEmpty wizard.business.name then
-                    "Concierge will start answering on the channels you connected."
+                (if String.isEmpty wizard.basics.brandName then
+                    "Review your setup and go live on WhatsApp."
 
                  else
-                    "Concierge will start answering for "
-                        ++ wizard.business.name
-                        ++ " on the channels you connected."
+                    "Review your setup for "
+                        ++ wizard.basics.brandName
+                        ++ " and go live on WhatsApp."
                 )
+            ]
+        , Ui.card
+            [ h2 [] [ text "Setup summary" ]
+            , p []
+                [ text
+                    ("Business: "
+                        ++ (if String.isEmpty wizard.basics.brandName then
+                                "—"
+
+                            else
+                                wizard.basics.brandName
+                           )
+                    )
+                ]
+            , ul [ class "connected-list" ]
+                (List.map
+                    (\account ->
+                        li [ class "connected-item" ]
+                            [ span [ class "connected-name" ] [ text account.name ]
+                            , span [ class "connected-phone" ] [ text account.displayPhoneNumber ]
+                            , span [ class "pill pill-ok" ] [ text "Connected" ]
+                            ]
+                    )
+                    wizard.whatsapp
+                )
+            ]
+        , Ui.card
+            [ h2 [] [ text "Prepaid credits" ]
+            , p []
+                [ text
+                    ("Replies use prepaid credits (1 credit = 1 reply, static or AI"
+                        ++ (if unitPrice > 0 then
+                                ", from " ++ Format.milliRate "en-IN" wizard.pricing.defaultCurrency unitPrice ++ " per reply"
+
+                            else
+                                ""
+                           )
+                        ++ "). Current balance: "
+                        ++ Format.count "en-IN" wizard.creditsBalance
+                        ++ " credits."
+                    )
+                ]
+            , p [ class "muted" ]
+                [ text "You can top up anytime in the Credits tab right after launching." ]
             ]
         , div [ class "wizard-actions" ]
             [ Ui.button
                 { label = "Back"
-                , onClick = GoBack "persona"
+                , onClick = GoBack "channels"
                 , primary = False
                 , busy = model.saving
                 }

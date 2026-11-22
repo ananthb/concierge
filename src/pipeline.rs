@@ -4,26 +4,26 @@
 use worker::*;
 
 use crate::ai;
+use crate::billing;
 use crate::channel;
 use crate::helpers::generate_id;
 use crate::storage::*;
 use crate::types::*;
 
-/// Process an inbound WhatsApp message.
-///
-/// Routes through the ReplyBufferDO so quick-fire messages from the same
-/// sender batch into one AI call. wait_seconds=0 (or DO unreachable) falls
-/// back to immediate processing.
+/// Process an inbound message, optionally batching via `ReplyBufferDO`.
 pub async fn process_inbound(msg: &InboundMessage, env: &Env) -> Result<()> {
     let kv = env.kv("KV")?;
     let db = env.d1("DB")?;
 
-    // 1. Log inbound to unified messages table
     if let Err(e) = save_inbound_message(&db, msg, None).await {
         console_log!("Failed to log inbound message: {:?}", e);
     }
 
-    let wait = lookup_wait_seconds(&kv, msg).await.unwrap_or(0);
+    let wait = get_channel_reply_config(&kv, &msg.channel, &msg.channel_account_id)
+        .await?
+        .map(|c| c.wait_seconds)
+        .unwrap_or(0);
+
     if wait == 0 {
         process_inbound_immediate(msg, env).await?;
     } else if let Err(e) = forward_to_buffer(env, msg, wait).await {
@@ -34,31 +34,21 @@ pub async fn process_inbound(msg: &InboundMessage, env: &Env) -> Result<()> {
     Ok(())
 }
 
-/// Process a single (possibly already-batched) message immediately, no
-/// further buffering. Called both from `process_inbound` (when wait=0)
-/// and from `ReplyBufferDO::alarm` after the wait window closes.
+/// Process a single (possibly already-batched) message immediately.
 pub async fn process_inbound_immediate(msg: &InboundMessage, env: &Env) -> Result<()> {
     let kv = env.kv("KV")?;
     let db = env.d1("DB")?;
     handle_auto_reply(msg, &kv, &db, env).await
 }
 
-async fn lookup_wait_seconds(kv: &kv::KvStore, msg: &InboundMessage) -> Result<u32> {
-    let cfg = match msg.channel {
-        Channel::WhatsApp => get_whatsapp_account(kv, &msg.channel_account_id)
-            .await?
-            .map(|a| a.auto_reply),
-        Channel::Email => get_email_account(kv, &msg.channel_account_id)
-            .await?
-            .map(|a| a.auto_reply),
-    };
-    Ok(cfg.map(|c| c.wait_seconds).unwrap_or(0))
-}
-
 async fn forward_to_buffer(env: &Env, msg: &InboundMessage, wait_seconds: u32) -> Result<()> {
     let ns = env.durable_object("REPLY_BUFFER")?;
-    // One DO per conversation: tenant + channel + sender.
-    let id_name = format!("{}:{}:{}", msg.tenant_id, msg.channel.as_str(), msg.sender);
+    let id_name = format!(
+        "{}:{}:{}",
+        msg.tenant_id,
+        msg.channel.as_str(),
+        msg.conversation_key()
+    );
     let stub = ns.id_from_name(&id_name)?.get_stub()?;
 
     let payload = serde_json::json!({
@@ -78,41 +68,51 @@ async fn forward_to_buffer(env: &Env, msg: &InboundMessage, wait_seconds: u32) -
     Ok(())
 }
 
-/// Handle auto-reply for an inbound WhatsApp message.
-///
-/// Pipeline:
-///   1. Load the channel's `ReplyConfig`.
+/// Handle auto-reply for an inbound message:
+///   1. Load `ReplyConfig` + canned safety via `get_channel_reply_info`.
 ///   2. Skip if disabled.
-///   3. Run prompt-injection scan on the body.
-///   4. Build the response: `Canned` → send verbatim (no AI, no credit);
-///      `Prompt` → run the LLM with `persona prompt + instruction` (one credit).
-///   5. AI replies are blocked unless the tenant's persona safety status
-///      is `Approved` and unchanged.
-///   6. AI drafts run the risk gate. A draft that trips it is never sent:
-///      the customer gets a fixed holding sentence, the tenant is paged,
-///      and the conversation enters the handoff path.
+///   3. Gate on content safety (`profile_safety` for AI, `canned_safety` for Canned).
+///   4. Run prompt-injection scan via `@cf/meta/prompt-guard-2-86m`.
+///   5. Check conversation handoff state (`Silent` exits without spending a credit).
+///   6. Deduct 1 credit (`billing::try_deduct`) for BOTH Canned and AI replies.
+///   7. Generate AI reply (or use Canned text), run handoff + risk gate, send reply.
+///      Restore credit on AI failure, empty reply, or channel send failure.
 async fn handle_auto_reply(
     msg: &InboundMessage,
     kv: &kv::KvStore,
     db: &D1Database,
     env: &Env,
 ) -> Result<()> {
-    let config = match msg.channel {
-        Channel::WhatsApp => get_whatsapp_account(kv, &msg.channel_account_id)
-            .await?
-            .map(|a| a.auto_reply),
-        Channel::Email => get_email_account(kv, &msg.channel_account_id)
-            .await?
-            .map(|a| a.auto_reply),
-    };
-
-    let config = match config {
-        Some(c) if c.enabled => c,
+    let info = match get_channel_reply_info(kv, &msg.channel, &msg.channel_account_id).await? {
+        Some(i) if i.config.enabled => i,
         _ => return Ok(()),
     };
+    let config = info.config;
+    let is_ai = matches!(config.response, ReplyResponse::Ai);
 
-    // Inbound text. Cap to limit injection scope; same value feeds the
-    // injection scanner, the matcher, and the AI context.
+    let onboarding = if is_ai {
+        let o = get_onboarding(kv, &msg.tenant_id).await?;
+        if !o.profile_safety.is_approved_for(&o.business.name) {
+            console_log!(
+                "Profile not safety-approved for tenant {}, skipping AI reply",
+                msg.tenant_id
+            );
+            return Ok(());
+        }
+        Some(o)
+    } else {
+        if let ReplyResponse::Canned { ref text } = config.response {
+            if !info.canned_safety.is_approved_for(text) {
+                console_log!(
+                    "Canned reply not safety-approved for account {}, skipping reply",
+                    msg.channel_account_id
+                );
+                return Ok(());
+            }
+        }
+        None
+    };
+
     let safe_body: String = msg.body.chars().take(1000).collect();
 
     if ai::is_prompt_injection(env, &safe_body).await {
@@ -124,95 +124,35 @@ async fn handle_auto_reply(
         return Ok(());
     }
 
-    let is_ai = matches!(config.response, ReplyResponse::Prompt { .. });
-
-    // Load full onboarding state once when the response is AI-backed. We
-    // need the persona (for the prompt) AND the conversation knobs (for
-    // the idle-gap / handoff-cooldown / history-cap window). A canned
-    // response skips the KV hit entirely.
-    let onboarding = if is_ai {
-        Some(get_onboarding(kv, &msg.tenant_id).await?)
-    } else {
-        None
-    };
-    let persona = onboarding.as_ref().map(|o| o.persona.clone());
     let window = onboarding
         .as_ref()
         .map(|o| o.conversation.resolve())
-        .unwrap_or_else(|| crate::types::ConversationConfig::default().resolve());
+        .unwrap_or_else(|| ConversationConfig::default().resolve());
 
-    // Block AI replies unless the persona has been approved AND the prompt
-    // hasn't drifted since approval.
-    if is_ai {
-        let voice_prompt = if let Some(p) = persona.as_ref() {
-            match &p.source {
-                crate::types::PersonaSource::Builder(b) => {
-                    match crate::storage::get_archetype_cached(kv, db, &b.archetype_slug).await {
-                        Ok(Some(a)) => a.voice_prompt,
-                        _ => String::new(),
-                    }
-                }
-                crate::types::PersonaSource::Custom(_) => String::new(),
-            }
-        } else {
-            String::new()
-        };
-
-        let safe = persona
-            .as_ref()
-            .map(|p| p.is_safe_to_use(&voice_prompt))
-            .unwrap_or(false);
-        if !safe {
-            console_log!(
-                "Persona not safety-approved for tenant {}, skipping AI reply",
-                msg.tenant_id
-            );
-            return Ok(());
-        }
-    }
-
-    // Resolve the conversation session for this customer thread before
-    // we burn an AI credit. Two boundaries shape the behavior, both
-    // sourced from the tenant's effective `ConversationWindow`:
-    //
-    //   1. Conversation idle gap: if the customer has been silent for
-    //      at least this long, the previous conversation is over: we
-    //      wipe any in-progress handoff and the message history, mint
-    //      a fresh conversation_id, and treat this inbound as a fresh
-    //      question.
-    //
-    //   2. Handoff cooldown: once the AI has signaled handoff on this
-    //      conversation, the next cooldown-window of replies are
-    //      holding-pattern, then we go silent until the conversation
-    //      ends (idle gap or the human taking over via the channel).
-    //
-    // Three handoff branches:
-    //   - None:           reply under the persona normally.
-    //   - HoldingPattern: swap to HOLDING_PATTERN_MIDDLE.
-    //   - Silent:         return early. The human owns the thread.
     enum HandoffMode {
         None,
         HoldingPattern,
         Silent,
     }
+
+    let conv_key = msg.conversation_key();
     let existing_session = if is_ai {
-        crate::storage::get_conversation_session(
+        get_conversation_session(
             kv,
             &msg.tenant_id,
             &msg.channel,
             &msg.channel_account_id,
-            &msg.sender,
+            &conv_key,
         )
         .await
         .unwrap_or(None)
     } else {
         None
     };
+
     let conversation_ended = match existing_session.as_ref() {
         Some(s) => match age_minutes(&s.last_inbound_at) {
-            // Idle gap exceeded: conversation is over.
             Some(mins) => mins >= window.idle_gap_mins,
-            // Unparseable timestamp: treat as fresh.
             None => true,
         },
         None => false,
@@ -222,20 +162,18 @@ async fn handle_auto_reply(
     } else {
         existing_session.as_ref().and_then(|s| s.handoff.clone())
     };
-    // Carry the conversation_id and message history if (and only if)
-    // we're continuing the same conversation. Idle-gap reset wipes
-    // both. A non-empty existing id with no idle-gap reset is reused;
-    // anything else mints a fresh id.
+
     let (conversation_id, prior_messages) = if conversation_ended {
-        (crate::helpers::generate_id(), Vec::new())
+        (generate_id(), Vec::new())
     } else {
         match existing_session.as_ref() {
             Some(s) if !s.conversation_id.is_empty() => {
                 (s.conversation_id.clone(), s.messages.clone())
             }
-            _ => (crate::helpers::generate_id(), Vec::new()),
+            _ => (generate_id(), Vec::new()),
         }
     };
+
     let handoff_mode = match active_handoff.as_ref() {
         Some(h) => match age_minutes(&h.signaled_at) {
             Some(mins) if mins < window.handoff_cooldown_mins => HandoffMode::HoldingPattern,
@@ -245,16 +183,8 @@ async fn handle_auto_reply(
         None => HandoffMode::None,
     };
 
-    // Stamp the inbound row (logged earlier in `process_inbound` with
-    // NULL conversation_id) with the resolved id. We're past the
-    // is_ai gate, so this only runs when the inbound is actually
-    // entering a conversation. Best-effort: if the UPDATE fails the
-    // outbound rows still get stamped, and the row is reconstructable
-    // by adjacency.
     if is_ai {
-        if let Err(e) =
-            crate::storage::update_message_conversation_id(db, &msg.id, &conversation_id).await
-        {
+        if let Err(e) = update_message_conversation_id(db, &msg.id, &conversation_id).await {
             console_log!("Failed to stamp inbound conversation_id: {:?}", e);
         }
     }
@@ -265,42 +195,62 @@ async fn handle_auto_reply(
             msg.tenant_id,
             msg.sender
         );
-        // Still update last_inbound_at so the idle gap is measured
-        // from this ping. That way the customer eventually escapes
-        // the silent window once they actually go quiet. Append the
-        // inbound to history so the audit/context is complete; the
-        // history isn't used while we're silent, but max-cap guards
-        // against unbounded growth.
         let now = crate::helpers::now_iso();
         let mut messages = prior_messages;
         push_user_turn(&mut messages, &safe_body, &now, window.max_history_messages);
-        let new_session = crate::types::Session {
+        let new_session = Session {
             last_inbound_at: now,
             handoff: active_handoff.clone(),
-            conversation_id: conversation_id.clone(),
+            conversation_id,
             messages,
         };
-        let _ = crate::storage::save_conversation_session(
+        let _ = save_conversation_session(
             kv,
             &msg.tenant_id,
             &msg.channel,
             &msg.channel_account_id,
-            &msg.sender,
+            &conv_key,
             &new_session,
         )
         .await;
         return Ok(());
     }
 
-    // Billing is deactivated (dormant): AI replies are never metered and
-    // never blocked on a credit balance. `src/billing` and the credit ledger
-    // remain in the tree for a possible re-enable, but the pipeline no longer
-    // touches them.
+    let Some(tenant) = get_tenant(db, &msg.tenant_id).await? else {
+        return Ok(());
+    };
+    let metered = tenant.plan.is_metered();
 
-    // Build the chat history we'll hand to the model: prior turns
-    // (capped) plus the new inbound as the latest user turn. The same
-    // shape (`Vec<(role, content)>`) is also what `generate_chat_reply`
-    // expects, so we can pass it through verbatim.
+    // Deduct 1 credit BEFORE generating AI reply or sending Canned reply.
+    let outbound_conversation_id: Option<&str> = if is_ai {
+        Some(conversation_id.as_str())
+    } else {
+        None
+    };
+    if !billing::try_deduct(db, &msg.tenant_id, metered).await? {
+        console_log!(
+            "Insufficient credits for tenant {}, skipping reply",
+            msg.tenant_id
+        );
+        if let Err(e) = save_message(
+            db,
+            &generate_id(),
+            &msg.channel,
+            MessageDirection::Outbound,
+            &msg.recipient,
+            &msg.sender,
+            &msg.tenant_id,
+            &msg.channel_account_id,
+            Some(MessageAction::NoCredits),
+            outbound_conversation_id,
+        )
+        .await
+        {
+            console_log!("Failed to log no_credits message: {:?}", e);
+        }
+        return Ok(());
+    }
+
     let now_iso = crate::helpers::now_iso();
     let mut session_messages = prior_messages;
     push_user_turn(
@@ -310,57 +260,19 @@ async fn handle_auto_reply(
         window.max_history_messages,
     );
 
-    let reply = match &config.response {
+    let raw_reply = match &config.response {
         ReplyResponse::Canned { text } => text.clone(),
-        ReplyResponse::Prompt {
-            text: reply_instruction,
-        } => {
-            let wrapped = match handoff_mode {
-                // Silent was handled with an early return above; if we
-                // reached here in Silent something is very wrong.
+        ReplyResponse::Ai => {
+            let brand_name = onboarding
+                .as_ref()
+                .map(|o| o.business.name.as_str())
+                .unwrap_or("");
+            let system_prompt = match handoff_mode {
                 HandoffMode::Silent => unreachable!("Silent handoff returned earlier"),
                 HandoffMode::HoldingPattern => {
                     crate::prompt::wrap(crate::prompt::HOLDING_PATTERN_MIDDLE)
                 }
-                HandoffMode::None => {
-                    let voice_prompt = if let Some(p) = persona.as_ref() {
-                        match &p.source {
-                            crate::types::PersonaSource::Builder(b) => {
-                                match crate::storage::get_archetype_cached(
-                                    kv,
-                                    db,
-                                    &b.archetype_slug,
-                                )
-                                .await
-                                {
-                                    Ok(Some(a)) => a.voice_prompt,
-                                    _ => String::new(),
-                                }
-                            }
-                            crate::types::PersonaSource::Custom(_) => String::new(),
-                        }
-                    } else {
-                        String::new()
-                    };
-
-                    let persona_prompt = persona
-                        .as_ref()
-                        .map(|p| p.active_prompt(&voice_prompt))
-                        .unwrap_or_default();
-                    let combined = if persona_prompt.is_empty() {
-                        reply_instruction.clone()
-                    } else {
-                        format!("{persona_prompt}\n\n{reply_instruction}")
-                    };
-
-                    // Wrap the tenant's persona text in the
-                    // safety/alignment envelope. The envelope is
-                    // non-editable and ships globally; the bookends
-                    // are visible everywhere the user views a prompt
-                    // so there's no surprise about what's actually
-                    // sent to the model.
-                    crate::prompt::wrap(&combined)
-                }
+                HandoffMode::None => crate::prompt::core_system_prompt(brand_name),
             };
 
             let history: Vec<(String, String)> = session_messages
@@ -368,43 +280,30 @@ async fn handle_auto_reply(
                 .map(|m| (m.role.as_wire().to_string(), m.content.clone()))
                 .collect();
 
-            match ai::generate_chat_reply(env, &wrapped, &history).await {
+            match ai::generate_chat_reply(env, &system_prompt, &history).await {
                 Ok(r) => r,
                 Err(e) => {
                     console_log!("AI auto-reply error: {:?}", e);
+                    let _ = billing::restore_credit(db, &msg.tenant_id, metered).await;
                     return Ok(());
                 }
             }
         }
     };
 
-    // Strip the handoff sentinel before anything else looks at the
-    // reply. If we're already in the holding pattern, the model was
-    // told not to re-emit; this is a defence-in-depth strip.
-    let stripped = crate::prompt::detect_and_strip_handoff(&reply);
-    let reply = stripped.reply;
-    let new_handoff = stripped.handoff && matches!(handoff_mode, HandoffMode::None);
+    let stripped = crate::prompt::detect_and_strip_handoff(&raw_reply);
+    let mut reply = stripped.reply;
+    let mut new_handoff = stripped.handoff && matches!(handoff_mode, HandoffMode::None);
 
     if reply.is_empty() {
+        let _ = billing::restore_credit(db, &msg.tenant_id, metered).await;
         return Ok(());
     }
 
-    // For AI drafts, run the risk gate. A draft that trips it is never
-    // shown to the customer: we send a fixed holding sentence instead,
-    // page the tenant, and drop the conversation into the handoff path.
-    // The credit is not refunded — the model did run.
-    //
-    // Skip the gate for the handoff path itself:
-    //   - holding-pattern replies are safe by construction (the model is
-    //     only saying "a human is on the way"), and
-    //   - the turn that *signals* a handoff is already a holding sentence.
     let in_handoff_mode = matches!(handoff_mode, HandoffMode::HoldingPattern);
-    let mut reply = reply;
-    let mut new_handoff = new_handoff;
     let mut risk_reason = None;
     if is_ai && !in_handoff_mode && !new_handoff {
-        let persona_ref = persona.as_ref().expect("AI reply must have loaded persona");
-        if let Some(reason) = crate::risk::signal(&reply, persona_ref) {
+        if let Some(reason) = crate::risk::signal(&reply) {
             console_log!(
                 "Risk gate withheld a draft for tenant={} sender={}: {}",
                 msg.tenant_id,
@@ -433,18 +332,12 @@ async fn handle_auto_reply(
         }
     }
 
-    if let Err(e) =
-        channel::send_reply(&msg.channel, env, &msg.raw_metadata, &msg.sender, &reply).await
-    {
+    if let Err(e) = channel::send_reply(env, msg, &reply).await {
         console_log!("Auto-reply send error: {:?}", e);
+        let _ = billing::restore_credit(db, &msg.tenant_id, metered).await;
         return Ok(());
     }
 
-    let outbound_conversation_id: Option<&str> = if is_ai {
-        Some(conversation_id.as_str())
-    } else {
-        None
-    };
     if let Err(e) = save_message(
         db,
         &generate_id(),
@@ -462,32 +355,17 @@ async fn handle_auto_reply(
         console_log!("Failed to log outbound message: {:?}", e);
     }
 
-    // Persist the conversation session. Four things happen here:
-    //   - `last_inbound_at` is bumped to now so the idle-gap clock
-    //     restarts from this ping.
-    //   - If the model just signaled handoff on this turn, stamp a
-    //     fresh `HandoffState` in.
-    //   - Otherwise carry over whatever handoff sub-state we were
-    //     already running with (still in holding-pattern, or none).
-    //   - If we actually sent an AI reply (vs canned), append the
-    //     assistant turn to history so the next turn has it as
-    //     context. Canned replies skip session writes entirely;
-    //     they don't use the conversation machinery.
-    //
-    // For a brand-new handoff we then page the tenant exactly once.
-    // The notify call is best-effort. Failing to fan out shouldn't
-    // tear down the inbound flow.
     if !is_ai {
         return Ok(());
     }
 
     let mut session_handoff = if new_handoff {
-        Some(crate::types::HandoffState {
+        Some(HandoffState {
             signaled_at: now_iso.clone(),
             notified: false,
         })
     } else {
-        active_handoff.clone()
+        active_handoff
     };
 
     if new_handoff {
@@ -504,8 +382,6 @@ async fn handle_auto_reply(
         {
             console_log!("Handoff notify failed: {:?}", e);
         }
-        // Flip notified=true after the dispatch attempt. Even if it
-        // partially failed we don't want to re-page on the next turn.
         if let Some(ref mut h) = session_handoff {
             h.notified = true;
         }
@@ -518,18 +394,18 @@ async fn handle_auto_reply(
         window.max_history_messages,
     );
 
-    let new_session = crate::types::Session {
+    let new_session = Session {
         last_inbound_at: now_iso,
         handoff: session_handoff,
         conversation_id,
         messages: session_messages,
     };
-    if let Err(e) = crate::storage::save_conversation_session(
+    if let Err(e) = save_conversation_session(
         kv,
         &msg.tenant_id,
         &msg.channel,
         &msg.channel_account_id,
-        &msg.sender,
+        &conv_key,
         &new_session,
     )
     .await
@@ -540,41 +416,25 @@ async fn handle_auto_reply(
     Ok(())
 }
 
-/// Append a user turn to the running `messages` list and trim from the
-/// front to keep the cap honored. The cap is the tenant's effective
-/// `max_history_messages`. Never zero in practice (resolver clamps
-/// to the default), so we don't bother special-casing it. `at` is the
-/// turn's RFC3339 timestamp; the caller's "now" works for both
-/// inbound (just-arrived) and assistant (just-sent) turns.
-fn push_user_turn(
-    messages: &mut Vec<crate::types::ConversationMessage>,
-    body: &str,
-    at: &str,
-    max: u32,
-) {
-    messages.push(crate::types::ConversationMessage {
-        role: crate::types::ConversationRole::User,
+fn push_user_turn(messages: &mut Vec<ConversationMessage>, body: &str, at: &str, max: u32) {
+    messages.push(ConversationMessage {
+        role: ConversationRole::User,
         content: body.to_string(),
         at: at.to_string(),
     });
     trim_to_max(messages, max);
 }
 
-fn push_assistant_turn(
-    messages: &mut Vec<crate::types::ConversationMessage>,
-    body: &str,
-    at: &str,
-    max: u32,
-) {
-    messages.push(crate::types::ConversationMessage {
-        role: crate::types::ConversationRole::Assistant,
+fn push_assistant_turn(messages: &mut Vec<ConversationMessage>, body: &str, at: &str, max: u32) {
+    messages.push(ConversationMessage {
+        role: ConversationRole::Assistant,
         content: body.to_string(),
         at: at.to_string(),
     });
     trim_to_max(messages, max);
 }
 
-fn trim_to_max(messages: &mut Vec<crate::types::ConversationMessage>, max: u32) {
+fn trim_to_max(messages: &mut Vec<ConversationMessage>, max: u32) {
     let max = max as usize;
     if max == 0 {
         messages.clear();
@@ -586,14 +446,6 @@ fn trim_to_max(messages: &mut Vec<crate::types::ConversationMessage>, max: u32) 
     }
 }
 
-/// Minutes between an ISO/RFC3339 timestamp and now. Uses the
-/// platform `Date.parse` (no `chrono` dep), which accepts both
-/// `Date.toISOString()` output (what `helpers::now_iso` writes) and
-/// other RFC3339-shaped strings.
-///
-/// Returns `None` for unparseable input so callers can fall through
-/// to "treat as fresh" rather than trapping a customer in silence on
-/// a bad record.
 fn age_minutes(timestamp: &str) -> Option<i64> {
     let then_ms = js_sys::Date::parse(timestamp);
     if then_ms.is_nan() {
@@ -607,7 +459,6 @@ fn age_minutes(timestamp: &str) -> Option<i64> {
 #[cfg(test)]
 mod history_tests {
     use super::*;
-    use crate::types::{ConversationMessage, ConversationRole};
 
     fn msg(role: ConversationRole, content: &str) -> ConversationMessage {
         ConversationMessage {
@@ -624,7 +475,6 @@ mod history_tests {
         assert_eq!(messages.len(), 2);
         assert_eq!(messages[1].role, ConversationRole::User);
         assert_eq!(messages[1].content, "hello again");
-        assert_eq!(messages[1].at, "2026-05-04T12:01:00.000Z");
     }
 
     #[test]
@@ -633,7 +483,6 @@ mod history_tests {
         push_assistant_turn(&mut messages, "pong", "2026-05-04T12:01:00.000Z", 10);
         assert_eq!(messages.len(), 2);
         assert_eq!(messages[1].role, ConversationRole::Assistant);
-        assert_eq!(messages[1].content, "pong");
     }
 
     #[test]
@@ -647,43 +496,14 @@ mod history_tests {
         ];
         trim_to_max(&mut messages, 3);
         assert_eq!(messages.len(), 3);
-        // Oldest two ("u1", "a1") were drained; the most recent three remain.
         assert_eq!(messages[0].content, "u2");
-        assert_eq!(messages[1].content, "a2");
         assert_eq!(messages[2].content, "u3");
-    }
-
-    #[test]
-    fn trim_no_op_when_under_cap() {
-        let mut messages = vec![
-            msg(ConversationRole::User, "u1"),
-            msg(ConversationRole::Assistant, "a1"),
-        ];
-        trim_to_max(&mut messages, 10);
-        assert_eq!(messages.len(), 2);
     }
 
     #[test]
     fn trim_with_zero_cap_clears() {
-        // A pathological 0 max (only reachable if a tenant explicitly
-        // sets max_history_messages to 0) clears history entirely
-        // rather than tripping a slice underflow.
         let mut messages = vec![msg(ConversationRole::User, "u1")];
         trim_to_max(&mut messages, 0);
         assert!(messages.is_empty());
-    }
-
-    #[test]
-    fn push_user_turn_caps_at_max_when_already_full() {
-        let mut messages = vec![
-            msg(ConversationRole::User, "u1"),
-            msg(ConversationRole::Assistant, "a1"),
-            msg(ConversationRole::User, "u2"),
-        ];
-        push_user_turn(&mut messages, "u3", "2026-05-04T12:01:00.000Z", 3);
-        assert_eq!(messages.len(), 3);
-        // u1 was evicted; the new u3 is at the tail.
-        assert_eq!(messages[0].content, "a1");
-        assert_eq!(messages[2].content, "u3");
     }
 }

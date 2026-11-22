@@ -25,6 +25,7 @@ pub fn parse_inbound(change: &WebhookChange, account: &WhatsAppAccount) -> Vec<I
                 sender: msg.from.clone(),
                 sender_name,
                 recipient: phone_number_id.clone(),
+                reply_to: msg.from.clone(),
                 body: text,
                 has_attachment: false,
                 tenant_id: account.tenant_id.clone(),
@@ -70,7 +71,9 @@ mod tests {
             name: "Test".into(),
             phone_number: "+1234567890".into(),
             phone_number_id: "phone-123".into(),
+            waba_id: Some("waba-123".into()),
             auto_reply: ReplyConfig::default(),
+            canned_safety: SafetyState::default(),
             created_at: String::new(),
             updated_at: String::new(),
         }
@@ -115,6 +118,8 @@ mod tests {
         assert_eq!(msgs.len(), 1);
         assert_eq!(msgs[0].channel, Channel::WhatsApp);
         assert_eq!(msgs[0].sender, "user-1");
+        assert_eq!(msgs[0].reply_to, "user-1");
+        assert_eq!(msgs[0].conversation_key(), "user-1");
         assert_eq!(msgs[0].sender_name.as_deref(), Some("Alice"));
         assert_eq!(msgs[0].body, "Hello!");
         assert_eq!(msgs[0].recipient, "phone-123");

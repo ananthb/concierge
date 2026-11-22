@@ -1,8 +1,8 @@
-import { test, expect, waitForBoot } from './_helpers/fixtures';
+import { test, expect, waitForBoot, devLogin } from './_helpers/fixtures';
 import { checkTapTargets } from './_helpers/layout';
 
 /**
- * The Elm app: does it boot, route, and run the demo.
+ * The Elm app: does it boot, route, run the demo, and drive the wizard & dashboard.
  *
  * Every assertion here waits on rendered content rather than a timeout,
  * because with a single-page app "the HTML came back" says nothing — the
@@ -15,42 +15,24 @@ import { checkTapTargets } from './_helpers/layout';
  * error rather than a visibly broken page.
  */
 
-/**
- * Scope assertions to what Elm actually renders.
- *
- * Not `#app`: this is a `Browser.application`, so Elm takes over `<body>` and
- * removes anything it finds there on init. `.site-main` is the container Elm
- * itself renders, which is what we want to assert against anyway — its
- * presence proves the bundle booted.
- */
 const app = (page: import('@playwright/test').Page) => page.locator('main.site-main');
 
 test.describe('shell', () => {
   test('/ serves the shell and Elm mounts into it', async ({ page, consoleErrors }) => {
     await page.goto('/');
-    // Something — anything — rendered by Elm.
     await expect(app(page).locator('.landing')).toBeVisible();
     await expect(page.locator('.site-header .brand')).toBeVisible();
     expect(consoleErrors, consoleErrors.join('\n')).toEqual([]);
   });
 
   test('the shell carries no copy of its own', async ({ request }) => {
-    // Every user-facing string lives in the Elm app. If marketing copy starts
-    // appearing in the shell too there are two places to change it, and the
-    // shell's copy is the one that goes stale.
-    //
-    // Read /wizard, not /: the marketing routes are prerendered static files
-    // and *do* carry copy — that's their entire purpose. /wizard is never
-    // prerendered, so it is the shell.
     const body = await (await request.get('/wizard')).text();
     expect(body).toContain('/app.js');
     expect(body).toContain('/boot.js');
-    expect(body).not.toContain('Answer every customer');
+    expect(body).not.toContain('Answer every WhatsApp customer');
   });
 
   test('an unknown path gets the shell under a 404', async ({ page, request }) => {
-    // Status has to be honest for crawlers and uptime monitors, even though
-    // the body is the same shell every route gets.
     const resp = await request.get('/no-such-page');
     expect(resp.status()).toBe(404);
 
@@ -61,8 +43,6 @@ test.describe('shell', () => {
   test('static assets are served outside the worker', async ({ request }) => {
     const js = await request.get('/app.js');
     expect(js.status()).toBe(200);
-    // Cached hard by `public/_headers`: the bundle is rebuilt on every
-    // deploy, unlike the shell, which is regenerated per request.
     expect(js.headers()['content-type']).toContain('javascript');
 
     const boot = await request.get('/boot.js');
@@ -70,10 +50,6 @@ test.describe('shell', () => {
   });
 
   test('every asset the shell loads carries an integrity hash', async ({ request }) => {
-    // Subresource Integrity covers the stylesheets *and* both scripts. The
-    // scripts matter more: they are the executable code, and an earlier
-    // revision hashed only the CSS, which left /app.js — the part that can
-    // actually do something — unprotected.
     const shell = await (await request.get('/wizard')).text();
 
     const tags = [
@@ -84,17 +60,11 @@ test.describe('shell', () => {
     expect(tags.length, 'shell should reference assets').toBeGreaterThan(0);
     for (const tag of tags) {
       expect(tag, `missing integrity: ${tag}`).toMatch(/\bintegrity="sha384-[A-Za-z0-9+/=]+"/);
-      // Required for the browser to check the hash at all.
       expect(tag, `missing crossorigin: ${tag}`).toMatch(/\bcrossorigin="anonymous"/);
     }
   });
 
   test('the integrity hashes match what is served', async ({ page }) => {
-    // An SRI rejection is silent: the page renders, the asset just never
-    // applies. That is why this asserts on *effects* — the stylesheets being
-    // applied, and the app having booted — rather than on the hash strings.
-    // A stale hash breaks both, and nothing else in the suite would notice a
-    // page that looks right and does nothing.
     const errors: string[] = [];
     page.on('console', (m) => {
       if (m.type() === 'error') errors.push(m.text());
@@ -103,16 +73,13 @@ test.describe('shell', () => {
     await page.goto('/wizard');
     await waitForBoot(page);
 
-    const integrityFailures = errors.filter((e) => /integrity|Failed to find a valid digest/i.test(e));
+    const integrityFailures = errors.filter((e) =>
+      /integrity|Failed to find a valid digest/i.test(e),
+    );
     expect(integrityFailures, integrityFailures.join('\n')).toEqual([]);
   });
 
   test('every stylesheet the shell references actually loads', async ({ page, request }) => {
-    // This replaces a build-time guard. `build.rs` used to read each CSS file
-    // to hash it, so a missing one failed the build; without that, a name in
-    // `STYLESHEETS` with no matching file would 404 silently and the page
-    // would render unstyled. Checked at runtime, which also catches a file
-    // that exists locally but wasn't deployed.
     const shell = await (await request.get('/wizard')).text();
     const hrefs = [...shell.matchAll(/<link rel="stylesheet" href="([^"]+)"/g)].map((m) => m[1]);
     expect(hrefs.length, 'shell should reference stylesheets').toBeGreaterThan(0);
@@ -123,10 +90,6 @@ test.describe('shell', () => {
       expect(resp.headers()['content-type'], `${href} should be CSS`).toContain('css');
     }
 
-    // And the browser must actually apply them — a stylesheet can 200 and
-    // still be rejected (that is exactly what integrity hashes did when they
-    // drifted). Compare the count the browser accepted against the count
-    // referenced.
     await page.goto('/');
     await page.locator('main.site-main').waitFor();
     const accepted = await page.evaluate(
@@ -148,18 +111,12 @@ test.describe('prerendered pages', () => {
 
   for (const path of STATIC) {
     test(`${path} carries its copy without JavaScript`, async ({ request }) => {
-      // The whole point of prerendering: a crawler that never runs a script
-      // still reads the page. Asserted on the raw bytes, with no browser.
       const body = await (await request.get(path)).text();
       expect(body).toContain('site-main');
       expect(body.length, `${path} looks like an empty shell`).toBeGreaterThan(2000);
     });
 
     test(`${path} comes alive when scripts do run`, async ({ page }) => {
-      // The failure this guards is the nasty one: a static page that renders
-      // perfectly and is completely inert, because the bundle never loaded or
-      // never initialised. Every DOM selector would still match, so only the
-      // boot marker can tell the difference.
       await page.goto(path);
       await waitForBoot(page);
     });
@@ -172,12 +129,9 @@ test.describe('prerendered pages', () => {
       (window as unknown as { __stillHere: boolean }).__stillHere = true;
     });
 
-    // Footer, not header: the header's marketing links are hidden below
-    // 600px, and this spec runs at both viewports. The footer carries the same
-    // destinations at every width and is the navigation path on a phone.
     await page.locator('.footer-links a[href="/features"]').click();
     await expect(page.locator('main.site-main').getByRole('heading', { level: 1 })).toHaveText(
-      /What Concierge does/,
+      /Built for small businesses on WhatsApp/,
     );
 
     const stillHere = await page.evaluate(
@@ -189,8 +143,8 @@ test.describe('prerendered pages', () => {
 
 test.describe('routing', () => {
   const routes: Array<[string, string]> = [
-    ['/pricing', 'Pay for replies'],
-    ['/features', 'What Concierge does'],
+    ['/pricing', 'Pay per reply, nothing else'],
+    ['/features', 'Built for small businesses on WhatsApp'],
     ['/terms', 'Terms of Service'],
     ['/privacy', 'Privacy Policy'],
     ['/login', 'Sign in to Concierge'],
@@ -198,9 +152,6 @@ test.describe('routing', () => {
 
   for (const [path, heading] of routes) {
     test(`${path} renders on a cold load`, async ({ page, consoleErrors }) => {
-      // A cold load is the case that breaks when the worker's `is_app_route`
-      // list drifts from Route.elm: in-app navigation would still work, so
-      // only a direct hit catches it.
       await page.goto(path);
       await expect(app(page).getByRole('heading', { name: heading, level: 1 })).toBeVisible();
       expect(consoleErrors, consoleErrors.join('\n')).toEqual([]);
@@ -209,19 +160,14 @@ test.describe('routing', () => {
 
   test('in-app navigation does not reload the page', async ({ page }) => {
     await page.goto('/');
-    // Must wait for the bundle, not for markup. `/` is a prerendered snapshot
-    // of Elm's own output, so every selector is present before Elm runs; a
-    // click in that window is handled by the browser as a plain link and the
-    // page really does reload.
     await waitForBoot(page);
     await page.evaluate(() => {
       (window as unknown as { __stillHere: boolean }).__stillHere = true;
     });
 
     await page.locator('.footer-links a[href="/pricing"]').click();
-    await expect(app(page).getByRole('heading', { name: /Pay for replies/ })).toBeVisible();
+    await expect(app(page).getByRole('heading', { name: /Pay per reply, nothing else/ })).toBeVisible();
 
-    // Survived the navigation ⇒ Elm handled it, no document reload.
     const stillHere = await page.evaluate(
       () => (window as unknown as { __stillHere?: boolean }).__stillHere === true,
     );
@@ -232,7 +178,9 @@ test.describe('routing', () => {
     await page.goto('/');
     await waitForBoot(page);
     await page.locator('.footer-links a[href="/features"]').click();
-    await expect(app(page).getByRole('heading', { name: /What Concierge does/ })).toBeVisible();
+    await expect(
+      app(page).getByRole('heading', { name: /Built for small businesses on WhatsApp/ }),
+    ).toBeVisible();
     await page.goBack();
     await expect(app(page).locator('.landing')).toBeVisible();
   });
@@ -249,17 +197,14 @@ test.describe('pricing', () => {
     const { pricing } = await bootstrap.json();
 
     await page.goto('/pricing');
-    await expect(app(page).getByRole('heading', { name: /Pay for replies/ })).toBeVisible();
+    await expect(app(page).getByRole('heading', { name: /Pay per reply, nothing else/ })).toBeVisible();
 
-    // Every currency the worker quotes gets a card.
     for (const rate of pricing.currencies) {
       await expect(app(page).getByRole('heading', { name: rate.code })).toBeVisible();
     }
   });
 
   test('Indian amounts use lakh grouping', async ({ page }) => {
-    // The one formatting rule worth asserting end-to-end: ₹1,00,000 is one
-    // lakh, ₹100,000 is a bug that still looks like a number.
     await page.goto('/pricing');
     const body = await app(page).textContent();
     expect(body).not.toMatch(/₹1,000,000/);
@@ -267,8 +212,6 @@ test.describe('pricing', () => {
 });
 
 test.describe('demo chat', () => {
-  // The demo is operator-configurable and can be off, so every test here
-  // skips rather than fails when it's disabled.
   test('a visitor can pick a business and send a message', async ({ page, consoleErrors }) => {
     const boot = await (await page.request.get('/api/bootstrap')).json();
     test.skip(!boot.demo.enabled || boot.demo.personas.length === 0, 'demo is disabled');
@@ -278,14 +221,12 @@ test.describe('demo chat', () => {
     await expect(firstPersona).toBeVisible();
     await firstPersona.click();
 
-    // The business greets first, as it would on WhatsApp.
     await expect(page.locator('.demo-transcript .bubble-assistant')).toBeVisible();
+    await expect(page.locator('.prompt-panel .prompt-panel-note')).toBeVisible();
 
     await page.locator('#demo-input').fill('What time do you open?');
     await page.locator('.demo-composer button[type="submit"]').click();
 
-    // The visitor's own message appears immediately; the reply needs a model
-    // call, so allow it real time.
     await expect(page.locator('.demo-transcript .bubble-user')).toHaveText(
       'What time do you open?',
     );
@@ -293,20 +234,6 @@ test.describe('demo chat', () => {
       timeout: 30_000,
     });
     expect(consoleErrors, consoleErrors.join('\n')).toEqual([]);
-  });
-
-  test('the prompt panel shows what the model is actually sent', async ({ page }) => {
-    const boot = await (await page.request.get('/api/bootstrap')).json();
-    test.skip(!boot.demo.enabled || boot.demo.personas.length === 0, 'demo is disabled');
-
-    await page.goto('/');
-    await page.locator('.persona-card').first().click();
-    await page.getByRole('button', { name: /View the prompt/ }).click();
-
-    const panel = page.locator('.prompt-panel .prompt-preview');
-    await expect(panel).toBeVisible();
-    // Not a placeholder: the real composed middle for that persona.
-    expect((await panel.textContent())?.length ?? 0).toBeGreaterThan(50);
   });
 
   test('send is refused while empty', async ({ page }) => {
@@ -319,36 +246,77 @@ test.describe('demo chat', () => {
   });
 });
 
-test.describe('operator console', () => {
-  test('an operator can add and delete a voice from the catalog', async ({ page, consoleErrors }) => {
-    const slug = `test-voice-${Date.now()}`;
+test.describe('authenticated wizard and dashboard', () => {
+  test('3-step wizard renders basics -> channels -> back to basics', async ({
+    page,
+    consoleErrors,
+  }) => {
+    await devLogin(page.request, `wizard-ui-${Date.now()}@local.test`);
 
-    await page.goto('/manage');
-    await page.getByRole('button', { name: 'Archetypes' }).click();
+    await page.goto('/wizard');
+    await expect(app(page).locator('.wizard-progress li')).toHaveCount(3);
+    await expect(app(page).getByRole('heading', { name: 'Tell us about your business' })).toBeVisible();
 
-    // The seeded catalog from migration 0001.
-    await expect(page.locator('.manage .rate-table')).toBeVisible();
+    await page.locator('#name').fill('Nutmeg & Crumb');
+    await page.locator('#phone').fill('+91 98200 11223');
+    await page.getByRole('button', { name: 'Sole proprietorship' }).click();
+    await page.getByRole('button', { name: 'Continue' }).click();
 
-    await page.getByRole('button', { name: 'Add a voice' }).click();
-    await page.getByLabel('Slug').fill(slug);
-    await page.getByLabel('Label').fill('Test voice');
-    await page.getByLabel('Description').fill('A voice created by the test suite.');
-    await page.getByLabel('Voice prompt').fill('Voice: matter-of-fact.');
-    await page.getByLabel('Greeting').fill('Hello from the test suite.');
-    await page.getByRole('button', { name: 'Save voice' }).click();
+    await expect(
+      app(page).getByRole('heading', { name: 'Connect your WhatsApp Business number' }),
+    ).toBeVisible();
+    await expect(app(page).getByRole('button', { name: 'Connect with Meta' })).toBeVisible();
 
-    await expect(page.locator('.banner.success')).toContainText(slug);
+    await page.getByRole('button', { name: 'Back' }).click();
+    await expect(app(page).locator('#name')).toHaveValue('Nutmeg & Crumb');
+    expect(consoleErrors, consoleErrors.join('\n')).toEqual([]);
+  });
 
-    // Saving re-reads the catalog; the row is pending until the safety queue
-    // approves the voice, which is why it must not look selectable yet.
-    const row = page.locator('.manage .rate-table tr', { hasText: slug });
-    await expect(row).toBeVisible();
-    await expect(row.locator('.pill')).toHaveText('pending');
+  test('dashboard renders Overview, Channels, Credits, and Settings against real API', async ({
+    page,
+    consoleErrors,
+  }) => {
+    await devLogin(page.request, `dash-ui-${Date.now()}@local.test`);
 
-    await row.getByRole('button', { name: 'Delete' }).click();
-    await page.getByRole('button', { name: 'Delete permanently' }).click();
-    await expect(row).toHaveCount(0);
+    // Allow reaching /dashboard directly in UI tests while keeping all /api/{whatsapp,billing,settings}
+    // requests backed by the live local Worker + D1/KV.
+    await page.route('**/api/bootstrap', async (route) => {
+      const resp = await route.fetch();
+      const json = await resp.json();
+      if (json.session) {
+        json.session.destination = 'dashboard';
+        json.session.onboarding_step = null;
+      }
+      await route.fulfill({ response: resp, json });
+    });
 
+    await page.goto('/dashboard');
+    await expect(app(page).locator('.tabs .tab')).toHaveCount(4);
+    await expect(app(page).locator('.balance')).toHaveText('0 credits');
+    await expect(app(page).getByText('No WhatsApp number connected')).toBeVisible();
+
+    // Channels tab
+    await app(page).locator('.tabs a', { hasText: 'Channels' }).click();
+    await expect(app(page).getByRole('heading', { name: 'WhatsApp Business' })).toBeVisible();
+    await expect(app(page).getByRole('button', { name: 'Connect WhatsApp number' })).toBeVisible();
+
+    // Credits tab
+    await app(page).locator('.tabs a', { hasText: 'Credits' }).click();
+    await expect(app(page).getByRole('heading', { name: 'Balance' })).toBeVisible();
+    await expect(app(page).getByRole('heading', { name: 'Buy credits' })).toBeVisible();
+    await expect(app(page).locator('.balance')).toHaveText('0 credits');
+
+    // Settings tab: toggle handoff_email and persist to Worker
+    await app(page).locator('.tabs a', { hasText: 'Settings' }).click();
+    await expect(app(page).getByRole('heading', { name: 'Conversation timing' })).toBeVisible();
+    const handoffCheckbox = app(page).locator('#handoff_email');
+    await expect(handoffCheckbox).toBeChecked();
+    await handoffCheckbox.uncheck();
+    await app(page).getByRole('button', { name: 'Save notifications' }).click();
+    await expect(app(page).locator('.banner.success')).toContainText('Saved.');
+
+    await page.reload();
+    await expect(app(page).locator('#handoff_email')).not.toBeChecked();
     expect(consoleErrors, consoleErrors.join('\n')).toEqual([]);
   });
 });
@@ -360,9 +328,6 @@ test.describe('mobile ergonomics', () => {
     await expect(app(page).locator('.landing')).toBeVisible();
 
     const issues = await checkTapTargets(page, { min: 36 });
-    // The brand link is a logo plus a wordmark — it reads as a header
-    // element, not a precision target, and was exempt before this refactor
-    // too.
     const real = issues.filter((i) => !i.includes('a.brand'));
     expect(real, real.join('\n  ')).toEqual([]);
   });

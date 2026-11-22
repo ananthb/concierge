@@ -1,24 +1,13 @@
-pub mod email;
 pub mod whatsapp;
 
 use worker::*;
 
-use crate::types::Channel;
+use crate::types::{Channel, InboundMessage};
 
-/// Dispatch a reply to the correct channel adapter.
-///
-/// WhatsApp and Email are the inbound channels. The match is kept (rather
-/// than calling an adapter directly) so adding a channel back is a variant
-/// plus an arm, not a re-plumb of the pipeline.
-pub async fn send_reply(
-    channel: &Channel,
-    env: &Env,
-    metadata: &serde_json::Value,
-    to: &str,
-    body: &str,
-) -> Result<()> {
-    match channel {
-        Channel::WhatsApp => whatsapp::send_reply(env, metadata, to, body).await,
-        Channel::Email => email::send_reply(env, metadata, to, body).await,
+/// Dispatch an outbound reply to the matching channel adapter.
+pub async fn send_reply(env: &Env, msg: &InboundMessage, reply: &str) -> Result<()> {
+    let target = msg.conversation_key();
+    match msg.channel {
+        Channel::WhatsApp => whatsapp::send_reply(env, &msg.raw_metadata, &target, reply).await,
     }
 }
