@@ -1,9 +1,8 @@
 module Page.Dashboard exposing (Model, Msg, Tab(..), init, subscriptions, switchTab, update, view)
 
-{-| The signed-in app: what's connected, how it sounds, what it costs.
+{-| The signed-in app: overview, WhatsApp channels, prepaid credits, settings.
 
-Each tab owns one `RemoteData` field and fetches on first visit, so opening
-the dashboard doesn't pull billing and persona data nobody asked for. Tabs are
+Each tab owns one `RemoteData` field and fetches on first visit. Tabs are
 real routes, so they're linkable and the back button works.
 
 -}
@@ -11,7 +10,7 @@ real routes, so they're linkable and the back button works.
 import Api
 import Browser.Navigation as Nav
 import Format
-import Html exposing (Html, a, div, h1, h2, li, p, pre, section, span, text, ul)
+import Html exposing (Html, a, div, h1, h2, li, p, section, span, text, ul)
 import Html.Attributes exposing (class, classList)
 import Html.Events exposing (onClick)
 import Json.Encode as E
@@ -23,7 +22,6 @@ import Ui
 
 type Tab
     = Overview
-    | Persona
     | Channels
     | Billing
     | Settings
@@ -31,78 +29,25 @@ type Tab
 
 type alias Model =
     { tab : Tab
-    , channels : Api.Data { accounts : List Api.WhatsAppAccount, signup : Maybe Api.Signup }
-    , email : Api.Data Api.EmailOverview
-    , persona : Api.Data Api.Persona
-    , billing : Api.Data Api.Billing
-
-    -- The conversation window and the locale pair, on the Settings tab.
-    , settings : Api.Data Api.Settings
+    , channels : Api.Data { accounts : List Api.WhatsAppAccount, signup : Maybe Api.MetaSignup }
+    , billing : Api.Data Api.BillingView
+    , settings : Api.Data Api.SettingsView
     , settingsForm : SettingsForm
-
-    -- The archetype catalog, for the voice picker. Operator-managed, so it's
-    -- fetched rather than hardcoded — a fifth voice appears here without a
-    -- frontend change.
-    , archetypes : Api.Data (List Api.Archetype)
-
-    -- Local edits, keyed by the account being edited. Only one at a time,
-    -- which matches the UI: you expand one number's settings.
-    , editing : Maybe ( String, Api.Reply )
-
-    -- Same, for an email domain's reply config.
-    , emailEditing : Maybe ( String, Api.Reply )
-
-    -- The connect-an-email-domain form.
-    , emailForm : EmailForm
-    , emailFormOpen : Bool
-    , emailSaving : Bool
-
-    -- Open persona form. `Nothing` means the tab is in read-only mode.
-    , personaForm : Maybe PersonaForm
-
-    -- The composed prompt for the unsaved form, from /api/persona/preview.
-    , preview : Api.Data String
+    , editing : Maybe { id : String, reply : Api.ReplyConfig, waitText : String }
+    , confirmDisconnect : Maybe String
     , creditsToBuy : Int
-
-    -- Typed confirmation for closing the account. The worker requires the
-    -- account's own email, so this has to match before the button works.
     , deleteConfirm : String
     , saving : Bool
+    , connectingMeta : Bool
     , notice : Maybe ( String, String )
     }
 
 
-{-| Local state for the connect-an-email-domain form.
--}
-type alias EmailForm =
-    { domain : String
-    , localPart : String
-    , name : String
-    , fromName : String
-    }
-
-
-emptyEmailForm : EmailForm
-emptyEmailForm =
-    { domain = ""
-    , localPart = ""
-    , name = ""
-    , fromName = ""
-    }
-
-
-{-| The Settings tab's form.
-
-The three timing knobs are held as strings because they are text inputs and
-an empty box is meaningful: it means "no override, use the default". Parsing
-to `Maybe Int` happens on save, so a half-typed "1" never briefly becomes a
-saved value of 1.
-
--}
 type alias SettingsForm =
     { idleGap : String
     , cooldown : String
     , history : String
+    , handoffEmail : Bool
     , locale : String
     , currency : String
     }
@@ -110,18 +55,21 @@ type alias SettingsForm =
 
 emptySettingsForm : SettingsForm
 emptySettingsForm =
-    { idleGap = "", cooldown = "", history = "", locale = "", currency = "" }
+    { idleGap = ""
+    , cooldown = ""
+    , history = ""
+    , handoffEmail = True
+    , locale = ""
+    , currency = ""
+    }
 
 
-{-| Fill the form from what the server holds. An unset override stays an
-empty box rather than showing the default, so saving an untouched form is a
-no-op instead of pinning today's default.
--}
-formFromSettings : Api.Settings -> SettingsForm
+formFromSettings : Api.SettingsView -> SettingsForm
 formFromSettings s =
     { idleGap = maybeIntToString s.conversation.idleGapMins
     , cooldown = maybeIntToString s.conversation.handoffCooldownMins
     , history = maybeIntToString s.conversation.maxHistoryMessages
+    , handoffEmail = s.notifications.handoffEmail
     , locale = s.locale
     , currency = s.currency
     }
@@ -132,121 +80,50 @@ maybeIntToString =
     Maybe.map String.fromInt >> Maybe.withDefault ""
 
 
-{-| Local state for the persona editor.
-
-The chip lists are held as newline-delimited text while editing, because a
-textarea is the right control for "one per line" and converting on save keeps
-every keystroke from restructuring a list.
-
--}
-type alias PersonaForm =
-    { mode : String
-    , builder : Api.PersonaBuilder
-    , customPrompt : String
-    , catchPhrasesText : String
-    , offTopicsText : String
-    , handoffText : String
-
-    -- The worker's cap on a custom prompt, carried through rather than
-    -- copied as a constant so the two can't drift.
-    , maxLength : Int
-    }
-
-
-{-| Seed the form from the saved persona, so opening the editor shows what is
-live rather than an empty form.
--}
-formFrom : Api.Persona -> PersonaForm
-formFrom persona =
-    { mode = persona.mode
-    , builder = persona.builder
-    , customPrompt = persona.customPrompt
-    , catchPhrasesText = String.join "\n" persona.builder.catchPhrases
-    , offTopicsText = String.join "\n" persona.builder.offTopics
-    , handoffText = String.join "\n" persona.builder.handoffConditions
-    , maxLength = persona.maxCustomPrompt
-    }
-
-
-{-| Fold the newline-edited chip lists back into the builder for submission.
--}
-formBuilder : PersonaForm -> Api.PersonaBuilder
-formBuilder form =
-    let
-        b =
-            form.builder
-    in
-    { b
-        | catchPhrases = lines form.catchPhrasesText
-        , offTopics = lines form.offTopicsText
-        , handoffConditions = lines form.handoffText
-    }
-
-
-lines : String -> List String
-lines text_ =
-    text_
-        |> String.lines
-        |> List.map String.trim
-        |> List.filter (not << String.isEmpty)
-
-
 init : Tab -> ( Model, Cmd Msg )
 init tab =
     let
         model =
             { tab = tab
             , channels = NotAsked
-            , email = NotAsked
-            , persona = NotAsked
             , billing = NotAsked
             , settings = NotAsked
             , settingsForm = emptySettingsForm
-            , archetypes = NotAsked
             , editing = Nothing
-            , emailEditing = Nothing
-            , emailForm = emptyEmailForm
-            , emailFormOpen = False
-            , emailSaving = False
-            , personaForm = Nothing
-            , preview = NotAsked
+            , confirmDisconnect = Nothing
             , creditsToBuy = 0
             , deleteConfirm = ""
             , saving = False
+            , connectingMeta = False
             , notice = Nothing
             }
     in
     ( model, fetchFor tab model )
 
 
-{-| Fetch the data a tab needs, unless it's already in hand. Re-visiting a tab
-shouldn't re-request.
--}
 fetchFor : Tab -> Model -> Cmd Msg
 fetchFor tab model =
     case tab of
         Overview ->
-            channelsCmds model
-
-        Channels ->
-            channelsCmds model
-
-        Persona ->
-            -- Both, in parallel: the editor can't render its voice picker
-            -- without the catalog, and waiting for one before asking for the
-            -- other would double the time to a usable form.
             Cmd.batch
-                [ if RemoteData.isNotAsked model.persona then
-                    Api.getPersona GotPersona
+                [ if RemoteData.isNotAsked model.channels then
+                    Api.getWhatsApp GotChannels
 
                   else
                     Cmd.none
-                , if RemoteData.isNotAsked model.archetypes then
-                    Api.getArchetypes GotArchetypes
+                , if RemoteData.isNotAsked model.billing then
+                    Api.getBilling GotBilling
 
                   else
                     Cmd.none
                 ]
+
+        Channels ->
+            if RemoteData.isNotAsked model.channels then
+                Api.getWhatsApp GotChannels
+
+            else
+                Cmd.none
 
         Billing ->
             if RemoteData.isNotAsked model.billing then
@@ -263,31 +140,6 @@ fetchFor tab model =
                 Cmd.none
 
 
-{-| The channel list is WhatsApp plus email; both tabs that show it fetch both.
--}
-channelsCmds : Model -> Cmd Msg
-channelsCmds model =
-    Cmd.batch
-        [ if RemoteData.isNotAsked model.channels then
-            Api.getWhatsApp GotChannels
-
-          else
-            Cmd.none
-        , if RemoteData.isNotAsked model.email then
-            Api.getEmail GotEmail
-
-          else
-            Cmd.none
-        ]
-
-
-{-| Move to another tab, keeping whatever data is already loaded.
-
-Exposed as a function rather than by opening up `Msg`, so `Main` can drive a
-tab change on navigation without the constructor set becoming part of this
-module's interface.
-
--}
 switchTab : Tab -> Model -> ( Model, Cmd Msg )
 switchTab tab model =
     update (SwitchedTo tab) model
@@ -299,53 +151,34 @@ switchTab tab model =
 
 type Msg
     = SwitchedTo Tab
-    | GotChannels (Api.Data { accounts : List Api.WhatsAppAccount, signup : Maybe Api.Signup })
-    | GotPersona (Api.Data Api.Persona)
-    | GotBilling (Api.Data Api.Billing)
-    | EditReply String Api.Reply
+    | GotChannels (Api.Data { accounts : List Api.WhatsAppAccount, signup : Maybe Api.MetaSignup })
+    | RefreshedChannels (Api.Data { accounts : List Api.WhatsAppAccount, signup : Maybe Api.MetaSignup })
+    | StartMetaSignup Api.MetaSignup
+    | MetaSignupCame E.Value
+    | GotBilling (Api.Data Api.BillingView)
+    | EditReply String Api.ReplyConfig
+    | SetEditReply Api.ReplyConfig
+    | SetWaitText String
     | CancelEdit
     | SaveReply
     | SavedReply (Api.Data Api.WhatsAppAccount)
-    | GotEmail (Api.Data Api.EmailOverview)
-    | OpenEmailForm
-    | CancelEmailForm
-    | CancelEmailEdit
-    | SetEmailDomain String
-    | SetEmailLocalPart String
-    | SetEmailName String
-    | SetEmailFromName String
-    | ConnectEmail
-    | ConnectedEmail (Api.Data Api.EmailAccount)
-    | EditEmailReply String Api.Reply
-    | SaveEmailReply
-    | SavedEmailReply (Api.Data Api.EmailAccount)
-    | DeleteEmail String
-    | DeletedEmail (Api.Data ())
-    | GotArchetypes (Api.Data (List Api.Archetype))
-    | OpenPersonaEditor
-    | ClosePersonaEditor
-    | SetPersonaMode String
-    | EditBuilder (Api.PersonaBuilder -> Api.PersonaBuilder)
-    | SetCatchPhrases String
-    | SetOffTopics String
-    | SetHandoff String
-    | SetCustomPrompt String
-    | RequestPreview
-    | GotPreview (Api.Data String)
-    | SavePersona
-    | SavedPersona (Api.Data Api.Persona)
+    | AskDisconnect String
+    | CancelDisconnect
+    | ConfirmDisconnect String
+    | DisconnectedWhatsApp (Api.Data ())
     | SetCredits String
     | BuyCredits
     | GotOrder (Api.Data Api.Order)
     | PaymentCame Ports.PaymentOutcome
-    | PaymentConfirmed (Api.Data ())
-    | GotSettings (Api.Data Api.Settings)
+    | GotSettings (Api.Data Api.SettingsView)
     | SetTiming (SettingsForm -> SettingsForm)
     | SaveTiming
+    | SetHandoffEmail Bool
+    | SaveNotifications
     | SetLocaleField String
     | SetCurrencyField String
     | SaveLocale
-    | SavedSettings (Api.Data Api.Settings)
+    | SavedSettings (Api.Data Api.SettingsView)
     | SetDeleteConfirm String
     | CloseAccount
     | AccountClosed (Api.Data ())
@@ -355,151 +188,60 @@ update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
         SwitchedTo tab ->
-            ( { model | tab = tab, notice = Nothing }, fetchFor tab model )
+            ( { model | tab = tab, notice = Nothing, confirmDisconnect = Nothing }, fetchFor tab model )
 
         GotChannels result ->
-            ( { model | channels = result }, Cmd.none )
+            ( { model | channels = result, connectingMeta = False }, Cmd.none )
 
-        GotPersona result ->
-            ( { model | persona = result }, Cmd.none )
-
-        GotArchetypes result ->
-            ( { model | archetypes = result }, Cmd.none )
-
-        OpenPersonaEditor ->
-            case model.persona of
-                Success persona ->
-                    ( { model
-                        | personaForm = Just (formFrom persona)
-
-                        -- The saved prompt is already on screen; seeding the
-                        -- preview with it means the panel doesn't go blank
-                        -- before the first Preview press.
-                        , preview = Success persona.prompt
-                        , notice = Nothing
-                      }
-                    , Cmd.none
-                    )
-
-                _ ->
-                    ( model, Cmd.none )
-
-        ClosePersonaEditor ->
-            ( { model | personaForm = Nothing, preview = NotAsked, notice = Nothing }, Cmd.none )
-
-        SetPersonaMode mode ->
-            ( { model | personaForm = Maybe.map (\f -> { f | mode = mode }) model.personaForm }
-            , Cmd.none
-            )
-
-        EditBuilder change ->
-            ( { model
-                | personaForm =
-                    Maybe.map (\f -> { f | builder = change f.builder }) model.personaForm
-              }
-            , Cmd.none
-            )
-
-        SetCatchPhrases value ->
-            ( { model | personaForm = Maybe.map (\f -> { f | catchPhrasesText = value }) model.personaForm }
-            , Cmd.none
-            )
-
-        SetOffTopics value ->
-            ( { model | personaForm = Maybe.map (\f -> { f | offTopicsText = value }) model.personaForm }
-            , Cmd.none
-            )
-
-        SetHandoff value ->
-            ( { model | personaForm = Maybe.map (\f -> { f | handoffText = value }) model.personaForm }
-            , Cmd.none
-            )
-
-        SetCustomPrompt value ->
-            ( { model | personaForm = Maybe.map (\f -> { f | customPrompt = value }) model.personaForm }
-            , Cmd.none
-            )
-
-        RequestPreview ->
-            -- On demand rather than on every keystroke. Each press is a
-            -- request, and a debounce that fired mid-sentence would spend
-            -- them on half-typed prompts.
-            case model.personaForm of
-                Just form ->
-                    ( { model | preview = Loading }
-                    , Api.previewPersona (formBuilder form) GotPreview
-                    )
-
-                Nothing ->
-                    ( model, Cmd.none )
-
-        GotPreview result ->
-            ( { model | preview = result }, Cmd.none )
-
-        SavePersona ->
-            case model.personaForm of
-                Just form ->
-                    if form.mode == "custom" && String.isEmpty (String.trim form.customPrompt) then
-                        ( { model
-                            | notice =
-                                Just ( "error", "Write a prompt, or switch to the guided builder." )
-                          }
-                        , Cmd.none
-                        )
-
-                    else
-                        ( { model | saving = True, notice = Nothing }
-                        , Api.savePersona
-                            { mode = form.mode
-                            , builder = formBuilder form
-                            , customPrompt = form.customPrompt
-                            }
-                            SavedPersona
-                        )
-
-                Nothing ->
-                    ( model, Cmd.none )
-
-        SavedPersona result ->
+        RefreshedChannels result ->
             case result of
-                Success persona ->
-                    ( { model
-                        | saving = False
-                        , persona = Success persona
-                        , personaForm = Nothing
-                        , preview = NotAsked
-                        , notice =
-                            Just
-                                ( "success"
-                                , if persona.safetyStatus == "approved" then
-                                    "Saved."
-
-                                  else
-                                    -- Worth saying plainly: the tenant has
-                                    -- just turned their own AI replies off
-                                    -- until the classifier comes back.
-                                    "Saved. AI replies are paused while we check the new prompt."
-                                )
-                      }
-                    , Cmd.none
-                    )
-
-                Failure err ->
-                    ( { model | saving = False, notice = Just ( "error", Api.errorMessage err ) }
-                    , Cmd.none
-                    )
+                Success data ->
+                    ( { model | channels = Success data }, Cmd.none )
 
                 _ ->
                     ( model, Cmd.none )
+
+        StartMetaSignup signup ->
+            ( { model | connectingMeta = True, notice = Nothing }
+            , Ports.openMetaSignup
+                { appId = signup.appId
+                , configId = signup.configId
+                , state = signup.state
+                }
+            )
+
+        MetaSignupCame raw ->
+            case Ports.decodeMetaSignupOutcome raw of
+                Ports.MetaSignupOk ->
+                    ( { model
+                        | connectingMeta = False
+                        , notice = Just ( "success", "WhatsApp Business number connected." )
+                      }
+                    , Api.getWhatsApp GotChannels
+                    )
+
+                Ports.MetaSignupCancelled ->
+                    ( { model
+                        | connectingMeta = False
+                        , notice = Just ( "info", "WhatsApp signup was cancelled." )
+                      }
+                    , Api.getWhatsApp RefreshedChannels
+                    )
+
+                Ports.MetaSignupError errMsg ->
+                    ( { model
+                        | connectingMeta = False
+                        , notice = Just ( "error", errMsg )
+                      }
+                    , Api.getWhatsApp RefreshedChannels
+                    )
 
         GotBilling result ->
             let
-                -- Seed the slider at the minimum the operator allows, so the
-                -- buy button is valid the moment the page renders.
                 credits =
                     case result of
                         Success billing ->
-                            max model.creditsToBuy billing.minCredits
+                            clamp billing.pricing.minCredits billing.pricing.maxCredits (max model.creditsToBuy billing.pricing.minCredits)
 
                         _ ->
                             model.creditsToBuy
@@ -507,25 +249,67 @@ update msg model =
             ( { model | billing = result, creditsToBuy = credits }, Cmd.none )
 
         EditReply id reply ->
-            ( { model | editing = Just ( id, reply ), notice = Nothing }, Cmd.none )
+            ( { model
+                | editing = Just { id = id, reply = reply, waitText = String.fromInt reply.waitSeconds }
+                , confirmDisconnect = Nothing
+                , notice = Nothing
+              }
+            , Cmd.none
+            )
+
+        SetEditReply reply ->
+            ( { model | editing = Maybe.map (\e -> { e | reply = reply }) model.editing }
+            , Cmd.none
+            )
+
+        SetWaitText value ->
+            ( { model | editing = Maybe.map (\e -> { e | waitText = value }) model.editing }
+            , Cmd.none
+            )
 
         CancelEdit ->
             ( { model | editing = Nothing }, Cmd.none )
 
         SaveReply ->
             case ( model.editing, model.channels ) of
-                ( Just ( id, reply ), Success { accounts } ) ->
-                    let
-                        name =
-                            accounts
-                                |> List.filter (\a -> a.id == id)
-                                |> List.head
-                                |> Maybe.map .name
-                                |> Maybe.withDefault ""
-                    in
-                    ( { model | saving = True }
-                    , Api.saveWhatsApp id { name = name, reply = reply } SavedReply
-                    )
+                ( Just edit, Success { accounts } ) ->
+                    case String.toInt (String.trim edit.waitText) of
+                        Just waitSecs ->
+                            if waitSecs < 0 || waitSecs > 30 then
+                                ( { model
+                                    | notice =
+                                        Just ( "error", "Burst wait window must be between 0 and 30 seconds." )
+                                  }
+                                , Cmd.none
+                                )
+
+                            else
+                                let
+                                    name =
+                                        accounts
+                                            |> List.filter (\a -> a.id == edit.id)
+                                            |> List.head
+                                            |> Maybe.map .name
+                                            |> Maybe.withDefault ""
+                                in
+                                ( { model | saving = True, notice = Nothing }
+                                , Api.updateWhatsApp edit.id
+                                    { name = name
+                                    , enabled = edit.reply.enabled
+                                    , mode = edit.reply.mode
+                                    , text = edit.reply.text
+                                    , waitSeconds = waitSecs
+                                    }
+                                    SavedReply
+                                )
+
+                        Nothing ->
+                            ( { model
+                                | notice =
+                                    Just ( "error", "Burst wait window must be a whole number from 0 to 30." )
+                              }
+                            , Cmd.none
+                            )
 
                 _ ->
                     ( model, Cmd.none )
@@ -537,8 +321,6 @@ update msg model =
                         | saving = False
                         , editing = Nothing
                         , notice = Just ( "success", "Saved." )
-
-                        -- Patch the list in place rather than re-fetching.
                         , channels =
                             RemoteData.map
                                 (\c ->
@@ -568,130 +350,35 @@ update msg model =
                 _ ->
                     ( model, Cmd.none )
 
-        GotEmail result ->
-            ( { model | email = result }, Cmd.none )
+        AskDisconnect id ->
+            ( { model | confirmDisconnect = Just id, notice = Nothing }, Cmd.none )
 
-        OpenEmailForm ->
-            ( { model | emailFormOpen = True, emailForm = emptyEmailForm, notice = Nothing }, Cmd.none )
+        CancelDisconnect ->
+            ( { model | confirmDisconnect = Nothing }, Cmd.none )
 
-        CancelEmailForm ->
-            ( { model | emailFormOpen = False, emailForm = emptyEmailForm }, Cmd.none )
-
-        CancelEmailEdit ->
-            ( { model | emailEditing = Nothing }, Cmd.none )
-
-        SetEmailDomain value ->
-            ( { model | emailForm = (\f -> { f | domain = value }) model.emailForm }, Cmd.none )
-
-        SetEmailLocalPart value ->
-            ( { model | emailForm = (\f -> { f | localPart = value }) model.emailForm }, Cmd.none )
-
-        SetEmailName value ->
-            ( { model | emailForm = (\f -> { f | name = value }) model.emailForm }, Cmd.none )
-
-        SetEmailFromName value ->
-            ( { model | emailForm = (\f -> { f | fromName = value }) model.emailForm }, Cmd.none )
-
-        ConnectEmail ->
-            ( { model | emailSaving = True, notice = Nothing }
-            , Api.connectEmail
-                { domain = model.emailForm.domain
-                , localPart = model.emailForm.localPart
-                , name = model.emailForm.name
-                , fromName = model.emailForm.fromName
-                }
-                ConnectedEmail
+        ConfirmDisconnect id ->
+            ( { model | saving = True, notice = Nothing }
+            , Api.deleteWhatsApp id DisconnectedWhatsApp
             )
 
-        ConnectedEmail result ->
+        DisconnectedWhatsApp result ->
             case result of
-                Success _ ->
+                Success () ->
                     ( { model
-                        | emailSaving = False
-                        , emailForm = emptyEmailForm
-                        , emailFormOpen = False
-                        , notice = Just ( "success", "Domain connected. Add the DNS records to start receiving." )
+                        | saving = False
+                        , confirmDisconnect = Nothing
+                        , editing = Nothing
+                        , notice = Just ( "success", "WhatsApp number disconnected." )
                       }
-                    , Api.getEmail GotEmail
+                    , Api.getWhatsApp GotChannels
                     )
 
                 Failure err ->
-                    ( { model | emailSaving = False, notice = Just ( "error", Api.errorMessage err ) }
-                    , Cmd.none
-                    )
-
-                _ ->
-                    ( model, Cmd.none )
-
-        EditEmailReply id reply ->
-            ( { model | emailEditing = Just ( id, reply ), notice = Nothing }, Cmd.none )
-
-        SaveEmailReply ->
-            case ( model.emailEditing, model.email ) of
-                ( Just ( id, reply ), Success { accounts } ) ->
-                    let
-                        ( name, fromName ) =
-                            accounts
-                                |> List.filter (\a -> a.id == id)
-                                |> List.head
-                                |> Maybe.map (\a -> ( a.name, a.fromName ))
-                                |> Maybe.withDefault ( "", "" )
-                    in
-                    ( { model | emailSaving = True }
-                    , Api.saveEmail id { name = name, fromName = fromName, reply = reply } SavedEmailReply
-                    )
-
-                _ ->
-                    ( model, Cmd.none )
-
-        SavedEmailReply result ->
-            case result of
-                Success account ->
                     ( { model
-                        | emailSaving = False
-                        , emailEditing = Nothing
-                        , notice = Just ( "success", "Saved." )
-                        , email =
-                            RemoteData.map
-                                (\o ->
-                                    { o
-                                        | accounts =
-                                            List.map
-                                                (\a ->
-                                                    if a.id == account.id then
-                                                        account
-
-                                                    else
-                                                        a
-                                                )
-                                                o.accounts
-                                    }
-                                )
-                                model.email
+                        | saving = False
+                        , confirmDisconnect = Nothing
+                        , notice = Just ( "error", Api.errorMessage err )
                       }
-                    , Cmd.none
-                    )
-
-                Failure err ->
-                    ( { model | emailSaving = False, notice = Just ( "error", Api.errorMessage err ) }
-                    , Cmd.none
-                    )
-
-                _ ->
-                    ( model, Cmd.none )
-
-        DeleteEmail id ->
-            ( { model | emailSaving = True, notice = Nothing }, Api.deleteEmail id DeletedEmail )
-
-        DeletedEmail result ->
-            case result of
-                Success _ ->
-                    ( { model | emailSaving = False, notice = Just ( "success", "Domain disconnected." ) }
-                    , Api.getEmail GotEmail
-                    )
-
-                Failure err ->
-                    ( { model | emailSaving = False, notice = Just ( "error", Api.errorMessage err ) }
                     , Cmd.none
                     )
 
@@ -733,7 +420,8 @@ update msg model =
         PaymentCame outcome ->
             if String.isEmpty outcome.signature then
                 ( { model
-                    | notice =
+                    | saving = False
+                    , notice =
                         Just
                             ( "error"
                             , if String.isEmpty outcome.error then
@@ -747,13 +435,15 @@ update msg model =
                 )
 
             else
-                ( { model | saving = True }
-                , Api.verifyPayment
-                    { orderId = outcome.orderId
-                    , paymentId = outcome.paymentId
-                    , signature = outcome.signature
-                    }
-                    PaymentConfirmed
+                ( { model
+                    | saving = False
+                    , notice =
+                        Just
+                            ( "success"
+                            , "Payment received. Your credit balance updates within a few seconds."
+                            )
+                  }
+                , Api.getBilling GotBilling
                 )
 
         GotSettings result ->
@@ -780,15 +470,12 @@ update msg model =
                         form =
                             model.settingsForm
 
-                        -- An empty box clears the override; anything that
-                        -- isn't a number keeps what the server already has,
-                        -- so a typo can't silently reset a knob to default.
-                        read text stored =
-                            if String.trim text == "" then
+                        read txt stored =
+                            if String.trim txt == "" then
                                 Nothing
 
                             else
-                                case String.toInt (String.trim text) of
+                                case String.toInt (String.trim txt) of
                                     Just n ->
                                         Just n
 
@@ -810,6 +497,20 @@ update msg model =
 
                 _ ->
                     ( model, Cmd.none )
+
+        SetHandoffEmail checked ->
+            let
+                form =
+                    model.settingsForm
+            in
+            ( { model | settingsForm = { form | handoffEmail = checked } }, Cmd.none )
+
+        SaveNotifications ->
+            ( { model | saving = True, notice = Nothing }
+            , Api.saveNotifications
+                { handoffEmail = model.settingsForm.handoffEmail }
+                SavedSettings
+            )
 
         SetLocaleField tag ->
             let
@@ -865,36 +566,7 @@ update msg model =
         AccountClosed result ->
             case result of
                 Success () ->
-                    -- A real page load, not a route change: the session
-                    -- cookie is gone and every cached payload in this model
-                    -- belongs to an account that no longer exists.
                     ( { model | saving = False }, Nav.load "/" )
-
-                Failure err ->
-                    ( { model | saving = False, notice = Just ( "error", Api.errorMessage err ) }
-                    , Cmd.none
-                    )
-
-                _ ->
-                    ( model, Cmd.none )
-
-        PaymentConfirmed result ->
-            case result of
-                Success () ->
-                    -- Credits arrive via the webhook, which may land after
-                    -- this. Re-fetch so the balance is as fresh as it can be,
-                    -- and say so rather than claiming the credits are there.
-                    ( { model
-                        | saving = False
-                        , billing = Loading
-                        , notice =
-                            Just
-                                ( "success"
-                                , "Payment received. Your balance updates within a few seconds."
-                                )
-                      }
-                    , Api.getBilling GotBilling
-                    )
 
                 Failure err ->
                     ( { model | saving = False, notice = Just ( "error", Api.errorMessage err ) }
@@ -907,7 +579,10 @@ update msg model =
 
 subscriptions : Sub Msg
 subscriptions =
-    Ports.paymentOutcome PaymentCame
+    Sub.batch
+        [ Ports.paymentOutcome PaymentCame
+        , Ports.metaSignupOutcome MetaSignupCame
+        ]
 
 
 
@@ -918,12 +593,7 @@ view : Api.Session -> Model -> Html Msg
 view session model =
     div [ class "dashboard" ]
         [ h1 [] [ text (greeting session) ]
-        , if not session.aiReady then
-            Ui.banner "info"
-                "AI replies are paused while we check your prompt. Canned replies still go out."
-
-          else
-            text ""
+        , safetyNotice session
         , tabs model.tab
         , case model.notice of
             Just ( kind, message ) ->
@@ -933,20 +603,34 @@ view session model =
                 text ""
         , case model.tab of
             Overview ->
-                overviewTab model
+                overviewTab session model
 
             Channels ->
                 channelsTab model
 
-            Persona ->
-                personaTab model
-
             Billing ->
-                billingTab model
+                billingTab session model
 
             Settings ->
                 settingsTab session model
         ]
+
+
+safetyNotice : Api.Session -> Html Msg
+safetyNotice session =
+    if session.safetyStatus == "rejected" then
+        Ui.banner "error"
+            (Maybe.withDefault
+                "AI replies are paused because your account did not pass the safety check. Static replies still go out."
+                session.safetyReason
+            )
+
+    else if session.safetyStatus == "pending" || not session.aiReady then
+        Ui.banner "info"
+            "AI replies are paused while safety checks complete. Static replies still go out."
+
+    else
+        text ""
 
 
 greeting : Api.Session -> String
@@ -974,25 +658,48 @@ tabs current =
             )
             [ ( Overview, Route.Dashboard, "Overview" )
             , ( Channels, Route.DashboardChannels, "Channels" )
-            , ( Persona, Route.DashboardPersona, "Voice" )
+            , ( Billing, Route.DashboardBilling, "Credits" )
             , ( Settings, Route.DashboardSettings, "Settings" )
             ]
         )
 
 
-overviewTab : Model -> Html Msg
-overviewTab model =
+
+-- OVERVIEW TAB
+
+
+overviewTab : Api.Session -> Model -> Html Msg
+overviewTab session model =
     section []
-        [ Ui.remote model.channels (overviewWhatsApp model)
-        , Ui.remote model.email (overviewEmail model)
-        , if channelsEmpty model then
-            Ui.card
-                [ h2 [] [ text "Nothing connected yet" ]
-                , p [] [ text "Concierge can't answer anything until you connect WhatsApp or a custom email domain." ]
-                , Ui.linkButton
-                    { label = "Connect a channel"
-                    , url = Route.toPath Route.DashboardChannels
-                    , primary = True
+        [ Ui.remote model.billing (overviewBillingCard session)
+        , Ui.remote model.channels overviewWhatsApp
+        ]
+
+
+overviewBillingCard : Api.Session -> Api.BillingView -> Html Msg
+overviewBillingCard session billing =
+    Ui.card
+        [ h2 [] [ text "Prepaid credits" ]
+        , p [ class "balance" ]
+            [ text (Format.count session.locale billing.balance ++ " credits") ]
+        , p [ class "muted" ]
+            [ text
+                (Format.count session.locale billing.repliesUsed
+                    ++ " replies used so far · 1 credit = 1 reply (static or AI)."
+                )
+            ]
+        , if billing.metered && billing.balance == 0 then
+            Ui.banner "info"
+                "You have 0 credits left. Buy credits to start sending WhatsApp auto-replies."
+
+          else
+            text ""
+        , if billing.metered then
+            div [ class "card-actions" ]
+                [ Ui.linkButton
+                    { label = "Buy credits"
+                    , url = Route.toPath Route.DashboardBilling
+                    , primary = billing.balance == 0
                     }
                 ]
 
@@ -1001,41 +708,30 @@ overviewTab model =
         ]
 
 
-overviewWhatsApp : Model -> { accounts : List Api.WhatsAppAccount, signup : Maybe Api.Signup } -> Html Msg
-overviewWhatsApp _ data =
+overviewWhatsApp : { accounts : List Api.WhatsAppAccount, signup : Maybe Api.MetaSignup } -> Html Msg
+overviewWhatsApp data =
     if List.isEmpty data.accounts then
-        text ""
+        Ui.card
+            [ h2 [] [ text "No WhatsApp number connected" ]
+            , p [] [ text "Connect a WhatsApp Business number so Concierge can answer your customers." ]
+            , div [ class "card-actions" ]
+                [ Ui.linkButton
+                    { label = "Connect WhatsApp"
+                    , url = Route.toPath Route.DashboardChannels
+                    , primary = True
+                    }
+                ]
+            ]
 
     else
         Ui.card
-            [ h2 [] [ text "Answering on WhatsApp" ]
+            [ h2 [] [ text "Connected WhatsApp numbers" ]
             , ul [ class "connected-list" ]
                 (List.map
                     (\a ->
                         li [ class "connected-item" ]
                             [ span [ class "connected-name" ] [ text a.name ]
-                            , span [ class "connected-phone" ] [ text a.phoneNumber ]
-                            , replyPill a.reply.enabled
-                            ]
-                    )
-                    data.accounts
-                )
-            ]
-
-
-overviewEmail : Model -> Api.EmailOverview -> Html Msg
-overviewEmail _ data =
-    if List.isEmpty data.accounts then
-        text ""
-
-    else
-        Ui.card
-            [ h2 [] [ text "Answering on email" ]
-            , ul [ class "connected-list" ]
-                (List.map
-                    (\a ->
-                        li [ class "connected-item" ]
-                            [ span [ class "connected-name" ] [ text a.fromAddress ]
+                            , span [ class "connected-phone" ] [ text a.displayPhoneNumber ]
                             , replyPill a.reply.enabled
                             ]
                     )
@@ -1063,242 +759,61 @@ replyPill enabled =
         ]
 
 
-{-| True only when both channel lists have loaded and are empty — so the
-"connect a channel" prompt doesn't flash while they're still loading.
--}
-channelsEmpty : Model -> Bool
-channelsEmpty model =
-    let
-        whatsAppEmpty =
-            case model.channels of
-                Success d ->
-                    List.isEmpty d.accounts
 
-                _ ->
-                    False
-
-        emailEmpty =
-            case model.email of
-                Success d ->
-                    List.isEmpty d.accounts
-
-                _ ->
-                    False
-    in
-    whatsAppEmpty && emailEmpty
+-- CHANNELS TAB (WHATSAPP ONLY)
 
 
 channelsTab : Model -> Html Msg
 channelsTab model =
     section []
-        [ Ui.remote model.channels (whatsappSection model)
-        , Ui.remote model.email (emailSection model)
-        , Ui.remote model.email (\o -> setupCard o.setup)
-        ]
+        [ Ui.remote model.channels (whatsappSection model) ]
 
 
-whatsappSection : Model -> { accounts : List Api.WhatsAppAccount, signup : Maybe Api.Signup } -> Html Msg
+whatsappSection : Model -> { accounts : List Api.WhatsAppAccount, signup : Maybe Api.MetaSignup } -> Html Msg
 whatsappSection model data =
     div []
-        [ h2 [] [ text "WhatsApp" ]
-        , if List.isEmpty data.accounts then
+        [ if List.isEmpty data.accounts then
             Ui.card
-                [ case data.signup of
-                    Just _ ->
-                        Ui.linkButton
-                            { label = "Connect with Meta"
-                            , url = "/wizard"
-                            , primary = True
-                            }
-
-                    Nothing ->
-                        Ui.banner "info" "WhatsApp signup isn't configured on this deployment."
+                [ h2 [] [ text "WhatsApp Business" ]
+                , p [ class "muted" ]
+                    [ text "Connect your WhatsApp Business number via Meta Embedded Signup to start replying automatically." ]
+                , connectButton model True data.signup
                 ]
 
           else
-            div [] (List.map (accountCard model) data.accounts)
-        ]
+            div []
+                (List.map (accountCard model) data.accounts
+                    ++ [ case data.signup of
+                            Just _ ->
+                                Ui.card
+                                    [ h2 [] [ text "Add another number" ]
+                                    , p [ class "muted" ]
+                                        [ text "Connect an additional WhatsApp Business number through Meta Embedded Signup." ]
+                                    , connectButton model False data.signup
+                                    ]
 
-
-emailSection : Model -> Api.EmailOverview -> Html Msg
-emailSection model overview =
-    div []
-        [ h2 [] [ text "Email" ]
-        , if List.isEmpty overview.accounts then
-            text ""
-
-          else
-            div [] (List.map (emailCard model) overview.accounts)
-        , if model.emailFormOpen then
-            emailForm model
-
-          else
-            Ui.button
-                { label = "Connect a domain"
-                , onClick = OpenEmailForm
-                , primary = False
-                , busy = False
-                }
-        ]
-
-
-emailForm : Model -> Html Msg
-emailForm model =
-    Ui.card
-        [ h2 [] [ text "Connect a domain" ]
-        , Ui.field
-            { id = "email-domain"
-            , label = "Domain"
-            , value = model.emailForm.domain
-            , hint = "e.g. acme.com"
-            , required = True
-            , onInput = SetEmailDomain
-            }
-        , Ui.field
-            { id = "email-local"
-            , label = "Address"
-            , value = model.emailForm.localPart
-            , hint = "Optional. Leave blank to answer every address on the domain."
-            , required = False
-            , onInput = SetEmailLocalPart
-            }
-        , Ui.field
-            { id = "email-name"
-            , label = "Label"
-            , value = model.emailForm.name
-            , hint = "Just for you, e.g. Sales inbox."
-            , required = False
-            , onInput = SetEmailName
-            }
-        , Ui.field
-            { id = "email-from-name"
-            , label = "From name"
-            , value = model.emailForm.fromName
-            , hint = "Shown to customers, e.g. Acme Support."
-            , required = False
-            , onInput = SetEmailFromName
-            }
-        , div [ class "card-actions" ]
-            [ Ui.button { label = "Cancel", onClick = CancelEmailForm, primary = False, busy = False }
-            , Ui.button { label = "Connect", onClick = ConnectEmail, primary = True, busy = model.emailSaving }
-            ]
-        ]
-
-
-setupCard : Api.EmailSetup -> Html Msg
-setupCard setup =
-    Ui.card
-        [ h2 [] [ text "DNS for email" ]
-        , p [ class "muted" ] [ text setup.note ]
-        , pre [ class "prompt-preview" ]
-            [ text
-                (String.join "\n"
-                    (List.map (\mx -> "MX  " ++ mx) setup.mxHosts
-                        ++ [ "TXT " ++ setup.spf ]
-                    )
+                            Nothing ->
+                                text ""
+                       ]
                 )
-            ]
         ]
 
 
-emailCard : Model -> Api.EmailAccount -> Html Msg
-emailCard model account =
-    let
-        editing =
-            case model.emailEditing of
-                Just ( id, reply ) ->
-                    if id == account.id then
-                        Just reply
+connectButton : Model -> Bool -> Maybe Api.MetaSignup -> Html Msg
+connectButton model isPrimary maybeSignup =
+    case maybeSignup of
+        Just signup ->
+            div [ class "card-actions" ]
+                [ Ui.button
+                    { label = "Connect WhatsApp number"
+                    , onClick = StartMetaSignup signup
+                    , primary = isPrimary
+                    , busy = model.connectingMeta || model.saving
+                    }
+                ]
 
-                    else
-                        Nothing
-
-                Nothing ->
-                    Nothing
-    in
-    Ui.card
-        [ h2 [] [ text account.fromAddress ]
-        , if String.isEmpty account.name then
-            text ""
-
-          else
-            p [ class "muted" ] [ text account.name ]
-        , case editing of
-            Just reply ->
-                div []
-                    [ Ui.toggle
-                        { id = "email-reply-enabled"
-                        , label = "Reply automatically to new messages"
-                        , checked = reply.enabled
-                        , onCheck = \v -> EditEmailReply account.id { reply | enabled = v }
-                        }
-                    , modePicker (EditEmailReply account.id) reply
-                    , Ui.textarea
-                        { id = "email-reply-text"
-                        , label =
-                            if reply.mode == "prompt" then
-                                "What should the AI do?"
-
-                            else
-                                "Message to send"
-                        , value = reply.text
-                        , hint =
-                            if reply.mode == "prompt" then
-                                "This sits after your voice prompt. One credit per reply."
-
-                            else
-                                "Sent word for word. Costs nothing."
-                        , rows = 4
-                        , onInput = \v -> EditEmailReply account.id { reply | text = v }
-                        }
-                    , Ui.field
-                        { id = "email-wait"
-                        , label = "Wait before replying (seconds)"
-                        , value = String.fromInt reply.waitSeconds
-                        , hint = ""
-                        , required = False
-                        , onInput =
-                            \v ->
-                                EditEmailReply account.id
-                                    { reply | waitSeconds = String.toInt v |> Maybe.withDefault reply.waitSeconds }
-                        }
-                    , div [ class "card-actions" ]
-                        [ Ui.button { label = "Cancel", onClick = CancelEmailEdit, primary = False, busy = False }
-                        , Ui.button { label = "Save", onClick = SaveEmailReply, primary = True, busy = model.emailSaving }
-                        ]
-                    ]
-
-            Nothing ->
-                div []
-                    [ p []
-                        [ text
-                            (if account.reply.enabled then
-                                if account.reply.mode == "prompt" then
-                                    "Answering with AI."
-
-                                else
-                                    "Sending a fixed reply."
-
-                             else
-                                "Not replying."
-                            )
-                        ]
-                    , div [ class "card-actions" ]
-                        [ Ui.button
-                            { label = "Edit replies"
-                            , onClick = EditEmailReply account.id account.reply
-                            , primary = False
-                            , busy = False
-                            }
-                        , Ui.button
-                            { label = "Disconnect"
-                            , onClick = DeleteEmail account.id
-                            , primary = False
-                            , busy = model.emailSaving
-                            }
-                        ]
-                    ]
-        ]
+        Nothing ->
+            Ui.banner "info" "WhatsApp signup isn't configured on this deployment."
 
 
 accountCard : Model -> Api.WhatsAppAccount -> Html Msg
@@ -1306,9 +821,9 @@ accountCard model account =
     let
         editing =
             case model.editing of
-                Just ( id, reply ) ->
-                    if id == account.id then
-                        Just reply
+                Just e ->
+                    if e.id == account.id then
+                        Just e
 
                     else
                         Nothing
@@ -1318,45 +833,37 @@ accountCard model account =
     in
     Ui.card
         [ h2 [] [ text account.name ]
-        , p [ class "muted" ] [ text account.phoneNumber ]
+        , p [ class "muted" ] [ text account.displayPhoneNumber ]
         , case editing of
-            Just reply ->
+            Just edit ->
                 div []
                     [ Ui.toggle
-                        { id = "reply-enabled"
+                        { id = "reply-enabled-" ++ account.id
                         , label = "Reply automatically to new messages"
-                        , checked = reply.enabled
-                        , onCheck = \v -> EditReply account.id { reply | enabled = v }
+                        , checked = edit.reply.enabled
+                        , onCheck = \v -> SetEditReply (setEnabled v edit.reply)
                         }
-                    , modePicker (EditReply account.id) reply
-                    , Ui.textarea
-                        { id = "reply-text"
-                        , label =
-                            if reply.mode == "prompt" then
-                                "What should the AI do?"
+                    , modePicker edit.reply
+                    , if edit.reply.mode == "canned" then
+                        Ui.textarea
+                            { id = "reply-text-" ++ account.id
+                            , label = "Static reply message"
+                            , value = edit.reply.text
+                            , hint = "Sent word for word whenever a customer messages. 1 credit per reply."
+                            , rows = 4
+                            , onInput = \v -> SetEditReply (setText v edit.reply)
+                            }
 
-                            else
-                                "Message to send"
-                        , value = reply.text
-                        , hint =
-                            if reply.mode == "prompt" then
-                                "This sits after your voice prompt. One credit per reply."
-
-                            else
-                                "Sent word for word. Costs nothing."
-                        , rows = 4
-                        , onInput = \v -> EditReply account.id { reply | text = v }
-                        }
+                      else
+                        p [ class "hint" ]
+                            [ text "Concierge's built-in front-desk assistant handles greetings and simple questions briefly, and hands off to you fast when a person is needed. 1 credit per reply." ]
                     , Ui.field
-                        { id = "wait"
-                        , label = "Wait before replying (seconds)"
-                        , value = String.fromInt reply.waitSeconds
-                        , hint = "Gives customers a moment to finish typing, so a burst of messages gets one answer. 0 replies instantly."
+                        { id = "wait-" ++ account.id
+                        , label = "Burst wait window (seconds, 0–30)"
+                        , value = edit.waitText
+                        , hint = "Waits 0–30 seconds for a customer to finish typing a burst of short messages before sending one reply. 0 replies immediately."
                         , required = False
-                        , onInput =
-                            \v ->
-                                EditReply account.id
-                                    { reply | waitSeconds = String.toInt v |> Maybe.withDefault reply.waitSeconds }
+                        , onInput = SetWaitText
                         }
                     , div [ class "card-actions" ]
                         [ Ui.button { label = "Cancel", onClick = CancelEdit, primary = False, busy = False }
@@ -1369,396 +876,151 @@ accountCard model account =
                     [ p []
                         [ text
                             (if account.reply.enabled then
-                                if account.reply.mode == "prompt" then
-                                    "Answering with AI."
+                                if account.reply.mode == "canned" then
+                                    "Sending static reply · "
+                                        ++ String.fromInt account.reply.waitSeconds
+                                        ++ "s burst wait."
 
                                 else
-                                    "Sending a fixed reply."
+                                    "Answering with AI quick-handoff (Concierge core) · "
+                                        ++ String.fromInt account.reply.waitSeconds
+                                        ++ "s burst wait."
 
                              else
-                                "Not replying."
+                                "Auto-reply paused."
                             )
                         ]
-                    , Ui.button
-                        { label = "Edit replies"
-                        , onClick = EditReply account.id account.reply
-                        , primary = False
-                        , busy = False
-                        }
+                    , if model.confirmDisconnect == Just account.id then
+                        div []
+                            [ Ui.banner "error" "Disconnect this WhatsApp number? Concierge will stop replying on it immediately."
+                            , div [ class "card-actions" ]
+                                [ Html.button
+                                    [ class "btn btn-danger"
+                                    , Html.Attributes.type_ "button"
+                                    , Html.Attributes.disabled model.saving
+                                    , onClick (ConfirmDisconnect account.id)
+                                    ]
+                                    [ text
+                                        (if model.saving then
+                                            "Disconnecting…"
+
+                                         else
+                                            "Yes, disconnect"
+                                        )
+                                    ]
+                                , Ui.button
+                                    { label = "Cancel"
+                                    , onClick = CancelDisconnect
+                                    , primary = False
+                                    , busy = False
+                                    }
+                                ]
+                            ]
+
+                      else
+                        div [ class "card-actions" ]
+                            [ Ui.button
+                                { label = "Edit replies"
+                                , onClick = EditReply account.id account.reply
+                                , primary = False
+                                , busy = False
+                                }
+                            , Html.button
+                                [ class "btn btn-danger"
+                                , Html.Attributes.type_ "button"
+                                , Html.Attributes.disabled model.saving
+                                , onClick (AskDisconnect account.id)
+                                ]
+                                [ text "Disconnect" ]
+                            ]
                     ]
         ]
 
 
-modePicker : (Api.Reply -> Msg) -> Api.Reply -> Html Msg
-modePicker onChange reply =
+setEnabled : Bool -> Api.ReplyConfig -> Api.ReplyConfig
+setEnabled enabled reply =
+    { reply | enabled = enabled }
+
+
+setText : String -> Api.ReplyConfig -> Api.ReplyConfig
+setText txt reply =
+    { reply | text = txt }
+
+
+modePicker : Api.ReplyConfig -> Html Msg
+modePicker reply =
     div [ class "field" ]
-        [ Html.label [] [ text "Reply with" ]
+        [ Html.label [] [ text "Reply mode" ]
         , div [ class "choice-row" ]
             (List.map
                 (\( wire, label_ ) ->
                     Html.button
                         [ classList [ ( "choice", True ), ( "is-selected", reply.mode == wire ) ]
                         , Html.Attributes.type_ "button"
-                        , onClick (onChange { reply | mode = wire })
+                        , onClick (SetEditReply { reply | mode = wire })
                         ]
                         [ text label_ ]
                 )
-                [ ( "prompt", "AI" ), ( "canned", "Fixed message" ) ]
+                [ ( "ai", "AI quick-handoff (Concierge core)" ), ( "canned", "Static reply" ) ]
             )
         ]
 
 
-personaTab : Model -> Html Msg
-personaTab model =
-    Ui.remote model.persona <|
-        \persona ->
-            section []
-                [ safetyCard persona
-                , case model.personaForm of
-                    Just form ->
-                        personaEditor model form
 
-                    Nothing ->
-                        promptCard persona
-                ]
+-- CREDITS TAB
 
 
-safetyCard : Api.Persona -> Html Msg
-safetyCard persona =
-    Ui.card
-        [ h2 [] [ text "Safety check" ]
-        , case persona.safetyStatus of
-            "approved" ->
-                Ui.banner "success" "Approved. AI replies are going out."
-
-            "pending" ->
-                Ui.banner "info" "We're checking this prompt. AI replies are paused until it clears."
-
-            _ ->
-                Ui.banner "error"
-                    (Maybe.withDefault
-                        "This prompt didn't pass our safety check."
-                        persona.safetyReason
-                    )
-        ]
-
-
-{-| Read-only view of what is live, with the fixed bookends shown around it.
--}
-promptCard : Api.Persona -> Html Msg
-promptCard persona =
-    Ui.card
-        [ h2 [] [ text "What the model is sent" ]
-        , p [ class "muted" ]
-            [ text "The first and last parts are fixed and ship with Concierge. Only the middle is yours." ]
-        , pre [ class "prompt-preview prompt-preview-fixed" ] [ text persona.preamble ]
-        , pre [ class "prompt-preview prompt-preview-middle" ] [ text persona.prompt ]
-        , pre [ class "prompt-preview prompt-preview-fixed" ] [ text persona.postamble ]
-        , div [ class "card-actions" ]
-            [ Ui.button
-                { label = "Edit your voice"
-                , onClick = OpenPersonaEditor
-                , primary = True
-                , busy = False
-                }
-            ]
-        ]
-
-
-{-| The editor. Two modes, and only ever one: a persona is a guided builder or
-a raw prompt, never a blend, so there is exactly one source for the active
-prompt.
--}
-personaEditor : Model -> PersonaForm -> Html Msg
-personaEditor model form =
-    Ui.card
-        [ h2 [] [ text "Edit your voice" ]
-        , Ui.banner "info"
-            "Saving re-runs the safety check. AI replies pause until the new prompt is approved; fixed replies keep going out."
-        , modeSwitch form.mode
-        , if form.mode == "custom" then
-            customFields model form
-
-          else
-            builderFields model form
-        , previewPanel model form
-        , div [ class "card-actions" ]
-            [ Ui.button
-                { label = "Cancel"
-                , onClick = ClosePersonaEditor
-                , primary = False
-                , busy = False
-                }
-            , Ui.button
-                { label = "Save"
-                , onClick = SavePersona
-                , primary = True
-                , busy = model.saving
-                }
-            ]
-        ]
-
-
-modeSwitch : String -> Html Msg
-modeSwitch current =
-    div [ class "field" ]
-        [ Html.label [] [ text "How you want to write it" ]
-        , div [ class "choice-row" ]
-            (List.map
-                (\( wire, label_ ) ->
-                    Html.button
-                        [ classList [ ( "choice", True ), ( "is-selected", current == wire ) ]
-                        , Html.Attributes.type_ "button"
-                        , onClick (SetPersonaMode wire)
-                        ]
-                        [ text label_ ]
-                )
-                [ ( "builder", "Guided" ), ( "custom", "Write the prompt myself" ) ]
-            )
-        ]
-
-
-builderFields : Model -> PersonaForm -> Html Msg
-builderFields model form =
-    let
-        b =
-            form.builder
-    in
-    div []
-        [ voicePicker model b.archetypeSlug
-        , Ui.field
-            { id = "biz_name"
-            , label = "Business name"
-            , value = b.bizName
-            , hint = "How the AI refers to you."
-            , required = False
-            , onInput = \v -> EditBuilder (\x -> { x | bizName = v })
-            }
-        , Ui.field
-            { id = "biz_type"
-            , label = "What you do"
-            , value = b.bizType
-            , hint = "A few words: florist, dental clinic, tuition centre."
-            , required = False
-            , onInput = \v -> EditBuilder (\x -> { x | bizType = v })
-            }
-        , Ui.field
-            { id = "city"
-            , label = "Where you are"
-            , value = b.city
-            , hint = ""
-            , required = False
-            , onInput = \v -> EditBuilder (\x -> { x | city = v })
-            }
-        , Ui.field
-            { id = "hours"
-            , label = "When you're open"
-            , value = b.hours
-            , hint = "So it can say when you'll be back instead of guessing."
-            , required = False
-            , onInput = \v -> EditBuilder (\x -> { x | hours = v })
-            }
-        , Ui.field
-            { id = "goal"
-            , label = "What each conversation should aim for"
-            , value = b.goal
-            , hint = "For example: get them to book a slot."
-            , required = False
-            , onInput = \v -> EditBuilder (\x -> { x | goal = v })
-            }
-        , Ui.field
-            { id = "goal_url"
-            , label = "A link worth sending"
-            , value = b.goalUrl
-            , hint = "Your booking page, menu or catalogue. Anything that isn't a plain http(s) link is dropped."
-            , required = False
-            , onInput = \v -> EditBuilder (\x -> { x | goalUrl = v })
-            }
-        , Ui.textarea
-            { id = "catch_phrases"
-            , label = "Things you'd actually say"
-            , value = form.catchPhrasesText
-            , hint = "One per line, up to five. These make it sound like you rather than like an assistant."
-            , rows = 3
-            , onInput = SetCatchPhrases
-            }
-        , Ui.textarea
-            { id = "off_topics"
-            , label = "Stay off these"
-            , value = form.offTopicsText
-            , hint = "One per line. A draft that strays into one of these is withheld and you're emailed instead."
-            , rows = 3
-            , onInput = SetOffTopics
-            }
-        , Ui.field
-            { id = "never"
-            , label = "Never say"
-            , value = b.never
-            , hint = "One thing it must not promise. Also checked against every draft before it's sent."
-            , required = False
-            , onInput = \v -> EditBuilder (\x -> { x | never = v })
-            }
-        , Ui.textarea
-            { id = "handoff"
-            , label = "When should it stop and fetch you?"
-            , value = form.handoffText
-            , hint = "One per line. Prices and commitments already stop it automatically — these are your own additions."
-            , rows = 3
-            , onInput = SetHandoff
-            }
-        ]
-
-
-voicePicker : Model -> String -> Html Msg
-voicePicker model current =
-    div [ class "field" ]
-        [ Html.label [] [ text "Voice" ]
-        , Ui.remote model.archetypes <|
-            \archetypes ->
-                if List.isEmpty archetypes then
-                    Ui.banner "info" "No voices are available right now. Try again shortly."
-
-                else
-                    ul [ class "voice-grid" ]
-                        (List.map
-                            (\archetype ->
-                                li []
-                                    [ Html.button
-                                        [ classList
-                                            [ ( "voice-card", True )
-                                            , ( "is-selected", current == archetype.slug )
-                                            ]
-                                        , Html.Attributes.type_ "button"
-                                        , onClick
-                                            (EditBuilder
-                                                (\x -> { x | archetypeSlug = archetype.slug })
-                                            )
-                                        ]
-                                        [ h2 [] [ text archetype.label ]
-                                        , p [] [ text archetype.description ]
-                                        ]
-                                    ]
-                            )
-                            archetypes
-                        )
-        ]
-
-
-customFields : Model -> PersonaForm -> Html Msg
-customFields model form =
-    let
-        used =
-            String.length form.customPrompt
-    in
-    div []
-        [ Ui.textarea
-            { id = "custom_prompt"
-            , label = "Your prompt"
-            , value = form.customPrompt
-            , hint =
-                "This replaces the guided fields entirely. The fixed preamble and postamble still wrap it — they can't be edited away."
-            , rows = 14
-            , onInput = SetCustomPrompt
-            }
-        , p
-            [ classList
-                [ ( "hint", True )
-                , ( "hint-warn", used > form.maxLength )
-                ]
-            ]
-            [ text
-                (String.fromInt used
-                    ++ " / "
-                    ++ String.fromInt form.maxLength
-                    ++ " characters"
-                    ++ (if used > form.maxLength then
-                            " — anything past the limit is dropped on save."
-
-                        else
-                            ""
-                       )
-                )
-            ]
-        ]
-
-
-{-| The composed middle for the _unsaved_ form.
-
-Worth its own panel: the guided fields don't obviously map onto a prompt, and
-the point of the product is that you can read exactly what the model is told.
-
--}
-previewPanel : Model -> PersonaForm -> Html Msg
-previewPanel model form =
-    div [ class "preview-panel" ]
-        [ div [ class "preview-panel-head" ]
-            [ h2 [] [ text "What this composes to" ]
-            , Ui.button
-                { label = "Refresh preview"
-                , onClick = RequestPreview
-                , primary = False
-                , busy = RemoteData.isLoading model.preview
-                }
-            ]
-        , if form.mode == "custom" then
-            pre [ class "prompt-preview prompt-preview-middle" ]
-                [ text
-                    (if String.isEmpty (String.trim form.customPrompt) then
-                        "Nothing yet."
-
-                     else
-                        form.customPrompt
-                    )
-                ]
-
-          else
-            Ui.remote model.preview <|
-                \prompt -> pre [ class "prompt-preview prompt-preview-middle" ] [ text prompt ]
-        ]
-
-
-billingTab : Model -> Html Msg
-billingTab model =
+billingTab : Api.Session -> Model -> Html Msg
+billingTab session model =
     Ui.remote model.billing <|
         \billing ->
+            let
+                unitPrice =
+                    Api.unitPriceFor billing.currency billing.pricing
+            in
             section []
                 [ Ui.card
                     [ h2 [] [ text "Balance" ]
                     , p [ class "balance" ]
-                        [ text (Format.count "en-IN" billing.balance ++ " replies") ]
+                        [ text (Format.count session.locale billing.balance ++ " credits") ]
                     , p [ class "muted" ]
-                        [ text (Format.count "en-IN" billing.repliesUsed ++ " used so far.") ]
+                        [ text
+                            (Format.count session.locale billing.repliesUsed
+                                ++ " replies used so far · 1 credit = 1 reply (static or AI)."
+                            )
+                        ]
                     ]
                 , if billing.metered then
                     Ui.card
-                        [ h2 [] [ text "Buy replies" ]
+                        [ h2 [] [ text "Buy credits" ]
                         , p []
                             [ text
-                                (Format.milliRate "en-IN" billing.currency billing.unitPriceMilli
-                                    ++ " each. No packs, no tiers — buy any number."
+                                (Format.milliRate session.locale billing.currency unitPrice
+                                    ++ " per reply. Prepaid credits only — no subscriptions, no expiry."
                                 )
                             ]
                         , Html.input
                             [ Html.Attributes.type_ "range"
-                            , Html.Attributes.min (String.fromInt billing.minCredits)
-                            , Html.Attributes.max (String.fromInt billing.maxCredits)
-                            , Html.Attributes.step (String.fromInt billing.minCredits)
+                            , Html.Attributes.min (String.fromInt billing.pricing.minCredits)
+                            , Html.Attributes.max (String.fromInt billing.pricing.maxCredits)
+                            , Html.Attributes.step (String.fromInt billing.pricing.minCredits)
                             , Html.Attributes.value (String.fromInt model.creditsToBuy)
                             , Html.Events.onInput SetCredits
                             , class "credit-slider"
+                            , Html.Attributes.attribute "aria-label" "Number of credits to buy"
                             ]
                             []
                         , p [ class "credit-total" ]
                             [ text
-                                (Format.count "en-IN" model.creditsToBuy
-                                    ++ " replies for "
-                                    ++ Format.money "en-IN"
+                                (Format.count session.locale model.creditsToBuy
+                                    ++ " credits for "
+                                    ++ Format.money session.locale
                                         billing.currency
-                                        (totalFor model.creditsToBuy billing.unitPriceMilli)
+                                        (totalFor model.creditsToBuy unitPrice)
                                 )
                             ]
                         , Ui.button
-                            { label = "Pay"
+                            { label = "Buy credits"
                             , onClick = BuyCredits
                             , primary = True
                             , busy = model.saving
@@ -1770,17 +1032,17 @@ billingTab model =
                         [ h2 [] [ text "Complimentary account" ]
                         , p [] [ text "You're not charged for replies, and there's nothing to buy." ]
                         ]
-                , if List.isEmpty billing.credits then
+                , if List.isEmpty billing.ledger then
                     text ""
 
                   else
                     Ui.card
-                        [ h2 [] [ text "Where your balance came from" ]
+                        [ h2 [] [ text "Credit ledger" ]
                         , ul [ class "ledger" ]
                             (List.map
                                 (\credit ->
                                     li []
-                                        [ span [] [ text (Format.count "en-IN" credit.amount) ]
+                                        [ span [] [ text (Format.count session.locale credit.amount) ]
                                         , span [ class "muted" ] [ text credit.source ]
                                         , case credit.expiresAt of
                                             Just when ->
@@ -1790,30 +1052,75 @@ billingTab model =
                                                 span [ class "muted" ] [ text "never expires" ]
                                         ]
                                 )
-                                billing.credits
+                                billing.ledger
                             )
                         ]
                 ]
 
 
-{-| Mirror of `billing::calculate_total` in the worker: credits × milli price,
-rounded to the nearest minor unit. Duplicated so the slider can show a total
-without a request per drag; the worker's figure is authoritative on checkout.
--}
 totalFor : Int -> Int -> Int
 totalFor credits milliPrice =
     (credits * milliPrice + 500) // 1000
 
 
-{-| The conversation window.
 
-Three knobs the pipeline has always honoured and nothing could set. Each box
-is empty when the account has no override, with the default shown as the
-placeholder — so the form reads "leave it alone unless you mean it", and
-emptying a box puts that knob back on the default.
+-- SETTINGS TAB
 
--}
-timingCard : Model -> Api.Settings -> Html Msg
+
+settingsTab : Api.Session -> Model -> Html Msg
+settingsTab session model =
+    let
+        confirmed =
+            String.toLower (String.trim model.deleteConfirm) == String.toLower session.email
+    in
+    section []
+        [ Ui.remote model.settings
+            (\settings ->
+                div []
+                    [ timingCard model settings
+                    , notificationsCard model
+                    , localeCard model
+                    ]
+            )
+        , Ui.card
+            [ h2 [] [ text "Account" ]
+            , p [] [ text session.email ]
+            , p [ class "muted" ]
+                [ text "Handoff alert emails (when enabled above) are delivered to this address." ]
+            ]
+        , Ui.card
+            [ h2 [] [ text "Close your account" ]
+            , p []
+                [ text "Deletes your settings, your connected WhatsApp numbers, and your message metadata. Payment records are kept with your account identifier removed, because tax and dispute rules require it. This cannot be undone." ]
+            , Ui.field
+                { id = "confirm_email"
+                , label = "Type " ++ session.email ++ " to confirm"
+                , value = model.deleteConfirm
+                , hint = ""
+                , required = False
+                , onInput = SetDeleteConfirm
+                }
+            , div [ class "card-actions" ]
+                [ Html.button
+                    [ class "btn btn-danger"
+                    , Html.Attributes.type_ "button"
+                    , Html.Attributes.disabled (not confirmed || model.saving)
+                    , onClick CloseAccount
+                    ]
+                    [ text
+                        (if model.saving then
+                            "Closing…"
+
+                         else
+                            "Close my account permanently"
+                        )
+                    ]
+                ]
+            ]
+        ]
+
+
+timingCard : Model -> Api.SettingsView -> Html Msg
 timingCard model settings =
     let
         c =
@@ -1854,7 +1161,7 @@ timingCard model settings =
             (\v f -> { f | cooldown = v })
         , knob "max_history_messages"
             "Recent messages sent to the AI"
-            "More context costs more per reply and can drown the instructions."
+            "More context helps follow-ups; fewer messages keep replies concise."
             form.history
             c.defaults.maxHistoryMessages
             (\v f -> { f | history = v })
@@ -1869,12 +1176,42 @@ timingCard model settings =
         ]
 
 
-localeCard : Model -> Api.Settings -> Html Msg
-localeCard model settings =
+notificationsCard : Model -> Html Msg
+notificationsCard model =
+    Ui.card
+        [ h2 [] [ text "Notifications" ]
+        , Ui.toggle
+            { id = "handoff_email"
+            , label = "Email me when a customer needs a human"
+            , checked = model.settingsForm.handoffEmail
+            , onCheck = SetHandoffEmail
+            }
+        , p [ class "hint" ]
+            [ text "Sends an email alert when Concierge hands a WhatsApp conversation over to your team." ]
+        , div [ class "card-actions" ]
+            [ Ui.button
+                { label = "Save notifications"
+                , onClick = SaveNotifications
+                , primary = True
+                , busy = model.saving
+                }
+            ]
+        ]
+
+
+localeCard : Model -> Html Msg
+localeCard model =
+    let
+        locales =
+            [ "en-IN", "en-US" ]
+
+        currencies =
+            [ "INR", "USD" ]
+    in
     Ui.card
         [ h2 [] [ text "Language and currency" ]
         , p [ class "muted" ]
-            [ text "What your dashboard and invoices are written in. Your customers always get replies in the voice you set, whatever this says." ]
+            [ text "What your dashboard and invoices use." ]
         , div [ class "field" ]
             [ Html.label [] [ text "Language" ]
             , div [ class "choice-row" ]
@@ -1887,7 +1224,7 @@ localeCard model settings =
                             ]
                             [ text tag ]
                     )
-                    settings.locales
+                    locales
                 )
             ]
         , div [ class "field" ]
@@ -1902,7 +1239,7 @@ localeCard model settings =
                             ]
                             [ text code ]
                     )
-                    settings.currencies
+                    currencies
                 )
             ]
         , p [ class "hint" ]
@@ -1914,57 +1251,5 @@ localeCard model settings =
                 , primary = True
                 , busy = model.saving
                 }
-            ]
-        ]
-
-
-settingsTab : Api.Session -> Model -> Html Msg
-settingsTab session model =
-    let
-        confirmed =
-            String.toLower (String.trim model.deleteConfirm) == String.toLower session.email
-    in
-    section []
-        [ Ui.remote model.settings
-            (\settings ->
-                div []
-                    [ timingCard model settings
-                    , localeCard model settings
-                    ]
-            )
-        , Ui.card
-            [ h2 [] [ text "Account" ]
-            , p [] [ text session.email ]
-            , p [ class "muted" ]
-                [ text "Handoff emails go here — the ones telling you a conversation needs a person." ]
-            ]
-        , Ui.card
-            [ h2 [] [ text "Close your account" ]
-            , p []
-                [ text "Deletes your settings, your connected number, your persona and your message metadata. Payment records are kept with your account identifier removed, because tax and dispute rules require it. This cannot be undone." ]
-            , Ui.field
-                { id = "confirm_email"
-                , label = "Type " ++ session.email ++ " to confirm"
-                , value = model.deleteConfirm
-                , hint = ""
-                , required = False
-                , onInput = SetDeleteConfirm
-                }
-            , div [ class "card-actions" ]
-                [ Html.button
-                    [ class "btn btn-danger"
-                    , Html.Attributes.type_ "button"
-                    , Html.Attributes.disabled (not confirmed || model.saving)
-                    , onClick CloseAccount
-                    ]
-                    [ text
-                        (if model.saving then
-                            "Closing…"
-
-                         else
-                            "Close my account permanently"
-                        )
-                    ]
-                ]
             ]
         ]

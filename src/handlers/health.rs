@@ -1,49 +1,7 @@
-//! Health / connection-status checks.
-//!
-//! Every system the worker depends on — a third-party integration, a
-//! Cloudflare binding, or a secret group — implements [`Component`]. The
-//! login page gates feature buttons on [`Component::ready`], the
-//! management health panel renders [`Component::shallow_check`] rows,
-//! and the docs URL declared by each component flows through to the
-//! row's "Docs ↗" pill on the same panel.
-//!
-//! Two depths:
-//! - **shallow**: presence-only — each component is asked whether all
-//!   of its [`Requirement`]s are satisfied (secrets / vars / bindings).
-//!   Cheap, sync, runs on every hit.
-//! - **deep**: additionally invokes the optional async probe on
-//!   components that have one (D1 query, KV get, Discord API ping).
-//!   Cached in KV for 60s so /manage doesn't hammer providers.
-//!
-//! Two tiers, too. A [`Component`] is either **required** — the worker
-//! cannot serve without it, so an unmet requirement is [`Status::Error`]
-//! and `/health` answers 503 — or **optional**, an integration a given
-//! deployment may simply not use. An optional component that was never
-//! configured is [`Status::Warn`] ("not configured"), because a
-//! deployment that doesn't sell anything is not a deployment with a
-//! broken Razorpay. Only an unhealthy *required* component takes the
-//! rollup red; misconfiguring an optional one (some requirements set,
-//! others missing) is still an error, since that is a half-finished
-//! integration rather than an absent one.
+//! Health / readiness checks (`/health`).
 
 use serde::{Deserialize, Serialize};
 use worker::*;
-
-const DEEP_CACHE_KEY: &str = "health:deep:cache:v2";
-const DEEP_CACHE_TTL_SECS: u64 = 60;
-
-/// Concatenate the public docs base URL with a relative page path at
-/// compile time, so every component's `docs_url()` reads as one literal
-/// and we don't re-stringify per request.
-macro_rules! concat_doc {
-    ($page:literal) => {
-        concat!("https://ananthb.github.io/concierge/", $page)
-    };
-}
-
-// ============================================================================
-// Types
-// ============================================================================
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -53,9 +11,6 @@ pub enum Status {
     Error,
 }
 
-/// A single configuration item a [`Component`] needs to function. Each
-/// variant carries the env-side name of the item; `satisfied(env)` is
-/// the uniform "is it set" probe.
 #[derive(Clone, Copy, Debug)]
 pub enum Requirement {
     Secret(&'static str),
@@ -83,65 +38,26 @@ pub struct Check {
     pub name: String,
     pub status: Status,
     pub detail: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub docs_url: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct HealthReport {
-    pub overall: Status,
-    pub generated_at: String,
-    pub deep: bool,
-    pub checks: Vec<Check>,
-}
-
-/// Public health endpoint shape. Returns ONLY the rollup: no per-check
-/// detail, no secret names. Detailed status lives on /manage (Cloudflare
-/// Access protected).
 #[derive(Serialize)]
 struct PublicHealth {
     overall: Status,
     generated_at: String,
 }
 
-// ============================================================================
-// Component trait
-// ============================================================================
-
-/// A named system the worker depends on. The trait carries enough
-/// metadata for both the management panel (which renders every
-/// component's status as a table row) and per-feature gates on
-/// user-facing pages (which call `ready()` to decide whether to render
-/// the button at all).
-///
-/// Components that need an async probe beyond presence — D1's SELECT 1,
-/// KV's __healthcheck get, Discord's /users/@me ping — implement that
-/// as an inherent `probe(env).await` method. [`run_checks`] dispatches
-/// to the probe when one exists; everything else falls back to
-/// `shallow_check`.
 pub trait Component {
     fn name(&self) -> &'static str;
     fn requirements(&self) -> &'static [Requirement];
-    fn docs_url(&self) -> Option<&'static str> {
-        None
-    }
 
-    /// Whether the worker needs this component to serve at all.
-    /// Required by default; integrations a deployment can legitimately
-    /// run without override this to `false`.
     fn required(&self) -> bool {
         true
     }
 
-    /// Cheap sync "is every requirement satisfied" — the canonical
-    /// answer for feature-gate code paths.
     fn ready(&self, env: &Env) -> bool {
         self.requirements().iter().all(|r| r.satisfied(env))
     }
 
-    /// Presence-only [`Check`]: surveys every requirement and reports
-    /// the missing ones (if any). Carries the docs URL so renderers can
-    /// link operators straight to the relevant page.
     fn shallow_check(&self, env: &Env) -> Check {
         let missing: Vec<&'static str> = self
             .requirements()
@@ -149,7 +65,6 @@ pub trait Component {
             .filter(|r| !r.satisfied(env))
             .map(|r| r.name())
             .collect();
-        let docs_url = self.docs_url().map(String::from);
         let total = self.requirements().len();
         let status = classify(self.required(), missing.len(), total);
         let detail = match status {
@@ -162,20 +77,10 @@ pub trait Component {
             name: self.name().into(),
             status,
             detail,
-            docs_url,
         }
     }
 }
 
-/// Status for a component with `missing` of its `total` requirements
-/// unmet.
-///
-/// An optional integration with *nothing* set was never turned on:
-/// amber, not red, because the deployment is healthy and that channel
-/// is merely unavailable. Partially configured stays an error whether
-/// the component is required or not — half a set of credentials fails
-/// mid-conversation rather than at deploy time, which is strictly worse
-/// than not having the integration at all.
 fn classify(required: bool, missing: usize, total: usize) -> Status {
     if missing == 0 {
         Status::Ok
@@ -190,27 +95,6 @@ fn classify(required: bool, missing: usize, total: usize) -> Status {
 // Concrete components
 // ============================================================================
 
-// ---- User-facing OAuth / messaging flows -----------------------------------
-
-pub struct FacebookLogin;
-impl Component for FacebookLogin {
-    fn name(&self) -> &'static str {
-        "Facebook login"
-    }
-    fn requirements(&self) -> &'static [Requirement] {
-        &[
-            Requirement::Secret("META_APP_ID"),
-            Requirement::Secret("META_APP_SECRET"),
-        ]
-    }
-    fn docs_url(&self) -> Option<&'static str> {
-        Some(concat_doc!("facebook-app-setup.html"))
-    }
-    fn required(&self) -> bool {
-        false
-    }
-}
-
 pub struct WhatsAppSignup;
 impl Component for WhatsAppSignup {
     fn name(&self) -> &'static str {
@@ -224,49 +108,6 @@ impl Component for WhatsAppSignup {
             Requirement::Var("WHATSAPP_WABA_ID"),
             Requirement::Var("WHATSAPP_SIGNUP_CONFIG_ID"),
         ]
-    }
-    fn docs_url(&self) -> Option<&'static str> {
-        Some(concat_doc!("whatsapp.html"))
-    }
-    fn required(&self) -> bool {
-        false
-    }
-}
-
-pub struct InstagramMessaging;
-impl Component for InstagramMessaging {
-    fn name(&self) -> &'static str {
-        "Instagram messaging"
-    }
-    fn requirements(&self) -> &'static [Requirement] {
-        &[
-            Requirement::Secret("META_APP_ID"),
-            Requirement::Secret("META_APP_SECRET"),
-            Requirement::Secret("INSTAGRAM_VERIFY_TOKEN"),
-        ]
-    }
-    fn docs_url(&self) -> Option<&'static str> {
-        Some(concat_doc!("instagram.html"))
-    }
-    fn required(&self) -> bool {
-        false
-    }
-}
-
-pub struct Discord;
-impl Component for Discord {
-    fn name(&self) -> &'static str {
-        "Discord"
-    }
-    fn requirements(&self) -> &'static [Requirement] {
-        &[
-            Requirement::Secret("DISCORD_APPLICATION_ID"),
-            Requirement::Secret("DISCORD_PUBLIC_KEY"),
-            Requirement::Secret("DISCORD_BOT_TOKEN"),
-        ]
-    }
-    fn docs_url(&self) -> Option<&'static str> {
-        Some(concat_doc!("discord.html"))
     }
     fn required(&self) -> bool {
         false
@@ -285,9 +126,6 @@ impl Component for Razorpay {
             Requirement::Secret("RAZORPAY_WEBHOOK_SECRET"),
         ]
     }
-    fn docs_url(&self) -> Option<&'static str> {
-        Some(concat_doc!("billing.html"))
-    }
     fn required(&self) -> bool {
         false
     }
@@ -304,25 +142,7 @@ impl Component for GoogleOAuth {
             Requirement::Secret("GOOGLE_OAUTH_CLIENT_SECRET"),
         ]
     }
-    fn docs_url(&self) -> Option<&'static str> {
-        Some(concat_doc!("configuration.html"))
-    }
 }
-
-pub struct EncryptionKey;
-impl Component for EncryptionKey {
-    fn name(&self) -> &'static str {
-        "Encryption key"
-    }
-    fn requirements(&self) -> &'static [Requirement] {
-        &[Requirement::Secret("ENCRYPTION_KEY")]
-    }
-    fn docs_url(&self) -> Option<&'static str> {
-        Some(concat_doc!("configuration.html"))
-    }
-}
-
-// ---- Cloudflare bindings ---------------------------------------------------
 
 pub struct AiBinding;
 impl Component for AiBinding {
@@ -331,9 +151,6 @@ impl Component for AiBinding {
     }
     fn requirements(&self) -> &'static [Requirement] {
         &[Requirement::Binding("AI")]
-    }
-    fn docs_url(&self) -> Option<&'static str> {
-        Some(concat_doc!("deployment.html"))
     }
 }
 
@@ -345,21 +162,57 @@ impl Component for ReplyBufferBinding {
     fn requirements(&self) -> &'static [Requirement] {
         &[Requirement::Binding("REPLY_BUFFER")]
     }
-    fn docs_url(&self) -> Option<&'static str> {
-        Some(concat_doc!("deployment.html"))
+}
+
+pub struct SafetyQueueBinding;
+impl Component for SafetyQueueBinding {
+    fn name(&self) -> &'static str {
+        "SAFETY_QUEUE binding"
+    }
+    fn requirements(&self) -> &'static [Requirement] {
+        &[Requirement::Binding("SAFETY_QUEUE")]
     }
 }
 
+/// Outbound handoff notification email (`[[send_email]]` + `EMAIL_DOMAIN`).
+/// Optional: missing `EMAIL_DOMAIN` never fails `/health` 503.
 pub struct EmailBinding;
 impl Component for EmailBinding {
     fn name(&self) -> &'static str {
-        "EMAIL binding"
+        "EMAIL handoff alerts"
     }
     fn requirements(&self) -> &'static [Requirement] {
-        &[Requirement::Binding("EMAIL")]
+        &[
+            Requirement::Binding("EMAIL"),
+            Requirement::Var("EMAIL_DOMAIN"),
+        ]
     }
-    fn docs_url(&self) -> Option<&'static str> {
-        Some(concat_doc!("email-routing.html"))
+    fn required(&self) -> bool {
+        false
+    }
+    fn shallow_check(&self, env: &Env) -> Check {
+        // If EMAIL_DOMAIN is unset, outbound handoff emails are intentionally
+        // disabled — report Warn (not Error) even when the wrangler EMAIL
+        // binding is present.
+        if !var_set(env, "EMAIL_DOMAIN") {
+            return Check {
+                name: self.name().into(),
+                status: Status::Warn,
+                detail: "EMAIL_DOMAIN not set (handoff alerts disabled)".into(),
+            };
+        }
+        if !binding_present(env, "EMAIL") {
+            return Check {
+                name: self.name().into(),
+                status: Status::Warn,
+                detail: "EMAIL binding missing".into(),
+            };
+        }
+        Check {
+            name: self.name().into(),
+            status: Status::Ok,
+            detail: "configured".into(),
+        }
     }
 }
 
@@ -371,13 +224,8 @@ impl Component for D1Binding {
     fn requirements(&self) -> &'static [Requirement] {
         &[Requirement::Binding("DB")]
     }
-    fn docs_url(&self) -> Option<&'static str> {
-        Some(concat_doc!("deployment.html"))
-    }
 }
 impl D1Binding {
-    /// Reachability probe: if the binding is present, runs `SELECT 1`.
-    /// The shallow check covers the "missing binding" branch.
     pub async fn probe(env: &Env) -> Check {
         let mut check = D1Binding.shallow_check(env);
         if !matches!(check.status, Status::Ok) {
@@ -414,13 +262,8 @@ impl Component for KvBinding {
     fn requirements(&self) -> &'static [Requirement] {
         &[Requirement::Binding("KV")]
     }
-    fn docs_url(&self) -> Option<&'static str> {
-        Some(concat_doc!("deployment.html"))
-    }
 }
 impl KvBinding {
-    /// Reachability probe: if the binding is present, GETs a
-    /// likely-missing key (a `None` result is still "reachable").
     pub async fn probe(env: &Env) -> Check {
         let mut check = KvBinding.shallow_check(env);
         if !matches!(check.status, Status::Ok) {
@@ -445,108 +288,22 @@ impl KvBinding {
     }
 }
 
-/// Standalone deep probe row — pings `/users/@me` on Discord with the
-/// bot token. Separate from the [`Discord`] component (which covers
-/// "are the secrets set") because it tests a different fact: whether
-/// Discord accepts our token.
-pub struct DiscordReachable;
-impl DiscordReachable {
-    pub async fn probe(env: &Env) -> Check {
-        let docs_url = Some(concat_doc!("discord.html").to_string());
-        let name = "Discord bot reachable".to_string();
-        let token = env
-            .secret("DISCORD_BOT_TOKEN")
-            .map(|s| s.to_string())
-            .unwrap_or_default();
-        if token.is_empty() {
-            return Check {
-                name,
-                status: Status::Warn,
-                detail: "DISCORD_BOT_TOKEN not set, skipped".into(),
-                docs_url,
-            };
-        }
-        let url = "https://discord.com/api/v10/users/@me";
-        let headers = match Headers::new().with_set("Authorization", &format!("Bot {token}")) {
-            Ok(h) => h,
-            Err(_) => {
-                return Check {
-                    name,
-                    status: Status::Error,
-                    detail: "couldn't build auth header".into(),
-                    docs_url,
-                }
-            }
-        };
-        let mut init = RequestInit::new();
-        init.with_method(Method::Get).with_headers(headers);
-        let req = match Request::new_with_init(url, &init) {
-            Ok(r) => r,
-            Err(e) => {
-                return Check {
-                    name,
-                    status: Status::Error,
-                    detail: format!("request build: {e}"),
-                    docs_url,
-                }
-            }
-        };
-        match Fetch::Request(req).send().await {
-            Ok(mut r) if r.status_code() == 200 => Check {
-                name,
-                status: Status::Ok,
-                detail: r
-                    .json::<serde_json::Value>()
-                    .await
-                    .ok()
-                    .and_then(|v| v.get("username").and_then(|s| s.as_str()).map(String::from))
-                    .map(|u| format!("authenticated as @{u}"))
-                    .unwrap_or_else(|| "200 OK".into()),
-                docs_url,
-            },
-            Ok(r) => Check {
-                name,
-                status: Status::Error,
-                detail: format!("Discord returned HTTP {}", r.status_code()),
-                docs_url,
-            },
-            Err(e) => Check {
-                name,
-                status: Status::Error,
-                detail: format!("fetch failed: {e}"),
-                docs_url,
-            },
-        }
-    }
-}
-
 // ============================================================================
 // Registry + public API
 // ============================================================================
 
-/// Components covered by the always-on shallow sweep, in render order.
-/// D1 and KV aren't here — they have async probes and are pushed
-/// separately by [`run_checks`].
 const SHALLOW_COMPONENTS: &[&dyn Component] = &[
     &AiBinding,
     &ReplyBufferBinding,
+    &SafetyQueueBinding,
     &EmailBinding,
     &GoogleOAuth,
-    &EncryptionKey,
-    &FacebookLogin,
     &WhatsAppSignup,
-    &InstagramMessaging,
-    &Discord,
     &Razorpay,
 ];
 
-/// Components whose missing requirements take the worker offline. Used
-/// at request entry to serve a maintenance page rather than letting the
-/// user reach a broken OAuth redirect or a session that can't be
-/// encrypted. Returns the env-side names of every missing requirement
-/// across all essentials.
 pub fn essentials_missing(env: &Env) -> Vec<&'static str> {
-    let essentials: &[&dyn Component] = &[&EncryptionKey, &GoogleOAuth];
+    let essentials: &[&dyn Component] = &[&GoogleOAuth];
     essentials
         .iter()
         .flat_map(|c| {
@@ -559,18 +316,24 @@ pub fn essentials_missing(env: &Env) -> Vec<&'static str> {
 }
 
 pub async fn handle_health(_req: Request, env: Env) -> Result<Response> {
-    let report = run_checks(&env, false).await;
+    let mut checks = Vec::new();
+    checks.push(D1Binding::probe(&env).await);
+    checks.push(KvBinding::probe(&env).await);
+    for c in SHALLOW_COMPONENTS {
+        checks.push(c.shallow_check(&env));
+    }
+
+    let overall = rollup(&checks);
     let public = PublicHealth {
-        overall: report.overall,
-        generated_at: report.generated_at,
+        overall,
+        generated_at: crate::helpers::now_iso(),
     };
     let body = serde_json::to_string(&public)?;
     let headers = Headers::new();
     headers.set("Content-Type", "application/json")?;
     headers.set("Cache-Control", "no-store")?;
-    let status = match public.overall {
-        Status::Ok => 200,
-        Status::Warn => 200,
+    let status = match overall {
+        Status::Ok | Status::Warn => 200,
         Status::Error => 503,
     };
     Ok(Response::ok(body)?
@@ -578,55 +341,6 @@ pub async fn handle_health(_req: Request, env: Env) -> Result<Response> {
         .with_headers(headers))
 }
 
-/// Build a HealthReport. `deep=true` runs the optional async probes
-/// (e.g. Discord ping) on top of the always-on bindings + shallow
-/// sweep, and caches the combined report in KV for 60s.
-pub async fn run_checks(env: &Env, deep: bool) -> HealthReport {
-    let mut checks = Vec::new();
-
-    // Bindings with probes — async even at shallow depth because the
-    // probe IS the binding's real readiness signal.
-    checks.push(D1Binding::probe(env).await);
-    checks.push(KvBinding::probe(env).await);
-
-    // Pure-presence components.
-    for c in SHALLOW_COMPONENTS {
-        checks.push(c.shallow_check(env));
-    }
-
-    if deep {
-        let kv_ok = env.kv("KV").ok();
-        if let Some(kv) = kv_ok.as_ref() {
-            if let Ok(Some(cached)) = kv.get(DEEP_CACHE_KEY).text().await {
-                if let Ok(report) = serde_json::from_str::<HealthReport>(&cached) {
-                    return report;
-                }
-            }
-        }
-        checks.push(DiscordReachable::probe(env).await);
-
-        let report = finalize(checks, deep);
-        if let Some(kv) = kv_ok {
-            if let Ok(s) = serde_json::to_string(&report) {
-                // Await the put. The previous form ended in
-                // `.map(|f| async move { f.await })`, which built the
-                // future and dropped it unpolled, so this cache was
-                // never actually written and every deep check re-pinged
-                // Discord.
-                if let Ok(builder) = kv.put(DEEP_CACHE_KEY, s) {
-                    let _ = builder.expiration_ttl(DEEP_CACHE_TTL_SECS).execute().await;
-                }
-            }
-        }
-        return report;
-    }
-
-    finalize(checks, deep)
-}
-
-/// Worst status across every check. Error dominates Warn dominates Ok,
-/// so an integration reported as merely unconfigured never takes the
-/// rollup — and `/health`'s status code — red.
 fn rollup(checks: &[Check]) -> Status {
     checks
         .iter()
@@ -637,19 +351,6 @@ fn rollup(checks: &[Check]) -> Status {
             _ => Status::Ok,
         })
 }
-
-fn finalize(checks: Vec<Check>, deep: bool) -> HealthReport {
-    HealthReport {
-        overall: rollup(&checks),
-        generated_at: crate::helpers::now_iso(),
-        deep,
-        checks,
-    }
-}
-
-// ============================================================================
-// Env-side presence helpers
-// ============================================================================
 
 fn secret_set(env: &Env, name: &str) -> bool {
     env.secret(name)
@@ -663,9 +364,6 @@ fn var_set(env: &Env, name: &str) -> bool {
         .unwrap_or(false)
 }
 
-/// Generic binding-presence check via JsValue reflection. Works for
-/// every wrangler.toml binding type (D1, KV, AI, DO, send_email,
-/// queue producers, etc.) without per-type accessor calls.
 fn binding_present(env: &Env, name: &str) -> bool {
     use wasm_bindgen::JsValue;
     let env_js: JsValue = env.clone().into();
@@ -673,24 +371,6 @@ fn binding_present(env: &Env, name: &str) -> bool {
         .map(|v| !v.is_undefined())
         .unwrap_or(false)
 }
-
-// ============================================================================
-// Headers helper
-// ============================================================================
-
-trait HeadersWithSet {
-    fn with_set(self, name: &str, value: &str) -> Result<Headers>;
-}
-impl HeadersWithSet for Headers {
-    fn with_set(self, name: &str, value: &str) -> Result<Headers> {
-        self.set(name, value)?;
-        Ok(self)
-    }
-}
-
-// ============================================================================
-// Tests
-// ============================================================================
 
 #[cfg(test)]
 mod tests {
@@ -701,79 +381,46 @@ mod tests {
             name: name.into(),
             status,
             detail: String::new(),
-            docs_url: None,
         }
     }
 
     #[test]
-    fn fully_configured_is_ok_either_tier() {
+    fn classify_tiers() {
         assert_eq!(classify(true, 0, 3), Status::Ok);
         assert_eq!(classify(false, 0, 3), Status::Ok);
-    }
-
-    #[test]
-    fn untouched_optional_component_is_a_warning() {
-        // Razorpay on a deployment that doesn't sell anything.
         assert_eq!(classify(false, 3, 3), Status::Warn);
-    }
-
-    #[test]
-    fn untouched_required_component_is_an_error() {
         assert_eq!(classify(true, 1, 1), Status::Error);
-    }
-
-    #[test]
-    fn half_configured_optional_component_is_an_error() {
-        // Two of Razorpay's three secrets set: someone started wiring
-        // this up and stopped. That breaks at checkout, not at deploy.
         assert_eq!(classify(false, 1, 3), Status::Error);
     }
 
     #[test]
     fn rollup_ignores_warnings_but_not_errors() {
-        // The live shape this fixes: every binding healthy, Meta and
-        // Razorpay simply never configured. 200 warn, not 503.
         assert_eq!(
             rollup(&[
                 check("D1", Status::Ok),
                 check("KV", Status::Ok),
                 check("Razorpay", Status::Warn),
-                check("Instagram messaging", Status::Warn),
+                check("EMAIL handoff alerts", Status::Warn),
             ]),
             Status::Warn
         );
-
         assert_eq!(
             rollup(&[check("KV", Status::Ok), check("D1", Status::Error)]),
             Status::Error
         );
-
-        // An error anywhere wins, whatever order the checks arrive in.
-        assert_eq!(
-            rollup(&[check("D1", Status::Error), check("Razorpay", Status::Warn)]),
-            Status::Error
-        );
-
-        assert_eq!(rollup(&[check("D1", Status::Ok)]), Status::Ok);
-        assert_eq!(rollup(&[]), Status::Ok);
     }
 
     #[test]
-    fn optional_components_are_the_integrations_a_deployment_can_skip() {
-        assert!(!FacebookLogin.required());
+    fn required_vs_optional_components() {
         assert!(!WhatsAppSignup.required());
-        assert!(!InstagramMessaging.required());
-        assert!(!Discord.required());
         assert!(!Razorpay.required());
+        assert!(!EmailBinding.required());
 
-        // Bindings and the secrets that gate login stay required: if
-        // any of these is unset the worker genuinely cannot serve.
-        assert!(EncryptionKey.required());
         assert!(GoogleOAuth.required());
         assert!(AiBinding.required());
         assert!(D1Binding.required());
         assert!(KvBinding.required());
-        assert!(EmailBinding.required());
         assert!(ReplyBufferBinding.required());
+        assert!(SafetyQueueBinding.required());
     }
 }

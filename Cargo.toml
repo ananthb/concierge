@@ -16,27 +16,14 @@ uuid = { version = "1", features = ["v4", "js"] }
 wasm-bindgen = "0.2"
 wasm-bindgen-futures = "0.4"
 js-sys = "0.3"
-# Crypto/SubtleCrypto/CryptoKey: RS256 verification of the Cloudflare Access
-# JWT. ReadableStream/Response went with the inbound email handler, which read
-# the raw message off a stream.
-web-sys = { version = "0.3", features = ["Crypto", "SubtleCrypto", "CryptoKey"] }
 urlencoding = "2"
 sha2 = "0.11"
 hmac = "0.13"
 base64 = "0.23"
 subtle = "2.6"
 
-# Inbound mail body extraction: Cloudflare hands us raw RFC 5322 bytes,
-# and we need the text part to feed the pipeline.
-mail-parser = "1.0"
-
 # Locale resolution only: unic-langid for BCP-47 tag handling,
 # accept-language for parsing the request header.
-#
-# icu4x, fixed_decimal, rusty-money and fluent are gone with the server-side
-# templates. Number, currency and date formatting is the frontend's job now
-# (Intl.NumberFormat gives the same INR lakh grouping from the browser's own
-# locale data), and UI copy lives in the Elm app rather than in FTL files.
 unic-langid = { version = "0.9", features = ["macros"] }
 accept-language = "3"
 

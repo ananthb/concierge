@@ -1,18 +1,4 @@
 //! Google OAuth sign-in.
-//!
-//! Stays outside the JSON API because OAuth is a browser redirect dance:
-//! the frontend links to `/auth/login`, Google bounces back to
-//! `/auth/callback`, and we set a session cookie and redirect to `/`. The
-//! Elm app then calls `/api/bootstrap` and finds itself signed in.
-//!
-//! There is no login *page* here any more. The Elm app renders that and
-//! links to `/auth/login`, which now redirects straight to Google's consent
-//! screen instead of rendering a provider chooser.
-//!
-//! Facebook Login as a sign-in method went with the Instagram channel. Meta
-//! identity still arrives through WhatsApp Embedded Signup, which does its
-//! own token exchange in [`super::whatsapp_signup`] and can create a tenant
-//! the same way this does.
 
 use serde::Deserialize;
 use worker::*;
@@ -26,7 +12,7 @@ const GOOGLE_AUTH_URL: &str = "https://accounts.google.com/o/oauth2/v2/auth";
 const GOOGLE_TOKEN_URL: &str = "https://oauth2.googleapis.com/token";
 const GOOGLE_USERINFO_URL: &str = "https://www.googleapis.com/oauth2/v2/userinfo";
 
-const SESSION_TTL_SECONDS: u64 = 7 * 24 * 60 * 60; // 7 days
+const SESSION_TTL_SECONDS: u64 = 7 * 24 * 60 * 60;
 
 #[derive(Deserialize)]
 struct TokenResponse {
@@ -44,8 +30,6 @@ pub async fn handle_auth(req: Request, env: Env, path: &str, method: Method) -> 
     let base_url = get_base_url(&req);
 
     match (method, path) {
-        // Straight to Google. Already signed in? Send them to the app
-        // rather than minting a second session.
         (Method::Get, "/auth/login") => {
             let kv = env.kv("KV")?;
             if resolve_tenant_id(&req, &kv).await.is_some() {
@@ -76,8 +60,6 @@ pub async fn handle_auth(req: Request, env: Env, path: &str, method: Method) -> 
             let code = match query.get("code") {
                 Some(c) => c.to_string(),
                 None => {
-                    // The user declined, or Google refused. Back to the app,
-                    // which renders the login screen again.
                     let reason = query
                         .get("error")
                         .map(|e| e.to_string())
@@ -138,8 +120,6 @@ pub async fn handle_auth(req: Request, env: Env, path: &str, method: Method) -> 
             let kv = env.kv("KV")?;
             let db = env.d1("DB")?;
 
-            // Find or create the tenant. New tenants take their locale from
-            // Accept-Language > cf-ipcountry > en-IN; currency follows.
             let tenant = match get_tenant_by_email(&db, &user.email).await? {
                 Some(t) => t,
                 None => {
@@ -150,10 +130,9 @@ pub async fn handle_auth(req: Request, env: Env, path: &str, method: Method) -> 
                         email: user.email.clone(),
                         name: user.name,
                         facebook_id: None,
-                        plan: crate::types::Plan::Paid,
+                        plan: Plan::Paid,
                         locale: signup_locale.langid.to_string(),
                         currency: signup_locale.currency,
-                        verified_at: None,
                         created_at: now.clone(),
                         updated_at: now,
                     };
@@ -165,10 +144,7 @@ pub async fn handle_auth(req: Request, env: Env, path: &str, method: Method) -> 
             create_session_and_redirect(&req, &kv, &tenant.id).await
         }
 
-        // Dev-only login shortcut. Mints a session for an arbitrary email
-        // without a round-trip to Google, which can't reach localhost.
-        // Gated on `dev_bypass::active`; production sets CF_ACCESS_AUD, so
-        // this 404s there.
+        // Dev-only login shortcut gated on `DEV_MODE` (`dev_bypass::active`).
         (Method::Post, "/auth/dev-login") => {
             if !crate::dev_bypass::active(&env) {
                 return Response::error("Not Found", 404);
@@ -198,12 +174,9 @@ pub async fn handle_auth(req: Request, env: Env, path: &str, method: Method) -> 
                         email: email.clone(),
                         name: Some(email.split('@').next().unwrap_or("Dev").to_string()),
                         facebook_id: None,
-                        plan: crate::types::Plan::Paid,
+                        plan: Plan::Paid,
                         locale: signup_locale.langid.to_string(),
                         currency: signup_locale.currency,
-                        // Pre-verified: there's no Razorpay checkout to
-                        // complete against a local dev deploy.
-                        verified_at: Some(now.clone()),
                         created_at: now.clone(),
                         updated_at: now,
                     };
@@ -226,15 +199,6 @@ fn redirect(location: &str) -> Result<Response> {
     Ok(Response::empty()?.with_status(302).with_headers(headers))
 }
 
-/// Mint a session and bounce to the app root.
-///
-/// Lands on `/` rather than `/dashboard`: the Elm app reads
-/// `session.destination` from `/api/bootstrap` and routes to the wizard or
-/// the dashboard itself, so the correct landing spot is decided in one place
-/// instead of being duplicated here.
-///
-/// No CSRF cookie any more — the API authenticates state-changing calls with
-/// the `X-Concierge-Request` header instead (see [`crate::api`]).
 pub(super) async fn create_session_and_redirect(
     req: &Request,
     kv: &kv::KvStore,
@@ -243,8 +207,6 @@ pub(super) async fn create_session_and_redirect(
     let session_token = generate_token()?;
     save_session(kv, &session_token, tenant_id, SESSION_TTL_SECONDS).await?;
 
-    // Drop `Secure` on http origins so plain `wrangler dev` still
-    // authenticates on browsers that don't treat localhost as secure.
     let is_https = req
         .url()
         .ok()
@@ -267,7 +229,6 @@ pub(super) async fn create_session_and_redirect(
     Ok(Response::empty()?.with_status(302).with_headers(headers))
 }
 
-/// Extract a named cookie from a request.
 pub fn get_cookie(req: &Request, name: &str) -> Option<String> {
     let cookie_header = req.headers().get("Cookie").ok()??;
     let prefix = format!("{name}=");
@@ -282,12 +243,10 @@ pub fn get_cookie(req: &Request, name: &str) -> Option<String> {
     None
 }
 
-/// Extract the session cookie from a request.
 pub fn get_session_cookie(req: &Request) -> Option<String> {
     get_cookie(req, "session")
 }
 
-/// Resolve `tenant_id` from the session cookie. `None` when signed out.
 pub async fn resolve_tenant_id(req: &Request, kv: &kv::KvStore) -> Option<String> {
     let token = get_session_cookie(req)?;
     get_session(kv, &token).await.ok()?

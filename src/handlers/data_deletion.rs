@@ -1,11 +1,11 @@
-//! Facebook data deletion callback handler
+//! Meta data deletion callback handler (`POST /data-deletion`).
 
 use worker::*;
 
 use crate::helpers::generate_id;
 use crate::storage::*;
 
-/// Handle POST /data-deletion
+/// Handle `POST /data-deletion` per Meta App Review requirements.
 pub async fn handle_data_deletion(mut req: Request, env: Env, method: Method) -> Result<Response> {
     if method != Method::Post {
         return Response::error("Method not allowed", 405);
@@ -15,6 +15,9 @@ pub async fn handle_data_deletion(mut req: Request, env: Env, method: Method) ->
         .secret("META_APP_SECRET")
         .map(|s| s.to_string())
         .unwrap_or_default();
+    if app_secret.is_empty() {
+        return Response::error("META_APP_SECRET not configured", 500);
+    }
 
     let form = req.form_data().await?;
     let signed_request = match form.get("signed_request") {
@@ -27,8 +30,7 @@ pub async fn handle_data_deletion(mut req: Request, env: Env, method: Method) ->
         return Response::error("Invalid signed_request format", 400);
     }
 
-    // Verify signature (constant-time)
-    if !app_secret.is_empty() {
+    {
         use subtle::ConstantTimeEq;
         let computed = crate::crypto::hmac_sha256_hex(app_secret.as_bytes(), parts[1].as_bytes())?;
         let sig = base64url_to_hex(parts[0])?;
@@ -38,7 +40,6 @@ pub async fn handle_data_deletion(mut req: Request, env: Env, method: Method) ->
         }
     }
 
-    // Decode payload
     let payload = parts[1].replace('-', "+").replace('_', "/");
     let padded = match payload.len() % 4 {
         2 => format!("{}==", payload),
@@ -51,7 +52,6 @@ pub async fn handle_data_deletion(mut req: Request, env: Env, method: Method) ->
         .map_err(|e| Error::from(format!("Invalid payload JSON: {}", e)))?;
 
     let fb_user_id = json.get("user_id").and_then(|v| v.as_str()).unwrap_or("");
-
     if fb_user_id.is_empty() {
         return Response::error("Missing user_id", 400);
     }
@@ -59,24 +59,26 @@ pub async fn handle_data_deletion(mut req: Request, env: Env, method: Method) ->
     let kv = env.kv("KV")?;
     let db = env.d1("DB")?;
 
-    // Find and delete tenant by facebook_id
     if let Some(tenant) = get_tenant_by_facebook_id(&db, fb_user_id).await? {
         delete_tenant_data(&kv, &db, &tenant.id).await?;
     }
 
     let confirmation_code = generate_id();
-    let base_url = req
-        .url()
-        .map(|u| format!("{}://{}", u.scheme(), u.host_str().unwrap_or("localhost")))
-        .unwrap_or_default();
+    let base_url = env
+        .var("PUBLIC_BASE_URL")
+        .ok()
+        .map(|v| v.to_string())
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| super::get_base_url(&req));
 
     let response = serde_json::json!({
-        "url": format!("{}/dashboard/settings", base_url),
+        "url": format!("{}/dashboard/settings", base_url.trim_end_matches('/')),
         "confirmation_code": confirmation_code
     });
 
     let headers = Headers::new();
     headers.set("Content-Type", "application/json")?;
+    headers.set("Cache-Control", "no-store")?;
     Ok(Response::ok(response.to_string())?.with_headers(headers))
 }
 

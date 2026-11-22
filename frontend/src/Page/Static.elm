@@ -2,90 +2,84 @@ module Page.Static exposing (features, login, notFound, pricing, privacy, terms)
 
 {-| Pages with no state of their own: marketing copy, the legal text, the
 sign-in screen, and the 404.
-
-The legal text is held here as Elm rather than fetched, because it has to be
-readable whether or not the API is up, and because a terms page that can fail
-to load is a liability. It was `src/legal.rs` before.
-
-These are also the pages that suffer most from there being no server-side
-rendering: a crawler sees an empty shell. The copy is here, in one place, for
-whatever prerender step comes next to pick up.
-
 -}
 
 import Api
+import Dict
 import Format
-import Html exposing (Html, a, div, h1, h2, h3, li, p, section, span, text, ul)
+import Html exposing (Html, a, div, h1, h2, h3, li, p, section, text, ul)
 import Html.Attributes exposing (class, href)
 import Route
 import Ui
 
 
-{-| The pricing page.
-
-Takes the rates as `Data` rather than a resolved value so the copy renders on
-first paint and only the numbers wait. That is what makes a prerendered
-snapshot of this page useful: a crawler gets the prose, and the rates are
-never baked into a static file where they could go stale against the
-operator-configured values.
-
--}
 pricing : Api.Data Api.Pricing -> Html msg
 pricing rates =
     div [ class "page page-pricing" ]
-        [ h1 [] [ text "Pay for replies, nothing else" ]
+        [ h1 [] [ text "Pay per reply, nothing else" ]
         , p [ class "page-sub" ]
-            [ text "No subscription, no per-seat fee, no minimum. Buy a pile of replies and use them whenever." ]
+            [ text "Prepaid credits only — 1 credit = 1 reply (static or AI), no subscriptions, no free trials, top up anytime with Razorpay." ]
         , section [ class "price-cards" ]
             [ Ui.remote rates <|
-                \p_ -> div [ class "price-cards__inner" ] (List.map (rateCard p_) p_.currencies)
+                \p_ ->
+                    div [ class "price-cards__inner" ]
+                        (List.map (rateCard p_) (Dict.toList p_.unitPriceMilli))
             ]
         , section [ class "price-notes" ]
-            [ h2 [] [ text "What counts as a reply" ]
+            [ h2 [] [ text "How credits work" ]
             , ul []
-                [ li [] [ text "An AI-written answer costs one reply." ]
-                , li [] [ text "A fixed message you wrote costs nothing, however many go out." ]
-                , li [] [ text "A message Concierge decides not to answer — because it's about money, or it's been handed to you — costs nothing." ]
-                , li [] [ text "If the AI fails mid-reply, the credit goes back." ]
+                [ li [] [ text "Prepaid credits only — 1 credit = 1 WhatsApp reply (static or AI)." ]
+                , li [] [ text "No subscriptions, no per-seat fees, and no free trials." ]
+                , li [] [ text "A message Concierge holds back — or if AI generation fails — is not charged." ]
+                , li [] [ text "Purchased credits do not expire." ]
                 ]
-            , h2 [] [ text "Buying" ]
-            , p []
-                [ text "Any quantity, upwards of the minimum shown above. Credits you buy don't expire." ]
+            , h2 [] [ text "Topping up" ]
+            , Ui.remote rates <|
+                \p_ ->
+                    p []
+                        [ text
+                            ("Top up anytime in your dashboard with Razorpay, starting from "
+                                ++ Format.count "en-IN" p_.minCredits
+                                ++ " credits up to "
+                                ++ Format.count "en-IN" p_.maxCredits
+                                ++ " credits per order."
+                            )
+                        ]
             ]
         , div [ class "page-cta" ]
             [ a [ href "/auth/login", class "btn btn-primary btn-lg" ] [ text "Get started" ] ]
         ]
 
 
-rateCard : Api.Pricing -> { code : String, unitPriceMilli : Int } -> Html msg
-rateCard _ rate =
+rateCard : Api.Pricing -> ( String, Int ) -> Html msg
+rateCard _ ( code, unitPriceMilli ) =
     div [ class "price-card" ]
-        [ h3 [] [ text rate.code ]
+        [ h3 [] [ text code ]
         , p [ class "price" ]
-            [ text (Format.milliRate "en-IN" rate.code rate.unitPriceMilli) ]
-        , p [ class "muted" ] [ text "per AI reply" ]
+            [ text (Format.milliRate "en-IN" code unitPriceMilli) ]
+        , p [ class "muted" ] [ text "per reply (1 credit = 1 reply)" ]
         ]
 
 
 features : Html msg
 features =
     div [ class "page page-features" ]
-        [ h1 [] [ text "What Concierge does" ]
+        [ h1 [] [ text "Built for small businesses on WhatsApp" ]
         , section [ class "feature-list" ]
-            [ feature "Answers WhatsApp for you"
-                "Messages to your business number get a reply in your own voice, within seconds, at any hour. Your number and your customers' threads stay exactly where they are."
-            , feature "Knows when to stop"
-                "Anything that quotes a price, promises a date or strays outside what you said it should discuss is never sent. Concierge tells the customer a person is picking it up, and emails you."
-            , feature "Waits for people to finish typing"
-                "A burst of three short messages gets one considered answer, not three. You choose how long it waits."
-            , feature "Remembers the conversation"
-                "Replies use the thread's recent history. After a few hours of silence the conversation is over and the next message starts fresh."
-            , feature "A prompt you can actually read"
-                "Pick a voice, answer a few questions, and Concierge writes the prompt. The fixed guardrails around it are visible on the page — nothing about what the model is told is hidden from you."
-            , feature "Checked before it speaks"
-                "Every prompt goes past a safety classifier before it's allowed to answer a customer. Change the prompt and AI replies pause until the new one clears."
-            , feature "Keeps almost nothing"
-                "Message bodies pass through and are never written down. Only channel, direction, sender, recipient and timestamp are stored."
+            [ feature "Static or AI quick-handoff replies"
+                "Choose a fixed static message or let Concierge's built-in front-desk assistant answer briefly on your WhatsApp Business number."
+            , feature "Fast human handoff + email alert"
+                "The moment a customer asks for a quote, a commitment, or personal attention, Concierge hands off cleanly and optionally emails you so you can step in."
+            , feature "Burst message batching"
+                "Wait 0 to 30 seconds for customers who send multiple short messages in a row, so they get one coherent reply instead of three."
+            , feature "Conversation session window"
+                "Configure the idle gap, handoff cooldown, and recent message context so threads stay relevant without repeating stale history."
+            , feature "Cloudflare AI safety & guardrails"
+                "Every reply passes through Cloudflare AI safety and prompt-injection guardrails designed to stop off-topic drift and unauthorized promises."
+            , feature "Metadata-only privacy"
+                "Customer message text passes through in memory to produce a reply and is never stored in our database — only channel, direction, sender, recipient, and timestamp are kept."
+            , feature "Self-service Razorpay prepaid credits"
+                "Prepaid credits only (1 credit = 1 reply). Buy what you need when you need it with Razorpay — no subscriptions or lock-in."
             ]
         , div [ class "page-cta" ]
             [ a [ href "/auth/login", class "btn btn-primary btn-lg" ] [ text "Get started" ] ]
@@ -130,35 +124,34 @@ terms : Html msg
 terms =
     legalPage "Terms of Service"
         [ ( "The service"
-          , [ "Concierge replies to messages sent to a WhatsApp business number you connect. You keep the number and the WhatsApp Business account; we act on your instructions."
-            , "Replies are generated by a language model working from a prompt you configure. We do not guarantee that any particular reply is accurate, appropriate or complete. You are responsible for what your business says to its customers, including what Concierge says on your behalf."
+          , [ "Concierge connects to your WhatsApp Business Account through Meta Embedded Signup to send automated replies on your behalf. You keep ownership of your phone number and WhatsApp Business Account; we process messages only on your instructions."
+            , "Automated replies are either static messages you write or responses generated by Concierge's built-in front-desk AI assistant. We do not guarantee that any AI-generated reply is accurate, complete, or suitable for your business. You remain responsible for all communications sent from your WhatsApp Business number."
             ]
           )
-        , ( "What you must not do"
-          , [ "Do not use Concierge to send unsolicited bulk messages, to impersonate anyone, or for anything unlawful. Do not configure a prompt intended to deceive customers about whether they are talking to an automated system."
-            , "We may suspend an account that breaks these rules, or that Meta requires us to suspend."
+        , ( "Acceptable use"
+          , [ "Do not use Concierge to send spam, unsolicited bulk messages, deceptive communications, or anything unlawful or prohibited by Meta's WhatsApp Business Messaging Policy."
+            , "We may suspend or terminate an account that violates these terms or that Meta requires us to restrict."
             ]
           )
-        , ( "Replies and payment"
-          , [ "AI replies are prepaid. A fixed message you wrote costs nothing. A reply that fails, or one Concierge withholds, is not charged."
-            , "Credits you buy do not expire. Credits we grant may carry an expiry, which is shown on your billing page."
-            , "At sign-up we charge a small amount to verify your payment method and refund it immediately."
+        , ( "Prepaid credits and payment"
+          , [ "Concierge operates strictly on prepaid credits: 1 credit = 1 reply (whether static or AI). There are no subscriptions and no free trials."
+            , "You can purchase credits anytime through Razorpay in your dashboard. A reply that fails before delivery or is withheld before sending is not charged. Purchased credits do not expire."
             ]
           )
         , ( "Availability"
-          , [ "We aim to keep Concierge running but offer no uptime guarantee. Meta's WhatsApp API, our AI provider and our hosting are all outside our control, and an outage in any of them will stop replies going out."
+          , [ "We aim to keep Concierge reliable, but offer no uptime SLA. Meta's WhatsApp Cloud API, Cloudflare Workers/AI, and Razorpay are outside our control, and an outage in any dependency will interrupt service."
             ]
           )
         , ( "Liability"
-          , [ "To the extent the law allows, our liability to you is limited to the amount you paid us in the three months before the claim. We are not liable for lost business, lost customers or lost data."
+          , [ "To the extent permitted by law, our total liability to you is limited to the amount you paid us in the three months preceding the claim. We are not liable for indirect or consequential losses, lost revenue, or lost business."
             ]
           )
-        , ( "Ending it"
-          , [ "You can stop using Concierge at any time and ask us to delete your account. Unused credits are not refundable except where the law requires it. We may end your account with reasonable notice, or immediately if you break these terms."
+        , ( "Ending your account"
+          , [ "You may stop using Concierge and permanently delete your account at any time from Dashboard Settings. Unused prepaid credits are non-refundable except where required by law."
             ]
           )
-        , ( "Changes"
-          , [ "We may change these terms. Continuing to use Concierge after a change means you accept it."
+        , ( "Contact"
+          , [ "Questions about these terms: support@calculon.tech."
             ]
           )
         ]
@@ -167,33 +160,30 @@ terms =
 privacy : Html msg
 privacy =
     legalPage "Privacy Policy"
-        [ ( "The short version"
-          , [ "We do not store the contents of your customers' messages. They pass through our worker, are sent to an AI model to generate a reply, and are not written to any database we keep."
+        [ ( "Metadata-only message logging"
+          , [ "We do not store the text content of your customers' WhatsApp messages in our database. Inbound and outbound message bodies pass through in memory to generate or dispatch a reply and are not persisted."
             ]
           )
         , ( "What we store"
-          , [ "For every message: the channel, whether it was inbound or outbound, the sender, the recipient, a timestamp, and what Concierge did with it. Not the text."
-            , "For your account: your email address and name from Google, your business details as you entered them, your prompt configuration, and your credit balance and payment records."
+          , [ "Message metadata: channel, direction (inbound or outbound), sender and recipient identifiers, timestamp, and handling outcome (replied or handed off) — never the message body."
+            , "Account records: your Google account email and name, business and invoicing details you enter during setup, your WhatsApp Business connection metadata (phone number ID and display number), notification preferences, and your prepaid credit balance and Razorpay payment records."
             ]
           )
-        , ( "Who else sees it"
-          , [ "Meta, because that is where WhatsApp messages come from and go to."
-            , "Cloudflare, who host the service and run the AI model that writes replies. Message text is sent to that model to produce a reply and is not used to train it."
-            , "Razorpay, for payments. We never see or store your card details."
-            , "Google, if you sign in with them — they tell us your email address and name."
+        , ( "Third-party processors"
+          , [ "Meta / WhatsApp: delivers and receives your WhatsApp Business messages and powers Meta Embedded Signup."
+            , "Cloudflare: hosts the application and runs Workers AI inference and safety guardrails. Message text sent for reply generation is not used to train models."
+            , "Razorpay: processes prepaid credit payments. We never receive or store your card or bank details."
+            , "Google: authenticates your sign-in and provides your email address and display name."
             ]
           )
-        , ( "How long"
-          , [ "Message metadata and account records are kept while your account is open. Payment records are kept as long as tax and accounting law requires, which is longer."
-            ]
-          )
-        , ( "Your data"
-          , [ "You can ask us to delete your account and the metadata attached to it. Payment records survive with your account identifier removed."
-            , "There is also a data-deletion endpoint at /data-deletion, which exists because Meta requires one."
+        , ( "Retention and deletion"
+          , [ "Account records, WhatsApp connection details, and message metadata are kept only while your account remains active."
+            , "You can permanently delete your account and associated metadata yourself at any time in /dashboard/settings. Payment records required by tax and accounting law are retained with your account identifier removed."
+            , "We also expose Meta's required /data-deletion callback endpoint for WhatsApp Business data-deletion requests."
             ]
           )
         , ( "Contact"
-          , [ "Questions about any of this: support@calculon.tech."
+          , [ "Privacy inquiries and deletion requests: support@calculon.tech."
             ]
           )
         ]
@@ -203,7 +193,7 @@ legalPage : String -> List ( String, List String ) -> Html msg
 legalPage title sections =
     div [ class "page page-legal" ]
         [ h1 [] [ text title ]
-        , p [ class "muted" ] [ text "Last updated 26 September 2026." ]
+        , p [ class "muted" ] [ text "Last updated 22 November 2026." ]
         , div []
             (List.map
                 (\( heading, paragraphs ) ->

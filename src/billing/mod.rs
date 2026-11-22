@@ -1,48 +1,41 @@
-//! Billing: reply credit tracking with expiry + Razorpay payments.
+//! Billing: prepaid reply credit tracking + Razorpay payments.
 //!
-//! Credits are stored as a ledger of entries, each with an optional expiry.
-//! Purchased credits never expire; operator-issued grants can expire after
-//! a configurable period (or never, when `expires_in_days = 0`).
-//!
-//! Deduction happens BEFORE send (optimistic). If send fails,
-//! credits are restored. This prevents double-spend races.
-//! Soonest-expiring credits are consumed first.
+//! 1 credit = 1 reply (both static/canned and AI replies cost 1 credit).
+//! Deduction happens BEFORE send (optimistic); on AI/send failure, the
+//! credit is restored. Soonest-expiring credits are consumed first.
 
 pub mod razorpay;
 pub mod webhook;
 
 use worker::*;
 
-use crate::helpers::{days_from_now, now_iso};
+use crate::helpers::now_iso;
 use crate::storage;
 use crate::types::{CreditEntry, CreditSource, TenantBilling};
 
-// Hard ceiling for the credit-purchase slider, used as a sanity bound on
-// the operator-tunable max in `pricing_config`. Operators can set
-// `pricing_config.max_credits` lower; this ceiling prevents accidental
-// overflow on the calculate_total multiplication.
-pub const MAX_CREDITS_CEILING: i64 = 10_000_000;
+pub const MIN_CREDITS: i64 = 100;
+pub const MAX_CREDITS: i64 = 100_000;
+pub const DEFAULT_CURRENCY: &str = "INR";
+
+/// Per-reply rate in milli-minor units (1/1000 of paise / cents).
+pub fn unit_price_milli(currency: &str) -> i64 {
+    match currency.trim().to_ascii_uppercase().as_str() {
+        "INR" => 10_000, // ₹0.10 / reply
+        "USD" => 100,    // $0.001 / reply
+        _ => 0,
+    }
+}
 
 /// Total price in the smallest currency unit (paise / cents) for a given credit amount.
 pub fn calculate_total(credits: i64, milli_price: i64) -> i64 {
     (credits * milli_price + 500) / 1000
 }
 
-/// Try to deduct one reply credit before sending. Returns whether the
-/// caller should proceed with the send.
-///
-/// `metered` reflects the tenant's plan: when `true` (paid), an empty
-/// balance returns `false` and the reply is skipped. When `false` (free
-/// / complimentary), we still bump `replies_used` and consume from any
-/// existing balance, but always return `true` so the reply ships.
-///
-/// Dormant: the pipeline no longer calls this (billing is deactivated), so
-/// the item is retained for a possible re-enable rather than deleted.
-#[allow(dead_code)]
-pub async fn try_deduct(db: &D1Database, tenant_id: &str, metered: bool) -> Result<bool> {
-    let mut billing = storage::get_tenant_billing(db, tenant_id).await?;
-    prune_expired(&mut billing);
-    sort_credits(&mut billing);
+/// Pure credit deduction step against an in-memory `TenantBilling` ledger.
+/// Returns `true` if the reply is allowed to proceed.
+pub(crate) fn deduct_one(billing: &mut TenantBilling, metered: bool, now: &str) -> bool {
+    prune_expired_at(billing, now);
+    sort_credits(billing);
 
     let mut deducted = false;
     for entry in billing.credits.iter_mut() {
@@ -54,30 +47,44 @@ pub async fn try_deduct(db: &D1Database, tenant_id: &str, metered: bool) -> Resu
     }
 
     if !deducted && metered {
-        storage::save_tenant_billing(db, tenant_id, &billing).await?;
-        return Ok(false);
+        billing.credits.retain(|e| e.amount > 0);
+        return false;
     }
 
     billing.credits.retain(|e| e.amount > 0);
     billing.replies_used += 1;
-    storage::save_tenant_billing(db, tenant_id, &billing).await?;
-    Ok(true)
+    true
 }
 
-/// Restore one reply credit after a failed send.
-/// Adds as a non-expiring purchase credit for simplicity.
-///
-/// Dormant: see [`try_deduct`]. Retained for a possible re-enable.
-#[allow(dead_code)]
-pub async fn restore_credit(db: &D1Database, tenant_id: &str) -> Result<()> {
-    let mut billing = storage::get_tenant_billing(db, tenant_id).await?;
-    billing.credits.push(CreditEntry {
-        amount: 1,
-        source: CreditSource::Purchase,
-        expires_at: None,
-        granted_at: now_iso(),
-    });
+/// Pure credit restoration step against an in-memory `TenantBilling` ledger.
+pub(crate) fn restore_one(billing: &mut TenantBilling, metered: bool, now: &str) {
+    if metered {
+        billing.credits.push(CreditEntry {
+            amount: 1,
+            source: CreditSource::Purchase,
+            expires_at: None,
+            granted_at: now.to_string(),
+        });
+    }
     billing.replies_used = (billing.replies_used - 1).max(0);
+}
+
+/// Try to deduct one reply credit before sending.
+///
+/// When `metered` is `true` (paid), a zero balance returns `Ok(false)` and
+/// the reply is suppressed. When `false` (complimentary `Free` plan), we still
+/// consume from any available balance and increment `replies_used`, returning `Ok(true)`.
+pub async fn try_deduct(db: &D1Database, tenant_id: &str, metered: bool) -> Result<bool> {
+    let mut billing = storage::get_tenant_billing(db, tenant_id).await?;
+    let allowed = deduct_one(&mut billing, metered, &now_iso());
+    storage::save_tenant_billing(db, tenant_id, &billing).await?;
+    Ok(allowed)
+}
+
+/// Restore one reply credit after a failed generation/send.
+pub async fn restore_credit(db: &D1Database, tenant_id: &str, metered: bool) -> Result<()> {
+    let mut billing = storage::get_tenant_billing(db, tenant_id).await?;
+    restore_one(&mut billing, metered, &now_iso());
     storage::save_tenant_billing(db, tenant_id, &billing).await
 }
 
@@ -96,29 +103,7 @@ pub async fn grant_purchased(db: &D1Database, tenant_id: &str, count: i64) -> Re
     storage::save_tenant_billing(db, tenant_id, &billing).await
 }
 
-/// Grant credits with expiry (for management grants).
-pub async fn grant_with_expiry(
-    db: &D1Database,
-    tenant_id: &str,
-    count: i64,
-    expires_in_days: i64,
-) -> Result<()> {
-    if count <= 0 {
-        return Err(Error::from("Credit count must be positive"));
-    }
-    let mut billing = storage::get_tenant_billing(db, tenant_id).await?;
-    billing.credits.push(CreditEntry {
-        amount: count,
-        source: CreditSource::Grant,
-        expires_at: Some(days_from_now(expires_in_days)),
-        granted_at: now_iso(),
-    });
-    storage::save_tenant_billing(db, tenant_id, &billing).await
-}
-
-/// Prepare billing for display. Prunes expired entries and sorts the
-/// ledger so soonest-expiring credits are consumed first. Call this
-/// before rendering billing UI.
+/// Prepare billing for display: prune expired entries and sort soonest-expiring first.
 pub fn refresh_billing(billing: &mut TenantBilling) {
     let now = now_iso();
     prune_expired_at(billing, &now);
@@ -126,11 +111,6 @@ pub fn refresh_billing(billing: &mut TenantBilling) {
     billing.credits.retain(|e| e.amount > 0);
 }
 
-fn prune_expired(billing: &mut TenantBilling) {
-    prune_expired_at(billing, &now_iso());
-}
-
-/// Remove expired credit entries.
 fn prune_expired_at(billing: &mut TenantBilling, now: &str) {
     billing.credits.retain(|e| match &e.expires_at {
         None => true,
@@ -138,16 +118,15 @@ fn prune_expired_at(billing: &mut TenantBilling, now: &str) {
     });
 }
 
-/// Sort credits by expiry: soonest first, never-expire last.
 fn sort_credits(billing: &mut TenantBilling) {
-    billing.credits.sort_by(|a, b| {
-        match (&a.expires_at, &b.expires_at) {
+    billing
+        .credits
+        .sort_by(|a, b| match (&a.expires_at, &b.expires_at) {
             (Some(a_exp), Some(b_exp)) => a_exp.cmp(b_exp),
-            (Some(_), None) => std::cmp::Ordering::Less, // expiring before never
+            (Some(_), None) => std::cmp::Ordering::Less,
             (None, Some(_)) => std::cmp::Ordering::Greater,
             (None, None) => std::cmp::Ordering::Equal,
-        }
-    });
+        });
 }
 
 #[cfg(test)]
@@ -171,75 +150,91 @@ mod tests {
     }
 
     #[test]
-    fn has_credits_positive() {
-        let b = make_billing(vec![entry(5, CreditSource::Purchase, None)]);
-        assert!(b.has_credits());
-    }
+    fn has_credits_and_total_remaining() {
+        let empty = TenantBilling::default();
+        assert!(!empty.has_credits());
+        assert_eq!(empty.total_remaining(), 0);
 
-    #[test]
-    fn has_credits_empty() {
-        let b = TenantBilling::default();
-        assert!(!b.has_credits());
-    }
-
-    #[test]
-    fn total_remaining_sums() {
         let b = make_billing(vec![
             entry(10, CreditSource::Purchase, None),
             entry(50, CreditSource::Grant, Some("2099-12-31T23:59:59Z")),
-            entry(25, CreditSource::Grant, Some("2027-01-01T00:00:00Z")),
         ]);
-        assert_eq!(b.total_remaining(), 85);
+        assert!(b.has_credits());
+        assert_eq!(b.total_remaining(), 60);
     }
 
     #[test]
-    fn sort_credits_soonest_first() {
+    fn deduct_and_restore_metered_round_trip() {
         let mut b = make_billing(vec![
-            entry(10, CreditSource::Purchase, None),
-            entry(5, CreditSource::Grant, Some("2027-06-01T00:00:00Z")),
-            entry(100, CreditSource::Grant, Some("2026-04-30T23:59:59Z")),
+            entry(1, CreditSource::Grant, Some("2027-01-01T00:00:00Z")),
+            entry(2, CreditSource::Purchase, None),
         ]);
-        sort_credits(&mut b);
-        // First two are grants ordered by expiry; the never-expire purchase
-        // sorts last.
-        assert_eq!(b.credits[0].amount, 100);
-        assert_eq!(b.credits[1].amount, 5);
-        assert_eq!(b.credits[2].source, CreditSource::Purchase);
-    }
+        let now = "2026-06-01T00:00:00Z";
 
-    #[test]
-    fn prune_expired_removes_old() {
-        let mut b = make_billing(vec![
-            entry(50, CreditSource::Grant, Some("2020-01-31T23:59:59Z")),
-            entry(10, CreditSource::Purchase, None),
-            entry(25, CreditSource::Grant, Some("2020-06-01T00:00:00Z")),
-        ]);
-        prune_expired_at(&mut b, "2026-04-19T12:00:00Z");
+        // Consumes soonest-expiring entry first
+        assert!(deduct_one(&mut b, true, now));
+        assert_eq!(b.total_remaining(), 2);
+        assert_eq!(b.replies_used, 1);
         assert_eq!(b.credits.len(), 1);
-        assert_eq!(b.credits[0].source, CreditSource::Purchase);
+
+        // Consume remaining two
+        assert!(deduct_one(&mut b, true, now));
+        assert!(deduct_one(&mut b, true, now));
+        assert_eq!(b.total_remaining(), 0);
+        assert_eq!(b.replies_used, 3);
+
+        // Blocked at zero balance
+        assert!(!deduct_one(&mut b, true, now));
+        assert_eq!(b.replies_used, 3);
+
+        // Restore puts 1 credit back and decrements replies_used
+        restore_one(&mut b, true, now);
+        assert_eq!(b.total_remaining(), 1);
+        assert_eq!(b.replies_used, 2);
     }
 
     #[test]
-    fn prune_keeps_future() {
-        let mut b = make_billing(vec![
-            entry(50, CreditSource::Grant, Some("2099-12-31T23:59:59Z")),
-            entry(10, CreditSource::Purchase, None),
-        ]);
-        prune_expired_at(&mut b, "2026-04-19T12:00:00Z");
-        assert_eq!(b.credits.len(), 2);
+    fn deduct_unmetered_allows_zero_balance_and_restore_does_not_mint() {
+        let mut b = TenantBilling::default();
+        let now = "2026-06-01T00:00:00Z";
+
+        assert!(deduct_one(&mut b, false, now));
+        assert_eq!(b.replies_used, 1);
+        assert_eq!(b.total_remaining(), 0);
+
+        restore_one(&mut b, false, now);
+        assert_eq!(b.replies_used, 0);
+        assert_eq!(b.total_remaining(), 0);
+    }
+
+    #[test]
+    fn prune_expired_drops_old_before_deduct() {
+        let mut b = make_billing(vec![entry(
+            50,
+            CreditSource::Grant,
+            Some("2020-01-31T23:59:59Z"),
+        )]);
+        assert!(!deduct_one(&mut b, true, "2026-06-01T00:00:00Z"));
+        assert!(b.credits.is_empty());
     }
 
     #[test]
     fn test_calculate_total() {
-        // 10 paise (10,000 milli-paise) per reply
         assert_eq!(calculate_total(1, 10_000), 10);
         assert_eq!(calculate_total(100, 10_000), 1000); // ₹10.00
         assert_eq!(calculate_total(500, 10_000), 5000); // ₹50.00
 
-        // $0.001 (100 milli-cents) per reply
-        assert_eq!(calculate_total(1, 100), 0); // rounds 0.1 to 0
-        assert_eq!(calculate_total(5, 100), 1); // rounds 0.5 to 1
-        assert_eq!(calculate_total(500, 100), 50); // $0.50
-        assert_eq!(calculate_total(1000, 100), 100); // $1.00
+        assert_eq!(calculate_total(1, 100), 0);
+        assert_eq!(calculate_total(5, 100), 1);
+        assert_eq!(calculate_total(500, 100), 50);
+        assert_eq!(calculate_total(1000, 100), 100);
+    }
+
+    #[test]
+    fn unit_price_milli_matches_supported_currencies() {
+        assert_eq!(unit_price_milli(DEFAULT_CURRENCY), 10_000);
+        assert_eq!(unit_price_milli("INR"), 10_000);
+        assert_eq!(unit_price_milli("usd"), 100);
+        assert_eq!(unit_price_milli("EUR"), 0);
     }
 }

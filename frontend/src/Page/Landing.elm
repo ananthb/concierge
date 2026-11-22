@@ -1,31 +1,26 @@
 module Page.Landing exposing (Model, Msg, init, subscriptions, update, view)
 
-{-| The landing page, and the interactive demo that is the point of it.
+{-| The landing page and the interactive WhatsApp demo.
 
-A visitor picks a sample business, talks to it as if they were its customer,
-and watches the AI answer. "View the prompt" opens the exact middle the model
-is being sent, which is the most convincing thing we can show: the product is
-a prompt envelope, so letting people read it is the demo.
+A visitor picks a sample small business, chats with it as a customer, and
+watches Concierge's built-in front-desk assistant reply briefly and hand off to
+a human as soon as a real decision or quote is needed.
 
-Three limits shape the conversation, all operator-configured and all arriving
-in `/api/bootstrap`:
+Three limits shape the conversation, all arriving in `/api/bootstrap`:
 
   - **Turn cap** (`maxUserTurns`): after this many messages the input is
-    replaced by the sign-up call to action. The server enforces it too — this
-    is the polite version, not the security boundary.
+    replaced by the sign-up call to action.
   - **Idle timeout** (`idleTimeoutSecs`): a conversation nobody is typing in
     swaps to the CTA. Restarts on every keystroke.
-  - **Handoff**: if the model emits the handoff sentinel the server strips it
-    and flags the turn. The demo then shows the holding-pattern state, which
-    is exactly what a real customer would see. There is no human to escalate
-    to here, so it lasts as long as the page does.
+  - **Handoff** (`handed_off`): once the assistant hands off, the demo shows
+    the holding-pattern pill just as a real customer thread would.
 
 -}
 
 import Api
 import Browser.Dom as Dom
 import Format
-import Html exposing (Html, button, div, h1, h2, h3, input, li, p, pre, section, span, text, ul)
+import Html exposing (Html, button, div, h1, h2, h3, input, li, p, section, span, text, ul)
 import Html.Attributes exposing (attribute, class, classList, disabled, id, placeholder, value)
 import Html.Events exposing (onClick, onInput, onSubmit)
 import RemoteData exposing (RemoteData(..))
@@ -44,7 +39,6 @@ type alias Model =
 
     -- Seconds since the visitor last typed or sent. Drives the idle timeout.
     , idleSeconds : Int
-    , promptVisible : Bool
     }
 
 
@@ -55,9 +49,6 @@ type alias Chat =
 
     -- The in-flight reply. `Loading` renders the typing indicator.
     , pending : Api.Data Api.DemoReply
-
-    -- Sticky once set: every later send tells the server we're in the
-    -- holding pattern so it keeps using that prompt.
     , handoff : Bool
     }
 
@@ -72,7 +63,6 @@ init : Model
 init =
     { chat = Nothing
     , idleSeconds = 0
-    , promptVisible = False
     }
 
 
@@ -85,32 +75,25 @@ type Msg
     | Draft String
     | Send
     | GotReply (Api.Data Api.DemoReply)
-    | TogglePrompt
     | CloseChat
     | Tick
     | NoOp
 
 
 update : Api.DemoConfig -> Msg -> Model -> ( Model, Cmd Msg )
-update config msg model =
+update _ msg model =
     case msg of
         PickPersona persona ->
             ( { model
                 | chat =
                     Just
                         { persona = persona
-
-                        -- The greeting is the business speaking first, as it
-                        -- would on WhatsApp. It's display-only: the server
-                        -- strips leading assistant turns anyway, since Llama
-                        -- chat templates expect the first turn to be a user's.
-                        , messages = [ { role = "assistant", content = persona.greeting } ]
+                        , messages = [ { role = "assistant", content = persona.opener } ]
                         , draft = ""
                         , pending = NotAsked
                         , handoff = False
                         }
                 , idleSeconds = 0
-                , promptVisible = False
               }
             , focusInput
             )
@@ -135,8 +118,11 @@ update config msg model =
 
                     else
                         let
+                            priorHistory =
+                                chat.messages
+
                             withUserTurn =
-                                chat.messages ++ [ { role = "user", content = body } ]
+                                priorHistory ++ [ { role = "user", content = body } ]
                         in
                         ( { model
                             | chat =
@@ -150,8 +136,9 @@ update config msg model =
                           }
                         , Cmd.batch
                             [ Api.demoChat
-                                { persona = chat.persona.slug
-                                , messages = withUserTurn
+                                { personaId = chat.persona.id
+                                , history = priorHistory
+                                , message = body
                                 , handoff = chat.handoff
                                 }
                                 GotReply
@@ -174,13 +161,10 @@ update config msg model =
                                             chat.messages
                                                 ++ [ { role = "assistant", content = reply.reply } ]
                                         , pending = NotAsked
-                                        , handoff = reply.handoff
+                                        , handoff = chat.handoff || reply.handedOff
                                     }
 
                                 _ ->
-                                    -- Keep the failure in `pending` so the
-                                    -- error renders in the transcript where
-                                    -- the reply would have been.
                                     { chat | pending = result }
                     in
                     ( { model | chat = Just updated }, scrollToBottom )
@@ -188,11 +172,8 @@ update config msg model =
                 Nothing ->
                     ( model, Cmd.none )
 
-        TogglePrompt ->
-            ( { model | promptVisible = not model.promptVisible }, Cmd.none )
-
         CloseChat ->
-            ( { model | chat = Nothing, promptVisible = False }, Cmd.none )
+            ( { model | chat = Nothing, idleSeconds = 0 }, Cmd.none )
 
         Tick ->
             ( { model | idleSeconds = model.idleSeconds + 1 }, Cmd.none )
@@ -214,7 +195,6 @@ scrollToBottom =
 
 
 {-| Tick once a second only while a chat is open and not already timed out.
-An idle page shouldn't hold a subscription.
 -}
 subscriptions : Api.DemoConfig -> Model -> Sub Msg
 subscriptions config model =
@@ -234,9 +214,6 @@ subscriptions config model =
 -- VIEW
 
 
-{-| Both arguments arrive as `Data` rather than resolved values, so the pitch
-renders on first paint and only the rate and the demo wait on the payload.
--}
 view : Api.Data Api.Pricing -> Api.Data Api.DemoConfig -> Model -> Html Msg
 view pricing demo model =
     div [ class "landing" ]
@@ -252,10 +229,6 @@ view pricing demo model =
                 else
                     text ""
 
-            -- No demo yet. Deliberately renders nothing rather than a
-            -- spinner: the demo is an invitation, and an empty slot reads
-            -- better than a loading state where one may never appear (the
-            -- operator can switch it off entirely).
             _ ->
                 text ""
         , howItWorks
@@ -265,9 +238,9 @@ view pricing demo model =
 hero : Api.Data Api.Pricing -> Api.Data Api.DemoConfig -> Html Msg
 hero pricing demo =
     section [ class "hero" ]
-        [ h1 [] [ text "Answer every customer, even when you're closed." ]
+        [ h1 [] [ text "Answer every WhatsApp customer, even when you're busy." ]
         , p [ class "hero-sub" ]
-            [ text "Concierge replies to your WhatsApp messages in your own voice, and hands the conversation to you the moment it matters — a price, a promise, anything it shouldn't decide alone." ]
+            [ text "Quick auto-replies for small businesses, built to hand off to you fast — greet customers, answer simple questions, and alert you the moment a person is needed." ]
         , div [ class "hero-actions" ]
             [ Html.a [ Html.Attributes.href "/auth/login", class "btn btn-primary btn-lg" ]
                 [ text "Get started" ]
@@ -277,7 +250,7 @@ hero pricing demo =
         , case demo of
             Success config ->
                 if config.enabled && not (List.isEmpty config.personas) then
-                    p [ class "hero-nudge" ] [ text "Try it below — you're the customer." ]
+                    p [ class "hero-nudge" ] [ text "Try the live demo below — message one of these sample businesses." ]
 
                 else
                     text ""
@@ -287,20 +260,19 @@ hero pricing demo =
         ]
 
 
-{-| The secondary CTA's label.
-
-Falls back to wording with no number in it while the rate is unknown, rather
-than a spinner inside a button or a placeholder price. That also means a
-prerendered snapshot of this page never carries a rate that could go stale
-against the operator's configured value — the number only ever comes from the
-live API.
-
--}
 rateLabel : Api.Data Api.Pricing -> String
 rateLabel pricing =
     case pricing of
         Success p_ ->
-            "From " ++ Format.milliRate "en-IN" p_.currency p_.unitPriceMilli ++ " a reply"
+            let
+                unitPrice =
+                    Api.unitPriceFor p_.defaultCurrency p_
+            in
+            if unitPrice > 0 then
+                "From " ++ Format.milliRate "en-IN" p_.defaultCurrency unitPrice ++ " per reply"
+
+            else
+                "See pricing"
 
         _ ->
             "See pricing"
@@ -311,7 +283,7 @@ personaPicker config =
     section [ class "demo-picker" ]
         [ Ui.sectionTitle "Pick a business to message"
         , p [ class "demo-picker-sub" ]
-            [ text "These are sample businesses. You'll be the customer; Concierge answers as them." ]
+            [ text "Concierge uses one smart built-in front-desk assistant focused on quick helpful replies and fast human handoff." ]
         , ul [ class "persona-grid" ]
             (List.map personaCard config.personas)
         ]
@@ -323,10 +295,11 @@ personaCard persona =
         [ button
             [ class "persona-card"
             , onClick (PickPersona persona)
-            , attribute "aria-label" ("Message " ++ persona.label)
+            , attribute "aria-label" ("Message " ++ persona.businessName)
             ]
-            [ h3 [] [ text persona.label ]
-            , p [] [ text persona.description ]
+            [ h3 [] [ text persona.businessName ]
+            , p [] [ text (persona.businessType ++ " · " ++ persona.city ++ " · " ++ persona.hours) ]
+            , p [] [ text persona.summary ]
             ]
         ]
 
@@ -343,37 +316,36 @@ chatPanel config model chat =
         idledOut =
             model.idleSeconds >= config.idleTimeoutSecs
 
+        remainingIdle =
+            max 0 (config.idleTimeoutSecs - model.idleSeconds)
+
         finished =
             turnsSpent || idledOut
     in
     section [ class "demo-chat" ]
         [ div [ class "demo-chat-head" ]
             [ div []
-                [ h2 [] [ text chat.persona.label ]
-                , if chat.handoff then
-                    span [ class "pill pill-warn" ] [ text "Handed to a human" ]
+                [ h2 [] [ text chat.persona.businessName ]
+                , div [ class "demo-chat-head-actions" ]
+                    [ if chat.handoff then
+                        span [ class "pill pill-warn" ] [ text "Handed to a human" ]
 
-                  else
-                    span [ class "pill" ] [ text "Replying automatically" ]
+                      else
+                        span [ class "pill" ] [ text "Replying automatically" ]
+                    , span [ class "pill" ]
+                        [ text (String.fromInt userTurns ++ " / " ++ String.fromInt config.maxUserTurns ++ " turns") ]
+                    , span [ class "pill" ]
+                        [ text (String.fromInt remainingIdle ++ "s idle") ]
+                    ]
                 ]
             , div [ class "demo-chat-head-actions" ]
-                [ button [ class "btn btn-ghost", onClick TogglePrompt ]
-                    [ text
-                        (if model.promptVisible then
-                            "Hide the prompt"
-
-                         else
-                            "View the prompt"
-                        )
-                    ]
-                , button [ class "btn btn-ghost", onClick CloseChat ] [ text "Start over" ]
+                [ button [ class "btn btn-ghost", onClick CloseChat ] [ text "Start over" ]
                 ]
             ]
-        , if model.promptVisible then
-            promptPanel chat.persona
-
-          else
-            text ""
+        , div [ class "prompt-panel" ]
+            [ p [ class "prompt-panel-note" ]
+                [ text "Concierge uses a single built-in front-desk assistant focused on quick answers and fast human handoff whenever pricing, commitments, or custom requests come up." ]
+            ]
         , div [ class "demo-transcript", id "demo-transcript" ]
             (List.map bubble chat.messages
                 ++ [ pendingBubble chat.pending ]
@@ -383,15 +355,6 @@ chatPanel config model chat =
 
           else
             composer chat
-        ]
-
-
-promptPanel : Api.DemoPersona -> Html Msg
-promptPanel persona =
-    div [ class "prompt-panel" ]
-        [ p [ class "prompt-panel-note" ]
-            [ text "This is the middle of the prompt — the business's own voice and rules. A fixed preamble and postamble wrap it on every call and can't be edited away, which is what keeps a prompt from talking the model out of its guardrails." ]
-        , pre [ class "prompt-preview" ] [ text persona.prompt ]
         ]
 
 
@@ -431,18 +394,11 @@ composer chat =
             , value chat.draft
             , onInput Draft
             , attribute "autocomplete" "off"
-
-            -- The server caps this too; matching it here means the limit is
-            -- visible as you type rather than arriving as a 400.
             , Html.Attributes.maxlength 300
             ]
             []
         , button
             [ class "btn btn-primary"
-
-            -- Explicit, though a <button> in a form submits by default:
-            -- the tests select on it, and a selector can't match an
-            -- attribute the browser only implies.
             , Html.Attributes.type_ "submit"
             , disabled (String.isEmpty (String.trim chat.draft) || RemoteData.isLoading chat.pending)
             ]
@@ -456,10 +412,10 @@ closingCta idledOut =
         [ p []
             [ text
                 (if idledOut then
-                    "Still there? That's the demo — it answers like this every time, day or night."
+                    "Timed out from inactivity — that's how Concierge answers every WhatsApp thread day or night."
 
                  else
-                    "That's the demo. It answers like this every time, day or night."
+                    "That's the demo. Quick replies when customers message, and fast handoff to you when it matters."
                 )
             ]
         , Html.a [ Html.Attributes.href "/auth/login", class "btn btn-primary btn-lg" ]
@@ -473,9 +429,12 @@ howItWorks =
     section [ class "how-it-works" ]
         [ Ui.sectionTitle "How it works"
         , ul [ class "steps" ]
-            [ step "Connect your WhatsApp number" "Through Meta's own signup flow. No new number, no app to install."
-            , step "Describe your business once" "Pick a voice, tell it what you do and when you're open. It writes the prompt for you."
-            , step "It answers; you get the hard ones" "Anything about money or a commitment is never sent on its own — Concierge holds the conversation and emails you."
+            [ step "1. Connect WhatsApp Business via Meta"
+                "Link your business number in a few clicks through Meta Embedded Signup. No new number, no app to install."
+            , step "2. Choose static or AI quick-handoff replies"
+                "Send an instant static message, or let Concierge's built-in front-desk assistant answer briefly and hand off to your team fast."
+            , step "3. Top up prepaid credits"
+                "1 credit = 1 reply, static or AI. Pay as you go with Razorpay — no subscriptions or free trials."
             ]
         ]
 

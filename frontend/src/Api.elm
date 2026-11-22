@@ -1,88 +1,49 @@
 module Api exposing
-    ( AdminArchetype
-    , AdminDemo
-    , AdminPricing
-    , ApiError(..)
-    , Archetype
-    , AuditEntry
-    , Billing
+    ( ApiError(..)
+    , Basics
+    , BillingView
     , Bootstrap
-    , Business
-    , Conversation
     , ConversationBounds
-    , Credit
+    , ConversationSettings
+    , CreditEntry
     , Data
     , DemoConfig
     , DemoPersona
     , DemoReply
-    , EmailAccount
-    , EmailOverview
-    , EmailSetup
-    , Health
-    , HealthCheck
+    , MetaSignup
+    , NotificationSettings
     , Order
-    , Overview
-    , Persona
-    , PersonaBuilder
     , Pricing
-    , PricingAmount
-    , PricingConcept
-    , Reply
+    , ReplyConfig
     , Session
-    , Settings
-    , Signup
-    , TenantDetail
-    , TenantRow
+    , SettingsView
     , WhatsAppAccount
-    , Wizard
-    , WizardPersona
+    , WizardView
     , channelsDone
     , completeWizard
-    , connectEmail
     , delete
     , deleteAccount
-    , deleteAdminArchetype
-    , deleteEmail
-    , deleteTenant
+    , deleteWhatsApp
     , demoChat
-    , emptyBuilder
+    , emptyBasics
     , errorMessage
     , get
-    , getAdminArchetypes
-    , getAdminDemo
-    , getAdminPricing
-    , getArchetypes
-    , getAudit
     , getBilling
     , getBootstrap
-    , getEmail
-    , getOverview
-    , getPersona
     , getSettings
-    , getTenantDetail
     , getWhatsApp
     , getWizard
-    , grantReplies
     , isUnauthenticated
-    , listTenants
     , post
-    , previewPersona
     , put
-    , rerollDemo
-    , saveAdminArchetype
-    , saveAdminDemo
-    , saveAdminPricing
     , saveBasics
     , saveConversation
-    , saveEmail
     , saveLocale
-    , savePersona
-    , savePersonaStep
-    , saveWhatsApp
+    , saveNotifications
     , startCheckout
-    , startVerification
     , stepWizard
-    , verifyPayment
+    , unitPriceFor
+    , updateWhatsApp
     )
 
 {-| The single place that knows the shape of `/api/*`.
@@ -106,11 +67,11 @@ continue." to `BadStatus 400`. See [`ApiError`].
 
 -}
 
+import Dict exposing (Dict)
 import Http
 import Json.Decode as D exposing (Decoder)
 import Json.Encode as E
 import RemoteData exposing (RemoteData)
-import Url
 
 
 
@@ -158,8 +119,6 @@ errorMessage err =
             "That took too long. Try again."
 
         Transport (Http.BadBody detail) ->
-            -- A decoder mismatch is our bug, not the user's. Say so plainly
-            -- rather than showing them a decoder trace.
             "The server sent something we couldn't read. " ++ detail
 
         Transport (Http.BadUrl url) ->
@@ -178,8 +137,6 @@ isUnauthenticated err =
 -- REQUESTS
 
 
-{-| Header marking a request as coming from our own frontend.
--}
 requestHeader : Http.Header
 requestHeader =
     Http.header "X-Concierge-Request" "1"
@@ -204,9 +161,6 @@ expectJson toMsg decoder =
                         Err Unauthenticated
 
                     else
-                        -- Prefer the worker's own message. A body without the
-                        -- envelope (a platform 5xx, say) falls back to the
-                        -- status code.
                         case D.decodeString faultDecoder body of
                             Ok fault ->
                                 Err (Fault fault)
@@ -215,9 +169,6 @@ expectJson toMsg decoder =
                                 Err (Transport (Http.BadStatus metadata.statusCode))
 
                 Http.GoodStatus_ _ body ->
-                    -- 204 has no body. Decoders for endpoints that answer 204
-                    -- are built with `D.succeed`, which still needs valid JSON
-                    -- to run against, so substitute an empty object.
                     let
                         payload =
                             if String.trim body == "" then
@@ -298,12 +249,22 @@ type alias Bootstrap =
 
 
 type alias Pricing =
-    { unitPriceMilli : Int
-    , currency : String
-    , minCredits : Int
+    { minCredits : Int
     , maxCredits : Int
-    , currencies : List { code : String, unitPriceMilli : Int }
+    , unitPriceMilli : Dict String Int
+    , defaultCurrency : String
     }
+
+
+unitPriceFor : String -> Pricing -> Int
+unitPriceFor currency pricing =
+    case Dict.get currency pricing.unitPriceMilli of
+        Just price ->
+            price
+
+        Nothing ->
+            Dict.get pricing.defaultCurrency pricing.unitPriceMilli
+                |> Maybe.withDefault 0
 
 
 type alias DemoConfig =
@@ -315,14 +276,13 @@ type alias DemoConfig =
 
 
 type alias DemoPersona =
-    { slug : String
-    , label : String
-    , description : String
-    , greeting : String
-
-    -- The exact middle sent to the model, shown in the "view prompt" panel.
-    , prompt : String
+    { id : String
     , businessName : String
+    , businessType : String
+    , city : String
+    , hours : String
+    , opener : String
+    , summary : String
     }
 
 
@@ -330,16 +290,12 @@ type alias Session =
     { tenantId : String
     , email : String
     , name : Maybe String
+    , locale : String
     , currency : String
-    , metered : Bool
-
-    -- "wizard" until onboarding is sealed, then "dashboard".
     , destination : String
-    , onboardingStep : Maybe String
-
-    -- False while the persona's safety verdict is pending or rejected; AI
-    -- replies are blocked until it clears.
     , aiReady : Bool
+    , safetyStatus : String
+    , safetyReason : Maybe String
     }
 
 
@@ -358,19 +314,36 @@ bootstrapDecoder =
 
 pricingDecoder : Decoder Pricing
 pricingDecoder =
-    D.map5 Pricing
-        (D.field "unit_price_milli" D.int)
-        (D.field "currency" D.string)
-        (D.field "min_credits" D.int)
-        (D.field "max_credits" D.int)
-        (D.field "currencies"
-            (D.list
-                (D.map2 (\c p -> { code = c, unitPriceMilli = p })
-                    (D.field "code" D.string)
-                    (D.field "unit_price_milli" D.int)
+    D.oneOf
+        [ D.map4 Pricing
+            (D.field "min_credits" D.int)
+            (D.field "max_credits" D.int)
+            (D.field "unit_price_milli" (D.dict D.int))
+            (D.field "default_currency" D.string)
+        , D.map4
+            (\minC maxC cur rates ->
+                Pricing minC maxC (Dict.fromList (List.map (\r -> ( r.code, r.unitPriceMilli )) rates)) cur
+            )
+            (D.field "min_credits" D.int)
+            (D.field "max_credits" D.int)
+            (D.field "currency" D.string)
+            (D.field "currencies"
+                (D.list
+                    (D.map2 (\c p -> { code = c, unitPriceMilli = p })
+                        (D.field "code" D.string)
+                        (D.field "unit_price_milli" D.int)
+                    )
                 )
             )
-        )
+        , D.map4
+            (\minC maxC unit cur ->
+                Pricing minC maxC (Dict.singleton cur unit) cur
+            )
+            (D.field "min_credits" D.int)
+            (D.field "max_credits" D.int)
+            (D.field "unit_price_milli" D.int)
+            (D.field "currency" D.string)
+        ]
 
 
 demoDecoder : Decoder DemoConfig
@@ -384,26 +357,49 @@ demoDecoder =
 
 demoPersonaDecoder : Decoder DemoPersona
 demoPersonaDecoder =
-    D.map6 DemoPersona
-        (D.field "slug" D.string)
-        (D.field "label" D.string)
-        (D.field "description" D.string)
-        (D.field "greeting" D.string)
-        (D.field "prompt" D.string)
-        (D.at [ "business", "name" ] D.string |> withDefault "")
+    D.map7 DemoPersona
+        (D.field "id" D.string)
+        (D.field "business_name" D.string)
+        (D.field "business_type" D.string)
+        (D.field "city" D.string)
+        (D.field "hours" D.string)
+        (D.field "opener" D.string)
+        (D.field "summary" D.string)
 
 
 sessionDecoder : Decoder Session
 sessionDecoder =
-    D.map8 Session
+    D.map7
+        (\tenantId email name locale currency destination aiReady ->
+            { tenantId = tenantId
+            , email = email
+            , name = name
+            , locale = locale
+            , currency = currency
+            , destination = destination
+            , aiReady = aiReady
+            , safetyStatus =
+                if aiReady then
+                    "approved"
+
+                else
+                    "pending"
+            , safetyReason = Nothing
+            }
+        )
         (D.field "tenant_id" D.string)
         (D.field "email" D.string)
         (D.field "name" (D.nullable D.string))
+        (D.field "locale" D.string)
         (D.field "currency" D.string)
-        (D.field "metered" D.bool)
         (D.field "destination" D.string)
-        (D.field "onboarding_step" (D.nullable D.string))
         (D.field "ai_ready" D.bool)
+        |> D.andThen
+            (\s ->
+                D.map2 (\status reason -> { s | safetyStatus = status, safetyReason = reason })
+                    (withDefault s.safetyStatus (D.field "safety_status" D.string))
+                    (withDefault Nothing (D.field "safety_reason" (D.nullable D.string)))
+            )
 
 
 
@@ -412,23 +408,23 @@ sessionDecoder =
 
 type alias DemoReply =
     { reply : String
-
-    -- True once the conversation has been handed to a human; the client
-    -- echoes it back on every later turn so the server keeps using the
-    -- holding-pattern prompt.
-    , handoff : Bool
+    , handedOff : Bool
     }
 
 
 demoChat :
-    { persona : String, messages : List { role : String, content : String }, handoff : Bool }
+    { personaId : String
+    , history : List { role : String, content : String }
+    , message : String
+    , handoff : Bool
+    }
     -> (Data DemoReply -> msg)
     -> Cmd msg
 demoChat args =
     post "/api/demo/chat"
         (E.object
-            [ ( "persona", E.string args.persona )
-            , ( "messages"
+            [ ( "persona_id", E.string args.personaId )
+            , ( "history"
               , E.list
                     (\m ->
                         E.object
@@ -436,15 +432,20 @@ demoChat args =
                             , ( "content", E.string m.content )
                             ]
                     )
-                    args.messages
+                    args.history
               )
+            , ( "message", E.string args.message )
             , ( "handoff", E.bool args.handoff )
             ]
         )
         (D.map2 DemoReply
             (D.field "reply" D.string)
-            (D.field "handoff" D.bool)
+            (D.field "handed_off" D.bool)
         )
+
+
+
+-- ACCOUNT
 
 
 {-| Close the account. Irreversible.
@@ -465,176 +466,127 @@ deleteAccount confirmEmail =
 -- WIZARD
 
 
-type alias Wizard =
+type alias WizardView =
     { step : String
-    , steps : List String
     , completed : Bool
-    , business : Business
-    , persona : WizardPersona
+    , basics : Basics
     , whatsapp : List WhatsAppAccount
-    , email : List EmailAccount
-    , signup : Maybe Signup
-    , launch : Launch
+    , signup : Maybe MetaSignup
+    , creditsBalance : Int
+    , pricing : Pricing
     }
 
 
-type alias Business =
-    { name : String
+type alias Basics =
+    { brandName : String
     , contactName : String
-    , phone : String
-    , businessType : String
+    , contactPhone : String
+    , entityType : String
     , pan : String
     , gstin : String
     , address : String
     , state : String
-    , pincode : String
+    , pin : String
     }
 
 
-type alias WizardPersona =
-    { archetypeSlug : String
-    , goal : String
-    , goalUrl : String
-    , handoffConditions : List String
-    , safetyStatus : String
-    }
-
-
-type alias Launch =
-    { verified : Bool
-    , verificationAmount : Int
-    , unitPriceMilli : Int
-    , currency : String
-    , minCredits : Int
-    , maxCredits : Int
-    , metered : Bool
+emptyBasics : Basics
+emptyBasics =
+    { brandName = ""
+    , contactName = ""
+    , contactPhone = ""
+    , entityType = ""
+    , pan = ""
+    , gstin = ""
+    , address = ""
+    , state = ""
+    , pin = ""
     }
 
 
 {-| Meta Embedded Signup parameters. `state` is a one-shot nonce, so a fresh
-one arrives with every wizard read.
+one arrives with every read.
 -}
-type alias Signup =
+type alias MetaSignup =
     { appId : String
     , configId : String
     , state : String
     }
 
 
-getWizard : (Data Wizard -> msg) -> Cmd msg
+getWizard : (Data WizardView -> msg) -> Cmd msg
 getWizard =
     get "/api/wizard" wizardDecoder
 
 
-{-| Save the basics step. Advances the server-side step on success.
--}
-saveBasics : Business -> (Data Wizard -> msg) -> Cmd msg
+saveBasics : Basics -> (Data WizardView -> msg) -> Cmd msg
 saveBasics b =
     put "/api/wizard/basics"
         (E.object
-            [ ( "name", E.string b.name )
+            [ ( "name", E.string b.brandName )
             , ( "contact_name", E.string b.contactName )
-            , ( "phone", E.string b.phone )
-            , ( "business_type", E.string b.businessType )
+            , ( "phone", E.string b.contactPhone )
+            , ( "business_type", E.string b.entityType )
             , ( "pan", E.string b.pan )
             , ( "gstin", E.string b.gstin )
             , ( "address", E.string b.address )
             , ( "state", E.string b.state )
-            , ( "pincode", E.string b.pincode )
+            , ( "pincode", E.string b.pin )
             ]
         )
         wizardDecoder
 
 
-savePersonaStep :
-    { archetypeSlug : String, goal : String, goalUrl : String, handoffConditions : List String }
-    -> (Data Wizard -> msg)
-    -> Cmd msg
-savePersonaStep p =
-    put "/api/wizard/persona"
-        (E.object
-            [ ( "archetype_slug", E.string p.archetypeSlug )
-            , ( "goal", E.string p.goal )
-            , ( "goal_url", E.string p.goalUrl )
-            , ( "handoff_conditions", E.list E.string p.handoffConditions )
-            ]
-        )
-        wizardDecoder
-
-
-channelsDone : (Data Wizard -> msg) -> Cmd msg
+channelsDone : (Data WizardView -> msg) -> Cmd msg
 channelsDone =
     post "/api/wizard/channels/done" (E.object []) wizardDecoder
 
 
 {-| Step backwards. The server refuses a forward jump.
 -}
-stepWizard : String -> (Data Wizard -> msg) -> Cmd msg
+stepWizard : String -> (Data WizardView -> msg) -> Cmd msg
 stepWizard to =
     post "/api/wizard/step" (E.object [ ( "to", E.string to ) ]) wizardDecoder
 
 
-completeWizard : (Data Wizard -> msg) -> Cmd msg
+completeWizard : (Data WizardView -> msg) -> Cmd msg
 completeWizard =
     post "/api/wizard/complete" (E.object []) wizardDecoder
 
 
-wizardDecoder : Decoder Wizard
+wizardDecoder : Decoder WizardView
 wizardDecoder =
-    D.map8
-        (\step steps completed business persona whatsapp email signup launch ->
-            Wizard step steps completed business persona whatsapp email signup launch
-        )
+    D.map7 WizardView
         (D.field "step" D.string)
-        (D.field "steps" (D.list D.string))
         (D.field "completed" D.bool)
-        (D.field "business" businessDecoder)
-        (D.field "persona" wizardPersonaDecoder)
+        (D.oneOf [ D.field "business" basicsDecoder, D.field "basics" basicsDecoder ])
         (D.field "whatsapp" (D.list whatsAppDecoder))
-        (D.field "email" (D.list emailDecoder))
         (D.field "signup" (D.nullable signupDecoder))
-        |> D.andThen (\f -> D.map f (D.field "launch" launchDecoder))
+        (D.oneOf [ D.at [ "launch", "balance" ] D.int, D.field "credits_balance" D.int ])
+        (D.oneOf [ D.field "launch" pricingDecoder, D.field "pricing" pricingDecoder ])
 
 
-businessDecoder : Decoder Business
-businessDecoder =
-    D.map8 (\n c p b pan g a s -> Business n c p b pan g a s)
-        (D.field "name" D.string)
+basicsDecoder : Decoder Basics
+basicsDecoder =
+    D.map8 (\bn cn cp et pan g a s -> Basics bn cn cp et pan g a s "")
+        (D.oneOf [ D.field "name" D.string, D.field "brand_name" D.string ])
         (D.field "contact_name" D.string)
-        (D.field "phone" D.string)
-        (D.field "business_type" D.string)
+        (D.oneOf [ D.field "phone" D.string, D.field "contact_phone" D.string ])
+        (D.oneOf [ D.field "business_type" D.string, D.field "entity_type" D.string ])
         (D.field "pan" D.string)
         (D.field "gstin" D.string)
         (D.field "address" D.string)
         (D.field "state" D.string)
-        |> D.andThen (\f -> D.map f (D.field "pincode" D.string))
+        |> D.andThen
+            (\b ->
+                D.map (\p -> { b | pin = p })
+                    (D.oneOf [ D.field "pincode" D.string, D.field "pin" D.string ])
+            )
 
 
-wizardPersonaDecoder : Decoder WizardPersona
-wizardPersonaDecoder =
-    D.map5 WizardPersona
-        (D.field "archetype_slug" D.string)
-        (D.field "goal" D.string)
-        (D.field "goal_url" D.string)
-        (D.field "handoff_conditions" (D.list D.string))
-        (D.field "safety_status" D.string)
-
-
-launchDecoder : Decoder Launch
-launchDecoder =
-    D.map7 Launch
-        (D.field "verified" D.bool)
-        (D.field "verification_amount" D.int)
-        (D.field "unit_price_milli" D.int)
-        (D.field "currency" D.string)
-        (D.field "min_credits" D.int)
-        (D.field "max_credits" D.int)
-        (D.field "metered" D.bool)
-
-
-signupDecoder : Decoder Signup
+signupDecoder : Decoder MetaSignup
 signupDecoder =
-    D.map3 Signup
+    D.map3 MetaSignup
         (D.field "app_id" D.string)
         (D.field "config_id" D.string)
         (D.field "state" D.string)
@@ -647,15 +599,15 @@ signupDecoder =
 type alias WhatsAppAccount =
     { id : String
     , name : String
-    , phoneNumber : String
     , phoneNumberId : String
-    , reply : Reply
+    , displayPhoneNumber : String
+    , reply : ReplyConfig
     }
 
 
-{-| `mode` is "canned" or "prompt"; `text` is the message or the instruction.
+{-| `mode` is "ai" or "canned". `text` is the static message when `mode` is "canned".
 -}
-type alias Reply =
+type alias ReplyConfig =
     { enabled : Bool
     , mode : String
     , text : String
@@ -663,7 +615,7 @@ type alias Reply =
     }
 
 
-getWhatsApp : (Data { accounts : List WhatsAppAccount, signup : Maybe Signup } -> msg) -> Cmd msg
+getWhatsApp : (Data { accounts : List WhatsAppAccount, signup : Maybe MetaSignup } -> msg) -> Cmd msg
 getWhatsApp =
     get "/api/whatsapp"
         (D.map2 (\a s -> { accounts = a, signup = s })
@@ -672,22 +624,27 @@ getWhatsApp =
         )
 
 
-saveWhatsApp : String -> { name : String, reply : Reply } -> (Data WhatsAppAccount -> msg) -> Cmd msg
-saveWhatsApp id args =
+updateWhatsApp :
+    String
+    -> { name : String, enabled : Bool, mode : String, text : String, waitSeconds : Int }
+    -> (Data WhatsAppAccount -> msg)
+    -> Cmd msg
+updateWhatsApp id args =
     put ("/api/whatsapp/" ++ id)
         (E.object
             [ ( "name", E.string args.name )
-            , ( "reply"
-              , E.object
-                    [ ( "enabled", E.bool args.reply.enabled )
-                    , ( "mode", E.string args.reply.mode )
-                    , ( "text", E.string args.reply.text )
-                    , ( "wait_seconds", E.int args.reply.waitSeconds )
-                    ]
-              )
+            , ( "enabled", E.bool args.enabled )
+            , ( "mode", E.string args.mode )
+            , ( "text", E.string args.text )
+            , ( "wait_seconds", E.int args.waitSeconds )
             ]
         )
         whatsAppDecoder
+
+
+deleteWhatsApp : String -> (Data () -> msg) -> Cmd msg
+deleteWhatsApp id =
+    delete ("/api/whatsapp/" ++ id) (E.object []) (D.succeed ())
 
 
 whatsAppDecoder : Decoder WhatsAppAccount
@@ -695,14 +652,14 @@ whatsAppDecoder =
     D.map5 WhatsAppAccount
         (D.field "id" D.string)
         (D.field "name" D.string)
-        (D.field "phone_number" D.string)
         (D.field "phone_number_id" D.string)
+        (D.oneOf [ D.field "display_phone_number" D.string, D.field "phone_number" D.string ])
         (D.field "reply" replyDecoder)
 
 
-replyDecoder : Decoder Reply
+replyDecoder : Decoder ReplyConfig
 replyDecoder =
-    D.map4 Reply
+    D.map4 ReplyConfig
         (D.field "enabled" D.bool)
         (D.field "mode" D.string)
         (D.field "text" D.string)
@@ -710,315 +667,20 @@ replyDecoder =
 
 
 
--- EMAIL
-
-
-{-| A connected custom email domain. Inbound mail for `domain` is answered by
-the same pipeline as WhatsApp; replies go out from `fromAddress`.
--}
-type alias EmailAccount =
-    { id : String
-    , name : String
-    , domain : String
-    , localPart : String
-    , fromName : String
-    , fromAddress : String
-    , reply : Reply
-    , createdAt : String
-    }
-
-
-{-| DNS the tenant must have in place. Cloudflare Email Routing creates it on
-a zone it manages; the records are shown for another provider.
--}
-type alias EmailSetup =
-    { mxHosts : List String
-    , spf : String
-    , note : String
-    }
-
-
-type alias EmailOverview =
-    { accounts : List EmailAccount
-    , setup : EmailSetup
-    }
-
-
-getEmail : (Data EmailOverview -> msg) -> Cmd msg
-getEmail =
-    get "/api/email" emailOverviewDecoder
-
-
-{-| Connect a domain. An empty `localPart` claims the domain catch-all.
--}
-connectEmail :
-    { domain : String, localPart : String, name : String, fromName : String }
-    -> (Data EmailAccount -> msg)
-    -> Cmd msg
-connectEmail args =
-    post "/api/email"
-        (E.object
-            [ ( "domain", E.string args.domain )
-            , ( "local_part", E.string args.localPart )
-            , ( "name", E.string args.name )
-            , ( "from_name", E.string args.fromName )
-            ]
-        )
-        emailDecoder
-
-
-saveEmail : String -> { name : String, fromName : String, reply : Reply } -> (Data EmailAccount -> msg) -> Cmd msg
-saveEmail id args =
-    put ("/api/email/" ++ id)
-        (E.object
-            [ ( "name", E.string args.name )
-            , ( "from_name", E.string args.fromName )
-            , ( "reply"
-              , E.object
-                    [ ( "enabled", E.bool args.reply.enabled )
-                    , ( "mode", E.string args.reply.mode )
-                    , ( "text", E.string args.reply.text )
-                    , ( "wait_seconds", E.int args.reply.waitSeconds )
-                    ]
-              )
-            ]
-        )
-        emailDecoder
-
-
-deleteEmail : String -> (Data () -> msg) -> Cmd msg
-deleteEmail id =
-    delete ("/api/email/" ++ id) (E.object []) (D.succeed ())
-
-
-emailDecoder : Decoder EmailAccount
-emailDecoder =
-    D.map8 EmailAccount
-        (D.field "id" D.string)
-        (D.field "name" D.string)
-        (D.field "domain" D.string)
-        (D.field "local_part" D.string)
-        (D.field "from_name" D.string)
-        (D.field "from_address" D.string)
-        (D.field "reply" replyDecoder)
-        (D.field "created_at" D.string)
-
-
-emailSetupDecoder : Decoder EmailSetup
-emailSetupDecoder =
-    D.map3 EmailSetup
-        (D.field "mx_hosts" (D.list D.string))
-        (D.field "spf" D.string)
-        (D.field "note" D.string)
-
-
-emailOverviewDecoder : Decoder EmailOverview
-emailOverviewDecoder =
-    D.map2 EmailOverview
-        (D.field "accounts" (D.list emailDecoder))
-        (D.field "setup" emailSetupDecoder)
-
-
-
--- PERSONA
-
-
-type alias Persona =
-    { mode : String
-    , builder : PersonaBuilder
-    , customPrompt : String
-    , safetyStatus : String
-    , safetyReason : Maybe String
-    , aiReady : Bool
-    , prompt : String
-    , preamble : String
-    , postamble : String
-    , maxCustomPrompt : Int
-    }
-
-
-type alias PersonaBuilder =
-    { archetypeSlug : String
-    , bizName : String
-    , bizType : String
-    , city : String
-    , hours : String
-    , goal : String
-    , goalUrl : String
-    , catchPhrases : List String
-    , offTopics : List String
-    , never : String
-    , handoffConditions : List String
-    }
-
-
-emptyBuilder : PersonaBuilder
-emptyBuilder =
-    { archetypeSlug = ""
-    , bizName = ""
-    , bizType = ""
-    , city = ""
-    , hours = ""
-    , goal = ""
-    , goalUrl = ""
-    , catchPhrases = []
-    , offTopics = []
-    , never = ""
-    , handoffConditions = []
-    }
-
-
-type alias Archetype =
-    { slug : String
-    , label : String
-    , description : String
-    , greeting : String
-    }
-
-
-getPersona : (Data Persona -> msg) -> Cmd msg
-getPersona =
-    get "/api/persona" personaDecoder
-
-
-savePersona : { mode : String, builder : PersonaBuilder, customPrompt : String } -> (Data Persona -> msg) -> Cmd msg
-savePersona args =
-    put "/api/persona"
-        (E.object
-            [ ( "mode", E.string args.mode )
-            , ( "builder", encodeBuilder args.builder )
-            , ( "custom_prompt", E.string args.customPrompt )
-            ]
-        )
-        personaDecoder
-
-
-{-| Compose a prompt from unsaved fields. Writes nothing and never touches
-the safety queue, so it's safe to call on every edit.
--}
-previewPersona : PersonaBuilder -> (Data String -> msg) -> Cmd msg
-previewPersona builder =
-    post "/api/persona/preview"
-        (E.object [ ( "builder", encodeBuilder builder ) ])
-        (D.field "prompt" D.string)
-
-
-getArchetypes : (Data (List Archetype) -> msg) -> Cmd msg
-getArchetypes =
-    get "/api/archetypes"
-        (D.field "archetypes"
-            (D.list
-                (D.map4 Archetype
-                    (D.field "slug" D.string)
-                    (D.field "label" D.string)
-                    (D.field "description" D.string)
-                    (D.field "greeting" D.string)
-                )
-            )
-        )
-
-
-encodeBuilder : PersonaBuilder -> E.Value
-encodeBuilder b =
-    E.object
-        [ ( "archetype_slug", E.string b.archetypeSlug )
-        , ( "biz_name", E.string b.bizName )
-        , ( "biz_type", E.string b.bizType )
-        , ( "city", E.string b.city )
-        , ( "hours", E.string b.hours )
-        , ( "goal", E.string b.goal )
-        , ( "goal_url", E.string b.goalUrl )
-        , ( "catch_phrases", E.list E.string b.catchPhrases )
-        , ( "off_topics", E.list E.string b.offTopics )
-        , ( "never", E.string b.never )
-        , ( "handoff_conditions", E.list E.string b.handoffConditions )
-        ]
-
-
-personaDecoder : Decoder Persona
-personaDecoder =
-    D.map8
-        (\mode builder custom status reason ready prompt pre ->
-            { mode = mode
-            , builder = builder
-            , customPrompt = custom
-            , safetyStatus = status
-            , safetyReason = reason
-            , aiReady = ready
-            , prompt = prompt
-            , preamble = pre
-            , postamble = ""
-            , maxCustomPrompt = 2000
-            }
-        )
-        (D.field "mode" D.string)
-        (D.field "builder" builderDecoder)
-        (D.field "custom_prompt" D.string)
-        (D.at [ "safety", "status" ] D.string)
-        (D.at [ "safety", "reason" ] (D.nullable D.string))
-        (D.at [ "safety", "ai_ready" ] D.bool)
-        (D.field "prompt" D.string)
-        (D.field "preamble" D.string)
-        |> D.andThen
-            (\p ->
-                D.map2 (\postText max -> { p | postamble = postText, maxCustomPrompt = max })
-                    (D.field "postamble" D.string)
-                    (D.field "max_custom_prompt" D.int)
-            )
-
-
-builderDecoder : Decoder PersonaBuilder
-builderDecoder =
-    D.map8
-        (\slug name typ city hours goal url phrases ->
-            { archetypeSlug = slug
-            , bizName = name
-            , bizType = typ
-            , city = city
-            , hours = hours
-            , goal = goal
-            , goalUrl = url
-            , catchPhrases = phrases
-            , offTopics = []
-            , never = ""
-            , handoffConditions = []
-            }
-        )
-        (D.field "archetype_slug" D.string)
-        (D.field "biz_name" D.string)
-        (D.field "biz_type" D.string)
-        (D.field "city" D.string)
-        (D.field "hours" D.string)
-        (D.field "goal" D.string)
-        (D.field "goal_url" D.string)
-        (D.field "catch_phrases" (D.list D.string))
-        |> D.andThen
-            (\b ->
-                D.map3 (\off never handoff -> { b | offTopics = off, never = never, handoffConditions = handoff })
-                    (D.field "off_topics" (D.list D.string))
-                    (D.field "never" D.string)
-                    (D.field "handoff_conditions" (D.list D.string))
-            )
-
-
-
 -- BILLING
 
 
-type alias Billing =
+type alias BillingView =
     { balance : Int
     , repliesUsed : Int
-    , credits : List Credit
-    , unitPriceMilli : Int
-    , currency : String
-    , minCredits : Int
-    , maxCredits : Int
     , metered : Bool
-    , verified : Bool
+    , currency : String
+    , pricing : Pricing
+    , ledger : List CreditEntry
     }
 
 
-type alias Credit =
+type alias CreditEntry =
     { amount : Int
     , source : String
     , expiresAt : Maybe String
@@ -1037,105 +699,65 @@ type alias Order =
     }
 
 
-getBilling : (Data Billing -> msg) -> Cmd msg
+getBilling : (Data BillingView -> msg) -> Cmd msg
 getBilling =
     get "/api/billing" billingDecoder
 
 
 startCheckout : Int -> (Data Order -> msg) -> Cmd msg
 startCheckout credits =
-    post "/api/billing/checkout" (E.object [ ( "credits", E.int credits ) ]) orderDecoder
+    post "/api/billing/checkout"
+        (E.object [ ( "credits", E.int credits ) ])
+        (orderDecoder credits)
 
 
-startVerification : (Data Order -> msg) -> Cmd msg
-startVerification =
-    post "/api/billing/verification" (E.object []) orderDecoder
-
-
-{-| Confirm a completed checkout. Validates the signature only — credits are
-granted by the Razorpay webhook, never by this call.
--}
-verifyPayment :
-    { orderId : String, paymentId : String, signature : String }
-    -> (Data () -> msg)
-    -> Cmd msg
-verifyPayment args =
-    post "/api/billing/verify"
-        (E.object
-            [ ( "razorpay_order_id", E.string args.orderId )
-            , ( "razorpay_payment_id", E.string args.paymentId )
-            , ( "razorpay_signature", E.string args.signature )
-            ]
-        )
-        (D.succeed ())
-
-
-orderDecoder : Decoder Order
-orderDecoder =
+orderDecoder : Int -> Decoder Order
+orderDecoder fallbackCredits =
     D.map5 Order
         (D.field "order_id" D.string)
         (D.field "amount" D.int)
         (D.field "currency" D.string)
         (D.field "key_id" D.string)
-        (D.field "credits" D.int)
+        (withDefault fallbackCredits (D.field "credits" D.int))
 
 
-billingDecoder : Decoder Billing
+billingDecoder : Decoder BillingView
 billingDecoder =
-    D.map8
-        (\balance used credits price currency minC maxC metered ->
-            { balance = balance
-            , repliesUsed = used
-            , credits = credits
-            , unitPriceMilli = price
-            , currency = currency
-            , minCredits = minC
-            , maxCredits = maxC
-            , metered = metered
-            , verified = False
-            }
-        )
+    D.map6 BillingView
         (D.field "balance" D.int)
         (D.field "replies_used" D.int)
-        (D.field "credits" (D.list creditDecoder))
-        (D.field "unit_price_milli" D.int)
-        (D.field "currency" D.string)
-        (D.field "min_credits" D.int)
-        (D.field "max_credits" D.int)
         (D.field "metered" D.bool)
-        |> D.andThen (\b -> D.map (\v -> { b | verified = v }) (D.field "verified" D.bool))
+        (D.field "currency" D.string)
+        (D.field "pricing" pricingDecoder)
+        (D.field "ledger" (D.list creditDecoder))
 
 
-creditDecoder : Decoder Credit
+creditDecoder : Decoder CreditEntry
 creditDecoder =
-    D.map3 Credit
+    D.map3 CreditEntry
         (D.field "amount" D.int)
         (D.field "source" D.string)
-        (D.field "expires_at" (D.nullable D.string))
+        (withDefault Nothing (D.field "expires_at" (D.nullable D.string)))
 
 
 
 -- SETTINGS
 
 
-{-| The conversation window and the locale pair.
-
-Each knob is a `Maybe`: `Nothing` is "no override, use the default", which is
-the state most accounts should stay in. The view shows `defaults` as the
-input's placeholder rather than pre-filling it, so an untouched form saves
-nothing and clearing a box returns that knob to the default.
-
--}
-type alias Settings =
-    { conversation : Conversation
+type alias SettingsView =
+    { conversation : ConversationSettings
+    , notifications : NotificationSettings
     , locale : String
     , currency : String
-    , locales : List String
-    , currencies : List String
     }
 
 
-type alias Conversation =
+type alias NotificationSettings =
+    { handoffEmail : Bool
+    }
+
+
+type alias ConversationSettings =
     { idleGapMins : Maybe Int
     , handoffCooldownMins : Maybe Int
     , maxHistoryMessages : Maybe Int
@@ -1152,16 +774,36 @@ type alias ConversationBounds =
     }
 
 
-getSettings : (Data Settings -> msg) -> Cmd msg
+defaultBounds : ConversationBounds
+defaultBounds =
+    { idleGapMins = 240
+    , handoffCooldownMins = 60
+    , maxHistoryMessages = 20
+    }
+
+
+defaultMinBounds : ConversationBounds
+defaultMinBounds =
+    { idleGapMins = 5
+    , handoffCooldownMins = 5
+    , maxHistoryMessages = 4
+    }
+
+
+defaultMaxBounds : ConversationBounds
+defaultMaxBounds =
+    { idleGapMins = 1440
+    , handoffCooldownMins = 1440
+    , maxHistoryMessages = 200
+    }
+
+
+getSettings : (Data SettingsView -> msg) -> Cmd msg
 getSettings =
     get "/api/settings" settingsDecoder
 
 
-{-| Save the window. `Nothing` encodes as JSON `null`, which is how the API
-distinguishes "clear this override" from "leave it alone" — an absent field
-is the latter, so every knob is always sent.
--}
-saveConversation : Conversation -> (Data Settings -> msg) -> Cmd msg
+saveConversation : ConversationSettings -> (Data SettingsView -> msg) -> Cmd msg
 saveConversation conversation =
     put "/api/settings"
         (E.object
@@ -1177,7 +819,20 @@ saveConversation conversation =
         settingsDecoder
 
 
-saveLocale : { locale : String, currency : String } -> (Data Settings -> msg) -> Cmd msg
+saveNotifications : NotificationSettings -> (Data SettingsView -> msg) -> Cmd msg
+saveNotifications notifications =
+    put "/api/settings"
+        (E.object
+            [ ( "notifications"
+              , E.object
+                    [ ( "handoff_email", E.bool notifications.handoffEmail ) ]
+              )
+            ]
+        )
+        settingsDecoder
+
+
+saveLocale : { locale : String, currency : String } -> (Data SettingsView -> msg) -> Cmd msg
 saveLocale fields =
     put "/api/settings"
         (E.object
@@ -1193,25 +848,30 @@ maybeInt =
     Maybe.map E.int >> Maybe.withDefault E.null
 
 
-settingsDecoder : Decoder Settings
+settingsDecoder : Decoder SettingsView
 settingsDecoder =
-    D.map5 Settings
+    D.map4 SettingsView
         (D.field "conversation" conversationDecoder)
+        (D.field "notifications" notificationsDecoder)
         (D.field "locale" D.string)
         (D.field "currency" D.string)
-        (D.field "locales" (D.list D.string))
-        (D.field "currencies" (D.list D.string))
 
 
-conversationDecoder : Decoder Conversation
+notificationsDecoder : Decoder NotificationSettings
+notificationsDecoder =
+    D.map NotificationSettings
+        (D.field "handoff_email" D.bool)
+
+
+conversationDecoder : Decoder ConversationSettings
 conversationDecoder =
-    D.map6 Conversation
+    D.map6 ConversationSettings
         (D.field "idle_gap_mins" (D.nullable D.int))
         (D.field "handoff_cooldown_mins" (D.nullable D.int))
         (D.field "max_history_messages" (D.nullable D.int))
-        (D.field "defaults" boundsDecoder)
-        (D.field "min" boundsDecoder)
-        (D.field "max" boundsDecoder)
+        (withDefault defaultBounds (D.field "defaults" boundsDecoder))
+        (withDefault defaultMinBounds (D.field "min" boundsDecoder))
+        (withDefault defaultMaxBounds (D.field "max" boundsDecoder))
 
 
 boundsDecoder : Decoder ConversationBounds
@@ -1223,438 +883,9 @@ boundsDecoder =
 
 
 
--- OPERATOR
-
-
-{-| `/api/manage/*`.
-
-Authenticated by the Cloudflare Access JWT rather than the session cookie, so
-these calls carry no credential of their own — `CF_Authorization` rides along
-like any other cookie. A caller without it gets `access_required`, which the
-console renders as an explanation rather than as a failure.
-
--}
-type alias Overview =
-    { actor : String
-    , tenantCount : Int
-    , health : Health
-    }
-
-
-type alias Health =
-    { overall : String
-    , checks : List HealthCheck
-    }
-
-
-type alias HealthCheck =
-    { name : String
-    , status : String
-    , detail : String
-    }
-
-
-type alias AdminPricing =
-    { minCredits : Int
-    , maxCredits : Int
-    , maxCreditsCeiling : Int
-    , amounts : List PricingAmount
-    , concepts : List PricingConcept
-    , currencies : List String
-    }
-
-
-type alias PricingAmount =
-    { concept : String
-    , currency : String
-    , amount : Int
-    }
-
-
-type alias PricingConcept =
-    { wire : String
-    , label : String
-    , unitCaption : String
-    , isMilli : Bool
-    }
-
-
-type alias AdminDemo =
-    { enabled : Bool
-    , personaGenerationPrompt : String
-    , regenerationCadenceMins : Int
-    , idleTimeoutSecs : Int
-    , maxUserTurns : Int
-    , generatedAt : Maybe String
-    , defaultPrompt : String
-    }
-
-
-{-| A catalog row as the operator API returns it: every field, including the
-safety verdict and timestamps the tenant-facing `Archetype` hides.
--}
-type alias AdminArchetype =
-    { slug : String
-    , label : String
-    , description : String
-    , voicePrompt : String
-    , greeting : String
-    , catchPhrases : List String
-    , offTopics : List String
-    , never : String
-    , handoffConditions : List String
-    , safetyStatus : String
-    , safetyReason : Maybe String
-    , updatedAt : Maybe String
-    }
-
-
-type alias TenantRow =
-    { id : String
-    , email : String
-    , name : Maybe String
-    , plan : String
-    , currency : String
-    , createdAt : String
-    }
-
-
-type alias TenantDetail =
-    { tenant : TenantRow
-    , balance : Int
-    , repliesUsed : Int
-    , onboardingComplete : Bool
-    , whatsappNumbers : List String
-    , audit : List AuditEntry
-    }
-
-
-type alias AuditEntry =
-    { at : String
-    , actor : String
-    , action : String
-    , resourceType : String
-    , resourceId : Maybe String
-    }
-
-
-getOverview : (Data Overview -> msg) -> Cmd msg
-getOverview =
-    get "/api/manage/overview" overviewDecoder
-
-
-getAdminPricing : (Data AdminPricing -> msg) -> Cmd msg
-getAdminPricing =
-    get "/api/manage/pricing" adminPricingDecoder
-
-
-{-| Amounts are sent as the full list rather than as a diff: the operator
-edits a table, and a partial update would leave the rows nobody touched at
-whatever the server last had, which is the same thing with more ways to go
-wrong.
--}
-saveAdminPricing :
-    { minCredits : Int, maxCredits : Int, amounts : List PricingAmount }
-    -> (Data AdminPricing -> msg)
-    -> Cmd msg
-saveAdminPricing fields =
-    put "/api/manage/pricing"
-        (E.object
-            [ ( "min_credits", E.int fields.minCredits )
-            , ( "max_credits", E.int fields.maxCredits )
-            , ( "amounts"
-              , E.list
-                    (\a ->
-                        E.object
-                            [ ( "concept", E.string a.concept )
-                            , ( "currency", E.string a.currency )
-                            , ( "amount", E.int a.amount )
-                            ]
-                    )
-                    fields.amounts
-              )
-            ]
-        )
-        adminPricingDecoder
-
-
-getAdminArchetypes : (Data (List AdminArchetype) -> msg) -> Cmd msg
-getAdminArchetypes =
-    get "/api/manage/archetypes"
-        (D.field "archetypes" (D.list adminArchetypeDecoder))
-
-
-{-| Create or replace one row. The slug is the key, so it lives in the URL
-rather than the body; the response is the row as written, with its safety
-verdict reset to pending.
--}
-saveAdminArchetype : AdminArchetype -> (Data AdminArchetype -> msg) -> Cmd msg
-saveAdminArchetype row =
-    put ("/api/manage/archetypes/" ++ row.slug)
-        (E.object
-            [ ( "label", E.string row.label )
-            , ( "description", E.string row.description )
-            , ( "voice_prompt", E.string row.voicePrompt )
-            , ( "greeting", E.string row.greeting )
-            , ( "catch_phrases", E.list E.string row.catchPhrases )
-            , ( "off_topics", E.list E.string row.offTopics )
-            , ( "never", E.string row.never )
-            , ( "handoff_conditions", E.list E.string row.handoffConditions )
-            ]
-        )
-        adminArchetypeDecoder
-
-
-deleteAdminArchetype : String -> (Data () -> msg) -> Cmd msg
-deleteAdminArchetype slug =
-    delete ("/api/manage/archetypes/" ++ slug) (E.object []) (D.succeed ())
-
-
-getAdminDemo : (Data AdminDemo -> msg) -> Cmd msg
-getAdminDemo =
-    get "/api/manage/demo" adminDemoDecoder
-
-
-saveAdminDemo : AdminDemo -> (Data AdminDemo -> msg) -> Cmd msg
-saveAdminDemo demo =
-    put "/api/manage/demo"
-        (E.object
-            [ ( "enabled", E.bool demo.enabled )
-            , ( "persona_generation_prompt", E.string demo.personaGenerationPrompt )
-            , ( "regeneration_cadence_mins", E.int demo.regenerationCadenceMins )
-            , ( "idle_timeout_secs", E.int demo.idleTimeoutSecs )
-            , ( "max_user_turns", E.int demo.maxUserTurns )
-            ]
-        )
-        -- PUT answers the saved config alone, without the `generated_at` and
-        -- `default_prompt` the GET carries, so the response is decoded back
-        -- into the fields the caller already holds.
-        (demoConfigDecoder demo.generatedAt demo.defaultPrompt)
-
-
-rerollDemo : (Data () -> msg) -> Cmd msg
-rerollDemo =
-    post "/api/manage/demo/reroll" (E.object []) (D.succeed ())
-
-
-listTenants : String -> (Data (List TenantRow) -> msg) -> Cmd msg
-listTenants query =
-    get ("/api/manage/tenants" ++ queryString [ ( "q", query ) ])
-        (D.field "tenants" (D.list tenantRowDecoder))
-
-
-getTenantDetail : String -> (Data TenantDetail -> msg) -> Cmd msg
-getTenantDetail id =
-    get ("/api/manage/tenants/" ++ id) tenantDetailDecoder
-
-
-grantReplies : String -> { count : Int, expiresDays : Maybe Int } -> (Data () -> msg) -> Cmd msg
-grantReplies id fields =
-    post ("/api/manage/tenants/" ++ id ++ "/grant-replies")
-        (E.object
-            (( "count", E.int fields.count )
-                :: (case fields.expiresDays of
-                        Just days ->
-                            [ ( "expires_in_days", E.int days ) ]
-
-                        Nothing ->
-                            []
-                   )
-            )
-        )
-        (D.succeed ())
-
-
-deleteTenant : String -> (Data () -> msg) -> Cmd msg
-deleteTenant id =
-    delete ("/api/manage/tenants/" ++ id) (E.object []) (D.succeed ())
-
-
-getAudit : { actor : String, action : String } -> (Data (List AuditEntry) -> msg) -> Cmd msg
-getAudit filters =
-    get
-        ("/api/manage/audit"
-            ++ queryString [ ( "actor", filters.actor ), ( "action", filters.action ) ]
-        )
-        (D.field "entries" (D.list auditDecoder))
-
-
-{-| Build a query string from the pairs whose value isn't blank. Values are
-percent-encoded, because an operator searching for "a+b@example.com" would
-otherwise send a space.
--}
-queryString : List ( String, String ) -> String
-queryString pairs =
-    case List.filter (\( _, v ) -> String.trim v /= "") pairs of
-        [] ->
-            ""
-
-        kept ->
-            "?"
-                ++ String.join "&"
-                    (List.map (\( k, v ) -> k ++ "=" ++ Url.percentEncode (String.trim v)) kept)
-
-
-overviewDecoder : Decoder Overview
-overviewDecoder =
-    D.map3 Overview
-        (D.field "actor" D.string)
-        (D.field "tenant_count" D.int)
-        (D.field "health" healthDecoder)
-
-
-healthDecoder : Decoder Health
-healthDecoder =
-    D.map2 Health
-        (D.field "overall" D.string)
-        (D.field "checks" (D.list healthCheckDecoder))
-
-
-healthCheckDecoder : Decoder HealthCheck
-healthCheckDecoder =
-    D.map3 HealthCheck
-        (D.field "name" D.string)
-        (D.field "status" D.string)
-        (D.field "detail" D.string)
-
-
-adminPricingDecoder : Decoder AdminPricing
-adminPricingDecoder =
-    D.map6 AdminPricing
-        (D.field "min_credits" D.int)
-        (D.field "max_credits" D.int)
-        (D.field "max_credits_ceiling" D.int)
-        (D.field "amounts" (D.list pricingAmountDecoder))
-        (D.field "concepts" (D.list pricingConceptDecoder))
-        (D.field "currencies" (D.list D.string))
-
-
-pricingAmountDecoder : Decoder PricingAmount
-pricingAmountDecoder =
-    D.map3 PricingAmount
-        (D.field "concept" D.string)
-        (D.field "currency" D.string)
-        (D.field "amount" D.int)
-
-
-pricingConceptDecoder : Decoder PricingConcept
-pricingConceptDecoder =
-    D.map4 PricingConcept
-        (D.field "wire" D.string)
-        (D.field "label" D.string)
-        (D.field "unit_caption" D.string)
-        (D.field "is_milli" D.bool)
-
-
-adminDemoDecoder : Decoder AdminDemo
-adminDemoDecoder =
-    D.field "generated_at" (D.nullable D.string)
-        |> D.andThen
-            (\generatedAt ->
-                D.field "default_prompt" D.string
-                    |> D.andThen
-                        (\defaultPrompt ->
-                            D.field "config" (demoConfigDecoder generatedAt defaultPrompt)
-                        )
-            )
-
-
-demoConfigDecoder : Maybe String -> String -> Decoder AdminDemo
-demoConfigDecoder generatedAt defaultPrompt =
-    D.map5 (\a b c d e -> AdminDemo a b c d e generatedAt defaultPrompt)
-        (D.field "enabled" D.bool)
-        (D.field "persona_generation_prompt" D.string)
-        (D.field "regeneration_cadence_mins" D.int)
-        (D.field "idle_timeout_secs" D.int)
-        (D.field "max_user_turns" D.int)
-
-
-adminArchetypeDecoder : Decoder AdminArchetype
-adminArchetypeDecoder =
-    D.map8
-        (\slug label description voicePrompt greeting catchPhrases offTopics never ->
-            { slug = slug
-            , label = label
-            , description = description
-            , voicePrompt = voicePrompt
-            , greeting = greeting
-            , catchPhrases = catchPhrases
-            , offTopics = offTopics
-            , never = never
-            , handoffConditions = []
-            , safetyStatus = "pending"
-            , safetyReason = Nothing
-            , updatedAt = Nothing
-            }
-        )
-        (D.field "slug" D.string)
-        (D.field "label" D.string)
-        (D.field "description" D.string)
-        (D.field "voice_prompt" D.string)
-        (D.field "greeting" D.string)
-        (D.field "catch_phrases" (D.list D.string))
-        (D.field "off_topics" (D.list D.string))
-        (D.field "never" D.string)
-        |> D.andThen
-            (\row ->
-                D.map4
-                    (\handoff status reason updated ->
-                        { row
-                            | handoffConditions = handoff
-                            , safetyStatus = status
-                            , safetyReason = reason
-                            , updatedAt = updated
-                        }
-                    )
-                    (D.field "handoff_conditions" (D.list D.string))
-                    (D.at [ "safety", "status" ] D.string)
-                    (D.at [ "safety", "vague_reason" ] (D.nullable D.string))
-                    (D.field "updated_at" (D.nullable D.string))
-            )
-
-
-tenantRowDecoder : Decoder TenantRow
-tenantRowDecoder =
-    D.map6 TenantRow
-        (D.field "id" D.string)
-        (D.field "email" D.string)
-        (D.field "name" (D.nullable D.string))
-        (D.field "plan" D.string)
-        (D.field "currency" D.string)
-        (D.field "created_at" D.string)
-
-
-tenantDetailDecoder : Decoder TenantDetail
-tenantDetailDecoder =
-    D.map6 TenantDetail
-        (D.field "tenant" tenantRowDecoder)
-        -- `TenantBilling` carries the ledger, not a balance: the number the
-        -- operator wants is the sum of what is left, and the server has
-        -- already dropped expired entries via `refresh_billing`.
-        (D.at [ "billing", "credits" ] (D.list (D.field "amount" D.int)) |> D.map List.sum)
-        (D.at [ "billing", "replies_used" ] D.int)
-        (D.at [ "onboarding", "completed" ] D.bool)
-        (D.field "whatsapp" (D.list (D.field "phone_number" D.string)))
-        (D.field "audit" (D.list auditDecoder))
-
-
-auditDecoder : Decoder AuditEntry
-auditDecoder =
-    D.map5 AuditEntry
-        (D.field "created_at" D.string)
-        (D.field "actor_email" D.string)
-        (D.field "action" D.string)
-        (D.field "resource_type" D.string)
-        (D.field "resource_id" (D.nullable D.string))
-
-
-
 -- HELPERS
 
 
-{-| A decoder that falls back instead of failing. Used for optional nested
-fields where an absent value is normal rather than an error.
--}
 withDefault : a -> Decoder a -> Decoder a
 withDefault fallback decoder =
     D.oneOf [ decoder, D.succeed fallback ]

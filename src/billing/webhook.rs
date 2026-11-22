@@ -1,5 +1,9 @@
-//! Razorpay webhook handler. Processes payment events.
-//! Idempotent: checks payment_id in D1 before granting credits or address packs.
+//! Razorpay webhook handler.
+//!
+//! Fails closed if `RAZORPAY_WEBHOOK_SECRET` is unset or empty, verifies the
+//! HMAC-SHA256 signature, deduplicates by `razorpay_payment_id`, records the
+//! actual monetary amount and credits in D1 `payments`, and grants purchased
+//! credits to the tenant.
 
 use wasm_bindgen::JsValue;
 use worker::*;
@@ -7,22 +11,85 @@ use worker::*;
 use super::razorpay;
 use crate::helpers::generate_id;
 
-/// Handle POST /webhook/razorpay
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) struct CapturedPayment {
+    pub payment_id: String,
+    pub order_id: Option<String>,
+    pub tenant_id: String,
+    pub amount: i64,
+    pub credits: i64,
+    pub currency: String,
+}
+
+/// Parse a Razorpay `payment.captured` webhook payload into a validated struct.
+/// Returns `None` if `tenant_id`, `payment_id`, or positive `credits` are missing.
+pub(crate) fn parse_captured_payment(payload: &serde_json::Value) -> Option<CapturedPayment> {
+    let payment = payload.pointer("/payload/payment/entity")?;
+    let payment_id = payment
+        .get("id")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())?
+        .to_string();
+    let order_id = payment
+        .get("order_id")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(String::from);
+    let tenant_id = payment
+        .pointer("/notes/tenant_id")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())?
+        .to_string();
+    let credits = payment
+        .pointer("/notes/credits")
+        .and_then(|v| {
+            v.as_i64()
+                .or_else(|| v.as_str().and_then(|s| s.trim().parse::<i64>().ok()))
+        })
+        .unwrap_or(0);
+    if credits <= 0 {
+        return None;
+    }
+    let amount = payment.get("amount").and_then(|v| v.as_i64()).unwrap_or(0);
+    let currency = payment
+        .get("currency")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .unwrap_or(super::DEFAULT_CURRENCY)
+        .to_string();
+
+    Some(CapturedPayment {
+        payment_id,
+        order_id,
+        tenant_id,
+        amount,
+        credits,
+        currency,
+    })
+}
+
+/// Handle `POST /webhook/razorpay`
 pub async fn handle_razorpay_webhook(mut req: Request, env: Env) -> Result<Response> {
+    let webhook_secret = env
+        .secret("RAZORPAY_WEBHOOK_SECRET")
+        .map(|s| s.to_string())
+        .unwrap_or_default();
+    if webhook_secret.trim().is_empty() {
+        console_log!("RAZORPAY_WEBHOOK_SECRET is not configured");
+        return Response::error("Webhook secret not configured", 500);
+    }
+
     let signature = req
         .headers()
         .get("X-Razorpay-Signature")?
         .unwrap_or_default();
     let body = req.text().await?;
 
-    let webhook_secret = env
-        .secret("RAZORPAY_WEBHOOK_SECRET")
-        .map(|s| s.to_string())
-        .unwrap_or_default();
-
-    if !webhook_secret.is_empty()
-        && !razorpay::verify_webhook_signature(&body, &signature, &webhook_secret)
-    {
+    if !razorpay::verify_webhook_signature(&body, &signature, &webhook_secret) {
         console_log!("Invalid Razorpay webhook signature");
         return Response::error("Invalid signature", 401);
     }
@@ -34,99 +101,29 @@ pub async fn handle_razorpay_webhook(mut req: Request, env: Env) -> Result<Respo
 
     match event {
         "payment.captured" => {
-            let payment = match payload.pointer("/payload/payment/entity") {
-                Some(p) => p,
-                None => return Response::ok("OK"),
-            };
-
-            let payment_id = payment.get("id").and_then(|v| v.as_str()).unwrap_or("");
-            let tenant_id = payment
-                .pointer("/notes/tenant_id")
-                .and_then(|v| v.as_str())
-                .unwrap_or("");
-            let kind = payment
-                .pointer("/notes/kind")
-                .and_then(|v| v.as_str())
-                .unwrap_or("reply_credits");
-
-            if tenant_id.is_empty() || payment_id.is_empty() {
-                console_log!("Webhook missing tenant_id/payment_id");
+            let Some(captured) = parse_captured_payment(&payload) else {
+                console_log!("Webhook missing tenant_id, payment_id, or positive credits");
                 return Response::ok("OK");
-            }
+            };
 
             let db = env.d1("DB")?;
 
-            if is_payment_processed(&db, payment_id).await? {
-                console_log!("Payment {payment_id} already processed, skipping");
+            if is_payment_processed(&db, &captured.payment_id).await? {
+                console_log!(
+                    "Payment {} already processed, skipping",
+                    captured.payment_id
+                );
                 return Response::ok("OK");
             }
 
-            let currency = payment
-                .get("currency")
-                .and_then(|v| v.as_str())
-                .unwrap_or("INR");
-
-            // Any captured payment proves the tenant has a working card,
-            // which is the entire point of the verification charge.
-            // Mark them verified before branching on `kind` so credit and
-            // address purchases also satisfy the wizard's verify gate.
-            mark_verified(&db, tenant_id).await?;
-
-            match kind {
-                "verification" => {
-                    record_payment(
-                        &db,
-                        payment_id,
-                        tenant_id,
-                        payment.get("amount").and_then(|v| v.as_i64()).unwrap_or(0),
-                        currency,
-                        "verification",
-                    )
-                    .await?;
-                    // Auto-refund. If the API call fails we log and move
-                    // on. The tenant is already marked verified, so an
-                    // operator can issue the refund manually from the
-                    // Razorpay dashboard.
-                    let key_id = env.secret("RAZORPAY_KEY_ID")?.to_string();
-                    let key_secret = env.secret("RAZORPAY_KEY_SECRET")?.to_string();
-                    match razorpay::refund_payment(&key_id, &key_secret, payment_id).await {
-                        Ok(refund) => {
-                            let refund_id =
-                                refund.get("id").and_then(|v| v.as_str()).unwrap_or("?");
-                            console_log!(
-                                "Verified {tenant_id}; refunded {payment_id} as {refund_id}"
-                            );
-                        }
-                        Err(e) => {
-                            console_log!(
-                                "Verified {tenant_id}; auto-refund failed for {payment_id}: {e}"
-                            );
-                        }
-                    }
-                }
-                _ => {
-                    let credits = payment
-                        .pointer("/notes/credits")
-                        .and_then(|v| v.as_str())
-                        .and_then(|s| s.parse::<i64>().ok())
-                        .unwrap_or(0);
-                    if credits <= 0 {
-                        console_log!("Reply-credit payment with non-positive credits, skipping");
-                        return Response::ok("OK");
-                    }
-                    record_payment(
-                        &db,
-                        payment_id,
-                        tenant_id,
-                        credits,
-                        currency,
-                        "reply_credits",
-                    )
-                    .await?;
-                    super::grant_purchased(&db, tenant_id, credits).await?;
-                    console_log!("Granted {credits} replies to {tenant_id} (payment {payment_id})");
-                }
-            }
+            record_payment(&db, &captured).await?;
+            super::grant_purchased(&db, &captured.tenant_id, captured.credits).await?;
+            console_log!(
+                "Granted {} replies to {} (payment {})",
+                captured.credits,
+                captured.tenant_id,
+                captured.payment_id
+            );
 
             Response::ok("OK")
         }
@@ -134,28 +131,11 @@ pub async fn handle_razorpay_webhook(mut req: Request, env: Env) -> Result<Respo
             console_log!("Razorpay payment failed: {:?}", payload.get("payload"));
             Response::ok("OK")
         }
-
         _ => {
             console_log!("Unhandled Razorpay event: {event}");
             Response::ok("OK")
         }
     }
-}
-
-/// Set `tenants.verified_at = now` if it isn't already. Safe to call on
-/// every captured payment; the SQL is a no-op when the column is set.
-/// We update directly instead of round-tripping via the Tenant struct so
-/// concurrent webhook + admin saves don't race over the column.
-async fn mark_verified(db: &D1Database, tenant_id: &str) -> Result<()> {
-    db.prepare(
-        "UPDATE tenants \
-            SET verified_at = datetime('now'), updated_at = datetime('now') \
-            WHERE id = ? AND verified_at IS NULL",
-    )
-    .bind(&[tenant_id.into()])?
-    .run()
-    .await?;
-    Ok(())
 }
 
 async fn is_payment_processed(db: &D1Database, payment_id: &str) -> Result<bool> {
@@ -167,27 +147,86 @@ async fn is_payment_processed(db: &D1Database, payment_id: &str) -> Result<bool>
     Ok(result.is_some())
 }
 
-async fn record_payment(
-    db: &D1Database,
-    payment_id: &str,
-    tenant_id: &str,
-    amount: i64,
-    currency: &str,
-    _kind: &str,
-) -> Result<()> {
+async fn record_payment(db: &D1Database, captured: &CapturedPayment) -> Result<()> {
     let id = generate_id();
+    let order_val: JsValue = match &captured.order_id {
+        Some(oid) => oid.as_str().into(),
+        None => JsValue::NULL,
+    };
     let stmt = db.prepare(
-        "INSERT INTO payments (id, tenant_id, razorpay_payment_id, amount, currency, status)
-         VALUES (?, ?, ?, ?, ?, 'captured')",
+        "INSERT INTO payments (id, tenant_id, razorpay_payment_id, razorpay_order_id, amount, credits, currency, status)
+         VALUES (?, ?, ?, ?, ?, ?, ?, 'captured')",
     );
     stmt.bind(&[
         id.as_str().into(),
-        tenant_id.into(),
-        payment_id.into(),
-        JsValue::from(amount as f64),
-        currency.into(),
+        captured.tenant_id.as_str().into(),
+        captured.payment_id.as_str().into(),
+        order_val,
+        JsValue::from(captured.amount as f64),
+        JsValue::from(captured.credits as f64),
+        captured.currency.as_str().into(),
     ])?
     .run()
     .await?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn parses_valid_captured_payment() {
+        let payload = json!({
+            "event": "payment.captured",
+            "payload": {
+                "payment": {
+                    "entity": {
+                        "id": "pay_123",
+                        "order_id": "order_456",
+                        "amount": 5000,
+                        "currency": "INR",
+                        "notes": {
+                            "tenant_id": "tenant-1",
+                            "kind": "reply_credits",
+                            "credits": "500"
+                        }
+                    }
+                }
+            }
+        });
+        assert_eq!(
+            parse_captured_payment(&payload),
+            Some(CapturedPayment {
+                payment_id: "pay_123".to_string(),
+                order_id: Some("order_456".to_string()),
+                tenant_id: "tenant-1".to_string(),
+                amount: 5000,
+                credits: 500,
+                currency: "INR".to_string(),
+            })
+        );
+    }
+
+    #[test]
+    fn rejects_missing_notes_or_zero_credits() {
+        let missing_tenant = json!({
+            "payload": { "payment": { "entity": {
+                "id": "pay_1",
+                "amount": 1000,
+                "notes": { "credits": "100" }
+            }}}
+        });
+        assert_eq!(parse_captured_payment(&missing_tenant), None);
+
+        let zero_credits = json!({
+            "payload": { "payment": { "entity": {
+                "id": "pay_1",
+                "amount": 1000,
+                "notes": { "tenant_id": "t1", "credits": "0" }
+            }}}
+        });
+        assert_eq!(parse_captured_payment(&zero_credits), None);
+    }
 }

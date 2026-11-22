@@ -1,14 +1,10 @@
 //! `/api/whatsapp/*` — the tenant's connected WhatsApp numbers.
-//!
-//! Connecting a number goes through Meta's Embedded Signup, which is a
-//! redirect flow the Worker still serves directly at `/whatsapp/signup/*`.
-//! This module covers everything after that: listing what's connected,
-//! editing the auto-reply, and disconnecting.
 
 use serde::Serialize;
 use worker::*;
 
-use crate::helpers::{generate_token, now_iso, truncate};
+use crate::helpers::{generate_token, now_iso, sha256_hex, truncate};
+use crate::safety_queue::{self, SafetyJob, SafetyTarget};
 use crate::storage::*;
 use crate::types::*;
 
@@ -18,16 +14,12 @@ pub struct AccountView {
     pub name: String,
     pub phone_number: String,
     pub phone_number_id: String,
+    pub waba_id: Option<String>,
     pub reply: ReplyView,
+    pub canned_safety_status: String,
     pub created_at: String,
 }
 
-/// The auto-reply settings for one number.
-///
-/// `mode` is `"canned"` or `"prompt"`; `text` is the canned message or the
-/// AI instruction depending on which. Flattening the `ReplyResponse` enum
-/// into two fields keeps the frontend's decoder trivial — it's a radio
-/// button and a textarea.
 #[derive(Serialize)]
 pub struct ReplyView {
     pub enabled: bool,
@@ -36,20 +28,14 @@ pub struct ReplyView {
     pub wait_seconds: u32,
 }
 
-/// Parameters for Meta's Embedded Signup JS SDK.
 #[derive(Serialize)]
 pub struct SignupView {
     pub app_id: String,
     pub config_id: String,
-    /// One-shot CSRF nonce, minted per read and valid for 10 minutes. The
-    /// signup callback refuses a state it can't find in KV.
     pub state: String,
 }
 
 impl SignupView {
-    /// `None` when the operator hasn't configured WhatsApp signup, so the
-    /// frontend can hide the button instead of rendering one that dead-ends
-    /// in the callback.
     pub async fn resolve(
         env: &Env,
         kv: &kv::KvStore,
@@ -85,20 +71,22 @@ impl SignupView {
 impl From<&WhatsAppAccount> for AccountView {
     fn from(a: &WhatsAppAccount) -> Self {
         let (mode, text) = match &a.auto_reply.response {
+            ReplyResponse::Ai => ("ai", String::new()),
             ReplyResponse::Canned { text } => ("canned", text.clone()),
-            ReplyResponse::Prompt { text } => ("prompt", text.clone()),
         };
         AccountView {
             id: a.id.clone(),
             name: a.name.clone(),
             phone_number: a.phone_number.clone(),
             phone_number_id: a.phone_number_id.clone(),
+            waba_id: a.waba_id.clone(),
             reply: ReplyView {
                 enabled: a.auto_reply.enabled,
                 mode,
                 text,
                 wait_seconds: a.auto_reply.wait_seconds,
             },
+            canned_safety_status: a.canned_safety.status.as_str().to_string(),
             created_at: a.created_at.clone(),
         }
     }
@@ -140,27 +128,70 @@ pub async fn handle(mut req: Request, env: Env, rest: &[&str]) -> Result<Respons
                 account.name = truncate(name.trim(), 200);
             }
 
-            // Auto-reply. `mode` picks which arm of ReplyResponse to build;
-            // an unknown mode falls back to canned, which cannot spend a
-            // credit and cannot reach the model.
-            if let Some(reply) = body.get("reply") {
-                account.auto_reply.enabled = super::field_bool(reply, "enabled");
-                let mode = super::field(reply, "mode");
-                let text = truncate(&super::field(reply, "text"), 2000);
-                if mode == "prompt" && text.is_empty() {
-                    return super::invalid("Write the instruction the AI should follow.");
-                }
-                if mode == "canned" && text.is_empty() && account.auto_reply.enabled {
-                    return super::invalid("Write the message to send.");
-                }
-                account.auto_reply.set_default_response(&mode, text);
-                if let Some(n) = super::field_i64(reply, "wait_seconds") {
-                    account.auto_reply.wait_seconds = n.clamp(0, 30) as u32;
+            // Accept flat `{ name, enabled, mode, text, wait_seconds }` (and
+            // fall back to nested `reply` object if provided).
+            let reply_src = body.get("reply").filter(|v| v.is_object()).unwrap_or(&body);
+
+            if let Some(enabled) = reply_src.get("enabled").and_then(|v| v.as_bool()) {
+                account.auto_reply.enabled = enabled;
+            }
+            if let Some(n) = super::field_i64(reply_src, "wait_seconds") {
+                account.auto_reply.wait_seconds = n.clamp(0, 30) as u32;
+            }
+
+            let mut enqueue_job: Option<SafetyJob> = None;
+            if reply_src.get("mode").is_some() {
+                let mode = super::field(reply_src, "mode");
+                match mode.as_str() {
+                    "ai" => {
+                        account.auto_reply.response = ReplyResponse::Ai;
+                    }
+                    "canned" => {
+                        let text = super::field(reply_src, "text");
+                        if text.is_empty() {
+                            return super::invalid("Write the canned reply message.");
+                        }
+                        if text.chars().count() > 2000 {
+                            return super::invalid(
+                                "Canned reply must be 2000 characters or fewer.",
+                            );
+                        }
+                        let content_hash = sha256_hex(&text);
+                        account.auto_reply.response = ReplyResponse::Canned { text };
+                        if crate::dev_bypass::active(&env) {
+                            account.canned_safety = SafetyState {
+                                status: SafetyStatus::Approved,
+                                content_hash: Some(content_hash),
+                                checked_at: Some(now_iso()),
+                                vague_reason: None,
+                            };
+                        } else {
+                            account.canned_safety = SafetyState {
+                                status: SafetyStatus::Pending,
+                                content_hash: None,
+                                checked_at: None,
+                                vague_reason: None,
+                            };
+                            enqueue_job = Some(SafetyJob {
+                                tenant_id: tenant_id.clone(),
+                                target: SafetyTarget::CannedReply {
+                                    account_id: account.id.clone(),
+                                },
+                                content_hash,
+                            });
+                        }
+                    }
+                    _ => {
+                        return super::invalid("Reply mode must be 'ai' or 'canned'.");
+                    }
                 }
             }
 
             account.updated_at = now_iso();
             save_whatsapp_account(&kv, &account).await?;
+            if let Some(job) = enqueue_job {
+                let _ = safety_queue::enqueue(&env, job).await;
+            }
             super::json(&AccountView::from(&account))
         }
 
@@ -176,11 +207,6 @@ pub async fn handle(mut req: Request, env: Env, rest: &[&str]) -> Result<Respons
     }
 }
 
-/// Load an account only if this tenant owns it.
-///
-/// Ownership is checked here rather than by the caller so no endpoint can
-/// forget: WhatsApp account ids are a flat KV namespace, so without this an
-/// id from another tenant would load fine.
 async fn owned(kv: &kv::KvStore, tenant_id: &str, id: &str) -> Result<Option<WhatsAppAccount>> {
     Ok(get_whatsapp_account(kv, id)
         .await?

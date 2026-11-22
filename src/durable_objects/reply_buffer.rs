@@ -1,8 +1,8 @@
 //! Buffers inbound messages from a single conversation for `wait_seconds`,
-//! then sends one combined AI reply. Drops buffered bodies immediately
-//! after the AI call returns.
+//! then sends one combined reply. Drops buffered bodies immediately after
+//! reading them in `alarm`.
 //!
-//! Keyed by `(tenant_id, channel, sender)`: one DO instance per
+//! Keyed by `(tenant_id, channel, conversation_key)`: one DO instance per
 //! conversation. Sliding window: each new message resets the alarm.
 
 use std::time::Duration;
@@ -27,6 +27,8 @@ struct ConversationCtx {
     channel: Channel,
     sender: String,
     recipient: String,
+    #[serde(default)]
+    reply_to: String,
     channel_account_id: String,
 }
 
@@ -53,9 +55,10 @@ impl DurableObject for ReplyBufferDO {
 
         let ctx = ConversationCtx {
             tenant_id: msg.tenant_id.clone(),
-            channel: msg.channel.clone(),
+            channel: msg.channel,
             sender: msg.sender.clone(),
             recipient: msg.recipient.clone(),
+            reply_to: msg.conversation_key(),
             channel_account_id: msg.channel_account_id.clone(),
         };
         self.state.storage().put("ctx", &ctx).await?;
@@ -76,7 +79,6 @@ impl DurableObject for ReplyBufferDO {
         });
         self.state.storage().put("pending", &pending).await?;
 
-        // (Re)schedule alarm. Sliding window.
         self.state
             .storage()
             .set_alarm(Duration::from_secs(payload.wait_seconds.max(1) as u64))
@@ -96,8 +98,6 @@ impl DurableObject for ReplyBufferDO {
             .unwrap_or_default();
         let ctx: Option<ConversationCtx> = self.state.storage().get("ctx").await.ok().flatten();
 
-        // Drop everything before the LLM call. If the call fails or hangs,
-        // we don't want to keep bodies around in DO storage.
         let _ = self.state.storage().delete_all().await;
 
         let ctx = match ctx {
@@ -116,12 +116,19 @@ impl DurableObject for ReplyBufferDO {
             .collect::<Vec<_>>()
             .join("\n");
 
+        let reply_to = if ctx.reply_to.is_empty() {
+            ctx.sender.clone()
+        } else {
+            ctx.reply_to
+        };
+
         let synth = InboundMessage {
             id: last.id,
             channel: ctx.channel,
             sender: ctx.sender,
             sender_name: first.sender_name,
             recipient: ctx.recipient,
+            reply_to,
             body: combined_body,
             has_attachment: false,
             tenant_id: ctx.tenant_id,

@@ -1,4 +1,4 @@
-// Boots the Elm app, and bridges its one port.
+// Boots the Elm app, and bridges its ports (Razorpay checkout + Meta Embedded Signup).
 //
 // This lives in a file rather than inline in the shell for a specific reason:
 // the prerendered marketing pages (index.html, pricing.html, …) are served
@@ -16,105 +16,248 @@
   if (!window.Elm || !window.Elm.Main) return;
 
   // Clear whatever the document already holds before handing <body> to Elm.
-  //
-  // The prerendered marketing pages ship with Elm's own rendered markup in the
-  // body so that a crawler — which never runs this file — can read the page.
-  // Elm does not hydrate, though: `Browser.application` expects to own an
-  // empty body, and when it finds a foreign tree there it renders without
-  // taking ownership. The page then looks perfect and is inert: link clicks
-  // fall through to the browser as full navigations, so every route change is
-  // a page load and the app never behaves as a SPA.
-  //
-  // Clearing first costs at most one frame of blank — the markup Elm renders
-  // immediately afterwards is the same markup that was just removed, because
-  // the snapshot was taken from this app's own output.
   if (document.body) document.body.replaceChildren();
 
-  // No `node`. This is a `Browser.application`, which ignores that field and
-  // takes over <body> wholesale — passing a mount point would imply the app
-  // renders into it, and it does not.
-  //
-  // That matters for the prerendered pages: their body already holds rendered
-  // markup and no placeholder div, so anything that required one here would
-  // leave those pages static and their navigation dead.
-  //
-  // Flags carry what the app cannot discover for itself: the viewport width,
-  // so the first render isn't a desktop layout that immediately reflows on a
-  // phone. Everything else comes from GET /api/bootstrap.
   var app = window.Elm.Main.init({
     flags: { width: window.innerWidth },
   });
 
   // A signal that the app is live, for tests to wait on.
-  //
-  // It has to be a JS global rather than anything in the DOM. The prerendered
-  // pages are snapshots of this app's own output, so every marker rendered
-  // into the markup is present before the bundle has run — a test waiting on
-  // one would pass against an inert page and miss the very failure that
-  // matters most here, a static page whose navigation is dead. A global
-  // cannot be captured by a DOM snapshot, so it means what it says.
   window.__conciergeBooted = true;
 
-  if (!app.ports || !app.ports.openCheckout) return;
+  if (!app.ports) return;
 
-  // Razorpay's checkout is a hosted modal its own SDK opens, so it has to be
-  // a port — there is no redirect-only flow to use instead. The SDK loads on
-  // demand: most sessions never reach billing.
-  //
-  // Every outcome — success, failure, dismissal — sends exactly one message
-  // back, so the Elm side always leaves its "working" state. A success is
-  // still only a claim here; the app confirms it against
-  // POST /api/billing/verify, and credits are granted by the Razorpay
-  // webhook rather than by anything this file can say.
-  app.ports.openCheckout.subscribe(function (order) {
-    function done(result) {
-      app.ports.paymentOutcome.send({
-        orderId: result.orderId || order.order_id || '',
-        paymentId: result.paymentId || '',
-        signature: result.signature || '',
-        error: result.error || '',
-      });
-    }
-
-    function open(Rzp) {
-      try {
-        new Rzp({
-          key: order.key_id,
-          order_id: order.order_id,
-          amount: order.amount,
-          currency: order.currency,
-          name: 'Concierge',
-          handler: function (r) {
-            done({
-              orderId: r.razorpay_order_id,
-              paymentId: r.razorpay_payment_id,
-              signature: r.razorpay_signature,
-            });
-          },
-          modal: {
-            ondismiss: function () {
-              done({});
-            },
-          },
-        }).open();
-      } catch (e) {
-        done({ error: 'Could not open the payment window.' });
-      }
-    }
-
-    if (window.Razorpay) {
-      open(window.Razorpay);
+  // Idempotent external script loader for on-demand SDKs (Razorpay, Facebook).
+  var loadingScripts = {};
+  function loadScript(src, onLoad, onError) {
+    if (loadingScripts[src]) {
+      loadingScripts[src].push({ onLoad: onLoad, onError: onError });
       return;
     }
-
+    loadingScripts[src] = [{ onLoad: onLoad, onError: onError }];
     var s = document.createElement('script');
-    s.src = 'https://checkout.razorpay.com/v1/checkout.js';
+    s.src = src;
+    s.async = true;
     s.onload = function () {
-      open(window.Razorpay);
+      var cbs = loadingScripts[src] || [];
+      delete loadingScripts[src];
+      cbs.forEach(function (cb) { cb.onLoad(); });
     };
     s.onerror = function () {
-      done({ error: 'Could not reach the payment provider.' });
+      var cbs = loadingScripts[src] || [];
+      delete loadingScripts[src];
+      cbs.forEach(function (cb) { cb.onError(); });
     };
     document.head.appendChild(s);
-  });
+  }
+
+  // Razorpay hosted checkout modal.
+  if (app.ports.openCheckout && app.ports.paymentOutcome) {
+    app.ports.openCheckout.subscribe(function (order) {
+      function done(result) {
+        app.ports.paymentOutcome.send({
+          orderId: result.orderId || order.order_id || '',
+          paymentId: result.paymentId || '',
+          signature: result.signature || '',
+          error: result.error || '',
+        });
+      }
+
+      function open(Rzp) {
+        try {
+          new Rzp({
+            key: order.key_id,
+            order_id: order.order_id,
+            amount: order.amount,
+            currency: order.currency,
+            name: 'Concierge',
+            handler: function (r) {
+              done({
+                orderId: r.razorpay_order_id,
+                paymentId: r.razorpay_payment_id,
+                signature: r.razorpay_signature,
+              });
+            },
+            modal: {
+              ondismiss: function () {
+                done({});
+              },
+            },
+          }).open();
+        } catch (e) {
+          done({ error: 'Could not open the payment window.' });
+        }
+      }
+
+      if (window.Razorpay) {
+        open(window.Razorpay);
+        return;
+      }
+
+      loadScript(
+        'https://checkout.razorpay.com/v1/checkout.js',
+        function () {
+          open(window.Razorpay);
+        },
+        function () {
+          done({ error: 'Could not reach the payment provider.' });
+        }
+      );
+    });
+  }
+
+  // Meta WhatsApp Embedded Signup JS SDK flow.
+  if (app.ports.openMetaSignup && app.ports.metaSignupOutcome) {
+    var activeMessageListener = null;
+
+    app.ports.openMetaSignup.subscribe(function (opts) {
+      var wabaId = '';
+      var phoneNumberId = '';
+      var settled = false;
+
+      if (activeMessageListener) {
+        window.removeEventListener('message', activeMessageListener);
+        activeMessageListener = null;
+      }
+
+      function cleanup() {
+        if (activeMessageListener) {
+          window.removeEventListener('message', activeMessageListener);
+          activeMessageListener = null;
+        }
+      }
+
+      function finish(payload) {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        app.ports.metaSignupOutcome.send(payload);
+      }
+
+      function onMessage(event) {
+        if (
+          event.origin !== 'https://www.facebook.com' &&
+          event.origin !== 'https://web.facebook.com'
+        ) {
+          return;
+        }
+        var data = event.data;
+        if (typeof data === 'string') {
+          try {
+            data = JSON.parse(data);
+          } catch (e) {
+            return;
+          }
+        }
+        if (!data || data.type !== 'WA_EMBEDDED_SIGNUP') return;
+        if (data.event === 'FINISH' && data.data) {
+          wabaId = data.data.waba_id || '';
+          phoneNumberId = data.data.phone_number_id || '';
+        }
+      }
+
+      function launch() {
+        if (!window.FB) {
+          finish({ status: 'error', message: 'Meta signup SDK failed to initialise.' });
+          return;
+        }
+
+        try {
+          window.FB.init({
+            appId: opts.appId,
+            autoLogAppEvents: true,
+            xfbml: true,
+            version: 'v21.0',
+          });
+        } catch (e) {
+          finish({ status: 'error', message: 'Could not initialise Meta signup.' });
+          return;
+        }
+
+        activeMessageListener = onMessage;
+        window.addEventListener('message', activeMessageListener);
+
+        try {
+          window.FB.login(
+            function (response) {
+              var code =
+                response &&
+                response.authResponse &&
+                response.authResponse.code;
+
+              if (!code) {
+                finish({ status: 'cancelled' });
+                return;
+              }
+
+              fetch('/whatsapp/signup/callback', {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'X-Concierge-Request': '1',
+                  'Accept': 'application/json',
+                },
+                body: JSON.stringify({
+                  code: code,
+                  state: opts.state,
+                  phone_number_id: phoneNumberId,
+                  waba_id: wabaId,
+                }),
+              })
+                .then(function (resp) {
+                  if (resp.ok) {
+                    finish({ status: 'ok' });
+                    return null;
+                  }
+                  return resp
+                    .json()
+                    .catch(function () { return null; })
+                    .then(function (body) {
+                      var msg =
+                        (body && body.error && body.error.message) ||
+                        'Could not connect your WhatsApp Business number.';
+                      finish({ status: 'error', message: msg });
+                    });
+                })
+                .catch(function () {
+                  finish({
+                    status: 'error',
+                    message: 'Network error while finishing WhatsApp signup.',
+                  });
+                });
+            },
+            {
+              config_id: opts.configId,
+              response_type: 'code',
+              override_default_response_type: true,
+              extras: {
+                setup: {},
+                featureType: '',
+                sessionInfoVersion: '3',
+              },
+            }
+          );
+        } catch (e) {
+          finish({ status: 'error', message: 'Could not open Meta signup popup.' });
+        }
+      }
+
+      if (window.FB) {
+        launch();
+        return;
+      }
+
+      loadScript(
+        'https://connect.facebook.net/en_US/sdk.js',
+        launch,
+        function () {
+          finish({
+            status: 'error',
+            message: 'Could not load Meta signup. Please allow connect.facebook.net and try again.',
+          });
+        }
+      );
+    });
+  }
 })();

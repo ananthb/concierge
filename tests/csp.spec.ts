@@ -103,7 +103,15 @@ test('the static and Worker policies agree', async ({ request }) => {
   const staticCsp = (await request.get('/terms')).headers()['content-security-policy'];
   const workerCsp = (await request.get('/wizard')).headers()['content-security-policy'];
 
-  for (const name of ['default-src', 'script-src', 'style-src', 'base-uri', 'object-src']) {
+  for (const name of [
+    'default-src',
+    'script-src',
+    'style-src',
+    'connect-src',
+    'frame-src',
+    'base-uri',
+    'object-src',
+  ]) {
     expect(directive(staticCsp, name), `${name} differs between static and Worker pages`).toBe(
       directive(workerCsp, name),
     );

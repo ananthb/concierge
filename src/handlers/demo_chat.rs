@@ -1,53 +1,29 @@
-//! Public live-demo chat. Reachable from the welcome page CTA; the
-//! visitor picks one of the personas exposed by the D1 catalog
-//! (Concierge talking about itself, plus management-curated archetypes)
-//! and the worker forwards their message history to Cloudflare Workers
-//! AI under that persona's system prompt. Two-tier rate limiting: a
-//! per-IP hourly cap, plus a global daily cap (per UTC day, all IPs)
-//! that bounds worst-case Workers AI spend even under IP rotation.
-//! Every reply also runs through the prompt-injection scanner and the
-//! Approved-only persona gate. No bypass.
+//! Public live-demo chat (`POST /api/demo/chat`).
 //!
-//! Handoff: the demo handler is stateless on the server. The client
-//! tracks `handoff` in modal state; once set, every subsequent send
-//! includes `handoff: true` and the server swaps the persona middle
-//! for [`crate::prompt::HOLDING_PATTERN_MIDDLE`]. There's no real
-//! human to escalate to in the demo, so the holding pattern lasts as
-//! long as the modal session does. There's no cooldown branch.
+//! Backed by static small-business fixtures in `crate::api::demo` and the
+//! single core small-business persona in `crate::prompt`.
 
 use serde::{Deserialize, Serialize};
 use worker::*;
 
 use crate::ai;
-use crate::storage;
+use crate::api::demo::{find_fixture, DEMO_MAX_USER_TURNS};
+use crate::prompt;
+use crate::risk;
 
-/// Hard ceiling on total messages in a single /demo/chat request,
-/// regardless of operator config. The configured `max_user_turns`
-/// caps the conversation at `2 * max_user_turns` (one assistant per
-/// user turn); this constant clamps that so a misconfigured value
-/// can't blow up token spend on a single request.
-const MAX_TURNS_CEILING: usize = 40;
 const MAX_BODY_BYTES: usize = 4096;
 const MAX_CONTENT_CHARS: usize = 300;
 const RATE_LIMIT_PER_HOUR: i64 = 10;
 const RATE_LIMIT_TTL_SECONDS: u64 = 3600;
-// Global daily ceiling across all IPs. Bounds worst-case Workers AI
-// spend regardless of how many distinct sources hit the demo (per-IP
-// limits don't help against IP rotation). At ~$0.002/request worst
-// case this caps daily exposure around a few dollars.
 const RATE_LIMIT_GLOBAL_PER_DAY: i64 = 2000;
-// Slightly over 24h so a counter that gets created near midnight UTC
-// still expires cleanly the following day.
 const RATE_LIMIT_GLOBAL_TTL_SECONDS: u64 = 90_000;
 
 #[derive(Deserialize)]
 struct ChatRequest {
+    persona_id: String,
     #[serde(default)]
-    persona: String,
-    messages: Vec<ChatMessage>,
-    /// Set by the client once a previous turn flagged a handoff. When
-    /// true the server replies under the holding-pattern middle, not
-    /// the persona's prompt.
+    history: Vec<ChatMessage>,
+    message: String,
     #[serde(default)]
     handoff: bool,
 }
@@ -59,73 +35,56 @@ struct ChatMessage {
 }
 
 #[derive(Serialize)]
-struct ChatReply<'a> {
-    reply: &'a str,
-    /// True iff the AI's reply contained the handoff token. The token
-    /// is stripped from `reply` before sending; the client uses this
-    /// flag to flip into the holding-pattern UI and to echo
-    /// `handoff: true` on subsequent sends.
-    handoff: bool,
-}
-
-#[derive(Serialize)]
-struct ChatError<'a> {
-    error: &'a str,
+struct ChatReply {
+    reply: String,
+    handed_off: bool,
 }
 
 pub async fn handle_demo_chat(mut req: Request, env: Env) -> Result<Response> {
     let body = req.bytes().await.unwrap_or_default();
     if body.len() > MAX_BODY_BYTES {
-        return json_error("Message too long.", 413);
+        return crate::api::error("too_long", "Message too long.", 413);
     }
 
     let mut parsed: ChatRequest = match serde_json::from_slice(&body) {
         Ok(r) => r,
-        Err(_) => return json_error("Bad request body.", 400),
+        Err(_) => return crate::api::invalid("Bad request body."),
     };
 
-    if parsed.messages.is_empty() {
-        return json_error("No messages.", 400);
+    let Some(fixture) = find_fixture(&parsed.persona_id) else {
+        return crate::api::invalid("Unknown demo business.");
+    };
+
+    let message = parsed.message.trim().to_string();
+    if message.is_empty() {
+        return crate::api::invalid("Write a message to try the demo.");
     }
-    for m in &parsed.messages {
+    if message.chars().count() > MAX_CONTENT_CHARS {
+        return crate::api::invalid("Message too long.");
+    }
+
+    for m in &parsed.history {
         if m.role != "user" && m.role != "assistant" {
-            return json_error("Invalid message role.", 400);
+            return crate::api::invalid("Invalid message role.");
         }
         if m.content.chars().count() > MAX_CONTENT_CHARS {
-            return json_error("Message too long.", 400);
+            return crate::api::invalid("Message too long.");
         }
     }
-    // Llama chat templates expect the first non-system message to be a user
-    // turn. Leading with assistant content (e.g. a client-side greeting)
-    // confuses generation. Strip any leading assistant messages here.
-    while parsed.messages.first().map(|m| m.role.as_str()) == Some("assistant") {
-        parsed.messages.remove(0);
+
+    while parsed.history.first().map(|m| m.role.as_str()) == Some("assistant") {
+        parsed.history.remove(0);
     }
-    if parsed.messages.is_empty() {
-        return json_error("No user messages.", 400);
-    }
-    if parsed.messages.last().map(|m| m.role.as_str()) != Some("user") {
-        return json_error("Last message must be from the user.", 400);
+
+    let prior_user_turns = parsed.history.iter().filter(|m| m.role == "user").count();
+    if prior_user_turns + 1 > DEMO_MAX_USER_TURNS as usize
+        || parsed.history.len() >= (DEMO_MAX_USER_TURNS as usize) * 2
+    {
+        return crate::api::invalid("Too many turns; refresh and start over.");
     }
 
     let kv = env.kv("KV")?;
 
-    // Demo gate. Operator-controlled flag from /manage/demo. When off,
-    // refuse before doing any work or burning rate-limit budget.
-    let demo_cfg = storage::get_demo_config(&kv).await.unwrap_or_default();
-    if !demo_cfg.enabled {
-        return json_error("The demo is currently unavailable.", 503);
-    }
-    // Total-message cap derived from the operator's configured turn
-    // limit (one assistant reply per user turn). Hard-clamped to
-    // MAX_TURNS_CEILING to bound worst-case spend per request.
-    let max_turns = ((demo_cfg.max_user_turns as usize) * 2).clamp(2, MAX_TURNS_CEILING);
-    if parsed.messages.len() > max_turns {
-        return json_error("Too many turns; refresh and start over.", 400);
-    }
-
-    // Global daily cap. Checked first so an exhausted day refuses
-    // immediately, regardless of whether we have a client IP.
     let now_iso = crate::helpers::now_iso();
     let date_key = now_iso.get(0..10).unwrap_or("1970-01-01");
     let global_key = format!("ratelimit:demo:global:{}", date_key);
@@ -138,7 +97,8 @@ pub async fn handle_demo_chat(mut req: Request, env: Env) -> Result<Response> {
         .and_then(|s| s.parse().ok())
         .unwrap_or(0);
     if global_count >= RATE_LIMIT_GLOBAL_PER_DAY {
-        return json_error(
+        return crate::api::error(
+            "rate_limited",
             "The demo is at capacity for today. Please try again tomorrow.",
             429,
         );
@@ -161,7 +121,8 @@ pub async fn handle_demo_chat(mut req: Request, env: Env) -> Result<Response> {
             .and_then(|s| s.parse().ok())
             .unwrap_or(0);
         if count >= RATE_LIMIT_PER_HOUR {
-            return json_error(
+            return crate::api::error(
+                "rate_limited",
                 "You've sent quite a few messages — give me a minute and try again.",
                 429,
             );
@@ -173,106 +134,53 @@ pub async fn handle_demo_chat(mut req: Request, env: Env) -> Result<Response> {
             .await;
     }
 
-    // Bump the global counter only after the per-IP check passes, so a
-    // caller already over their personal limit doesn't drain the shared
-    // budget on requests we're going to refuse anyway.
     let _ = kv
         .put(&global_key, (global_count + 1).to_string())?
         .expiration_ttl(RATE_LIMIT_GLOBAL_TTL_SECONDS)
         .execute()
         .await;
 
-    // Resolve the persona from the D1 catalog. Refuse with 503 if the
-    // requested slug isn't there or isn't Approved. No bypass even if a
-    // management user is testing.
-    let db = env.d1("DB")?;
-    if parsed.persona.is_empty() {
-        return json_error("Pick a persona to start chatting.", 400);
-    }
-    let slug = parsed.persona.clone();
-    let row = match storage::get_archetype_cached(&kv, &db, &slug).await? {
-        Some(r) if r.is_safe_to_use() => r,
-        _ => {
-            return json_error(
-                "That persona isn't available right now. Please pick another.",
-                503,
-            );
-        }
-    };
-
-    // Run the prompt-injection scanner on the visitor's last user turn
-    // before we spend any tokens or KV credit.
-    let last_user = parsed
-        .messages
-        .iter()
-        .rev()
-        .find(|m| m.role == "user")
-        .map(|m| m.content.as_str())
-        .unwrap_or("");
-    if ai::is_prompt_injection(&env, last_user).await {
-        return json_error(
+    if ai::is_prompt_injection(&env, &message).await {
+        return crate::api::invalid(
             "We can't process that message. Please rephrase your question.",
-            400,
         );
     }
 
-    // Resolve the persona's prompt. In handoff mode the persona is
-    // replaced wholesale by [`crate::prompt::HOLDING_PATTERN_MIDDLE`]
-    // (no demo frame, no goal-driving) until the modal session ends.
-    let wrapped_prompt = if parsed.handoff {
-        crate::prompt::wrap(crate::prompt::HOLDING_PATTERN_MIDDLE)
+    let system_prompt = if parsed.handoff {
+        prompt::wrap(prompt::HOLDING_PATTERN_MIDDLE)
     } else {
-        // For demo purposes, we need a PersonaBuilder with fictional
-        // details. The welcome page embeds the resolved catalog inline
-        // (the rolled cache, kept warm by the cron). If a client POSTs
-        // /demo/chat with a slug directly (no inline preload visited),
-        // fall back to empty defaults for the builder + archetype voice.
-        let persona_middle =
-            crate::personas::generate(&crate::types::PersonaBuilder::default(), &row.voice_prompt);
-        let demo_middle = crate::prompt::compose_demo_middle(&persona_middle);
-        crate::prompt::wrap(&demo_middle)
+        prompt::demo_system_prompt(
+            fixture.business_name,
+            fixture.business_type,
+            fixture.city,
+            fixture.hours,
+            fixture.summary,
+        )
     };
 
-    let history: Vec<(String, String)> = parsed
-        .messages
+    let mut chat_history: Vec<(String, String)> = parsed
+        .history
         .into_iter()
         .map(|m| (m.role, m.content))
         .collect();
+    chat_history.push(("user".to_string(), message));
 
-    let raw_reply = match ai::generate_chat_reply(&env, &wrapped_prompt, &history).await {
+    let raw_reply = match ai::generate_chat_reply(&env, &system_prompt, &chat_history).await {
         Ok(r) => r,
         Err(e) => {
-            console_log!("Demo chat AI error (persona={}): {:?}", slug, e);
-            return json_error("Couldn't generate a reply right now.", 502);
+            console_log!("Demo chat AI error (persona={}): {:?}", fixture.id, e);
+            return crate::api::error("ai_error", "Couldn't generate a reply right now.", 502);
         }
     };
 
-    // Scan for the handoff sentinel before the customer ever sees it.
-    // If we're already in the holding pattern, the postamble told the
-    // model not to re-emit; this just defends against the model
-    // ignoring that instruction.
-    let stripped = crate::prompt::detect_and_strip_handoff(&raw_reply);
-    let handoff_signaled = stripped.handoff && !parsed.handoff;
-    json_response(
-        &ChatReply {
-            reply: &stripped.reply,
-            handoff: handoff_signaled || parsed.handoff,
-        },
-        200,
-    )
-}
+    let stripped = prompt::detect_and_strip_handoff(&raw_reply);
+    let mut reply = stripped.reply;
+    let mut handed_off = stripped.handoff || parsed.handoff;
 
-fn json_response<T: Serialize>(body: &T, status: u16) -> Result<Response> {
-    let serialized = serde_json::to_string(body)
-        .map_err(|e| Error::from(format!("Failed to serialize chat response: {}", e)))?;
-    let headers = Headers::new();
-    headers.set("Content-Type", "application/json")?;
-    headers.set("Cache-Control", "no-store")?;
-    Ok(Response::ok(serialized)?
-        .with_status(status)
-        .with_headers(headers))
-}
+    if !handed_off && risk::signal(&reply).is_some() {
+        reply = prompt::RISK_GATE_HOLDING_REPLY.to_string();
+        handed_off = true;
+    }
 
-fn json_error(msg: &str, status: u16) -> Result<Response> {
-    json_response(&ChatError { error: msg }, status)
+    crate::api::json(&ChatReply { reply, handed_off })
 }

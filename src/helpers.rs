@@ -29,27 +29,6 @@ pub fn now_iso() -> String {
         .unwrap_or_else(|| String::from("1970-01-01T00:00:00.000Z"))
 }
 
-/// Get ISO 8601 timestamp `days` from now.
-pub fn days_from_now(days: i64) -> String {
-    let ms = js_sys::Date::now() + (days as f64 * 86_400_000.0);
-    let d = js_sys::Date::new(&wasm_bindgen::JsValue::from_f64(ms));
-    d.to_iso_string()
-        .as_string()
-        .unwrap_or_else(|| String::from("2099-12-31T23:59:59.000Z"))
-}
-
-/// HTML escape for XSS prevention.
-///
-/// Only the schema-reseed report renders HTML now; everything else answers
-/// JSON, where `serde_json` does the escaping.
-pub fn html_escape(s: &str) -> String {
-    s.replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-        .replace('"', "&quot;")
-        .replace('\'', "&#x27;")
-}
-
 /// Truncate string to max characters (Unicode-safe).
 pub fn truncate(s: &str, max: usize) -> String {
     s.chars().take(max).collect()
@@ -88,15 +67,6 @@ mod tests {
         // Multi-byte input, to pin that we hash UTF-8 bytes.
         assert_eq!(sha256_hex("ஸுபா").len(), 64);
         assert_ne!(sha256_hex("abc"), sha256_hex("abd"));
-    }
-
-    #[test]
-    fn test_html_escape() {
-        assert_eq!(html_escape("hello"), "hello");
-        assert_eq!(html_escape("<script>"), "&lt;script&gt;");
-        assert_eq!(html_escape("a & b"), "a &amp; b");
-        assert_eq!(html_escape("\"quoted\""), "&quot;quoted&quot;");
-        assert_eq!(html_escape("it's"), "it&#x27;s");
     }
 
     #[test]
