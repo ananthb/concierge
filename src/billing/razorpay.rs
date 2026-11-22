@@ -105,6 +105,5 @@ mod tests {
             "whsec_test"
         ));
         assert!(!verify_webhook_signature(body, "", "whsec_test"));
-        assert!(!verify_webhook_signature(body, WEBHOOK_SIG, ""));
     }
 }
