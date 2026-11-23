@@ -26,6 +26,15 @@ pub struct ReplyView {
     pub mode: &'static str,
     pub text: String,
     pub wait_seconds: u32,
+    pub bot_prompt: String,
+}
+
+#[derive(Serialize)]
+pub struct BotPresetView {
+    pub id: &'static str,
+    pub label: &'static str,
+    pub tag: &'static str,
+    pub prompt: &'static str,
 }
 
 #[derive(Serialize)]
@@ -82,6 +91,7 @@ impl From<&WhatsAppAccount> for AccountView {
                 mode,
                 text,
                 wait_seconds: a.auto_reply.wait_seconds,
+                bot_prompt: a.auto_reply.bot_prompt.clone(),
             },
             canned_safety_status: a.canned_safety.status.as_str().to_string(),
             created_at: a.created_at.clone(),
@@ -93,6 +103,19 @@ impl From<&WhatsAppAccount> for AccountView {
 struct ListView {
     accounts: Vec<AccountView>,
     signup: Option<SignupView>,
+    bot_presets: Vec<BotPresetView>,
+}
+
+fn bot_presets() -> Vec<BotPresetView> {
+    crate::prompt::BOT_PERSONAS
+        .iter()
+        .map(|p| BotPresetView {
+            id: p.id,
+            label: p.label,
+            tag: p.tag,
+            prompt: p.prompt,
+        })
+        .collect()
 }
 
 pub async fn handle(mut req: Request, env: Env, rest: &[&str]) -> Result<Response> {
@@ -109,6 +132,7 @@ pub async fn handle(mut req: Request, env: Env, rest: &[&str]) -> Result<Respons
             super::json(&ListView {
                 accounts: accounts.iter().map(AccountView::from).collect(),
                 signup: SignupView::resolve(&env, &db, &tenant_id).await?,
+                bot_presets: bot_presets(),
             })
         }
 
@@ -125,8 +149,8 @@ pub async fn handle(mut req: Request, env: Env, rest: &[&str]) -> Result<Respons
                 account.name = truncate(name.trim(), 200);
             }
 
-            // Accept flat `{ name, enabled, mode, text, wait_seconds }` (and
-            // fall back to nested `reply` object if provided).
+            // Accept flat `{ name, enabled, mode, text, wait_seconds, bot_prompt }`
+            // (and fall back to nested `reply` object if provided).
             let reply_src = body.get("reply").filter(|v| v.is_object()).unwrap_or(&body);
 
             if let Some(enabled) = reply_src.get("enabled").and_then(|v| v.as_bool()) {
@@ -136,11 +160,27 @@ pub async fn handle(mut req: Request, env: Env, rest: &[&str]) -> Result<Respons
                 account.auto_reply.wait_seconds = n.clamp(0, 30) as u32;
             }
 
+            let mut bot_prompt_updated = false;
+            if let Some(raw_prompt) = reply_src.get("bot_prompt").and_then(|v| v.as_str()) {
+                let bp = raw_prompt.trim().to_string();
+                if bp.chars().count() > crate::prompt::MAX_BOT_PROMPT {
+                    return super::invalid("Bot prompt must be 600 characters or fewer.");
+                }
+                account.auto_reply.bot_prompt = if bp.is_empty() {
+                    crate::prompt::default_bot_prompt()
+                } else {
+                    bp
+                };
+                bot_prompt_updated = true;
+            }
+
+            let mut need_ai_safety = false;
             if reply_src.get("mode").is_some() {
                 let mode = super::field(reply_src, "mode");
                 match mode.as_str() {
                     "ai" => {
                         account.auto_reply.response = ReplyResponse::Ai;
+                        need_ai_safety = true;
                     }
                     "canned" => {
                         let text = super::field(reply_src, "text");
@@ -161,6 +201,15 @@ pub async fn handle(mut req: Request, env: Env, rest: &[&str]) -> Result<Respons
                         return super::invalid("Reply mode must be 'ai' or 'canned'.");
                     }
                 }
+            }
+
+            if (need_ai_safety
+                || (bot_prompt_updated && matches!(account.auto_reply.response, ReplyResponse::Ai)))
+                && !account.auto_reply.bot_prompt.trim().is_empty()
+            {
+                let content_hash = sha256_hex(&account.auto_reply.bot_prompt);
+                let verdict = safety::classify_text(&env, &account.auto_reply.bot_prompt).await;
+                account.canned_safety = safety::verdict_to_state(verdict, content_hash);
             }
 
             account.updated_at = now_iso();

@@ -29,7 +29,7 @@ test.describe('shell', () => {
     const body = await (await request.get('/wizard')).text();
     expect(body).toContain('/app.js');
     expect(body).toContain('/boot.js');
-    expect(body).not.toContain('Answer every WhatsApp customer');
+    expect(body).not.toContain('WhatsApp auto-replies for small businesses.');
   });
 
   test('an unknown path gets the shell under a 404', async ({ page, request }) => {
@@ -217,11 +217,13 @@ test.describe('demo chat', () => {
     test.skip(!boot.demo.enabled || boot.demo.personas.length === 0, 'demo is disabled');
 
     await page.goto('/');
-    const firstPersona = page.locator('.persona-card').first();
+    const firstPersona = page.locator('.persona-btn').first();
     await expect(firstPersona).toBeVisible();
     await firstPersona.click();
+    await expect(firstPersona).toHaveClass(/is-active/);
 
     await expect(page.locator('.demo-transcript .bubble-assistant')).toBeVisible();
+    await expect(page.locator('.prompt-panel .prompt-preview')).toBeVisible();
     await expect(page.locator('.prompt-panel .prompt-panel-note')).toBeVisible();
 
     await page.locator('#demo-input').fill('What time do you open?');
@@ -241,7 +243,7 @@ test.describe('demo chat', () => {
     test.skip(!boot.demo.enabled || boot.demo.personas.length === 0, 'demo is disabled');
 
     await page.goto('/');
-    await page.locator('.persona-card').first().click();
+    await page.locator('.persona-btn').first().click();
     await expect(page.locator('.demo-composer button[type="submit"]')).toBeDisabled();
   });
 });

@@ -222,13 +222,22 @@ view : Bool -> Api.Data Api.Pricing -> Api.Data Api.DemoConfig -> Model -> Html 
 view authBusy pricing demo model =
     div [ class "landing" ]
         [ hero authBusy pricing demo
-        , case ( model.chat, demo ) of
-            ( Just chat, Success config ) ->
-                chatPanel authBusy config model chat
-
-            ( _, Success config ) ->
+        , case demo of
+            Success config ->
                 if config.enabled && not (List.isEmpty config.personas) then
-                    personaPicker config
+                    let
+                        selectedId =
+                            Maybe.map (.persona >> .id) model.chat
+                    in
+                    div []
+                        [ personaPicker selectedId config
+                        , case model.chat of
+                            Just chat ->
+                                chatPanel authBusy config model chat
+
+                            Nothing ->
+                                text ""
+                        ]
 
                 else
                     text ""
@@ -242,9 +251,12 @@ view authBusy pricing demo model =
 hero : Bool -> Api.Data Api.Pricing -> Api.Data Api.DemoConfig -> Html Msg
 hero authBusy pricing demo =
     section [ class "hero" ]
-        [ h1 [] [ text "Answer every WhatsApp customer, even when you're busy." ]
+        [ h1 []
+            [ text "WhatsApp auto-replies for small businesses."
+            , span [ class "cursor-blink", attribute "aria-hidden" "true" ] []
+            ]
         , p [ class "hero-sub" ]
-            [ text "Quick auto-replies for small businesses, built to hand off to you fast — greet customers, answer simple questions, and alert you the moment a person is needed." ]
+            [ text "One bot prompt, fast human handoff, 1 credit = 1 reply." ]
         , div [ class "hero-actions" ]
             [ button
                 [ Html.Attributes.type_ "button"
@@ -266,7 +278,7 @@ hero authBusy pricing demo =
         , case demo of
             Success config ->
                 if config.enabled && not (List.isEmpty config.personas) then
-                    p [ class "hero-nudge" ] [ text "Try the live demo below — message one of these sample businesses." ]
+                    p [ class "hero-nudge" ] [ text "Try the live demo below — pick a bot persona and send a message." ]
 
                 else
                     text ""
@@ -294,28 +306,36 @@ rateLabel pricing =
             "See pricing"
 
 
-personaPicker : Api.DemoConfig -> Html Msg
-personaPicker config =
+personaPicker : Maybe String -> Api.DemoConfig -> Html Msg
+personaPicker selectedId config =
     section [ class "demo-picker" ]
-        [ Ui.sectionTitle "Pick a business to message"
+        [ Ui.sectionTitle "Pick a bot persona"
         , p [ class "demo-picker-sub" ]
-            [ text "replybots uses one smart built-in front-desk assistant focused on quick helpful replies and fast human handoff." ]
+            [ text "4 starter prompts on one shared system prompt with quick human handoff." ]
         , ul [ class "persona-grid" ]
-            (List.map personaCard config.personas)
+            (List.map (personaBtn selectedId) config.personas)
         ]
 
 
-personaCard : Api.DemoPersona -> Html Msg
-personaCard persona =
+personaBtn : Maybe String -> Api.DemoPersona -> Html Msg
+personaBtn selectedId persona =
+    let
+        isSelected =
+            selectedId == Just persona.id
+    in
     li []
         [ button
-            [ class "persona-card"
+            [ classList
+                [ ( "persona-btn", True )
+                , ( "is-active", isSelected )
+                ]
+            , Html.Attributes.type_ "button"
             , onClick (PickPersona persona)
-            , attribute "aria-label" ("Message " ++ persona.businessName)
+            , attribute "aria-label" ("Message " ++ persona.label ++ " — " ++ persona.businessName)
             ]
-            [ h3 [] [ text persona.businessName ]
-            , p [] [ text (persona.businessType ++ " · " ++ persona.city ++ " · " ++ persona.hours) ]
-            , p [] [ text persona.summary ]
+            [ span [ class "persona-tag" ] [ text persona.tag ]
+            , h3 [] [ text persona.label ]
+            , p [] [ text persona.businessName ]
             ]
         ]
 
@@ -359,8 +379,10 @@ chatPanel authBusy config model chat =
                 ]
             ]
         , div [ class "prompt-panel" ]
-            [ p [ class "prompt-panel-note" ]
-                [ text "replybots uses a single built-in front-desk assistant focused on quick answers and fast human handoff whenever pricing, commitments, or custom requests come up." ]
+            [ p [ class "prompt-preview prompt-preview-middle" ]
+                [ text ("User prompt: " ++ chat.persona.prompt) ]
+            , p [ class "prompt-panel-note" ]
+                [ text "Shared system prompt + quick human handoff built in." ]
             ]
         , div [ class "demo-transcript", id "demo-transcript" ]
             (List.map bubble chat.messages
@@ -379,6 +401,7 @@ bubble turn =
     div
         [ classList
             [ ( "bubble", True )
+            , ( "demo-msg", True )
             , ( "bubble-user", turn.role == "user" )
             , ( "bubble-assistant", turn.role /= "user" )
             ]
@@ -457,19 +480,22 @@ howItWorks =
     section [ class "how-it-works" ]
         [ Ui.sectionTitle "How it works"
         , ul [ class "steps" ]
-            [ step "1. Connect WhatsApp Business via Meta"
-                "Link your business number in a few clicks through Meta Embedded Signup. No new number, no app to install."
-            , step "2. Choose static or AI quick-handoff replies"
-                "Send an instant static message, or let replybots's built-in front-desk assistant answer briefly and hand off to your team fast."
-            , step "3. Top up prepaid credits"
-                "1 credit = 1 reply, static or AI. Pay as you go with Razorpay — no subscriptions or free trials."
+            [ step "color-bar-blue"
+                "1. Login with WhatsApp"
+                "Connect your WhatsApp Business number via Meta Embedded Signup. No new number or app needed."
+            , step "color-bar-green"
+                "2. Pick or edit 1 bot prompt"
+                "Choose a starter bot prompt or write your own (up to 600 chars), or send a static reply."
+            , step "color-bar-amber"
+                "3. 1 credit = 1 reply via Razorpay"
+                "Prepaid credits only — no subscriptions or free trials. Pay as you go with Razorpay."
             ]
         ]
 
 
-step : String -> String -> Html Msg
-step title body =
-    li [ class "step" ]
+step : String -> String -> String -> Html Msg
+step barClass title body =
+    li [ class ("step " ++ barClass) ]
         [ h3 [] [ text title ]
         , p [] [ text body ]
         ]

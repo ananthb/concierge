@@ -186,6 +186,29 @@ async fn handle_auto_reply(msg: &InboundMessage, db: &D1Database, env: &Env) -> 
     let config = info.config;
     let is_ai = matches!(config.response, ReplyResponse::Ai);
 
+    let effective_bot_prompt = if is_ai {
+        let prompt_hash = crate::helpers::sha256_hex(&config.bot_prompt);
+        if info.canned_safety.status == SafetyStatus::Rejected
+            && info.canned_safety.content_hash.as_deref() == Some(prompt_hash.as_str())
+        {
+            console_log!(
+                "Bot prompt rejected by safety (action_taken=unsafe_bot_prompt) for account {}, skipping reply",
+                msg.channel_account_id
+            );
+            return Ok(());
+        }
+        if info.canned_safety.is_approved_for(&config.bot_prompt)
+            || config.bot_prompt.trim().is_empty()
+            || config.bot_prompt.trim() == crate::prompt::DEFAULT_BOT_PROMPT
+        {
+            config.bot_prompt.as_str()
+        } else {
+            crate::prompt::DEFAULT_BOT_PROMPT
+        }
+    } else {
+        ""
+    };
+
     let onboarding = if is_ai {
         let o = get_onboarding(db, &msg.tenant_id).await?;
         if !o.profile_safety.is_approved_for(&o.business.name) {
@@ -368,7 +391,9 @@ async fn handle_auto_reply(msg: &InboundMessage, db: &D1Database, env: &Env) -> 
                 HandoffMode::HoldingPattern => {
                     crate::prompt::wrap(crate::prompt::HOLDING_PATTERN_MIDDLE)
                 }
-                HandoffMode::None => crate::prompt::core_system_prompt(brand_name),
+                HandoffMode::None => {
+                    crate::prompt::compose_bot_system_prompt(brand_name, effective_bot_prompt)
+                }
             };
 
             let history: Vec<(String, String)> = session_messages

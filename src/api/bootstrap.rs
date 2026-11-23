@@ -3,7 +3,7 @@
 use serde::Serialize;
 use worker::*;
 
-use crate::api::demo::{DemoFixture, DEMO_IDLE_TIMEOUT_SECS, DEMO_MAX_USER_TURNS, FIXTURES};
+use crate::api::demo::DemoView;
 use crate::billing;
 use crate::locale::{Currency, Locale};
 
@@ -36,14 +36,6 @@ struct CurrencyRate {
     unit_price_milli: i64,
 }
 
-#[derive(Serialize)]
-struct DemoView {
-    enabled: bool,
-    max_user_turns: u32,
-    idle_timeout_secs: u32,
-    personas: &'static [DemoFixture],
-}
-
 pub async fn get(req: Request, env: Env) -> Result<Response> {
     let session = super::account::resolve_session(&req, &env).await?;
     let locale = match session.as_ref() {
@@ -70,12 +62,7 @@ pub async fn get(req: Request, env: Env) -> Result<Response> {
             max_credits: billing::MAX_CREDITS,
             currencies,
         },
-        demo: DemoView {
-            enabled: true,
-            max_user_turns: DEMO_MAX_USER_TURNS,
-            idle_timeout_secs: DEMO_IDLE_TIMEOUT_SECS,
-            personas: FIXTURES,
-        },
+        demo: DemoView::default(),
         locale: LocaleView {
             tag: locale.langid.to_string(),
             currency: code.to_string(),
