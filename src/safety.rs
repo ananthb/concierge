@@ -1,11 +1,14 @@
 //! Content safety classifier using `@cf/meta/llama-guard-3-8b`.
 //!
-//! Invoked asynchronously from `safety_queue.rs` when a tenant saves their
-//! business name or a canned reply message. Fails closed (`Rejected`) on
-//! network errors or unparseable model output.
+//! Invoked synchronously when a tenant saves their business name or a canned
+//! reply message. Fails closed (`Rejected`) on network errors or unparseable
+//! model output.
 
 use serde::Serialize;
 use worker::*;
+
+use crate::helpers::now_iso;
+use crate::types::{SafetyState, SafetyStatus};
 
 const DEFAULT_SAFETY_MODEL: &str = "@cf/meta/llama-guard-3-8b";
 
@@ -13,6 +16,24 @@ const DEFAULT_SAFETY_MODEL: &str = "@cf/meta/llama-guard-3-8b";
 pub enum SafetyVerdict {
     Approved,
     Rejected { vague_reason: String },
+}
+
+pub fn verdict_to_state(verdict: SafetyVerdict, content_hash: String) -> SafetyState {
+    let now = now_iso();
+    match verdict {
+        SafetyVerdict::Approved => SafetyState {
+            status: SafetyStatus::Approved,
+            content_hash: Some(content_hash),
+            checked_at: Some(now),
+            vague_reason: None,
+        },
+        SafetyVerdict::Rejected { vague_reason } => SafetyState {
+            status: SafetyStatus::Rejected,
+            content_hash: Some(content_hash),
+            checked_at: Some(now),
+            vague_reason: Some(vague_reason),
+        },
+    }
 }
 
 #[derive(Serialize)]

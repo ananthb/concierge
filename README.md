@@ -14,7 +14,7 @@ Automatic WhatsApp replies for small businesses. Answers in your voice with the 
 
 - **WhatsApp auto-reply**: inbound messages get a canned message or an AI reply via the Meta Business API and Embedded Signup. You keep your number; existing threads continue seamlessly.
 - **Single core persona**: built-in small-business core persona designed to answer briefly and hand off quickly. No persona builder, archetypes catalog, or custom prompts.
-- **Prompt Guard & Safety Vetting**: incoming messages are screened by `@cf/meta/prompt-guard-2-86m` for prompt injections. Business profiles and canned replies are vetted asynchronously via Cloudflare Queues and `@cf/meta/llama-guard-3-8b`.
+- **Prompt Guard & Safety Vetting**: incoming messages are screened by `@cf/meta/prompt-guard-2-86m` for prompt injections. Business profiles and canned replies are vetted inline via `@cf/meta/llama-guard-3-8b`.
 - **Risk gate**: a draft that quotes an unauthorised price, makes a commitment, or strays past boundaries is withheld. The customer gets a holding sentence, the conversation enters handoff, and an alert email is sent to the tenant.
 - **Human handoff**: the model can request human intervention via `[[HANDOFF]]`. Follow-ups enter a holding-pattern cooldown before going silent.
 - **Prepaid Razorpay billing**: 1 credit = 1 reply (for both static and AI replies). No free trials, no card-verification gates. Default pricing: ₹0.10/reply INR, $0.001/reply USD (min 100 / max 100,000 credits). Authoritative webhook `POST /webhook/razorpay` with fail-closed HMAC-SHA256 validation.
@@ -26,11 +26,8 @@ Automatic WhatsApp replies for small businesses. Answers in your voice with the 
 
 - **[Cloudflare Workers](https://workers.cloudflare.com/)** — Rust compiled to WebAssembly, serving a JSON API
 - **[Elm](https://elm-lang.org/)** — Frontend, compiled to a single `public/app.js`
-- **[Cloudflare D1](https://developers.cloudflare.com/d1/)** — SQLite for metadata logs and billing
-- **[Cloudflare KV](https://developers.cloudflare.com/kv/)** — Account configs, sessions, conversation state
-- **[Cloudflare Workers AI](https://workers.cloudflare.com/)** — Reply generation (`@cf/meta/llama-4-scout-17b-16e-instruct`), prompt injection detection (`@cf/meta/prompt-guard-2-86m`), and safety vetting (`@cf/meta/llama-guard-3-8b`)
-- **[Cloudflare Queues](https://developers.cloudflare.com/queues/)** — Asynchronous content safety vetting
-- **[Cloudflare Durable Objects](https://developers.cloudflare.com/durable-objects/)** — Reply buffer for message batching
+- **[Cloudflare D1](https://developers.cloudflare.com/d1/)** — Single SQLite database for all persistent state (tenants, sessions, WhatsApp accounts, onboarding state, conversation sessions, burst buffer, rate limits, metadata logs, and billing)
+- **[Cloudflare Workers AI](https://workers.cloudflare.com/)** — Reply generation (`@cf/meta/llama-4-scout-17b-16e-instruct`), prompt injection detection (`@cf/meta/prompt-guard-2-86m`), and inline safety vetting (`@cf/meta/llama-guard-3-8b`)
 - Meta WhatsApp Business API & Embedded Signup
 - **[Razorpay](https://razorpay.com/)** — Prepaid credits payments
 

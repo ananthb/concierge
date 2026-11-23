@@ -83,18 +83,13 @@ pub async fn handle_demo_chat(mut req: Request, env: Env) -> Result<Response> {
         return crate::api::invalid("Too many turns; refresh and start over.");
     }
 
-    let kv = env.kv("KV")?;
+    let db = env.d1("DB")?;
 
     let now_iso = crate::helpers::now_iso();
     let date_key = now_iso.get(0..10).unwrap_or("1970-01-01");
     let global_key = format!("ratelimit:demo:global:{}", date_key);
-    let global_count: i64 = kv
-        .get(&global_key)
-        .text()
+    let global_count = crate::storage::get_rate_limit(&db, &global_key)
         .await
-        .ok()
-        .flatten()
-        .and_then(|s| s.parse().ok())
         .unwrap_or(0);
     if global_count >= RATE_LIMIT_GLOBAL_PER_DAY {
         return crate::api::error(
@@ -112,13 +107,8 @@ pub async fn handle_demo_chat(mut req: Request, env: Env) -> Result<Response> {
         .unwrap_or_default();
     if !client_ip.is_empty() {
         let rl_key = format!("ratelimit:demo:{}", client_ip);
-        let count: i64 = kv
-            .get(&rl_key)
-            .text()
+        let count = crate::storage::get_rate_limit(&db, &rl_key)
             .await
-            .ok()
-            .flatten()
-            .and_then(|s| s.parse().ok())
             .unwrap_or(0);
         if count >= RATE_LIMIT_PER_HOUR {
             return crate::api::error(
@@ -127,18 +117,17 @@ pub async fn handle_demo_chat(mut req: Request, env: Env) -> Result<Response> {
                 429,
             );
         }
-        let _ = kv
-            .put(&rl_key, (count + 1).to_string())?
-            .expiration_ttl(RATE_LIMIT_TTL_SECONDS)
-            .execute()
-            .await;
+        let _ =
+            crate::storage::put_rate_limit(&db, &rl_key, count + 1, RATE_LIMIT_TTL_SECONDS).await;
     }
 
-    let _ = kv
-        .put(&global_key, (global_count + 1).to_string())?
-        .expiration_ttl(RATE_LIMIT_GLOBAL_TTL_SECONDS)
-        .execute()
-        .await;
+    let _ = crate::storage::put_rate_limit(
+        &db,
+        &global_key,
+        global_count + 1,
+        RATE_LIMIT_GLOBAL_TTL_SECONDS,
+    )
+    .await;
 
     if ai::is_prompt_injection(&env, &message).await {
         return crate::api::invalid(

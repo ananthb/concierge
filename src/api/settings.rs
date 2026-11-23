@@ -69,9 +69,8 @@ pub async fn handle(mut req: Request, env: Env, rest: &[&str]) -> Result<Respons
 }
 
 async fn get(env: &Env, tenant_id: &str) -> Result<Response> {
-    let kv = env.kv("KV")?;
     let db = env.d1("DB")?;
-    let state = storage::get_onboarding(&kv, tenant_id).await?;
+    let state = storage::get_onboarding(&db, tenant_id).await?;
     let Some(tenant) = storage::get_tenant(&db, tenant_id).await? else {
         return super::not_found("Account");
     };
@@ -84,9 +83,8 @@ async fn get(env: &Env, tenant_id: &str) -> Result<Response> {
 }
 
 async fn put(env: &Env, tenant_id: &str, body: &serde_json::Value) -> Result<Response> {
-    let kv = env.kv("KV")?;
     let db = env.d1("DB")?;
-    let mut state = storage::get_onboarding(&kv, tenant_id).await?;
+    let mut state = storage::get_onboarding(&db, tenant_id).await?;
     let Some(mut tenant) = storage::get_tenant(&db, tenant_id).await? else {
         return super::not_found("Account");
     };
@@ -110,7 +108,7 @@ async fn put(env: &Env, tenant_id: &str, body: &serde_json::Value) -> Result<Res
     }
 
     if onboarding_changed {
-        storage::save_onboarding(&kv, tenant_id, &state).await?;
+        storage::save_onboarding(&db, tenant_id, &state).await?;
     }
 
     let mut tenant_changed = false;

@@ -209,37 +209,17 @@
       <div class="table-wrap">
         <div class="table-wrap__head">
           <b>wrangler.toml</b><span>resource bindings</span>
-          <span class="count">6 bindings</span>
+          <span class="count">3 bindings</span>
         </div>
         <table class="docs">
           <thead><tr><th>Binding</th><th>Type</th><th>Description</th></tr></thead>
           <tbody>
-            <tr><td><code>DB</code></td><td><span class="pill">D1</span></td><td class="muted">SQLite for message metadata, billing, payments, the audit log, and the archetype catalog.</td></tr>
-            <tr><td><code>KV</code></td><td><span class="pill">KV</span></td><td class="muted">Tenant and account configs, auth sessions, conversation state, persona, the demo cache.</td></tr>
+            <tr><td><code>DB</code></td><td><span class="pill">D1</span></td><td class="muted">SQLite for all persistent state: tenants, sessions, WhatsApp accounts, onboarding, conversation sessions, burst buffer, rate limits, message metadata, payments, and billing.</td></tr>
             <tr><td><code>AI</code></td><td><span class="pill">AI</span></td><td class="muted">Cloudflare Workers AI: reply generation, prompt&#8209;injection scanning, persona safety classification.</td></tr>
             <tr><td><code>EMAIL</code></td><td><span class="pill">send_email</span></td><td class="muted">Outbound only: the one email sent when a conversation is handed to a human.</td></tr>
-            <tr><td><code>REPLY_BUFFER</code></td><td><span class="pill">DO</span></td><td class="muted">Per&#8209;conversation reply buffer that batches multi&#8209;message bursts within <code>wait_seconds</code>.</td></tr>
-            <tr><td><code>SAFETY_QUEUE</code></td><td><span class="pill">Queue</span></td><td class="muted">Persona safety classifier jobs. Producer + consumer bound on the same Worker.</td></tr>
           </tbody>
         </table>
       </div>
-
-      <h2 id="queues">Cloudflare Queues</h2>
-      <p>Two queues must exist before deploy:</p>
-      <ul>
-        <li><code>concierge-safety</code>: producer + consumer for the persona safety classifier. The Worker enqueues a <code>SafetyJob</code> on each persona save and consumes the same queue via <code>#[event(queue)]</code>.</li>
-        <li><code>concierge-safety-dlq</code>: dead&#8209;letter queue for safety jobs after 3 retries. Inspect failures here when persona checks stop completing.</li>
-      </ul>
-      <div class="codeblock">
-        <div class="codeblock__head">
-          <span class="codeblock__lang">bash</span>
-          <span class="codeblock__file">terminal</span>
-          <button class="codeblock__copy">Copy</button>
-        </div>
-<pre><code><span class="tok-k">wrangler</span> queues create concierge-safety
-<span class="tok-k">wrangler</span> queues create concierge-safety-dlq</code></pre>
-      </div>
-      <p class="muted">Local <code>wrangler dev</code> works without queues configured: <code>safety_queue::enqueue</code> logs and falls through, leaving personas in <em>Pending</em> until you deploy against a properly bound environment.</p>
 
       <h2 id="locale">Locale &amp; supported languages</h2>
       <p>
@@ -251,7 +231,7 @@
 
       <h2 id="conversation">Conversation timing</h2>
       <p>
-        Three per&#8209;tenant knobs control how the worker treats a customer thread. They live on <code>OnboardingState.conversation</code> (a <code>ConversationConfig</code>) in KV at <code>onboarding:{tenant}</code>; each is <code>Option&lt;u32&gt;</code> and falls back to a constant in <code>src/prompt.rs</code> when unset. <code>GET</code> and <code>PUT /api/settings</code> read and write them, and the dashboard&rsquo;s Settings tab is the UI. Each field is three-valued on the wire: absent leaves the stored value, <code>null</code> clears the override back to the default, and a number sets it. An empty box in the form sends <code>null</code>, which is the only way to return a knob to its default.
+        Three per&#8209;tenant knobs control how the worker treats a customer thread. They live on <code>OnboardingState.conversation</code> (a <code>ConversationConfig</code>) in D1 (<code>tenant_onboarding</code>); each is <code>Option&lt;u32&gt;</code> and falls back to a constant in <code>src/prompt.rs</code> when unset. <code>GET</code> and <code>PUT /api/settings</code> read and write them, and the dashboard&rsquo;s Settings tab is the UI. Each field is three-valued on the wire: absent leaves the stored value, <code>null</code> clears the override back to the default, and a number sets it. An empty box in the form sends <code>null</code>, which is the only way to return a knob to its default.
       </p>
       <div class="table-wrap">
         <div class="table-wrap__head">
@@ -306,10 +286,6 @@
         </table>
       </div>
 
-      <h2 id="cron">Cron triggers</h2>
-      <p>One cron, hourly at <code>0 * * * *</code>: it re-rolls the landing-page demo personas when the operator-configured cadence has elapsed, and is a single KV read when it isn&rsquo;t due. Configured in the <code>[triggers]</code> section of <code>wrangler.toml</code> and mirrored in <code>src/scheduled.rs</code>, which dispatches on the cron string.</p>
-      <p class="muted">Two crons were removed: a 15-minute approval-digest sweep (which expired stale queued drafts and emailed digests) and a daily Instagram token refresh.</p>
-
       <div class="codeblock">
         <div class="codeblock__head">
           <span class="codeblock__lang">toml</span>
@@ -318,7 +294,7 @@
         </div>
 <pre><code><span class="tok-c"># Identity</span>
 <span class="tok-v">name</span> = <span class="tok-s">"concierge"</span>
-<span class="tok-v">main</span> = <span class="tok-s">"worker-shim.mjs"</span>
+<span class="tok-v">main</span> = <span class="tok-s">"build/index.js"</span>
 <span class="tok-v">compatibility_date</span> = <span class="tok-s">"2024-01-01"</span>
 
 <span class="tok-c"># Plain-text variables (deployment-specific values come in via --var at deploy time)</span>
@@ -331,10 +307,6 @@
 <span class="tok-v">database_name</span> = <span class="tok-s">"concierge"</span>
 <span class="tok-v">database_id</span>   = <span class="tok-s">"…"</span>
 
-[[<span class="tok-k">kv_namespaces</span>]]
-<span class="tok-v">binding</span> = <span class="tok-s">"KV"</span>
-<span class="tok-v">id</span>      = <span class="tok-s">"…"</span>
-
 [<span class="tok-k">ai</span>]            <span class="tok-v">binding</span> = <span class="tok-s">"AI"</span>
 [[<span class="tok-k">send_email</span>]]   <span class="tok-v">name</span>    = <span class="tok-s">"EMAIL"</span>
 
@@ -345,28 +317,6 @@
 <span class="tok-c"># /pricing serves public/pricing.html.</span>
 [<span class="tok-k">assets</span>]
 <span class="tok-v">directory</span> = <span class="tok-s">"./public"</span>
-
-[[<span class="tok-k">durable_objects.bindings</span>]]
-<span class="tok-v">name</span>       = <span class="tok-s">"REPLY_BUFFER"</span>
-<span class="tok-v">class_name</span> = <span class="tok-s">"ReplyBufferDO"</span>
-
-<span class="tok-c"># ApprovalsDO was deleted; the migration tells Cloudflare to drop the</span>
-<span class="tok-c"># class. Removing only the binding leaves it orphaned and the deploy fails.</span>
-[[<span class="tok-k">migrations</span>]]
-<span class="tok-v">tag</span>             = <span class="tok-s">"v3"</span>
-<span class="tok-v">deleted_classes</span> = [<span class="tok-s">"ApprovalsDO"</span>]
-
-<span class="tok-c"># Persona safety classifier</span>
-[[<span class="tok-k">queues.producers</span>]]
-<span class="tok-v">queue</span>   = <span class="tok-s">"concierge-safety"</span>
-<span class="tok-v">binding</span> = <span class="tok-s">"SAFETY_QUEUE"</span>
-
-[[<span class="tok-k">queues.consumers</span>]]
-<span class="tok-v">queue</span>             = <span class="tok-s">"concierge-safety"</span>
-<span class="tok-v">max_batch_size</span>    = <span class="tok-n">10</span>
-<span class="tok-v">max_batch_timeout</span> = <span class="tok-n">5</span>
-<span class="tok-v">max_retries</span>       = <span class="tok-n">3</span>
-<span class="tok-v">dead_letter_queue</span> = <span class="tok-s">"concierge-safety-dlq"</span>
 
 <span class="tok-c"># Hourly: re-roll the demo personas when the cadence has elapsed</span>
 [<span class="tok-k">triggers</span>]

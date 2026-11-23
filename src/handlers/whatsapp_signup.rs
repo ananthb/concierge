@@ -64,10 +64,9 @@ pub async fn handle_whatsapp_signup(
                 && (content_type.contains("application/json")
                     || accept.contains("application/json"));
 
-            let kv = env.kv("KV")?;
             let db = env.d1("DB")?;
 
-            let Some(tenant_id) = super::auth::resolve_tenant_id(&req, &kv).await else {
+            let Some(tenant_id) = super::auth::resolve_tenant_id(&req, &db).await else {
                 if wants_json {
                     return crate::api::error("unauthenticated", "Sign in to continue.", 401);
                 }
@@ -82,11 +81,16 @@ pub async fn handle_whatsapp_signup(
                 parse_form_params(&mut req).await?
             };
 
-            let state_key = format!("wa_signup_state:{}", params.state);
-            match kv.get(&state_key).text().await? {
-                Some(tid) if tid == tenant_id && !params.state.is_empty() => {
-                    kv.delete(&state_key).await?;
-                }
+            if params.state.is_empty() {
+                return fail(
+                    wants_json,
+                    "invalid_state",
+                    "Invalid or expired signup state.",
+                    400,
+                );
+            }
+            match take_signup_state(&db, &params.state).await? {
+                Some(tid) if tid == tenant_id => {}
                 _ => {
                     return fail(
                         wants_json,
@@ -184,7 +188,7 @@ pub async fn handle_whatsapp_signup(
                 }
             };
 
-            if get_whatsapp_account_by_phone(&kv, &phone_number_id)
+            if get_whatsapp_account_by_phone(&db, &phone_number_id)
                 .await?
                 .is_some()
             {
@@ -217,7 +221,7 @@ pub async fn handle_whatsapp_signup(
                 created_at: now.clone(),
                 updated_at: now,
             };
-            save_whatsapp_account(&kv, &account).await?;
+            save_whatsapp_account(&db, &account).await?;
 
             if wants_json {
                 crate::api::json(&SignupSuccessView {

@@ -39,8 +39,7 @@ pub async fn notify_human_requested(
     customer_excerpt: &str,
     risk: Option<crate::risk::RiskReason>,
 ) -> Result<()> {
-    let kv = env.kv("KV")?;
-    let onboarding = get_onboarding(&kv, tenant_id).await?;
+    let onboarding = get_onboarding(db, tenant_id).await?;
     if !onboarding.notifications.handoff_email {
         return Ok(());
     }

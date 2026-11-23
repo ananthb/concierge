@@ -29,6 +29,16 @@ pub fn now_iso() -> String {
         .unwrap_or_else(|| String::from("1970-01-01T00:00:00.000Z"))
 }
 
+/// Get current UNIX epoch timestamp in seconds.
+pub fn now_epoch_secs() -> i64 {
+    (js_sys::Date::now() / 1000.0) as i64
+}
+
+/// Get current UNIX epoch timestamp in milliseconds.
+pub fn now_epoch_ms() -> i64 {
+    js_sys::Date::now() as i64
+}
+
 /// Truncate string to max characters (Unicode-safe).
 pub fn truncate(s: &str, max: usize) -> String {
     s.chars().take(max).collect()

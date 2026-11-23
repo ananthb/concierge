@@ -1,33 +1,33 @@
 //! Unified message processing pipeline.
 //! All inbound messages from any channel flow through here.
 
+use wasm_bindgen::JsValue;
 use worker::*;
 
 use crate::ai;
 use crate::billing;
 use crate::channel;
-use crate::helpers::generate_id;
+use crate::helpers::{generate_id, now_epoch_ms};
 use crate::storage::*;
 use crate::types::*;
 
-/// Process an inbound message, optionally batching via `ReplyBufferDO`.
+/// Process an inbound message, optionally batching via D1 `pending_inbound`.
 pub async fn process_inbound(msg: &InboundMessage, env: &Env) -> Result<()> {
-    let kv = env.kv("KV")?;
     let db = env.d1("DB")?;
 
     if let Err(e) = save_inbound_message(&db, msg, None).await {
         console_log!("Failed to log inbound message: {:?}", e);
     }
 
-    let wait = get_channel_reply_config(&kv, &msg.channel, &msg.channel_account_id)
+    let wait = get_channel_reply_config(&db, &msg.channel, &msg.channel_account_id)
         .await?
         .map(|c| c.wait_seconds)
         .unwrap_or(0);
 
     if wait == 0 {
         process_inbound_immediate(msg, env).await?;
-    } else if let Err(e) = forward_to_buffer(env, msg, wait).await {
-        console_log!("buffer route failed, falling back to immediate: {:?}", e);
+    } else if let Err(e) = buffer_and_flush(&db, env, msg, wait).await {
+        console_log!("burst buffer failed, falling back to immediate: {:?}", e);
         process_inbound_immediate(msg, env).await?;
     }
 
@@ -36,36 +36,137 @@ pub async fn process_inbound(msg: &InboundMessage, env: &Env) -> Result<()> {
 
 /// Process a single (possibly already-batched) message immediately.
 pub async fn process_inbound_immediate(msg: &InboundMessage, env: &Env) -> Result<()> {
-    let kv = env.kv("KV")?;
     let db = env.d1("DB")?;
-    handle_auto_reply(msg, &kv, &db, env).await
+    handle_auto_reply(msg, &db, env).await
 }
 
-async fn forward_to_buffer(env: &Env, msg: &InboundMessage, wait_seconds: u32) -> Result<()> {
-    let ns = env.durable_object("REPLY_BUFFER")?;
-    let id_name = format!(
+async fn sleep_seconds(wait_seconds: u32) {
+    let ms = (wait_seconds.max(1) as i32) * 1000;
+    let promise = js_sys::Promise::new(&mut |resolve, _reject| {
+        let global = js_sys::global();
+        if let Ok(set_timeout_val) = js_sys::Reflect::get(&global, &JsValue::from_str("setTimeout"))
+        {
+            let set_timeout: js_sys::Function = set_timeout_val.into();
+            let _ = set_timeout.call2(&global, &resolve, &JsValue::from_f64(ms as f64));
+        } else {
+            let _ = resolve.call0(&JsValue::NULL);
+        }
+    });
+    let _ = wasm_bindgen_futures::JsFuture::from(promise).await;
+}
+
+async fn buffer_and_flush(
+    db: &D1Database,
+    env: &Env,
+    msg: &InboundMessage,
+    wait_seconds: u32,
+) -> Result<()> {
+    let row_id = generate_id();
+    let batch_key = format!(
         "{}:{}:{}",
         msg.tenant_id,
         msg.channel.as_str(),
         msg.conversation_key()
     );
-    let stub = ns.id_from_name(&id_name)?.get_stub()?;
+    let message_json = serde_json::to_string(msg)?;
+    let created_at_ms = now_epoch_ms();
 
-    let payload = serde_json::json!({
-        "msg": msg,
-        "wait_seconds": wait_seconds,
-    });
-    let body = serde_json::to_string(&payload)?;
+    db.prepare(
+        "INSERT INTO pending_inbound (id, batch_key, message_json, created_at_ms)
+         VALUES (?, ?, ?, ?)",
+    )
+    .bind(&[
+        row_id.as_str().into(),
+        batch_key.as_str().into(),
+        message_json.as_str().into(),
+        JsValue::from(created_at_ms as f64),
+    ])?
+    .run()
+    .await?;
 
-    let headers = Headers::new();
-    headers.set("Content-Type", "application/json")?;
-    let mut init = RequestInit::new();
-    init.with_method(Method::Post)
-        .with_headers(headers)
-        .with_body(Some(wasm_bindgen::JsValue::from_str(&body)));
-    let req = Request::new_with_init("https://buffer.do/push", &init)?;
-    let _ = stub.fetch_with_request(req).await?;
-    Ok(())
+    sleep_seconds(wait_seconds).await;
+
+    let latest = db
+        .prepare(
+            "SELECT id FROM pending_inbound
+             WHERE batch_key = ?
+             ORDER BY created_at_ms DESC, id DESC
+             LIMIT 1",
+        )
+        .bind(&[batch_key.as_str().into()])?
+        .first::<serde_json::Value>(None)
+        .await?;
+
+    let latest_id = latest
+        .as_ref()
+        .and_then(|r| r.get("id"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    if latest_id != row_id {
+        return Ok(());
+    }
+
+    let rows = db
+        .prepare(
+            "SELECT id, message_json FROM pending_inbound
+             WHERE batch_key = ?
+             ORDER BY created_at_ms ASC, id ASC",
+        )
+        .bind(&[batch_key.as_str().into()])?
+        .all()
+        .await?
+        .results::<serde_json::Value>()?;
+
+    if rows.is_empty() {
+        return Ok(());
+    }
+
+    let mut pending: Vec<InboundMessage> = Vec::with_capacity(rows.len());
+    for row in &rows {
+        if let Some(id) = row.get("id").and_then(|v| v.as_str()) {
+            let _ = db
+                .prepare("DELETE FROM pending_inbound WHERE id = ?")
+                .bind(&[id.into()])?
+                .run()
+                .await;
+        }
+        if let Some(json_str) = row.get("message_json").and_then(|v| v.as_str()) {
+            if let Ok(m) = serde_json::from_str::<InboundMessage>(json_str) {
+                pending.push(m);
+            }
+        }
+    }
+
+    let Some(synth) = merge_inbound_batch(&pending) else {
+        return Ok(());
+    };
+
+    process_inbound_immediate(&synth, env).await
+}
+
+pub(crate) fn merge_inbound_batch(pending: &[InboundMessage]) -> Option<InboundMessage> {
+    let first = pending.first()?;
+    let last = pending.last()?;
+    let combined_body = pending
+        .iter()
+        .map(|m| m.body.as_str())
+        .collect::<Vec<_>>()
+        .join("\n");
+    let reply_to = first.conversation_key();
+
+    Some(InboundMessage {
+        id: last.id.clone(),
+        channel: first.channel,
+        sender: first.sender.clone(),
+        sender_name: first.sender_name.clone(),
+        recipient: first.recipient.clone(),
+        reply_to,
+        body: combined_body,
+        has_attachment: false,
+        tenant_id: first.tenant_id.clone(),
+        channel_account_id: first.channel_account_id.clone(),
+        raw_metadata: last.raw_metadata.clone(),
+    })
 }
 
 /// Handle auto-reply for an inbound message:
@@ -77,13 +178,8 @@ async fn forward_to_buffer(env: &Env, msg: &InboundMessage, wait_seconds: u32) -
 ///   6. Deduct 1 credit (`billing::try_deduct`) for BOTH Canned and AI replies.
 ///   7. Generate AI reply (or use Canned text), run handoff + risk gate, send reply.
 ///      Restore credit on AI failure, empty reply, or channel send failure.
-async fn handle_auto_reply(
-    msg: &InboundMessage,
-    kv: &kv::KvStore,
-    db: &D1Database,
-    env: &Env,
-) -> Result<()> {
-    let info = match get_channel_reply_info(kv, &msg.channel, &msg.channel_account_id).await? {
+async fn handle_auto_reply(msg: &InboundMessage, db: &D1Database, env: &Env) -> Result<()> {
+    let info = match get_channel_reply_info(db, &msg.channel, &msg.channel_account_id).await? {
         Some(i) if i.config.enabled => i,
         _ => return Ok(()),
     };
@@ -91,7 +187,7 @@ async fn handle_auto_reply(
     let is_ai = matches!(config.response, ReplyResponse::Ai);
 
     let onboarding = if is_ai {
-        let o = get_onboarding(kv, &msg.tenant_id).await?;
+        let o = get_onboarding(db, &msg.tenant_id).await?;
         if !o.profile_safety.is_approved_for(&o.business.name) {
             console_log!(
                 "Profile not safety-approved for tenant {}, skipping AI reply",
@@ -138,7 +234,7 @@ async fn handle_auto_reply(
     let conv_key = msg.conversation_key();
     let existing_session = if is_ai {
         get_conversation_session(
-            kv,
+            db,
             &msg.tenant_id,
             &msg.channel,
             &msg.channel_account_id,
@@ -205,7 +301,7 @@ async fn handle_auto_reply(
             messages,
         };
         let _ = save_conversation_session(
-            kv,
+            db,
             &msg.tenant_id,
             &msg.channel,
             &msg.channel_account_id,
@@ -401,7 +497,7 @@ async fn handle_auto_reply(
         messages: session_messages,
     };
     if let Err(e) = save_conversation_session(
-        kv,
+        db,
         &msg.tenant_id,
         &msg.channel,
         &msg.channel_account_id,
@@ -505,5 +601,40 @@ mod history_tests {
         let mut messages = vec![msg(ConversationRole::User, "u1")];
         trim_to_max(&mut messages, 0);
         assert!(messages.is_empty());
+    }
+
+    #[test]
+    fn merge_inbound_batch_keeps_first_sender_name_and_last_id_and_metadata() {
+        let m1 = InboundMessage {
+            id: "id-1".into(),
+            channel: Channel::WhatsApp,
+            sender: "cust-1".into(),
+            sender_name: Some("Alice".into()),
+            recipient: "phone-1".into(),
+            reply_to: "cust-1".into(),
+            body: "Hello".into(),
+            has_attachment: false,
+            tenant_id: "t-1".into(),
+            channel_account_id: "wa-1".into(),
+            raw_metadata: serde_json::json!({"seq": 1}),
+        };
+        let m2 = InboundMessage {
+            id: "id-2".into(),
+            channel: Channel::WhatsApp,
+            sender: "cust-1".into(),
+            sender_name: None,
+            recipient: "phone-1".into(),
+            reply_to: "cust-1".into(),
+            body: "Are you open?".into(),
+            has_attachment: false,
+            tenant_id: "t-1".into(),
+            channel_account_id: "wa-1".into(),
+            raw_metadata: serde_json::json!({"seq": 2}),
+        };
+        let merged = merge_inbound_batch(&[m1, m2]).unwrap();
+        assert_eq!(merged.id, "id-2");
+        assert_eq!(merged.sender_name.as_deref(), Some("Alice"));
+        assert_eq!(merged.body, "Hello\nAre you open?");
+        assert_eq!(merged.raw_metadata, serde_json::json!({"seq": 2}));
     }
 }

@@ -1,6 +1,7 @@
 use wasm_bindgen::JsValue;
 use worker::*;
 
+use crate::helpers::{now_epoch_secs, now_iso};
 use crate::types::{
     Channel, CreditEntry, InboundMessage, MessageAction, MessageDirection, OnboardingState,
     ReplyConfig, SafetyState, Session, Tenant, TenantBilling, WhatsAppAccount,
@@ -140,118 +141,261 @@ pub async fn set_tenant_facebook_id(
 }
 
 // ============================================================================
-// Session KV Operations
+// Session D1 Operations
 // ============================================================================
 
 pub async fn save_session(
-    kv: &kv::KvStore,
+    db: &D1Database,
     token: &str,
     tenant_id: &str,
     ttl_seconds: u64,
 ) -> Result<()> {
-    kv.put(&format!("session:{}", token), tenant_id)?
-        .expiration_ttl(ttl_seconds)
-        .execute()
-        .await?;
+    let now = now_epoch_secs();
+    let expires_at = now + (ttl_seconds as i64);
+    let created_at = now_iso();
+    let _ = db
+        .prepare("DELETE FROM sessions WHERE expires_at <= ?")
+        .bind(&[JsValue::from(now as f64)])?
+        .run()
+        .await;
+    db.prepare(
+        "INSERT INTO sessions (token, tenant_id, expires_at, created_at)
+         VALUES (?, ?, ?, ?)
+         ON CONFLICT(token) DO UPDATE SET
+           tenant_id = excluded.tenant_id,
+           expires_at = excluded.expires_at,
+           created_at = excluded.created_at",
+    )
+    .bind(&[
+        token.into(),
+        tenant_id.into(),
+        JsValue::from(expires_at as f64),
+        created_at.as_str().into(),
+    ])?
+    .run()
+    .await?;
     Ok(())
 }
 
-pub async fn get_session(kv: &kv::KvStore, token: &str) -> Result<Option<String>> {
-    kv.get(&format!("session:{}", token))
-        .text()
-        .await
-        .map_err(|e| Error::from(e.to_string()))
+pub async fn get_session(db: &D1Database, token: &str) -> Result<Option<String>> {
+    let now = now_epoch_secs();
+    let row = db
+        .prepare("SELECT tenant_id FROM sessions WHERE token = ? AND expires_at > ?")
+        .bind(&[token.into(), JsValue::from(now as f64)])?
+        .first::<serde_json::Value>(None)
+        .await?;
+    Ok(row.and_then(|r| {
+        r.get("tenant_id")
+            .and_then(|v| v.as_str())
+            .map(String::from)
+    }))
 }
 
-pub async fn delete_session(kv: &kv::KvStore, token: &str) -> Result<()> {
-    kv.delete(&format!("session:{}", token)).await?;
+pub async fn delete_session(db: &D1Database, token: &str) -> Result<()> {
+    db.prepare("DELETE FROM sessions WHERE token = ?")
+        .bind(&[token.into()])?
+        .run()
+        .await?;
     Ok(())
 }
 
 // ============================================================================
-// WhatsApp Account KV Operations
+// WhatsApp Signup State D1 Operations
 // ============================================================================
 
-pub async fn get_whatsapp_account(kv: &kv::KvStore, id: &str) -> Result<Option<WhatsAppAccount>> {
-    kv.get(&format!("whatsapp:{}", id))
-        .json::<WhatsAppAccount>()
-        .await
-        .map_err(|e| Error::from(e.to_string()))
-}
-
-pub async fn save_whatsapp_account(kv: &kv::KvStore, account: &WhatsAppAccount) -> Result<()> {
-    kv.put(&format!("whatsapp:{}", account.id), account)?
-        .execute()
-        .await?;
-    if !account.tenant_id.is_empty() {
-        kv.put(
-            &format!("tenant:{}:whatsapp:{}", account.tenant_id, account.id),
-            "",
-        )?
-        .execute()
-        .await?;
-    }
-    // Reverse index: phone_number_id -> whatsapp account id (for webhook routing)
-    if !account.phone_number_id.is_empty() {
-        kv.put(
-            &format!("wa_phone:{}", account.phone_number_id),
-            &account.id,
-        )?
-        .execute()
-        .await?;
-    }
+pub async fn save_signup_state(
+    db: &D1Database,
+    state: &str,
+    tenant_id: &str,
+    ttl_seconds: u64,
+) -> Result<()> {
+    let now = now_epoch_secs();
+    let expires_at = now + (ttl_seconds as i64);
+    let _ = db
+        .prepare("DELETE FROM signup_states WHERE expires_at <= ?")
+        .bind(&[JsValue::from(now as f64)])?
+        .run()
+        .await;
+    db.prepare(
+        "INSERT INTO signup_states (state, tenant_id, expires_at)
+         VALUES (?, ?, ?)
+         ON CONFLICT(state) DO UPDATE SET
+           tenant_id = excluded.tenant_id,
+           expires_at = excluded.expires_at",
+    )
+    .bind(&[
+        state.into(),
+        tenant_id.into(),
+        JsValue::from(expires_at as f64),
+    ])?
+    .run()
+    .await?;
     Ok(())
 }
 
-pub async fn delete_whatsapp_account(kv: &kv::KvStore, tenant_id: &str, id: &str) -> Result<()> {
-    if let Some(account) = get_whatsapp_account(kv, id).await? {
-        if !account.phone_number_id.is_empty() {
-            kv.delete(&format!("wa_phone:{}", account.phone_number_id))
-                .await?;
-        }
+pub async fn take_signup_state(db: &D1Database, state: &str) -> Result<Option<String>> {
+    let now = now_epoch_secs();
+    let row = db
+        .prepare("SELECT tenant_id FROM signup_states WHERE state = ? AND expires_at > ?")
+        .bind(&[state.into(), JsValue::from(now as f64)])?
+        .first::<serde_json::Value>(None)
+        .await?;
+    if row.is_some() {
+        let _ = db
+            .prepare("DELETE FROM signup_states WHERE state = ?")
+            .bind(&[state.into()])?
+            .run()
+            .await;
     }
-    kv.delete(&format!("whatsapp:{}", id)).await?;
-    if !tenant_id.is_empty() {
-        kv.delete(&format!("tenant:{}:whatsapp:{}", tenant_id, id))
-            .await?;
+    Ok(row.and_then(|r| {
+        r.get("tenant_id")
+            .and_then(|v| v.as_str())
+            .map(String::from)
+    }))
+}
+
+// ============================================================================
+// WhatsApp Account D1 Operations
+// ============================================================================
+
+fn row_to_whatsapp_account(row: &serde_json::Value) -> WhatsAppAccount {
+    let created_at = row
+        .get("created_at")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let reply_json = row
+        .get("reply_json")
+        .and_then(|v| v.as_str())
+        .unwrap_or("{}");
+    let auto_reply: ReplyConfig = serde_json::from_str(reply_json).unwrap_or_default();
+    let canned_safety_json = row
+        .get("canned_safety_json")
+        .and_then(|v| v.as_str())
+        .unwrap_or("{}");
+    let canned_safety: SafetyState = serde_json::from_str(canned_safety_json).unwrap_or_default();
+
+    WhatsAppAccount {
+        id: row
+            .get("id")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string(),
+        tenant_id: row
+            .get("tenant_id")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string(),
+        name: row
+            .get("name")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string(),
+        phone_number: row
+            .get("display_phone_number")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string(),
+        phone_number_id: row
+            .get("phone_number_id")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string(),
+        waba_id: row
+            .get("waba_id")
+            .and_then(|v| v.as_str())
+            .filter(|s| !s.is_empty())
+            .map(String::from),
+        auto_reply,
+        canned_safety,
+        created_at: created_at.clone(),
+        updated_at: created_at,
     }
+}
+
+pub async fn get_whatsapp_account(db: &D1Database, id: &str) -> Result<Option<WhatsAppAccount>> {
+    let row = db
+        .prepare("SELECT * FROM whatsapp_accounts WHERE id = ?")
+        .bind(&[id.into()])?
+        .first::<serde_json::Value>(None)
+        .await?;
+    Ok(row.as_ref().map(row_to_whatsapp_account))
+}
+
+pub async fn save_whatsapp_account(db: &D1Database, account: &WhatsAppAccount) -> Result<()> {
+    let reply_json = serde_json::to_string(&account.auto_reply)
+        .map_err(|e| Error::from(format!("JSON error: {e}")))?;
+    let canned_safety_json = serde_json::to_string(&account.canned_safety)
+        .map_err(|e| Error::from(format!("JSON error: {e}")))?;
+    let waba_val: JsValue = match &account.waba_id {
+        Some(w) if !w.is_empty() => w.as_str().into(),
+        _ => JsValue::NULL,
+    };
+    let created_at = if account.created_at.is_empty() {
+        now_iso()
+    } else {
+        account.created_at.clone()
+    };
+
+    db.prepare(
+        "INSERT INTO whatsapp_accounts (id, tenant_id, name, phone_number_id, display_phone_number, waba_id, reply_json, canned_safety_json, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET
+           tenant_id = excluded.tenant_id,
+           name = excluded.name,
+           phone_number_id = excluded.phone_number_id,
+           display_phone_number = excluded.display_phone_number,
+           waba_id = excluded.waba_id,
+           reply_json = excluded.reply_json,
+           canned_safety_json = excluded.canned_safety_json",
+    )
+    .bind(&[
+        account.id.as_str().into(),
+        account.tenant_id.as_str().into(),
+        account.name.as_str().into(),
+        account.phone_number_id.as_str().into(),
+        account.phone_number.as_str().into(),
+        waba_val,
+        reply_json.as_str().into(),
+        canned_safety_json.as_str().into(),
+        created_at.as_str().into(),
+    ])?
+    .run()
+    .await?;
+    Ok(())
+}
+
+pub async fn delete_whatsapp_account(db: &D1Database, tenant_id: &str, id: &str) -> Result<()> {
+    db.prepare("DELETE FROM whatsapp_accounts WHERE id = ? AND tenant_id = ?")
+        .bind(&[id.into(), tenant_id.into()])?
+        .run()
+        .await?;
     Ok(())
 }
 
 pub async fn list_whatsapp_accounts(
-    kv: &kv::KvStore,
+    db: &D1Database,
     tenant_id: &str,
 ) -> Result<Vec<WhatsAppAccount>> {
-    let prefix = format!("tenant:{}:whatsapp:", tenant_id);
-    let list = kv
-        .list()
-        .prefix(prefix.clone())
-        .execute()
-        .await
-        .map_err(|e| Error::from(e.to_string()))?;
-
-    let mut accounts = Vec::new();
-    for key in list.keys {
-        let account_id = key.name.strip_prefix(&prefix).unwrap_or("").to_string();
-        if account_id.is_empty() {
-            continue;
-        }
-        if let Some(account) = get_whatsapp_account(kv, &account_id).await? {
-            accounts.push(account);
-        }
-    }
-    accounts.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
-    Ok(accounts)
+    let rows = db
+        .prepare("SELECT * FROM whatsapp_accounts WHERE tenant_id = ? ORDER BY created_at DESC")
+        .bind(&[tenant_id.into()])?
+        .all()
+        .await?
+        .results::<serde_json::Value>()?;
+    Ok(rows.iter().map(row_to_whatsapp_account).collect())
 }
 
 pub async fn get_whatsapp_account_by_phone(
-    kv: &kv::KvStore,
+    db: &D1Database,
     phone_number_id: &str,
 ) -> Result<Option<String>> {
-    kv.get(&format!("wa_phone:{}", phone_number_id))
-        .text()
-        .await
-        .map_err(|e| Error::from(e.to_string()))
+    let row = db
+        .prepare("SELECT id FROM whatsapp_accounts WHERE phone_number_id = ?")
+        .bind(&[phone_number_id.into()])?
+        .first::<serde_json::Value>(None)
+        .await?;
+    Ok(row.and_then(|r| r.get("id").and_then(|v| v.as_str()).map(String::from)))
 }
 
 // ============================================================================
@@ -266,13 +410,13 @@ pub struct ChannelReplyInfo {
 
 /// Look up a channel account's `ReplyConfig` and canned-reply safety verdict.
 pub async fn get_channel_reply_info(
-    kv: &kv::KvStore,
+    db: &D1Database,
     channel: &Channel,
     account_id: &str,
 ) -> Result<Option<ChannelReplyInfo>> {
     match channel {
         Channel::WhatsApp => {
-            Ok(get_whatsapp_account(kv, account_id)
+            Ok(get_whatsapp_account(db, account_id)
                 .await?
                 .map(|a| ChannelReplyInfo {
                     config: a.auto_reply,
@@ -285,11 +429,11 @@ pub async fn get_channel_reply_info(
 /// Look up a channel account's `ReplyConfig` without leaking channel-specific
 /// storage lookups into the pipeline.
 pub async fn get_channel_reply_config(
-    kv: &kv::KvStore,
+    db: &D1Database,
     channel: &Channel,
     account_id: &str,
 ) -> Result<Option<ReplyConfig>> {
-    Ok(get_channel_reply_info(kv, channel, account_id)
+    Ok(get_channel_reply_info(db, channel, account_id)
         .await?
         .map(|info| info.config))
 }
@@ -298,18 +442,30 @@ pub async fn get_channel_reply_config(
 // Delete All Tenant Data
 // ============================================================================
 
-pub async fn delete_tenant_data(kv: &kv::KvStore, db: &D1Database, tenant_id: &str) -> Result<()> {
-    let wa_accounts = list_whatsapp_accounts(kv, tenant_id).await?;
-    for account in &wa_accounts {
-        delete_whatsapp_account(kv, tenant_id, &account.id).await?;
-    }
-
-    for table in &["messages", "tenant_billing"] {
+pub async fn delete_tenant_data(db: &D1Database, tenant_id: &str) -> Result<()> {
+    for table in &[
+        "whatsapp_accounts",
+        "tenant_onboarding",
+        "sessions",
+        "signup_states",
+        "messages",
+        "tenant_billing",
+    ] {
         let query = format!("DELETE FROM {} WHERE tenant_id = ?", table);
         let stmt = db.prepare(&query);
         if let Err(e) = stmt.bind(&[tenant_id.into()])?.run().await {
             console_log!("Failed to delete from {}: {:?}", table, e);
         }
+    }
+
+    let prefix = format!("convsession:{tenant_id}:%");
+    if let Err(e) = db
+        .prepare("DELETE FROM conversation_sessions WHERE session_key LIKE ?")
+        .bind(&[prefix.as_str().into()])?
+        .run()
+        .await
+    {
+        console_log!("Failed to delete from conversation_sessions: {:?}", e);
     }
 
     // Nullify tenant_id in payments. The row stays for dispute and tax records.
@@ -321,11 +477,6 @@ pub async fn delete_tenant_data(kv: &kv::KvStore, db: &D1Database, tenant_id: &s
     {
         console_log!("Failed to nullify tenant in payments: {:?}", e);
     }
-
-    kv.delete(&format!("onboarding:{}", tenant_id)).await?;
-    kv.delete(&format!("tenant:{}:credentials", tenant_id))
-        .await?;
-    kv.delete(&format!("csrf:{}", tenant_id)).await?;
 
     db.prepare("DELETE FROM tenants WHERE id = ?")
         .bind(&[tenant_id.into()])?
@@ -410,10 +561,10 @@ pub async fn update_message_conversation_id(
 }
 
 // ============================================================================
-// Conversation Sessions (KV)
+// Conversation Sessions (D1)
 // ============================================================================
 
-const SESSION_TTL: u64 = 24 * 60 * 60;
+const SESSION_TTL: i64 = 24 * 60 * 60;
 
 fn conversation_session_key(
     tenant_id: &str,
@@ -427,21 +578,33 @@ fn conversation_session_key(
 }
 
 pub async fn get_conversation_session(
-    kv: &kv::KvStore,
+    db: &D1Database,
     tenant_id: &str,
     channel: &Channel,
     channel_account_id: &str,
     conversation_key: &str,
 ) -> Result<Option<Session>> {
     let key = conversation_session_key(tenant_id, channel, channel_account_id, conversation_key);
-    kv.get(&key)
-        .json::<Session>()
-        .await
-        .map_err(|e| Error::from(e.to_string()))
+    let now = now_epoch_secs();
+    let row = db
+        .prepare("SELECT session_json FROM conversation_sessions WHERE session_key = ? AND expires_at > ?")
+        .bind(&[key.as_str().into(), JsValue::from(now as f64)])?
+        .first::<serde_json::Value>(None)
+        .await?;
+    let Some(json_str) = row
+        .as_ref()
+        .and_then(|r| r.get("session_json"))
+        .and_then(|v| v.as_str())
+    else {
+        return Ok(None);
+    };
+    let session = serde_json::from_str::<Session>(json_str)
+        .map_err(|e| Error::from(format!("JSON error: {e}")))?;
+    Ok(Some(session))
 }
 
 pub async fn save_conversation_session(
-    kv: &kv::KvStore,
+    db: &D1Database,
     tenant_id: &str,
     channel: &Channel,
     channel_account_id: &str,
@@ -450,34 +613,121 @@ pub async fn save_conversation_session(
 ) -> Result<()> {
     let key = conversation_session_key(tenant_id, channel, channel_account_id, conversation_key);
     let json = serde_json::to_string(state).map_err(|e| Error::from(format!("JSON error: {e}")))?;
-    kv.put(&key, json)?
-        .expiration_ttl(SESSION_TTL)
-        .execute()
-        .await?;
+    let now = now_epoch_secs();
+    let expires_at = now + SESSION_TTL;
+    let updated_at = now_iso();
+    let _ = db
+        .prepare("DELETE FROM conversation_sessions WHERE expires_at <= ?")
+        .bind(&[JsValue::from(now as f64)])?
+        .run()
+        .await;
+    db.prepare(
+        "INSERT INTO conversation_sessions (session_key, session_json, expires_at, updated_at)
+         VALUES (?, ?, ?, ?)
+         ON CONFLICT(session_key) DO UPDATE SET
+           session_json = excluded.session_json,
+           expires_at = excluded.expires_at,
+           updated_at = excluded.updated_at",
+    )
+    .bind(&[
+        key.as_str().into(),
+        json.as_str().into(),
+        JsValue::from(expires_at as f64),
+        updated_at.as_str().into(),
+    ])?
+    .run()
+    .await?;
     Ok(())
 }
 
 // ============================================================================
-// Onboarding State (KV)
+// Onboarding State (D1)
 // ============================================================================
 
-pub async fn get_onboarding(kv: &kv::KvStore, tenant_id: &str) -> Result<OnboardingState> {
-    let key = format!("onboarding:{tenant_id}");
-    kv.get(&key)
-        .json::<OnboardingState>()
-        .await
-        .map_err(|e| Error::from(e.to_string()))
-        .map(|opt| opt.unwrap_or_default())
+pub async fn get_onboarding(db: &D1Database, tenant_id: &str) -> Result<OnboardingState> {
+    let row = db
+        .prepare("SELECT state_json FROM tenant_onboarding WHERE tenant_id = ?")
+        .bind(&[tenant_id.into()])?
+        .first::<serde_json::Value>(None)
+        .await?;
+    match row
+        .as_ref()
+        .and_then(|r| r.get("state_json"))
+        .and_then(|v| v.as_str())
+    {
+        Some(json_str) => serde_json::from_str::<OnboardingState>(json_str)
+            .map_err(|e| Error::from(format!("JSON error: {e}"))),
+        None => Ok(OnboardingState::default()),
+    }
 }
 
 pub async fn save_onboarding(
-    kv: &kv::KvStore,
+    db: &D1Database,
     tenant_id: &str,
     state: &OnboardingState,
 ) -> Result<()> {
-    let key = format!("onboarding:{tenant_id}");
     let json = serde_json::to_string(state).map_err(|e| Error::from(format!("JSON error: {e}")))?;
-    kv.put(&key, json)?.execute().await?;
+    let updated_at = now_iso();
+    db.prepare(
+        "INSERT INTO tenant_onboarding (tenant_id, state_json, updated_at)
+         VALUES (?, ?, ?)
+         ON CONFLICT(tenant_id) DO UPDATE SET
+           state_json = excluded.state_json,
+           updated_at = excluded.updated_at",
+    )
+    .bind(&[
+        tenant_id.into(),
+        json.as_str().into(),
+        updated_at.as_str().into(),
+    ])?
+    .run()
+    .await?;
+    Ok(())
+}
+
+// ============================================================================
+// Rate Limits (D1)
+// ============================================================================
+
+pub async fn get_rate_limit(db: &D1Database, bucket_key: &str) -> Result<i64> {
+    let now = now_epoch_secs();
+    let row = db
+        .prepare("SELECT count FROM rate_limits WHERE bucket_key = ? AND expires_at > ?")
+        .bind(&[bucket_key.into(), JsValue::from(now as f64)])?
+        .first::<serde_json::Value>(None)
+        .await?;
+    Ok(row
+        .and_then(|r| r.get("count").and_then(|v| v.as_i64()))
+        .unwrap_or(0))
+}
+
+pub async fn put_rate_limit(
+    db: &D1Database,
+    bucket_key: &str,
+    count: i64,
+    ttl_seconds: u64,
+) -> Result<()> {
+    let now = now_epoch_secs();
+    let expires_at = now + (ttl_seconds as i64);
+    let _ = db
+        .prepare("DELETE FROM rate_limits WHERE expires_at <= ?")
+        .bind(&[JsValue::from(now as f64)])?
+        .run()
+        .await;
+    db.prepare(
+        "INSERT INTO rate_limits (bucket_key, count, expires_at)
+         VALUES (?, ?, ?)
+         ON CONFLICT(bucket_key) DO UPDATE SET
+           count = excluded.count,
+           expires_at = excluded.expires_at",
+    )
+    .bind(&[
+        bucket_key.into(),
+        JsValue::from(count as f64),
+        JsValue::from(expires_at as f64),
+    ])?
+    .run()
+    .await?;
     Ok(())
 }
 

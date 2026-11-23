@@ -4,8 +4,8 @@ use serde::Serialize;
 use worker::*;
 
 use crate::billing;
-use crate::helpers::{now_iso, sha256_hex};
-use crate::safety_queue::{self, SafetyJob, SafetyTarget};
+use crate::helpers::sha256_hex;
+use crate::safety;
 use crate::storage::*;
 use crate::types::*;
 
@@ -36,10 +36,9 @@ pub async fn handle(mut req: Request, env: Env, rest: &[&str]) -> Result<Respons
         Ok(t) => t,
         Err(r) => return r,
     };
-    let kv = env.kv("KV")?;
     let db = env.d1("DB")?;
     let method = req.method();
-    let mut state = get_onboarding(&kv, &tenant_id).await?;
+    let mut state = get_onboarding(&db, &tenant_id).await?;
 
     if state.completed && method != Method::Get {
         return super::error(
@@ -50,7 +49,7 @@ pub async fn handle(mut req: Request, env: Env, rest: &[&str]) -> Result<Respons
     }
 
     match (method, rest) {
-        (Method::Get, []) => view(&env, &kv, &db, &tenant_id, &state).await,
+        (Method::Get, []) => view(&env, &db, &tenant_id, &state).await,
 
         (Method::Put, ["basics"]) => {
             let body = match super::read_json(&mut req).await {
@@ -71,6 +70,7 @@ pub async fn handle(mut req: Request, env: Env, rest: &[&str]) -> Result<Respons
             }
 
             let content_hash = sha256_hex(&name);
+            let verdict = safety::classify_text(&env, &name).await;
             state.business = BusinessInfo {
                 name,
                 contact_name: super::field(&body, "contact_name"),
@@ -82,45 +82,21 @@ pub async fn handle(mut req: Request, env: Env, rest: &[&str]) -> Result<Respons
                 state: super::field(&body, "state"),
                 pincode: super::field(&body, "pincode"),
             };
-
-            let mut enqueue_job: Option<SafetyJob> = None;
-            if crate::dev_bypass::active(&env) {
-                state.profile_safety = SafetyState {
-                    status: SafetyStatus::Approved,
-                    content_hash: Some(content_hash),
-                    checked_at: Some(now_iso()),
-                    vague_reason: None,
-                };
-            } else {
-                state.profile_safety = SafetyState {
-                    status: SafetyStatus::Pending,
-                    content_hash: None,
-                    checked_at: None,
-                    vague_reason: None,
-                };
-                enqueue_job = Some(SafetyJob {
-                    tenant_id: tenant_id.clone(),
-                    target: SafetyTarget::TenantProfile,
-                    content_hash,
-                });
-            }
+            state.profile_safety = safety::verdict_to_state(verdict, content_hash);
 
             state.step = advance(state.step, OnboardingStep::Channels);
-            save_onboarding(&kv, &tenant_id, &state).await?;
-            if let Some(job) = enqueue_job {
-                let _ = safety_queue::enqueue(&env, job).await;
-            }
-            view(&env, &kv, &db, &tenant_id, &state).await
+            save_onboarding(&db, &tenant_id, &state).await?;
+            view(&env, &db, &tenant_id, &state).await
         }
 
         (Method::Post, ["channels", "done"]) => {
-            let has_wa = !list_whatsapp_accounts(&kv, &tenant_id).await?.is_empty();
+            let has_wa = !list_whatsapp_accounts(&db, &tenant_id).await?.is_empty();
             if !has_wa {
                 return super::invalid("Connect a WhatsApp Business number to continue.");
             }
             state.step = advance(state.step, OnboardingStep::Launch);
-            save_onboarding(&kv, &tenant_id, &state).await?;
-            view(&env, &kv, &db, &tenant_id, &state).await
+            save_onboarding(&db, &tenant_id, &state).await?;
+            view(&env, &db, &tenant_id, &state).await
         }
 
         (Method::Post, ["step"]) => {
@@ -135,23 +111,23 @@ pub async fn handle(mut req: Request, env: Env, rest: &[&str]) -> Result<Respons
                 return super::invalid("Finish this step first.");
             }
             state.step = to;
-            save_onboarding(&kv, &tenant_id, &state).await?;
-            view(&env, &kv, &db, &tenant_id, &state).await
+            save_onboarding(&db, &tenant_id, &state).await?;
+            view(&env, &db, &tenant_id, &state).await
         }
 
         (Method::Post, ["complete"]) => {
             if state.business.name.trim().is_empty() {
                 return super::invalid("Complete your business basics before finishing.");
             }
-            let has_wa = !list_whatsapp_accounts(&kv, &tenant_id).await?.is_empty();
+            let has_wa = !list_whatsapp_accounts(&db, &tenant_id).await?.is_empty();
             if !has_wa {
                 return super::invalid("Connect a WhatsApp Business number before finishing.");
             }
 
             state.completed = true;
             state.step = OnboardingStep::Launch;
-            save_onboarding(&kv, &tenant_id, &state).await?;
-            view(&env, &kv, &db, &tenant_id, &state).await
+            save_onboarding(&db, &tenant_id, &state).await?;
+            view(&env, &db, &tenant_id, &state).await
         }
 
         _ => super::not_found("Endpoint"),
@@ -168,12 +144,11 @@ fn advance(current: OnboardingStep, target: OnboardingStep) -> OnboardingStep {
 
 async fn view(
     env: &Env,
-    kv: &kv::KvStore,
     db: &D1Database,
     tenant_id: &str,
     state: &OnboardingState,
 ) -> Result<Response> {
-    let accounts = list_whatsapp_accounts(kv, tenant_id).await?;
+    let accounts = list_whatsapp_accounts(db, tenant_id).await?;
     let tenant = get_tenant(db, tenant_id).await?.unwrap_or_default();
     let mut bill = get_tenant_billing(db, tenant_id).await?;
     billing::refresh_billing(&mut bill);
@@ -194,7 +169,7 @@ async fn view(
             .iter()
             .map(super::whatsapp::AccountView::from)
             .collect(),
-        signup: super::whatsapp::SignupView::resolve(env, kv, tenant_id).await?,
+        signup: super::whatsapp::SignupView::resolve(env, db, tenant_id).await?,
         launch: LaunchView {
             balance: bill.total_remaining(),
             unit_price_milli: billing::unit_price_milli(code),

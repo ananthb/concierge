@@ -82,7 +82,7 @@
       <h1 class="page-title">Architecture</h1>
 
 
-<p>Concierge is a Cloudflare Worker (Rust → WebAssembly) serving a JSON API, plus an Elm single-page app compiled to one static asset. All persistent state lives in Cloudflare D1 (metadata, billing, the archetype catalog) and KV (configs, sessions, conversation state). No message content is stored at rest.</p>
+<p>Concierge is a Cloudflare Worker (Rust → WebAssembly) serving a JSON API, plus an Elm single-page app compiled to one static asset. All persistent state lives in Cloudflare D1 (tenants, sessions, WhatsApp accounts, onboarding state, conversation sessions, burst buffer, rate limits, message metadata, payments, and billing). No message bodies are stored in the message log.</p>
 
 <h2>The two halves</h2>
 <ul>
@@ -150,7 +150,7 @@
   <li><strong>Prompt envelope:</strong> every system prompt is wrapped by <code>prompt::wrap(middle)</code>: a fixed <code>PREAMBLE</code> framing the model as a small-business reply assistant, the editable middle (the tenant's persona), and a fixed <code>POSTAMBLE</code> carrying house rules, jailbreak rails and the handoff sentinel <code>[[HANDOFF]]</code>. Both bookends are constants in <code>src/prompt.rs</code>; tenant content never reaches the model alone, and the API returns all three parts so the UI can render what-you-see-is-what-the-model-sees.</li>
   <li><strong>Persona prompt:</strong> tenant-wide, in <code>PersonaConfig.source</code> as one of two variants — <code>Builder(PersonaBuilder)</code> or <code>Custom(String)</code>, never a blend, so there is exactly one source for the active prompt. The builder carries archetype slug, business name and type, city, hours, <code>goal</code> (free text + optional sanitized URL), catch-phrases, off-topics, a <code>never</code> line, and <code>handoff_conditions</code>; <code>personas::generate</code> renders these into the middle. Curated archetypes live in the <code>archetypes</code> D1 catalog and are referenced by slug for their voice prompt, with the tenant's own fields layered over.</li>
   <li><strong>Reply config:</strong> per-channel <code>ReplyConfig { enabled, response, wait_seconds }</code>. <code>response</code> is <code>Canned { text }</code> (sent verbatim, free) or <code>Prompt { text }</code> (appended to the persona and run through the LLM, one credit). The ordered rule list with keyword and embedding matchers, and the per-rule <code>ApprovalPolicy</code>, are gone; the field is deserialized with <code>alias = "default_rule"</code> so existing records still load.</li>
-  <li><strong>Persona safety gate:</strong> AI replies are blocked unless the tenant's persona is <code>Approved</code> <em>and</em> its hash hasn't drifted since the last vetting. Canned responses are unaffected. See Persona safety queue below.</li>
+  <li><strong>Persona safety gate:</strong> AI replies are blocked unless the tenant's persona is <code>Approved</code> <em>and</em> its hash hasn't drifted since the last vetting. Canned responses are unaffected. See Inline persona safety below.</li>
   <li><strong>Final prompt:</strong> <code>prompt::wrap(persona.active_prompt() + "\n\n" + instruction)</code>. Recent <code>(role, content)</code> turns from the conversation session, capped by <code>max_history_messages</code>, are passed as prior turns; the latest inbound is the final <code>user</code> turn. An empty history degenerates to a single-turn call.</li>
   <li><strong>Risk gate:</strong> <code>src/risk.rs</code> runs four pure, synchronous checks on the generated draft — length bounds (8–600 chars), money words, commitment words, and drift into the persona's own off-topics or <code>never</code> line. No model call, no I/O. A draft that trips any of them is <strong>not sent</strong>: the customer receives <code>prompt::RISK_GATE_HOLDING_REPLY</code>, the conversation enters handoff, the tenant is emailed with the reason, and a row is logged with action <code>handed_off</code>. The credit is not refunded, because the model ran. Always on — there is no per-rule policy and no <code>ALLOW_NO_GATE</code> override any more.</li>
   <li><strong>Handoff sentinel:</strong> every model reply passes through <code>prompt::detect_and_strip_handoff</code> before leaving the worker. A case-insensitive match strips the token and flips the session into the holding-pattern path.</li>
@@ -161,7 +161,7 @@
 
 <h2>Conversation sessions &amp; handoff</h2>
 <ul>
-  <li><strong>Session record:</strong> <code>Session</code> in <code>src/types.rs</code>, persisted to KV at <code>convsession:{tenant}:{channel}:{sender}</code>. Holds a stable <code>conversation_id</code>, <code>last_inbound_at</code>, a bounded <code>messages: Vec&lt;ConversationMessage&gt;</code>, and an optional <code>handoff: Option&lt;HandoffState&gt;</code>. The <code>convsession:</code> namespace is distinct from the auth <code>session:</code> prefix.</li>
+  <li><strong>Session record:</strong> <code>Session</code> in <code>src/types.rs</code>, persisted to D1 in <code>conversation_sessions</code> keyed by <code>convsession:{tenant}:{channel}:{sender}</code>. Holds a stable <code>conversation_id</code>, <code>last_inbound_at</code>, a bounded <code>messages: Vec&lt;ConversationMessage&gt;</code>, and an optional <code>handoff: Option&lt;HandoffState&gt;</code>.</li>
   <li><strong>Idle gap:</strong> <code>ConversationConfig::idle_gap_mins</code> (default 6 h). If <code>now - last_inbound_at &gt; idle_gap</code>, the pipeline mints a fresh <code>conversation_id</code>, clears <code>messages</code>, drops <code>handoff</code>, and writes the new session.</li>
   <li><strong>History cap:</strong> <code>max_history_messages</code> (default 20) bounds <code>messages</code>. Inbound and <em>sent</em> assistant turns are appended; a withheld draft is not, so it can't poison the next call.</li>
   <li><strong>Handoff cooldown:</strong> <code>handoff_cooldown_mins</code> (default 60). Entering handoff — by sentinel or by risk gate — sets <code>handoff = Some(HandoffState { signaled_at, notified })</code> and swaps the persona for <code>prompt::HOLDING_PATTERN_MIDDLE</code> for the cooldown. Past it the worker stays silent until the idle gap fires.</li>
@@ -171,19 +171,17 @@
 
 <h2>The interactive demo</h2>
 <ul>
-  <li><strong>Endpoints:</strong> the persona catalog arrives inside <code>GET /api/bootstrap</code> (resolved server-side: warm KV cache → cold-miss regeneration against D1 + the LLM → empty), and <code>POST /api/demo/chat</code> runs one multi-turn call against the picked persona and the client-supplied history.</li>
-  <li><strong>Statelessness:</strong> the client keeps the transcript and posts it each turn. Handoff round-trips as <code>{handoff: bool}</code> on the wire and a field in the Elm model; picking another persona resets it. No KV session, and the server keeps nothing.</li>
+  <li><strong>Endpoints:</strong> the persona catalog arrives inside <code>GET /api/bootstrap</code>, and <code>POST /api/demo/chat</code> runs one multi-turn call against the picked persona and the client-supplied history.</li>
+  <li><strong>Statelessness:</strong> the client keeps the transcript and posts it each turn. Handoff round-trips as <code>{handoff: bool}</code> on the wire and a field in the Elm model; picking another persona resets it. The server keeps no demo transcript.</li>
   <li><strong>Same envelope, same gates:</strong> the handler wraps the persona with <code>prompt::wrap</code>, refuses any archetype that isn't safety-approved, runs the same injection scanner, and honours the same sentinel. <strong>View the prompt</strong> renders the exact middle being sent.</li>
-  <li><strong>Rate limiting:</strong> a per-IP hourly cap and a global per-UTC-day cap, both in KV. The global cap bounds worst-case model spend even under IP rotation; the per-IP check runs first so a caller already over their own limit doesn't drain the shared budget on a request we'd refuse anyway.</li>
+  <li><strong>Rate limiting:</strong> a per-IP hourly cap and a global per-UTC-day cap, both in D1 (<code>rate_limits</code>). The global cap bounds worst-case model spend even under IP rotation; the per-IP check runs first so a caller already over their own limit doesn't drain the shared budget on a request we'd refuse anyway.</li>
 </ul>
 
-<h2>Persona safety queue</h2>
+<h2>Inline persona safety</h2>
 <ul>
-  <li><strong>Trigger:</strong> <code>PUT /api/persona</code> and <code>PUT /api/wizard/persona</code> compute <code>sha256(active_prompt())</code> on save; if it differs from <code>safety.checked_prompt_hash</code>, status flips to <code>Pending</code> and a <code>SafetyJob { target, prompt_hash }</code> goes onto the <code>SAFETY_QUEUE</code> producer binding. A save that doesn't change the composed prompt keeps the existing verdict, so the badge doesn't flicker. <code>PUT /api/manage/archetypes/{slug}</code> does the same for a catalog row.</li>
-  <li><strong>Ordering:</strong> the enqueue happens <em>after</em> the save. A lost enqueue leaves the persona <code>Pending</code>, which is the safe direction; a successful enqueue against an unsaved persona would approve a hash nobody has.</li>
-  <li><strong>Consumer:</strong> <code>#[event(queue)]</code> in <code>src/lib.rs</code> dispatches to <code>safety_queue::handle_batch</code>. Each job re-reads the target, drops itself if the hash has drifted (a newer save has already enqueued), runs <code>safety::classify_persona</code> against the fast model, and writes back <code>Approved</code> or <code>Rejected { vague_reason }</code> with <code>checked_prompt_hash</code> and <code>checked_at</code>.</li>
+  <li><strong>Trigger:</strong> <code>PUT /api/persona</code> and <code>PUT /api/wizard/persona</code> compute <code>sha256(active_prompt())</code> on save; if it differs from <code>safety.checked_prompt_hash</code>, the handler runs <code>safety::classify_persona</code> inline against the fast model and writes back <code>Approved</code> or <code>Rejected { vague_reason }</code> with <code>checked_prompt_hash</code> and <code>checked_at</code>. A save that doesn't change the composed prompt keeps the existing verdict, so the badge doesn't flicker.</li>
   <li><strong>Classifier:</strong> the system prompt enumerates the content policy (no incitement, harassment, discrimination, sexualization of minors, self-harm, illegal-activity promotion, unconsented impersonation) and the model returns strict JSON. The category is logged for abuse review but never returned; the user-facing text comes from a fixed mapping, so a prompt can't be iterated against the classifier.</li>
-  <li><strong>Failure mode:</strong> classifier or KV failures call <code>message.retry()</code>; after 3 retries the job lands in <code>concierge-safety-dlq</code>. While <code>Pending</code>, AI replies are blocked and canned replies still send.</li>
+  <li><strong>Failure mode:</strong> if the classifier fails or is unavailable, the verdict stays <code>Pending</code>. While <code>Pending</code>, AI replies are blocked and canned replies still send.</li>
 </ul>
 
 <h2>Localization</h2>
@@ -196,41 +194,29 @@
   <li><strong>Out of scope:</strong> AI-generated reply content stays English regardless of UI locale.</li>
 </ul>
 
-<h2>Reply buffer (Durable Object)</h2>
+<h2>Reply buffer (D1)</h2>
 <ul>
-  <li><strong>Class:</strong> <code>ReplyBufferDO</code> in <code>src/durable_objects/reply_buffer.rs</code>; binding <code>REPLY_BUFFER</code>.</li>
-  <li><strong>Keying:</strong> one DO instance per <code>{tenant_id}:{channel}:{sender}</code> conversation.</li>
-  <li><strong>Sliding window:</strong> each push appends to a pending list and resets the alarm to <code>now + wait_seconds</code>. Bursts collapse into one alarm fire.</li>
-  <li><strong>Drop-after-send:</strong> the alarm handler clears DO storage <em>before</em> calling the LLM. Bodies live in DO state for ≤ <code>wait_seconds</code> (5 s default), then are gone.</li>
+  <li><strong>Table:</strong> <code>pending_inbound</code> in D1, keyed by <code>{tenant_id}:{channel}:{sender}</code>.</li>
+  <li><strong>Sliding window:</strong> webhook handlers dispatch via <code>ctx.wait_until</code>; each inbound row is inserted, sleeps for <code>wait_seconds</code>, and only the latest row flushes and merges the batch into one reply.</li>
+  <li><strong>Drop-after-send:</strong> the flushing invocation deletes the batch rows from <code>pending_inbound</code> <em>before</em> calling the LLM. Bodies live in D1 for ≤ <code>wait_seconds</code> (3 s default), then are gone.</li>
   <li><strong>Bypass:</strong> <code>wait_seconds = 0</code> skips the buffer for instant replies.</li>
-  <li><strong>ApprovalsDO is gone.</strong> A second Durable Object fanned out server-sent events to open approval pages. <code>wrangler.toml</code> carries a <code>v3</code> migration with <code>deleted_classes</code> so Cloudflare drops the class; removing only the binding would leave it orphaned and the deploy would be rejected.</li>
 </ul>
 
 <h2>Storage layout</h2>
 
 <h3>D1 tables</h3>
 <ul>
-  <li><code>tenants</code>: id, email (UNIQUE), facebook_id, plan, locale, currency, <code>verified_at</code>.</li>
-  <li><code>messages</code>: unified inbound/outbound metadata (channel, direction, sender, recipient, action, <code>conversation_id</code>). No body content. Indexed on tenant+time, channel+tenant+time, channel_account_id, and <code>conversation_id</code>+time so a thread can be reconstructed for audit. Action is <code>auto_reply</code> or <code>handed_off</code>.</li>
-  <li><code>whatsapp_messages</code>: channel-specific log. The <code>instagram_messages</code>, <code>email_messages</code> and <code>email_metrics</code> tables went with those channels.</li>
-  <li><code>tenant_billing</code>: credit ledger as JSON, entries carrying optional expiry.</li>
+  <li><code>tenants</code>: id, email (UNIQUE), name, facebook_id, plan, locale, currency.</li>
+  <li><code>sessions</code>: auth session tokens (TTL 7 d).</li>
+  <li><code>whatsapp_accounts</code>: per-resource config, embedding its own <code>ReplyConfig</code> and <code>canned_safety_json</code>.</li>
+  <li><code>tenant_onboarding</code>: wizard state (<code>BusinessInfo</code>, <code>PersonaConfig</code>, <code>NotificationConfig</code>, <code>ConversationConfig</code>, <code>default_wait_seconds</code>, <code>completed</code>).</li>
+  <li><code>signup_states</code>: one-shot WhatsApp Embedded Signup nonces (TTL 10 min).</li>
+  <li><code>conversation_sessions</code>: per-customer conversation state (<code>convsession:{tenant}:{channel}:{sender}</code>).</li>
+  <li><code>rate_limits</code>: per-IP and global demo chat rate-limit buckets.</li>
+  <li><code>pending_inbound</code>: short-lived burst buffer for multi-message batching.</li>
+  <li><code>messages</code>: unified inbound/outbound metadata (channel, direction, sender, recipient, action, <code>conversation_id</code>). No body content. Indexed on tenant+time, channel+tenant+time, channel_account_id, and <code>conversation_id</code>+time. Action is <code>auto_reply</code> or <code>handed_off</code>.</li>
   <li><code>payments</code>: Razorpay event log, kept for dispute and tax records. A deleted tenant's rows survive with <code>tenant_id</code> nulled.</li>
-  <li><code>audit_log</code>: operator-action history.</li>
-  <li><code>archetypes</code>: the curated voice catalog (slug, label, description, <code>voice_prompt</code>, greeting, catch-phrases, off-topics, <code>never</code>, handoff conditions, safety columns). Managed through <code>/api/manage/archetypes</code>; read by the persona picker and the public demo. Every write resets <code>safety_status</code> and enqueues a <code>SafetyJob</code>; only approved rows reach tenants. The <code>default_rules_json</code> column went with the rule engine.</li>
-  <li><code>pricing_config</code> + the per-(concept, currency) amount table: operator-configurable pricing.</li>
-</ul>
-
-<h3>KV keys</h3>
-<ul>
-  <li><code>session:*</code>: auth sessions (TTL 7 d). The <code>csrf:*</code> keys are gone — the API uses a request header instead.</li>
-  <li><code>whatsapp:{id}</code>: per-resource config, embedding its own <code>ReplyConfig</code>.</li>
-  <li><code>tenant:{tenant}:whatsapp:{id}</code>: per-tenant index (empty value; existence is the index).</li>
-  <li><code>wa_phone:*</code>: webhook → tenant reverse index.</li>
-  <li><code>wa_signup_state:*</code>, <code>wa_pubsignup_state:*</code>: one-shot Embedded Signup nonces (TTL 10 min).</li>
-  <li><code>onboarding:{tenant}</code>: wizard state. Holds <code>BusinessInfo</code>, the <code>PersonaConfig</code> (source variant + safety status), <code>NotificationConfig</code>, the <code>ConversationConfig</code> knobs, <code>default_wait_seconds</code>, and the <code>completed</code> flag that seals the wizard.</li>
-  <li><code>convsession:{tenant}:{channel}:{sender}</code>: per-customer conversation session.</li>
-  <li><code>demo:*</code>: the rolled demo-persona blob and its config; <code>ratelimit:demo:*</code> for the two caps.</li>
-  <li><strong>Gone:</strong> <code>instagram:*</code>, <code>ig_page:*</code>, <code>instagram_token:*</code>, <code>email_domain:*</code>, <code>email_rules:*</code>, <code>email_reverse:*</code>, <code>email_addrs:*</code>, <code>email_verify:*</code>, <code>discord_guild:*</code>, <code>discord_config:*</code>, <code>conv:{id}</code>, <code>csrf:*</code>.</li>
+  <li><code>tenant_billing</code>: credit ledger as JSON, entries carrying optional expiry, plus <code>replies_used</code>.</li>
 </ul>
 
 <h2>Auth</h2>
@@ -238,7 +224,7 @@
   <li><strong>Login:</strong> Google OAuth only. <code>/auth/login</code> redirects straight to Google's consent screen — there is no login page to render, because the Elm app renders that and links here. <code>/auth/callback</code> exchanges the code, finds or creates the tenant, sets the session cookie, and redirects to <code>/</code>.</li>
   <li><strong>Where you land:</strong> decided in one place — the session's <code>destination</code> field, computed server-side from whether onboarding is sealed. The callback always returns to <code>/</code> and the frontend routes from there, so the rule isn't duplicated between the Worker's redirects and the app.</li>
   <li><strong>Facebook Login is gone</strong> as a sign-in method; it existed for Instagram. Meta identity still arrives through WhatsApp Embedded Signup, which does its own token exchange and can create a tenant the same way.</li>
-  <li><strong>Session:</strong> a 7-day <code>HttpOnly; Secure; SameSite=Lax</code> cookie holding an opaque token that resolves to a tenant id in KV. <code>Secure</code> is dropped on http origins so plain <code>wrangler dev</code> still authenticates.</li>
+  <li><strong>Session:</strong> a 7-day <code>HttpOnly; Secure; SameSite=Lax</code> cookie holding an opaque token that resolves to a tenant id in D1 (<code>sessions</code>). <code>Secure</code> is dropped on http origins so plain <code>wrangler dev</code> still authenticates.</li>
   <li><strong>Dev shortcut:</strong> <code>POST /auth/dev-login</code> mints a session for an arbitrary email without a round-trip to Google, which can't reach localhost. Gated on <code>dev_bypass::active</code>; production sets <code>CF_ACCESS_AUD</code>, so it 404s there.</li>
   <li><strong>Operator API:</strong> <code>/api/manage/*</code> is protected by Cloudflare Access — the <code>Cf-Access-Jwt-Assertion</code> header (or the <code>CF_Authorization</code> cookie) is verified as RS256 against the team's JWKS, and the <code>email</code> claim becomes the actor in the audit log.</li>
 </ul>
@@ -249,7 +235,6 @@
   <li>Google OAuth token and userinfo endpoints for sign-in.</li>
   <li>Razorpay API for orders, payment-signature verification and refunds.</li>
   <li>Cloudflare Workers AI binding (a direct binding call, not HTTP): reply generation, injection scanning, safety classification.</li>
-  <li>Cloudflare Queues binding (<code>SAFETY_QUEUE</code>) for persona safety jobs.</li>
   <li>Cloudflare Email Service binding (<code>EMAIL</code>) for handoff notifications.</li>
   <li>The Cloudflare Access JWKS endpoint, for operator-API verification.</li>
 </ul>
@@ -258,7 +243,7 @@
 <ul>
   <li><strong>The prerendered pages are committed</strong>, because Cloudflare Builds has no browser. CI gates on them being current, but a deploy from a branch that skipped CI could ship stale marketing HTML.</li>
   <li><strong>A catalog edit can pause tenants using it.</strong> A tenant's active prompt embeds the catalog row's voice prompt, so changing that prompt drifts the hash the tenant's safety verdict was recorded against. Their AI replies stay paused until the new row is approved and the tenant re-saves their persona; the catalog editor states this rather than presenting the edit as immediately live.</li>
-  <li><strong>WhatsApp has no message-history API</strong>, so the reply buffer relies on its own DO state to reconstruct bursts.</li>
+  <li><strong>WhatsApp has no message-history API</strong>, so the reply buffer relies on its own D1 <code>pending_inbound</code> table to reconstruct bursts.</li>
   <li><strong>Cloudflare Email Service requires sender domains to be onboarded</strong> in the dashboard before sends succeed. Handoff emails come from one fixed address, so this is a one-time step.</li>
   <li><strong>No per-message body storage.</strong> A conversation web-view would need a schema change and a privacy-policy update.</li>
   <li><strong>A custom prompt is capped</strong> at <code>prompt::MAX_CUSTOM_PROMPT</code> characters; anything past it is truncated on save.</li>

@@ -258,7 +258,7 @@ pub struct TextMessage {
 /// Inbound messaging channel.
 ///
 /// WhatsApp-only today; `Discord` and `Telegram` are planned extensions that
-/// plug in by adding a variant, a `channel/` adapter, and a KV lookup arm in
+/// plug in by adding a variant, a `channel/` adapter, and a D1 lookup arm in
 /// `storage::get_channel_reply_config`.
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
@@ -267,7 +267,7 @@ pub enum Channel {
 }
 
 impl Channel {
-    /// Lowercase wire form used by the D1 `channel` column and inside KV keys.
+    /// Lowercase wire form used by the D1 `channel` column and inside session keys.
     pub fn as_str(&self) -> &'static str {
         match self {
             Channel::WhatsApp => "whatsapp",

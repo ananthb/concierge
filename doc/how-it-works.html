@@ -154,7 +154,7 @@
         </li>
         <li>
           <h3>Resolve the conversation session</h3>
-          <p>Per&#8209;customer threads live in KV at <code>convsession:{tenant}:{channel}:{sender}</code>. If the customer has been silent longer than <code>idle_gap_mins</code> (default 6&nbsp;h) a fresh conversation begins: new <code>conversation_id</code>, history cleared, handoff state wiped. Otherwise the existing session loads and the inbound is appended.</p>
+          <p>Per&#8209;customer threads live in D1 (<code>conversation_sessions</code>) keyed by <code>convsession:{tenant}:{channel}:{sender}</code>. If the customer has been silent longer than <code>idle_gap_mins</code> (default 6&nbsp;h) a fresh conversation begins: new <code>conversation_id</code>, history cleared, handoff state wiped. Otherwise the existing session loads and the inbound is appended.</p>
         </li>
         <li>
           <h3>Build the prompt envelope</h3>
@@ -174,7 +174,7 @@
         <div class="callout__icon">i</div>
         <div class="callout__body">
           <strong>Storage note</strong>
-          <p>The <code>messages</code> table stores <em>only</em> metadata: channel, direction, sender ID, recipient ID, tenant, timestamp. No subjects, no bodies, no attachments. Replies are generated from in&#8209;memory data and discarded. Recent conversation turns do live in KV, because multi&#8209;turn context needs them; they are cleared by the idle gap.</p>
+          <p>The <code>messages</code> table stores <em>only</em> metadata: channel, direction, sender ID, recipient ID, tenant, timestamp. No subjects, no bodies, no attachments. Replies are generated from in&#8209;memory data and discarded. Recent conversation turns do live in D1 (<code>conversation_sessions</code>), because multi&#8209;turn context needs them; they are cleared by the idle gap.</p>
         </div>
       </div>
 
@@ -237,7 +237,7 @@
 
       <h2 id="conversations">Conversations &amp; handoff</h2>
       <p>
-        Each customer&times;channel pair has a <em>conversation session</em> in KV holding a stable <code>conversation_id</code>, a bounded list of recent <code>(role, content)</code> turns, the timestamp of the last inbound, and an optional handoff sub&#8209;state. The id is stamped onto matching rows in D1 so a thread can be reconstructed for audit without ever having stored its contents.
+        Each customer&times;channel pair has a <em>conversation session</em> in D1 holding a stable <code>conversation_id</code>, a bounded list of recent <code>(role, content)</code> turns, the timestamp of the last inbound, and an optional handoff sub&#8209;state. The id is stamped onto matching rows in <code>messages</code> so a thread can be reconstructed for audit without ever having stored its contents.
       </p>
       <ol>
         <li><strong>Idle gap.</strong> Silence longer than <code>idle_gap_mins</code> (default 6&nbsp;h) means the next inbound starts fresh: history clears, handoff is wiped, the persona replies normally. Six hours is long enough for a customer mulling a quote over lunch, short enough that next morning&rsquo;s message is genuinely new.</li>
@@ -287,11 +287,8 @@
       <ul>
         <li><strong>Cloudflare Worker</strong>: Rust compiled to WebAssembly. Serves the JSON API, the webhooks, the OAuth redirects, and the SPA shell.</li>
         <li><strong>Elm</strong>: the frontend, compiled to one <code>public/app.js</code> served as a static asset.</li>
-        <li><strong>Cloudflare KV</strong>: tenant and account configs, sessions, conversation state, persona, the archetype cache.</li>
-        <li><strong>Cloudflare D1</strong>: message metadata, billing, payments, the archetype catalog, audit log.</li>
-        <li><strong>Cloudflare Workers AI</strong>: reply generation, prompt&#8209;injection scanning, persona safety classification.</li>
-        <li><strong>Cloudflare Queues</strong>: the persona safety classifier (<code>concierge-safety</code> + its dead&#8209;letter queue).</li>
-        <li><strong>Cloudflare Durable Objects</strong>: the reply buffer that batches quick&#8209;fire messages.</li>
+        <li><strong>Cloudflare D1</strong>: all persistent state &mdash; tenants, sessions, WhatsApp accounts, onboarding, conversation state, burst buffer, rate limits, message metadata, payments, billing.</li>
+        <li><strong>Cloudflare Workers AI</strong>: reply generation, prompt&#8209;injection scanning, inline persona safety classification.</li>
         <li><strong>Cloudflare Email Service</strong>: outbound handoff notifications. Nothing is received by email.</li>
         <li><strong>Razorpay</strong>: credit purchases and the sign&#8209;up verification charge.</li>
       </ul>

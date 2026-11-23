@@ -10,7 +10,6 @@ mod billing;
 mod channel;
 mod crypto;
 mod dev_bypass;
-mod durable_objects;
 mod email;
 mod escalations;
 mod handlers;
@@ -20,13 +19,11 @@ mod pipeline;
 mod prompt;
 mod risk;
 mod safety;
-mod safety_queue;
 mod shell;
 mod storage;
 mod types;
 mod whatsapp;
 
-pub use durable_objects::ReplyBufferDO;
 pub use types::*;
 
 /// Meta Graph API version used across all Facebook/WhatsApp API calls.
@@ -85,10 +82,10 @@ fn serve_png(body: &[u8]) -> Result<Response> {
 }
 
 #[event(fetch)]
-async fn fetch(req: Request, env: Env, _ctx: Context) -> Result<Response> {
+async fn fetch(req: Request, env: Env, ctx: Context) -> Result<Response> {
     console_error_panic_hook::set_once();
     let is_dev = dev_bypass::active(&env);
-    let mut resp = handle_request(req, env).await?;
+    let mut resp = handle_request(req, env, &ctx).await?;
     let is_html = resp
         .headers()
         .get("Content-Type")
@@ -127,7 +124,7 @@ fn is_app_route(path: &str) -> bool {
     ) || path.starts_with("/wizard/")
 }
 
-async fn handle_request(req: Request, env: Env) -> Result<Response> {
+async fn handle_request(req: Request, env: Env, ctx: &Context) -> Result<Response> {
     let url = req.url()?;
     let path = url.path();
     let method = req.method();
@@ -181,7 +178,7 @@ async fn handle_request(req: Request, env: Env) -> Result<Response> {
         return billing::webhook::handle_razorpay_webhook(req, env).await;
     }
     if path.starts_with("/webhook/") {
-        return handlers::handle_webhook(req, env, path, method).await;
+        return handlers::handle_webhook(req, env, ctx, path, method).await;
     }
 
     if path == "/data-deletion" {
@@ -209,14 +206,4 @@ async fn handle_request(req: Request, env: Env) -> Result<Response> {
     }
 
     serve_shell(404)
-}
-
-/// Content safety classifier consumer. See `src/safety_queue.rs`.
-#[event(queue)]
-async fn queue_handler(
-    batch: MessageBatch<safety_queue::SafetyJob>,
-    env: Env,
-    _ctx: Context,
-) -> Result<()> {
-    safety_queue::handle_batch(batch, env).await
 }

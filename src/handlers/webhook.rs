@@ -11,6 +11,7 @@ use crate::types::*;
 pub async fn handle_webhook(
     mut req: Request,
     env: Env,
+    ctx: &Context,
     path: &str,
     method: Method,
 ) -> Result<Response> {
@@ -84,7 +85,7 @@ pub async fn handle_webhook(
                 return Response::ok("OK");
             }
 
-            let kv = env.kv("KV")?;
+            let db = env.d1("DB")?;
 
             for entry in &body.entry {
                 for change in &entry.changes {
@@ -95,12 +96,12 @@ pub async fn handle_webhook(
                     let phone_number_id = &change.value.metadata.phone_number_id;
 
                     let account_id =
-                        match get_whatsapp_account_by_phone(&kv, phone_number_id).await? {
+                        match get_whatsapp_account_by_phone(&db, phone_number_id).await? {
                             Some(id) => id,
                             None => continue,
                         };
 
-                    let account = match get_whatsapp_account(&kv, &account_id).await? {
+                    let account = match get_whatsapp_account(&db, &account_id).await? {
                         Some(a) => a,
                         None => continue,
                     };
@@ -108,11 +109,14 @@ pub async fn handle_webhook(
                     // Parse into unified messages via channel adapter
                     let messages = channel::whatsapp::parse_inbound(change, &account);
 
-                    // Process each through the unified pipeline
-                    for msg in &messages {
-                        if let Err(e) = pipeline::process_inbound(msg, &env).await {
-                            console_log!("Pipeline error (WhatsApp): {:?}", e);
-                        }
+                    // Dispatch each through the unified pipeline asynchronously via wait_until
+                    for msg in messages {
+                        let env_clone = env.clone();
+                        ctx.wait_until(async move {
+                            if let Err(e) = pipeline::process_inbound(&msg, &env_clone).await {
+                                console_log!("Pipeline error (WhatsApp): {:?}", e);
+                            }
+                        });
                     }
                 }
             }

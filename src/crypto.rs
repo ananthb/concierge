@@ -2,7 +2,7 @@
 //!
 //! The AES-256-GCM token encryption that used to live here went with the
 //! Instagram channel: it existed to seal per-tenant Instagram long-lived
-//! tokens in KV. WhatsApp uses one platform-wide token from a secret, so
+//! tokens. WhatsApp uses one platform-wide token from a secret, so
 //! nothing needs sealing and `ENCRYPTION_KEY` is no longer read.
 
 use worker::*;
