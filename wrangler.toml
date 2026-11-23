@@ -47,6 +47,25 @@ binding = "AI"
 [[send_email]]
 name = "EMAIL"
 
+# ============================================================================
+# Durable Object migration history (v1-v3 applied live; v4 removes ReplyBufferDO)
+# ============================================================================
+[[migrations]]
+tag = "v1"
+new_classes = ["ReplyBufferDO"]
+
+[[migrations]]
+tag = "v2"
+new_classes = ["ApprovalsDO"]
+
+[[migrations]]
+tag = "v3"
+deleted_classes = ["ApprovalsDO"]
+
+[[migrations]]
+tag = "v4"
+deleted_classes = ["ReplyBufferDO"]
+
 [vars]
 ENVIRONMENT = "production"
 
