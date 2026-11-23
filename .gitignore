@@ -30,6 +30,7 @@ wrangler.production.toml
 
 # Documentation build
 site/
+docs/book/
 
 # Playwright
 playwright-report/

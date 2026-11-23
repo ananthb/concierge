@@ -1,4 +1,4 @@
-//! Handler modules for the concierge worker.
+//! Handler modules for the replybots worker.
 
 pub mod auth;
 mod data_deletion;

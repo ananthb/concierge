@@ -147,7 +147,7 @@ test.describe('routing', () => {
     ['/features', 'Built for small businesses on WhatsApp'],
     ['/terms', 'Terms of Service'],
     ['/privacy', 'Privacy Policy'],
-    ['/login', 'Sign in to Concierge'],
+    ['/login', 'Sign in to replybots'],
   ];
 
   for (const [path, heading] of routes) {
@@ -187,7 +187,7 @@ test.describe('routing', () => {
 
   test('signed-out visitors are sent to sign in, not into the app', async ({ page }) => {
     await page.goto('/dashboard');
-    await expect(app(page).getByRole('heading', { name: /Sign in to Concierge/ })).toBeVisible();
+    await expect(app(page).getByRole('heading', { name: /Sign in to replybots/ })).toBeVisible();
   });
 });
 

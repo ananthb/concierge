@@ -99,18 +99,18 @@ async fn dispatch_email(
     // second case a reply was written and deliberately not sent.
     let why = match risk {
         Some(reason) => format!(
-            "Concierge wrote a reply and did not send it, because {}.\n\n",
+            "replybots wrote a reply and did not send it, because {}.\n\n",
             reason.label()
         ),
         None => String::new(),
     };
     let text = format!(
-        "Concierge has paused replying on a customer message that needs you.\n\n\
+        "replybots has paused replying on a customer message that needs you.\n\n\
          {why}\
          Channel: {channel_label}\n\
          From: {customer_sender}\n\n\
          Last customer message:\n{preview}\n\n\
-         Take it from here directly on {channel_label}. Concierge will hold the conversation \
+         Take it from here directly on {channel_label}. replybots will hold the conversation \
          briefly and then go silent.\n\n\
          More: {dashboard_url}\n",
     );
@@ -118,7 +118,7 @@ async fn dispatch_email(
     let outbound = OutboundEmail {
         from: from_addr,
         to: recipient,
-        subject: "Concierge needs you on a customer message".into(),
+        subject: "replybots needs you on a customer message".into(),
         text: Some(text),
         html: None,
         reply_to: None,

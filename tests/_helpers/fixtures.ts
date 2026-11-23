@@ -36,13 +36,13 @@ export { expect };
  * therefore proves nothing and races the bundle — a click landing in that
  * window gets handled by the browser as a plain link, not by Elm's router.
  *
- * `window.__conciergeBooted` is set by `public/boot.js` after
+ * `window.__replybotsBooted` is set by `public/boot.js` after
  * `Elm.Main.init` returns. A JS global can't be captured by a DOM snapshot,
  * which is exactly why it's used instead of an attribute.
  */
 export async function waitForBoot(page: import('@playwright/test').Page) {
   await page.waitForFunction(
-    () => (window as unknown as { __conciergeBooted?: boolean }).__conciergeBooted === true,
+    () => (window as unknown as { __replybotsBooted?: boolean }).__replybotsBooted === true,
   );
 }
 

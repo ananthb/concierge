@@ -713,7 +713,7 @@ overviewWhatsApp data =
     if List.isEmpty data.accounts then
         Ui.card
             [ h2 [] [ text "No WhatsApp number connected" ]
-            , p [] [ text "Connect a WhatsApp Business number so Concierge can answer your customers." ]
+            , p [] [ text "Connect a WhatsApp Business number so replybots can answer your customers." ]
             , div [ class "card-actions" ]
                 [ Ui.linkButton
                     { label = "Connect WhatsApp"
@@ -856,7 +856,7 @@ accountCard model account =
 
                       else
                         p [ class "hint" ]
-                            [ text "Concierge's built-in front-desk assistant handles greetings and simple questions briefly, and hands off to you fast when a person is needed. 1 credit per reply." ]
+                            [ text "replybots's built-in front-desk assistant handles greetings and simple questions briefly, and hands off to you fast when a person is needed. 1 credit per reply." ]
                     , Ui.field
                         { id = "wait-" ++ account.id
                         , label = "Burst wait window (seconds, 0–30)"
@@ -882,7 +882,7 @@ accountCard model account =
                                         ++ "s burst wait."
 
                                 else
-                                    "Answering with AI quick-handoff (Concierge core) · "
+                                    "Answering with AI quick-handoff (replybots core) · "
                                         ++ String.fromInt account.reply.waitSeconds
                                         ++ "s burst wait."
 
@@ -892,7 +892,7 @@ accountCard model account =
                         ]
                     , if model.confirmDisconnect == Just account.id then
                         div []
-                            [ Ui.banner "error" "Disconnect this WhatsApp number? Concierge will stop replying on it immediately."
+                            [ Ui.banner "error" "Disconnect this WhatsApp number? replybots will stop replying on it immediately."
                             , div [ class "card-actions" ]
                                 [ Html.button
                                     [ class "btn btn-danger"
@@ -961,7 +961,7 @@ modePicker reply =
                         ]
                         [ text label_ ]
                 )
-                [ ( "ai", "AI quick-handoff (Concierge core)" ), ( "canned", "Static reply" ) ]
+                [ ( "ai", "AI quick-handoff (replybots core)" ), ( "canned", "Static reply" ) ]
             )
         ]
 
@@ -1146,7 +1146,7 @@ timingCard model settings =
     Ui.card
         [ h2 [] [ text "Conversation timing" ]
         , p [ class "muted" ]
-            [ text "How Concierge decides where one conversation ends and the next begins." ]
+            [ text "How replybots decides where one conversation ends and the next begins." ]
         , knob "idle_gap_mins"
             "Minutes of silence before a new conversation"
             "After this long without a message, the next one starts fresh — no earlier context."
@@ -1155,7 +1155,7 @@ timingCard model settings =
             (\v f -> { f | idleGap = v })
         , knob "handoff_cooldown_mins"
             "Minutes to keep holding after a handoff"
-            "Once a conversation is handed to you, Concierge answers in the holding voice for this long, then goes quiet."
+            "Once a conversation is handed to you, replybots answers in the holding voice for this long, then goes quiet."
             form.cooldown
             c.defaults.handoffCooldownMins
             (\v f -> { f | cooldown = v })
@@ -1187,7 +1187,7 @@ notificationsCard model =
             , onCheck = SetHandoffEmail
             }
         , p [ class "hint" ]
-            [ text "Sends an email alert when Concierge hands a WhatsApp conversation over to your team." ]
+            [ text "Sends an email alert when replybots hands a WhatsApp conversation over to your team." ]
         , div [ class "card-actions" ]
             [ Ui.button
                 { label = "Save notifications"

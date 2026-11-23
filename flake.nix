@@ -108,7 +108,7 @@
         # set CF_ACCESS_AUD, so the bypass cannot activate there.
         apps.dev = {
           type = "app";
-          program = toString (pkgs.writeShellScript "concierge-dev" ''
+          program = toString (pkgs.writeShellScript "replybots-dev" ''
             export PATH=${pkgs.lib.makeBinPath [ pkgs.wrangler pkgs.nodejs_22 ]}:$PATH
             # Run from the user's CWD so wrangler creates `.wrangler/`
             # in the project, not the read-only Nix store. The script
@@ -135,9 +135,10 @@
             # nodejs_22 ships npm; the old nodePackages.npm attribute was
             # removed from nixpkgs.
             nodejs_22
-            # Headless Chromium for the Playwright suite and for
-            # `npm run screenshots`, which writes doc/screenshots/.
+            # Headless Chromium for the Playwright suite.
             playwright-driver.browsers
+            # Documentation site generator (docs/).
+            mdbook
           ];
           shellHook = ''
             ${pre-commit-check.shellHook}
@@ -149,14 +150,14 @@
             dev() {
               node scripts/test-server.mjs "$@"
             }
-            echo "Concierge dev environment"
+            echo "replybots dev environment"
             echo "  npm run build:frontend - Compile the Elm app to public/app.js"
+            echo "  npm run build:docs     - Generate reference docs and build mdBook (docs/book/)"
             echo "  dev                 - Local server + /manage bypass + migrations (run from this shell)"
             echo "  nix run .#dev       - Same as above, runnable from any shell"
             echo "  wrangler dev        - Plain dev server (no bypass; /api/manage will 403)"
             echo "  wrangler deploy     - Deploy to Cloudflare"
             echo "  npm test            - Run Playwright browser tests"
-            echo "  npm run screenshots - Recapture doc/screenshots/ (every screen, stubbed)"
             echo "  nix flake check     - Run CI checks"
           '';
         };

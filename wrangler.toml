@@ -1,4 +1,4 @@
-name = "concierge"
+name = "replybots"
 main = "build/index.js"
 compatibility_date = "2024-01-01"
 
@@ -32,7 +32,8 @@ directory = "./public"
 # ============================================================================
 [[d1_databases]]
 binding = "DB"
-database_name = "concierge"
+database_name = "replybots"
+# Note: Forgejo PR #845 recreates the production D1 database under `replybots`.
 database_id = "95687fdd-d529-4993-8b84-e55db87159c2"
 
 # ============================================================================
@@ -47,31 +48,12 @@ binding = "AI"
 [[send_email]]
 name = "EMAIL"
 
-# ============================================================================
-# Durable Object migration history (v1-v3 applied live; v4 removes ReplyBufferDO)
-# ============================================================================
-[[migrations]]
-tag = "v1"
-new_classes = ["ReplyBufferDO"]
-
-[[migrations]]
-tag = "v2"
-new_classes = ["ApprovalsDO"]
-
-[[migrations]]
-tag = "v3"
-deleted_classes = ["ApprovalsDO"]
-
-[[migrations]]
-tag = "v4"
-deleted_classes = ["ReplyBufferDO"]
-
 [vars]
 ENVIRONMENT = "production"
 
 # These are injected at deploy time from build environment variables:
-#   PUBLIC_BASE_URL            Primary site URL, e.g. https://concierge.example.com
-#   EMAIL_DOMAIN               Domain outbound handoff emails are sent from
+#   PUBLIC_BASE_URL            Primary site URL, e.g. https://replybots.io
+#   EMAIL_DOMAIN               Domain outbound handoff emails are sent from, e.g. replybots.io
 #                              (optional — no MX needed, nothing received here)
 #   WHATSAPP_WABA_ID           Fallback WhatsApp Business Account ID
 #   WHATSAPP_SIGNUP_CONFIG_ID  Meta Embedded Signup config ID

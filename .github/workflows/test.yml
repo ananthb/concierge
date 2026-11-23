@@ -5,7 +5,7 @@ on:
     branches: [main]
   pull_request:
     paths-ignore:
-      - 'doc/**'
+      - 'docs/**'
       - '**/*.md'
       - 'README.md'
       - '.github/dependabot.yml'
@@ -178,3 +178,29 @@ jobs:
       # saying why, which keeps them reviewable in the diff.
       - name: cargo clippy
         run: nix develop --command cargo clippy --target wasm32-unknown-unknown --all-targets -- -D warnings
+
+  docs:
+    name: Docs (reference sync & mdBook)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: DeterminateSystems/nix-installer-action@main
+
+      - uses: cachix/cachix-action@v17
+        with:
+          name: ananthb
+          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
+
+      - name: Check generated docs reference is current
+        run: |
+          nix develop --command node scripts/generate-docs-ref.mjs
+          if ! git diff --quiet -- docs/src/reference/; then
+            echo "::error::Generated docs reference is stale. Run 'node scripts/generate-docs-ref.mjs' and commit docs/src/reference/."
+            git diff --stat -- docs/src/reference/
+            exit 1
+          fi
+
+      - name: Build mdBook docs
+        run: nix develop --command mdbook build docs

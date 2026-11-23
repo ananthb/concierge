@@ -216,7 +216,7 @@ header session =
     Html.header [ class "site-header" ]
         [ a [ Route.href Route.Landing, class "brand" ]
             [ Html.img [ Html.Attributes.src "/logo.svg", Html.Attributes.alt "", Html.Attributes.width 32, Html.Attributes.height 32 ] []
-            , span [] [ text "Concierge" ]
+            , span [] [ text "replybots" ]
             ]
         , nav [ class "site-nav" ]
             (case session of
@@ -258,7 +258,7 @@ footer =
             , li [] [ a [ Route.href Route.Pricing ] [ text "Pricing" ] ]
             , li [] [ a [ Route.href Route.Terms ] [ text "Terms" ] ]
             , li [] [ a [ Route.href Route.Privacy ] [ text "Privacy" ] ]
-            , li [] [ a [ href "https://ananthb.github.io/concierge/" ] [ text "Docs" ] ]
+            , li [] [ a [ href "https://replybots.dev" ] [ text "Docs" ] ]
             ]
         , p [ class "footer-note" ]
             [ text "Message bodies pass through but are never stored. Only channel, direction, sender, recipient and timestamp are kept." ]

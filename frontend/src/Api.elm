@@ -55,7 +55,7 @@ origin, so the `HttpOnly` session cookie set by `/auth/callback` travels on
 every request automatically. There is no token to store, attach or refresh,
 and nothing here reads or writes `document.cookie`.
 
-**Every mutation carries `X-Concierge-Request`.** The cookie is
+**Every mutation carries `X-Replybots-Request`.** The cookie is
 `SameSite=Lax`, which already stops a cross-site form post, and a custom
 header can't be set cross-origin without a preflight the worker never grants.
 That pair replaces the CSRF token the old HTML forms posted. [`post`], [`put`]
@@ -139,7 +139,7 @@ isUnauthenticated err =
 
 requestHeader : Http.Header
 requestHeader =
-    Http.header "X-Concierge-Request" "1"
+    Http.header "X-Replybots-Request" "1"
 
 
 expectJson : (Data a -> msg) -> Decoder a -> Http.Expect msg

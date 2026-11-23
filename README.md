@@ -1,14 +1,14 @@
 <p align="center">
-  <img src="assets/logo.svg" width="100" height="100" alt="Concierge logo">
+  <img src="assets/logo.svg" width="100" height="100" alt="replybots logo">
 </p>
 
-# Concierge
+# replybots
 
 Automatic WhatsApp replies for small businesses. Answers in your voice with the built-in core persona, and hands the conversation to a person the moment it shouldn't decide alone.
 
-[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/ananthb/concierge)
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/ananthb/replybots)
 
-**[Documentation](https://ananthb.github.io/concierge/)**
+**[Hosted SaaS (replybots.io)](https://replybots.io)** · **[Documentation (replybots.dev)](https://replybots.dev)**
 
 ## Features
 
@@ -37,6 +37,7 @@ Automatic WhatsApp replies for small businesses. Answers in your voice with the 
 direnv allow          # or: nix develop
 npm ci
 npm run build:frontend   # compile Elm to public/app.js
+npm run build:docs       # generate reference docs and build mdBook (docs/book/)
 DEV_MODE=1 wrangler dev  # local worker + migrations + dev login
 ```
 
@@ -44,7 +45,7 @@ Then open http://localhost:8787.
 
 ## Deploy
 
-See the **[Deploy guide](https://ananthb.github.io/concierge/deployment.html)**.
+See the **[Self-hosting guide](https://replybots.dev/self-hosting.html)** (built from `docs/` with [mdBook](https://rust-lang.github.io/mdBook/)).
 
 ## License
 

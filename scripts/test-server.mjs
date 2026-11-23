@@ -24,7 +24,7 @@ if (!existsSync(join(CWD, 'wrangler.toml'))) {
 }
 
 const PORT = process.env.PLAYWRIGHT_DEV_PORT ?? '8787';
-const ENV_FILE = join(tmpdir(), `concierge-playwright-${process.pid}.env`);
+const ENV_FILE = join(tmpdir(), `replybots-playwright-${process.pid}.env`);
 
 writeFileSync(
   ENV_FILE,
@@ -46,7 +46,7 @@ writeFileSync(
   ].join('\n'),
 );
 
-if (process.env.CONCIERGE_TEST_RESET === '1') {
+if (process.env.REPLYBOTS_TEST_RESET === '1') {
   try {
     rmSync(join(CWD, '.wrangler', 'state'), { recursive: true, force: true });
   } catch {
@@ -61,7 +61,7 @@ const migrationFiles = readdirSync(migrationsDir)
 for (const file of migrationFiles) {
   const r = spawnSync(
     'wrangler',
-    ['d1', 'execute', 'concierge', '--local', '--file', join(migrationsDir, file)],
+    ['d1', 'execute', 'replybots', '--local', '--file', join(migrationsDir, file)],
     { stdio: 'inherit', cwd: CWD },
   );
   if (r.status !== 0) {

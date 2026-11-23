@@ -74,7 +74,7 @@ export default defineConfig({
     url: BASE_URL,
     // Wipes .wrangler/state before boot. Interactive `nix run .#dev`
     // leaves this unset so dev state persists across restarts.
-    env: { CONCIERGE_TEST_RESET: '1' },
+    env: { REPLYBOTS_TEST_RESET: '1' },
     reuseExistingServer: !process.env.CI,
     timeout: 240_000, // first wasm build can take 2+ minutes
     stdout: 'pipe',
