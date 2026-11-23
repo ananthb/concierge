@@ -23,7 +23,7 @@
   });
 
   // A signal that the app is live, for tests to wait on.
-  window.__conciergeBooted = true;
+  window.__replybotsBooted = true;
 
   if (!app.ports) return;
 
@@ -70,7 +70,7 @@
             order_id: order.order_id,
             amount: order.amount,
             currency: order.currency,
-            name: 'Concierge',
+            name: 'replybots',
             handler: function (r) {
               done({
                 orderId: r.razorpay_order_id,
@@ -195,7 +195,7 @@
                 credentials: 'same-origin',
                 headers: {
                   'Content-Type': 'application/json',
-                  'X-Concierge-Request': '1',
+                  'X-Replybots-Request': '1',
                   'Accept': 'application/json',
                 },
                 body: JSON.stringify({

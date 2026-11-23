@@ -31,7 +31,7 @@ case "$TARGET" in
         ;;
 esac
 
-DB_NAME="concierge"
+DB_NAME="replybots"
 SCHEMA="$(dirname "$0")/../migrations/0001_create_schema.sql"
 
 # d1_migrations is wrangler's own bookkeeping: drop it too, or a later

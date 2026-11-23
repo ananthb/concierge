@@ -80,7 +80,7 @@ pub fn html() -> String {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Concierge</title>
+<title>replybots</title>
 <meta name="description" content="Automated customer messaging for small businesses. Auto-reply on WhatsApp, with a human picking up when it matters.">
 <link rel="icon" href="/favicon-32.png" sizes="32x32">
 <link rel="icon" href="/favicon-16.png" sizes="16x16">

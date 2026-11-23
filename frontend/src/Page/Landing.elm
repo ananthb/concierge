@@ -3,7 +3,7 @@ module Page.Landing exposing (Model, Msg, init, subscriptions, update, view)
 {-| The landing page and the interactive WhatsApp demo.
 
 A visitor picks a sample small business, chats with it as a customer, and
-watches Concierge's built-in front-desk assistant reply briefly and hand off to
+watches replybots's built-in front-desk assistant reply briefly and hand off to
 a human as soon as a real decision or quote is needed.
 
 Three limits shape the conversation, all arriving in `/api/bootstrap`:
@@ -283,7 +283,7 @@ personaPicker config =
     section [ class "demo-picker" ]
         [ Ui.sectionTitle "Pick a business to message"
         , p [ class "demo-picker-sub" ]
-            [ text "Concierge uses one smart built-in front-desk assistant focused on quick helpful replies and fast human handoff." ]
+            [ text "replybots uses one smart built-in front-desk assistant focused on quick helpful replies and fast human handoff." ]
         , ul [ class "persona-grid" ]
             (List.map personaCard config.personas)
         ]
@@ -344,7 +344,7 @@ chatPanel config model chat =
             ]
         , div [ class "prompt-panel" ]
             [ p [ class "prompt-panel-note" ]
-                [ text "Concierge uses a single built-in front-desk assistant focused on quick answers and fast human handoff whenever pricing, commitments, or custom requests come up." ]
+                [ text "replybots uses a single built-in front-desk assistant focused on quick answers and fast human handoff whenever pricing, commitments, or custom requests come up." ]
             ]
         , div [ class "demo-transcript", id "demo-transcript" ]
             (List.map bubble chat.messages
@@ -412,7 +412,7 @@ closingCta idledOut =
         [ p []
             [ text
                 (if idledOut then
-                    "Timed out from inactivity — that's how Concierge answers every WhatsApp thread day or night."
+                    "Timed out from inactivity — that's how replybots answers every WhatsApp thread day or night."
 
                  else
                     "That's the demo. Quick replies when customers message, and fast handoff to you when it matters."
@@ -432,7 +432,7 @@ howItWorks =
             [ step "1. Connect WhatsApp Business via Meta"
                 "Link your business number in a few clicks through Meta Embedded Signup. No new number, no app to install."
             , step "2. Choose static or AI quick-handoff replies"
-                "Send an instant static message, or let Concierge's built-in front-desk assistant answer briefly and hand off to your team fast."
+                "Send an instant static message, or let replybots's built-in front-desk assistant answer briefly and hand off to your team fast."
             , step "3. Top up prepaid credits"
                 "1 credit = 1 reply, static or AI. Pay as you go with Razorpay — no subscriptions or free trials."
             ]

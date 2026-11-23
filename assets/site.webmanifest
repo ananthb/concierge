@@ -1,6 +1,6 @@
 {
-  "name": "Concierge",
-  "short_name": "Concierge",
+  "name": "replybots",
+  "short_name": "replybots",
   "description": "Messaging automation for small businesses",
   "start_url": "/admin",
   "display": "standalone",

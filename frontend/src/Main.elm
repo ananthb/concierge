@@ -304,31 +304,31 @@ title : Route -> String
 title route =
     case route of
         Route.Landing ->
-            "Concierge — automatic WhatsApp replies for small businesses"
+            "replybots — automatic WhatsApp replies for small businesses"
 
         Route.Pricing ->
-            "Pricing — Concierge"
+            "Pricing — replybots"
 
         Route.Features ->
-            "Features — Concierge"
+            "Features — replybots"
 
         Route.Terms ->
-            "Terms of Service — Concierge"
+            "Terms of Service — replybots"
 
         Route.Privacy ->
-            "Privacy Policy — Concierge"
+            "Privacy Policy — replybots"
 
         Route.Login ->
-            "Sign in — Concierge"
+            "Sign in — replybots"
 
         Route.Wizard ->
-            "Set up Concierge"
+            "Set up replybots"
 
         Route.NotFound ->
-            "Not found — Concierge"
+            "Not found — replybots"
 
         _ ->
-            "Dashboard — Concierge"
+            "Dashboard — replybots"
 
 
 content : Model -> Html Msg

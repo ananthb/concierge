@@ -88,28 +88,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0c9ea0ac24bc397ab3c98583a3c9ba74fa56b09a4449bbe172b9b1ddb016027a"
 
 [[package]]
-name = "concierge"
-version = "0.1.0"
-dependencies = [
- "accept-language",
- "base64",
- "console_error_panic_hook",
- "getrandom 0.2.17",
- "hmac",
- "js-sys",
- "serde",
- "serde_json",
- "sha2",
- "subtle",
- "unic-langid",
- "urlencoding",
- "uuid",
- "wasm-bindgen",
- "wasm-bindgen-futures",
- "worker",
-]
-
-[[package]]
 name = "console_error_panic_hook"
 version = "0.1.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -611,6 +589,28 @@ name = "r-efi"
 version = "6.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f8dcc9c7d52a811697d2151c701e0d08956f92b0e24136cf4cf27b57a6a0d9bf"
+
+[[package]]
+name = "replybots"
+version = "0.1.0"
+dependencies = [
+ "accept-language",
+ "base64",
+ "console_error_panic_hook",
+ "getrandom 0.2.17",
+ "hmac",
+ "js-sys",
+ "serde",
+ "serde_json",
+ "sha2",
+ "subtle",
+ "unic-langid",
+ "urlencoding",
+ "uuid",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "worker",
+]
 
 [[package]]
 name = "rustversion"

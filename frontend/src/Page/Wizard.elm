@@ -273,7 +273,7 @@ basicsStep model =
     section [ class "wizard-step" ]
         [ h1 [] [ text "Tell us about your business" ]
         , p [ class "step-sub" ]
-            [ text "These details go on your invoices and help Concierge greet your WhatsApp customers properly." ]
+            [ text "These details go on your invoices and help replybots greet your WhatsApp customers properly." ]
         , Ui.card
             [ Ui.field
                 { id = "name"

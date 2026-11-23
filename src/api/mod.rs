@@ -11,7 +11,7 @@ mod settings;
 mod whatsapp;
 mod wizard;
 
-const REQUEST_HEADER: &str = "X-Concierge-Request";
+const REQUEST_HEADER: &str = "X-Replybots-Request";
 
 /// Dispatch an `/api/*` request. `path` is the full request path.
 pub async fn handle(req: Request, env: Env, path: &str) -> Result<Response> {

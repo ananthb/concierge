@@ -1,0 +1,14 @@
+[book]
+title = "replybots"
+authors = ["ananthb"]
+language = "en"
+src = "src"
+
+[build]
+build-dir = "book"
+
+[output.html]
+default-theme = "light"
+preferred-dark-theme = "ayu"
+git-repository-url = "https://github.com/ananthb/replybots"
+additional-css = ["theme/custom.css"]

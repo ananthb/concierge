@@ -1,4 +1,4 @@
-# Dependabot config for concierge.
+# Dependabot config for replybots.
 # Nix flake inputs aren't covered (no dependabot ecosystem for nix);
 # .github/workflows/flake-update.yml runs `nix flake update` weekly to
 # refresh those on the same cadence as the bumps below.

@@ -1,0 +1,18 @@
+:root {
+  --content-max-width: 780px;
+}
+
+.content main {
+  line-height: 1.65;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+table th,
+table td {
+  text-align: left;
+  padding: 0.45rem 0.65rem;
+}
