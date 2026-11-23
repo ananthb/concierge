@@ -273,11 +273,7 @@ pub async fn handle_whatsapp_signup(
                         phone_number,
                         phone_number_id,
                         waba_id: waba_opt,
-                        auto_reply: ReplyConfig {
-                            enabled: true,
-                            response: ReplyResponse::Ai,
-                            wait_seconds: 3,
-                        },
+                        auto_reply: ReplyConfig::default(),
                         canned_safety: SafetyState::default(),
                         created_at: now.clone(),
                         updated_at: now,

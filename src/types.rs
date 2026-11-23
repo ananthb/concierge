@@ -134,6 +134,10 @@ pub struct ReplyConfig {
     /// 0 = reply immediately (no buffering).
     #[serde(default = "default_wait_seconds")]
     pub wait_seconds: u32,
+    /// Single `"user"` prompt for this Reply Bot (wrapped inside the shared
+    /// system prompt envelope when `response` is `ReplyResponse::Ai`).
+    #[serde(default = "crate::prompt::default_bot_prompt")]
+    pub bot_prompt: String,
 }
 
 impl Default for ReplyConfig {
@@ -142,6 +146,7 @@ impl Default for ReplyConfig {
             enabled: true,
             response: default_response(),
             wait_seconds: default_wait_seconds(),
+            bot_prompt: crate::prompt::default_bot_prompt(),
         }
     }
 }
@@ -628,6 +633,16 @@ mod tests {
         let ai = ReplyResponse::Ai;
         let s = serde_json::to_string(&ai).unwrap();
         assert_eq!(s, "{\"mode\":\"ai\"}");
+    }
+
+    #[test]
+    fn reply_config_deserializes_legacy_json_without_bot_prompt() {
+        let legacy = r#"{"enabled":true,"response":{"mode":"ai"},"wait_seconds":3}"#;
+        let parsed: ReplyConfig = serde_json::from_str(legacy).unwrap();
+        assert!(parsed.enabled);
+        assert_eq!(parsed.response, ReplyResponse::Ai);
+        assert_eq!(parsed.wait_seconds, 3);
+        assert_eq!(parsed.bot_prompt, crate::prompt::DEFAULT_BOT_PROMPT);
     }
 
     #[test]

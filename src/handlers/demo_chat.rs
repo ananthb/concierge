@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use worker::*;
 
 use crate::ai;
-use crate::api::demo::{find_fixture, DEMO_MAX_USER_TURNS};
+use crate::api::demo::DEMO_MAX_USER_TURNS;
 use crate::prompt;
 use crate::risk;
 
@@ -51,8 +51,8 @@ pub async fn handle_demo_chat(mut req: Request, env: Env) -> Result<Response> {
         Err(_) => return crate::api::invalid("Bad request body."),
     };
 
-    let Some(fixture) = find_fixture(&parsed.persona_id) else {
-        return crate::api::invalid("Unknown demo business.");
+    let Some(persona) = prompt::find_bot_persona(&parsed.persona_id) else {
+        return crate::api::invalid("Unknown demo persona.");
     };
 
     let message = parsed.message.trim().to_string();
@@ -138,13 +138,7 @@ pub async fn handle_demo_chat(mut req: Request, env: Env) -> Result<Response> {
     let system_prompt = if parsed.handoff {
         prompt::wrap(prompt::HOLDING_PATTERN_MIDDLE)
     } else {
-        prompt::demo_system_prompt(
-            fixture.business_name,
-            fixture.business_type,
-            fixture.city,
-            fixture.hours,
-            fixture.summary,
-        )
+        prompt::demo_system_prompt(persona)
     };
 
     let mut chat_history: Vec<(String, String)> = parsed
@@ -157,7 +151,7 @@ pub async fn handle_demo_chat(mut req: Request, env: Env) -> Result<Response> {
     let raw_reply = match ai::generate_chat_reply(&env, &system_prompt, &chat_history).await {
         Ok(r) => r,
         Err(e) => {
-            console_log!("Demo chat AI error (persona={}): {:?}", fixture.id, e);
+            console_log!("Demo chat AI error (persona={}): {:?}", persona.id, e);
             return crate::api::error("ai_error", "Couldn't generate a reply right now.", 502);
         }
     };

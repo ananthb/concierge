@@ -1,59 +1,123 @@
 /* Page shell and containers.
-   The old templates wrapped everything in `.app-root`, which owned the
-   full-height flex column. Elm renders straight into <body>, so the
-   column lives on <body> itself and `.site-main` is the growing middle
-   that keeps the footer at the bottom of a short page. */
+   Elm renders straight into <body>, so the flex column lives on <body>
+   itself and `.site-main` is the growing middle that keeps the footer
+   at the bottom of a short page. */
 
-body { display:flex; flex-direction:column; min-height:100vh; }
+body { display: flex; flex-direction: column; min-height: 100vh; }
 
-/* reset.css lays a noise texture over the page at z-index 1. The chrome
-   has to sit above it, or the grain multiplies over the text. */
-.site-header, .site-main, .site-footer { position:relative; z-index:2; }
-.site-main { flex:1 0 auto; width:100%; }
+.site-header, .site-main, .site-footer { position: relative; z-index: 2; }
+.site-main { flex: 1 0 auto; width: 100%; }
 
-/* Every top-level page wrapper is the same measure. Keeping them in one
-   rule means a new page can't quietly ship full-bleed. */
-.landing, .dashboard, .page { width:100%; max-width:1080px; margin:0 auto;
-  padding:48px var(--page-pad) 72px; }
+/* Every top-level page wrapper is the same measure. */
+.landing, .dashboard, .page {
+  width: 100%;
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 44px var(--page-pad) 72px;
+}
 /* The wizard is a single column of form cards, so it reads better narrow
    than at the full page measure. */
-.wizard { width:100%; max-width:720px; margin:0 auto;
-  padding:40px var(--page-pad) 72px; display:flex; flex-direction:column; gap:24px; }
+.wizard {
+  width: 100%;
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 40px var(--page-pad) 72px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
 
 /* Header / footer */
-.site-header { flex:none; display:flex; align-items:center; gap:24px;
-  padding:16px var(--page-pad); border-bottom:1px solid var(--hair); background:var(--paper); }
-.site-header .brand { display:flex; align-items:center; gap:10px;
-  font-family:var(--f-display); font-size:22px; letter-spacing:-0.01em;
-  color:var(--ink); text-decoration:none; }
-.site-header .site-nav { display:flex; align-items:center; gap:6px; margin-left:auto; }
-.site-footer { flex:none; border-top:1px solid var(--hair); background:var(--paper);
-  padding:22px var(--page-pad); text-align:center; color:var(--muted); font-size:13px; }
+.site-header {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 14px var(--page-pad);
+  border-bottom: 2px solid var(--line);
+  background: var(--paper);
+}
+.site-header .brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 36px;
+  font-family: var(--f-mono);
+  font-weight: 600;
+  font-size: 18px;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+  text-decoration: none;
+}
+.site-header .brand:hover { color: var(--accent); }
+.brand-mark {
+  display: inline-block;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  transform-origin: center bottom;
+}
+.brand:hover .brand-mark {
+  animation: bot-wiggle .35s ease-in-out;
+}
+@keyframes bot-wiggle {
+  0%   { transform: rotate(0deg) translateY(0); }
+  25%  { transform: rotate(-6deg) translateY(-1px); }
+  60%  { transform: rotate(5deg) translateY(-1px); }
+  100% { transform: rotate(0deg) translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .brand:hover .brand-mark { animation: none; }
+}
 
-/* Cards.
-   The old `.card` carried no padding — templates added a `.p-20` utility
-   at each site. The Elm `Ui.card` takes children only, so the padding
-   belongs here. */
-.card { background:var(--paper); border:1px solid var(--hair); border-radius:var(--r-lg);
-  box-shadow:var(--shadow-1); padding:var(--card-pad); }
-/* Cards are siblings in a plain section rather than flex children, so
-   the gap between them is a margin. */
-.card + .card { margin-top:16px; }
-.card > :first-child { margin-top:0; }
-.card > :last-child { margin-bottom:0; }
-.card h2 { font-size:17px; margin:0 0 10px; letter-spacing:-0.01em; }
-/* Buttons that close out a card, separated from the content above. */
-.card-actions { display:flex; flex-wrap:wrap; gap:10px; margin-top:16px; }
+.site-header .site-nav { display: flex; align-items: center; gap: 6px; margin-left: auto; }
+.site-footer {
+  flex: none;
+  border-top: 2px solid var(--line);
+  background: var(--paper);
+  padding: 22px var(--page-pad);
+  text-align: center;
+  color: var(--muted);
+  font-size: 13px;
+}
 
-/* Headings. Elm emits bare h1/h2/h3 inside the page wrappers, so the
-   display face is applied by element rather than by a `.display` class. */
+/* Cards */
+.card {
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 0px;
+  box-shadow: var(--shadow-1);
+  padding: var(--card-pad);
+}
+.card + .card { margin-top: 16px; }
+.card > :first-child { margin-top: 0; }
+.card > :last-child { margin-bottom: 0; }
+.card h2 { font-size: 17px; font-weight: 700; margin: 0 0 10px; letter-spacing: -0.01em; }
+.card-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
+
+/* Headings */
 .landing h1, .dashboard h1, .wizard h1, .page h1 {
-  font-family:var(--f-display); font-size:clamp(32px,4.6vw,52px); line-height:1.08;
-  letter-spacing:-0.02em; margin:0 0 12px; }
-.section-title { font-family:var(--f-display); font-size:clamp(24px,3vw,32px);
-  letter-spacing:-0.01em; margin:0 0 6px; }
-.page-sub, .step-sub { color:var(--ink-2); font-size:17px; line-height:1.55;
-  max-width:60ch; margin:0 0 24px; }
+  font-family: var(--f-display);
+  font-weight: 700;
+  font-size: clamp(30px, 4.4vw, 48px);
+  line-height: 1.08;
+  letter-spacing: -0.03em;
+  margin: 0 0 12px;
+}
+.section-title {
+  font-family: var(--f-display);
+  font-weight: 700;
+  font-size: clamp(22px, 2.8vw, 30px);
+  letter-spacing: -0.02em;
+  margin: 0 0 6px;
+}
+.page-sub, .step-sub {
+  color: var(--ink-2);
+  font-size: 17px;
+  line-height: 1.55;
+  max-width: 60ch;
+  margin: 0 0 24px;
+}
 
-.muted { color:var(--muted); }
-.fine-print { color:var(--muted); font-size:12px; line-height:1.7; }
+.muted { color: var(--muted); }
+.fine-print { color: var(--muted); font-size: 12px; line-height: 1.7; }

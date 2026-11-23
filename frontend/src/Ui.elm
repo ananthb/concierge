@@ -2,6 +2,7 @@ module Ui exposing
     ( banner
     , button
     , card
+    , colorCard
     , field
     , footer
     , header
@@ -79,6 +80,11 @@ banner kind message =
 card : List (Html msg) -> Html msg
 card =
     div [ class "card" ]
+
+
+colorCard : String -> List (Html msg) -> Html msg
+colorCard barClass =
+    div [ class ("card " ++ barClass) ]
 
 
 sectionTitle : String -> Html msg
@@ -215,7 +221,7 @@ header : Maybe Api.Session -> Html msg
 header session =
     Html.header [ class "site-header" ]
         [ a [ Route.href Route.Landing, class "brand" ]
-            [ Html.img [ Html.Attributes.src "/logo.svg", Html.Attributes.alt "", Html.Attributes.width 32, Html.Attributes.height 32 ] []
+            [ Html.img [ Html.Attributes.src "/logo.svg", Html.Attributes.alt "", class "brand-mark" ] []
             , span [] [ text "replybots" ]
             ]
         , nav [ class "site-nav" ]

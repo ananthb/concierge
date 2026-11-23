@@ -31,24 +31,40 @@ const PRICING = {
 
 const DEMO_PERSONAS = [
   {
-    id: 'bakery',
+    id: 'front-desk',
+    label: 'Front Desk',
+    tag: 'Default',
     business_name: 'Nutmeg & Crumb Bakery',
-    business_type: 'Neighborhood sourdough & pastry bakery',
-    city: 'Bengaluru',
-    hours: 'Tue–Sun, 8:00 AM – 8:00 PM',
+    prompt:
+      'You reply for Nutmeg & Crumb Bakery in Indiranagar, Bengaluru (Tue–Sun, 8 AM–8 PM). Greet warmly, answer hours/location/menu questions, and hand off custom cake orders or bulk quotes to Asha.',
     opener: 'Hi! Welcome to Nutmeg & Crumb Bakery. How can we help today?',
-    summary:
-      'Artisan sourdough loaves, croissants, and custom celebration cakes baked fresh daily in Indiranagar, Bengaluru.',
   },
   {
-    id: 'clinic',
+    id: 'orders',
+    label: 'Order & Booking',
+    tag: 'Orders',
     business_name: 'ClearSmile Dental Clinic',
-    business_type: 'Family & cosmetic dental clinic',
-    city: 'Pune',
-    hours: 'Mon–Sat, 9:30 AM – 7:30 PM',
-    opener: 'Hello from ClearSmile Dental Clinic! How can we assist you?',
-    summary:
-      'Routine checkups, cleanings, aligners, and gentle family dentistry in Kothrud, Pune.',
+    prompt:
+      'You reply for ClearSmile Dental Clinic in Pune (Mon–Sat, 9:30 AM–7:30 PM). Confirm appointment hours and location, collect preferred day/time, and hand off medical questions or bookings to the front desk.',
+    opener: 'Hello from ClearSmile Dental Clinic! Looking to book an appointment?',
+  },
+  {
+    id: 'after-hours',
+    label: 'After-Hours Triage',
+    tag: 'Triage',
+    business_name: 'Kaveri Plumbing & Repairs',
+    prompt:
+      'You reply after hours for Kaveri Plumbing & Repairs. Ask whether the issue is urgent (active leak) or routine, collect the area/pin code, and hand off immediately to the on-call technician.',
+    opener: 'Hi! Kaveri Plumbing here — is this an urgent leak or a routine repair?',
+  },
+  {
+    id: 'concise',
+    label: 'Concise Support',
+    tag: 'Brief',
+    business_name: 'Veda Yoga Studio',
+    prompt:
+      'You reply for Veda Yoga Studio. Keep answers to 1–2 short sentences on class timings (6 AM–8 PM) and trial passes, and hand off membership pricing or private sessions to the studio team.',
+    opener: 'Namaste! Welcome to Veda Yoga Studio. How can we help?',
   },
 ];
 
@@ -76,6 +92,7 @@ const WHATSAPP_ACCOUNT = {
     enabled: true,
     mode: 'ai',
     text: '',
+    bot_prompt: '',
     wait_seconds: 3,
   },
   canned_safety_status: 'approved',
@@ -150,7 +167,11 @@ async function stubSignedIn(page: import('@playwright/test').Page) {
     session: SESSION,
     locale: { tag: 'en-IN', currency: 'INR' },
   });
-  await stub(page, '**/api/whatsapp', { accounts: [WHATSAPP_ACCOUNT], signup: null });
+  await stub(page, '**/api/whatsapp', {
+    accounts: [WHATSAPP_ACCOUNT],
+    signup: null,
+    bot_presets: DEMO_PERSONAS.map(({ id, label, tag, prompt }) => ({ id, label, tag, prompt })),
+  });
   await stub(page, '**/api/billing', {
     balance: 8450,
     replies_used: 1550,
@@ -277,7 +298,7 @@ async function openDemoConversation(page: import('@playwright/test').Page) {
   await stubPublic(page);
   await stub(page, '**/api/demo/chat', { reply: DEMO_REPLY, handed_off: false });
   await page.goto('/');
-  await page.locator('.persona-card').first().click();
+  await page.locator('.persona-btn').first().click();
   await page.locator('#demo-input').fill('Are you open on Sundays?');
   await page.locator('.demo-composer button[type="submit"]').click();
   await page.getByText(/8:00 AM/i).waitFor();

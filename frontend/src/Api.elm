@@ -3,6 +3,7 @@ module Api exposing
     , Basics
     , BillingView
     , Bootstrap
+    , BotPreset
     , ConversationBounds
     , ConversationSettings
     , CreditEntry
@@ -18,6 +19,7 @@ module Api exposing
     , Session
     , SettingsView
     , WhatsAppAccount
+    , WhatsAppView
     , WizardView
     , channelsDone
     , completeWizard
@@ -279,12 +281,11 @@ type alias DemoConfig =
 
 type alias DemoPersona =
     { id : String
+    , label : String
+    , tag : String
     , businessName : String
-    , businessType : String
-    , city : String
-    , hours : String
+    , prompt : String
     , opener : String
-    , summary : String
     }
 
 
@@ -359,14 +360,13 @@ demoDecoder =
 
 demoPersonaDecoder : Decoder DemoPersona
 demoPersonaDecoder =
-    D.map7 DemoPersona
+    D.map6 DemoPersona
         (D.field "id" D.string)
+        (D.field "label" D.string)
+        (D.field "tag" D.string)
         (D.field "business_name" D.string)
-        (D.field "business_type" D.string)
-        (D.field "city" D.string)
-        (D.field "hours" D.string)
+        (D.field "prompt" D.string)
         (D.field "opener" D.string)
-        (D.field "summary" D.string)
 
 
 sessionDecoder : Decoder Session
@@ -613,22 +613,48 @@ type alias ReplyConfig =
     { enabled : Bool
     , mode : String
     , text : String
+    , botPrompt : String
     , waitSeconds : Int
     }
 
 
-getWhatsApp : (Data { accounts : List WhatsAppAccount, signup : Maybe MetaSignup } -> msg) -> Cmd msg
+type alias BotPreset =
+    { id : String
+    , label : String
+    , tag : String
+    , prompt : String
+    }
+
+
+type alias WhatsAppView =
+    { accounts : List WhatsAppAccount
+    , signup : Maybe MetaSignup
+    , botPresets : List BotPreset
+    }
+
+
+getWhatsApp : (Data WhatsAppView -> msg) -> Cmd msg
 getWhatsApp =
     get "/api/whatsapp"
-        (D.map2 (\a s -> { accounts = a, signup = s })
+        (D.map3 WhatsAppView
             (D.field "accounts" (D.list whatsAppDecoder))
             (D.field "signup" (D.nullable signupDecoder))
+            (D.field "bot_presets" (D.list botPresetDecoder))
         )
+
+
+botPresetDecoder : Decoder BotPreset
+botPresetDecoder =
+    D.map4 BotPreset
+        (D.field "id" D.string)
+        (D.field "label" D.string)
+        (D.field "tag" D.string)
+        (D.field "prompt" D.string)
 
 
 updateWhatsApp :
     String
-    -> { name : String, enabled : Bool, mode : String, text : String, waitSeconds : Int }
+    -> { name : String, enabled : Bool, mode : String, text : String, botPrompt : String, waitSeconds : Int }
     -> (Data WhatsAppAccount -> msg)
     -> Cmd msg
 updateWhatsApp id args =
@@ -638,6 +664,7 @@ updateWhatsApp id args =
             , ( "enabled", E.bool args.enabled )
             , ( "mode", E.string args.mode )
             , ( "text", E.string args.text )
+            , ( "bot_prompt", E.string args.botPrompt )
             , ( "wait_seconds", E.int args.waitSeconds )
             ]
         )
@@ -661,10 +688,11 @@ whatsAppDecoder =
 
 replyDecoder : Decoder ReplyConfig
 replyDecoder =
-    D.map4 ReplyConfig
+    D.map5 ReplyConfig
         (D.field "enabled" D.bool)
         (D.field "mode" D.string)
         (D.field "text" D.string)
+        (D.field "bot_prompt" D.string)
         (D.field "wait_seconds" D.int)
 
 

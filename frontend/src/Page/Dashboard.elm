@@ -29,7 +29,7 @@ type Tab
 
 type alias Model =
     { tab : Tab
-    , channels : Api.Data { accounts : List Api.WhatsAppAccount, signup : Maybe Api.MetaSignup }
+    , channels : Api.Data Api.WhatsAppView
     , billing : Api.Data Api.BillingView
     , settings : Api.Data Api.SettingsView
     , settingsForm : SettingsForm
@@ -154,8 +154,8 @@ switchTab tab model =
 
 type Msg
     = SwitchedTo Tab
-    | GotChannels (Api.Data { accounts : List Api.WhatsAppAccount, signup : Maybe Api.MetaSignup })
-    | RefreshedChannels (Api.Data { accounts : List Api.WhatsAppAccount, signup : Maybe Api.MetaSignup })
+    | GotChannels (Api.Data Api.WhatsAppView)
+    | RefreshedChannels (Api.Data Api.WhatsAppView)
     | StartMetaSignup Api.MetaSignup
     | MetaSignupCame E.Value
     | GotBilling (Api.Data Api.BillingView)
@@ -303,6 +303,7 @@ update msg model =
                                     , enabled = edit.reply.enabled
                                     , mode = edit.reply.mode
                                     , text = edit.reply.text
+                                    , botPrompt = edit.reply.botPrompt
                                     , waitSeconds = waitSecs
                                     }
                                     SavedReply
@@ -695,7 +696,7 @@ overviewTab session model =
 
 overviewBillingCard : Api.Session -> Api.BillingView -> Html Msg
 overviewBillingCard session billing =
-    Ui.card
+    Ui.colorCard "color-bar-amber"
         [ h2 [] [ text "Prepaid credits" ]
         , p [ class "balance" ]
             [ text (Format.count session.locale billing.balance ++ " credits") ]
@@ -725,10 +726,10 @@ overviewBillingCard session billing =
         ]
 
 
-overviewWhatsApp : { accounts : List Api.WhatsAppAccount, signup : Maybe Api.MetaSignup } -> Html Msg
+overviewWhatsApp : Api.WhatsAppView -> Html Msg
 overviewWhatsApp data =
     if List.isEmpty data.accounts then
-        Ui.card
+        Ui.colorCard "color-bar-green"
             [ h2 [] [ text "No WhatsApp number connected" ]
             , p [] [ text "Connect a WhatsApp Business number so replybots can answer your customers." ]
             , div [ class "card-actions" ]
@@ -741,7 +742,7 @@ overviewWhatsApp data =
             ]
 
     else
-        Ui.card
+        Ui.colorCard "color-bar-green"
             [ h2 [] [ text "Connected WhatsApp numbers" ]
             , ul [ class "connected-list" ]
                 (List.map
@@ -786,11 +787,11 @@ channelsTab model =
         [ Ui.remote model.channels (whatsappSection model) ]
 
 
-whatsappSection : Model -> { accounts : List Api.WhatsAppAccount, signup : Maybe Api.MetaSignup } -> Html Msg
+whatsappSection : Model -> Api.WhatsAppView -> Html Msg
 whatsappSection model data =
     div []
         [ if List.isEmpty data.accounts then
-            Ui.card
+            Ui.colorCard "color-bar-blue"
                 [ h2 [] [ text "WhatsApp Business" ]
                 , p [ class "muted" ]
                     [ text "Connect your WhatsApp Business number via Meta Embedded Signup to start replying automatically." ]
@@ -799,10 +800,10 @@ whatsappSection model data =
 
           else
             div []
-                (List.map (accountCard model) data.accounts
+                (List.map (accountCard model data.botPresets) data.accounts
                     ++ [ case data.signup of
                             Just _ ->
-                                Ui.card
+                                Ui.colorCard "color-bar-blue"
                                     [ h2 [] [ text "Add another number" ]
                                     , p [ class "muted" ]
                                         [ text "Connect an additional WhatsApp Business number through Meta Embedded Signup." ]
@@ -833,8 +834,8 @@ connectButton model isPrimary maybeSignup =
             Ui.banner "info" "WhatsApp signup isn't configured on this deployment."
 
 
-accountCard : Model -> Api.WhatsAppAccount -> Html Msg
-accountCard model account =
+accountCard : Model -> List Api.BotPreset -> Api.WhatsAppAccount -> Html Msg
+accountCard model botPresets account =
     let
         editing =
             case model.editing of
@@ -848,7 +849,7 @@ accountCard model account =
                 Nothing ->
                     Nothing
     in
-    Ui.card
+    Ui.colorCard "color-bar-green"
         [ h2 [] [ text account.name ]
         , p [ class "muted" ] [ text account.displayPhoneNumber ]
         , case editing of
@@ -872,8 +873,40 @@ accountCard model account =
                             }
 
                       else
-                        p [ class "hint" ]
-                            [ text "replybots's built-in front-desk assistant handles greetings and simple questions briefly, and hands off to you fast when a person is needed. 1 credit per reply." ]
+                        div []
+                            [ if List.isEmpty botPresets then
+                                text ""
+
+                              else
+                                div [ class "field" ]
+                                    [ Html.label [] [ text "Quick-fill starter prompt" ]
+                                    , div [ class "choice-row" ]
+                                        (List.map
+                                            (\preset ->
+                                                Html.button
+                                                    [ classList
+                                                        [ ( "choice", True )
+                                                        , ( "is-selected", edit.reply.botPrompt == preset.prompt )
+                                                        ]
+                                                    , Html.Attributes.type_ "button"
+                                                    , onClick (SetEditReply (setBotPrompt preset.prompt edit.reply))
+                                                    ]
+                                                    [ text preset.label ]
+                                            )
+                                            botPresets
+                                        )
+                                    ]
+                            , Ui.textarea
+                                { id = "bot-prompt-" ++ account.id
+                                , label = "Bot prompt (optional, up to 600 chars)"
+                                , value = edit.reply.botPrompt
+                                , hint =
+                                    String.fromInt (String.length edit.reply.botPrompt)
+                                        ++ "/600 chars · All bots share the same system prompt and hand off to a human quickly."
+                                , rows = 4
+                                , onInput = \v -> SetEditReply (setBotPrompt v edit.reply)
+                                }
+                            ]
                     , Ui.field
                         { id = "wait-" ++ account.id
                         , label = "Burst wait window (seconds, 0–30)"
@@ -899,7 +932,7 @@ accountCard model account =
                                         ++ "s burst wait."
 
                                 else
-                                    "Answering with AI quick-handoff (replybots core) · "
+                                    "Answering with AI (1 user prompt) · "
                                         ++ String.fromInt account.reply.waitSeconds
                                         ++ "s burst wait."
 
@@ -964,6 +997,11 @@ setText txt reply =
     { reply | text = txt }
 
 
+setBotPrompt : String -> Api.ReplyConfig -> Api.ReplyConfig
+setBotPrompt prompt reply =
+    { reply | botPrompt = prompt }
+
+
 modePicker : Api.ReplyConfig -> Html Msg
 modePicker reply =
     div [ class "field" ]
@@ -978,7 +1016,7 @@ modePicker reply =
                         ]
                         [ text label_ ]
                 )
-                [ ( "ai", "AI quick-handoff (replybots core)" ), ( "canned", "Static reply" ) ]
+                [ ( "ai", "AI (1 user prompt)" ), ( "canned", "Static reply" ) ]
             )
         ]
 
@@ -996,7 +1034,7 @@ billingTab session model =
                     Api.unitPriceFor billing.currency billing.pricing
             in
             section []
-                [ Ui.card
+                [ Ui.colorCard "color-bar-amber"
                     [ h2 [] [ text "Balance" ]
                     , p [ class "balance" ]
                         [ text (Format.count session.locale billing.balance ++ " credits") ]
@@ -1008,7 +1046,7 @@ billingTab session model =
                         ]
                     ]
                 , if billing.metered then
-                    Ui.card
+                    Ui.colorCard "color-bar-blue"
                         [ h2 [] [ text "Buy credits" ]
                         , p []
                             [ text
@@ -1053,7 +1091,7 @@ billingTab session model =
                     text ""
 
                   else
-                    Ui.card
+                    Ui.colorCard "color-bar-violet"
                         [ h2 [] [ text "Credit ledger" ]
                         , ul [ class "ledger" ]
                             (List.map
@@ -1124,7 +1162,7 @@ settingsTab session model =
                     , localeCard model
                     ]
             )
-        , Ui.card
+        , Ui.colorCard "color-bar-blue"
             [ h2 [] [ text "Account" ]
             , Ui.field
                 { id = "account_email"
@@ -1198,7 +1236,7 @@ timingCard model settings =
                 , onInput = \v -> SetTiming (change v)
                 }
     in
-    Ui.card
+    Ui.colorCard "color-bar-green"
         [ h2 [] [ text "Conversation timing" ]
         , p [ class "muted" ]
             [ text "How replybots decides where one conversation ends and the next begins." ]
@@ -1233,7 +1271,7 @@ timingCard model settings =
 
 notificationsCard : Model -> Html Msg
 notificationsCard model =
-    Ui.card
+    Ui.colorCard "color-bar-violet"
         [ h2 [] [ text "Notifications" ]
         , Ui.toggle
             { id = "handoff_email"
@@ -1263,7 +1301,7 @@ localeCard model =
         currencies =
             [ "INR", "USD" ]
     in
-    Ui.card
+    Ui.colorCard "color-bar-amber"
         [ h2 [] [ text "Language and currency" ]
         , p [ class "muted" ]
             [ text "What your dashboard and invoices use." ]
