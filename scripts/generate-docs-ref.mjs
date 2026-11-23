@@ -289,7 +289,7 @@ function generateSchema() {
         lines.push(`| \`${col}\` | — |`);
       } else {
         const colName = col.slice(0, spaceIdx);
-        const def = col.slice(spaceIdx + 1).replace(/\|/g, '\\|');
+        const def = col.slice(spaceIdx + 1).replace(/\\/g, '\\\\').replace(/\|/g, '\\|');
         lines.push(`| \`${colName}\` | \`${def}\` |`);
       }
     }
