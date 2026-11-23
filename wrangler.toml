@@ -33,8 +33,7 @@ directory = "./public"
 [[d1_databases]]
 binding = "DB"
 database_name = "replybots"
-# Note: Forgejo PR #845 recreates the production D1 database under `replybots`.
-database_id = "95687fdd-d529-4993-8b84-e55db87159c2"
+database_id = "16aed6cb-c485-4a5f-96f9-ad1bace83f76"
 
 # ============================================================================
 # AI Binding for auto-reply generation, injection detection, and safety checks.
