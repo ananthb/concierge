@@ -3,7 +3,7 @@
 -- Tenants
 CREATE TABLE IF NOT EXISTS tenants (
     id TEXT PRIMARY KEY,
-    email TEXT NOT NULL UNIQUE,
+    email TEXT UNIQUE,
     name TEXT,
     facebook_id TEXT,
     plan TEXT DEFAULT 'paid',

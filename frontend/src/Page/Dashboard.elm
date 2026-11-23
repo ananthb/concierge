@@ -44,7 +44,8 @@ type alias Model =
 
 
 type alias SettingsForm =
-    { idleGap : String
+    { email : String
+    , idleGap : String
     , cooldown : String
     , history : String
     , handoffEmail : Bool
@@ -55,7 +56,8 @@ type alias SettingsForm =
 
 emptySettingsForm : SettingsForm
 emptySettingsForm =
-    { idleGap = ""
+    { email = ""
+    , idleGap = ""
     , cooldown = ""
     , history = ""
     , handoffEmail = True
@@ -66,7 +68,8 @@ emptySettingsForm =
 
 formFromSettings : Api.SettingsView -> SettingsForm
 formFromSettings s =
-    { idleGap = maybeIntToString s.conversation.idleGapMins
+    { email = s.email
+    , idleGap = maybeIntToString s.conversation.idleGapMins
     , cooldown = maybeIntToString s.conversation.handoffCooldownMins
     , history = maybeIntToString s.conversation.maxHistoryMessages
     , handoffEmail = s.notifications.handoffEmail
@@ -171,6 +174,8 @@ type Msg
     | GotOrder (Api.Data Api.Order)
     | PaymentCame Ports.PaymentOutcome
     | GotSettings (Api.Data Api.SettingsView)
+    | SetEmail String
+    | SaveEmail
     | SetTiming (SettingsForm -> SettingsForm)
     | SaveTiming
     | SetHandoffEmail Bool
@@ -458,6 +463,18 @@ update msg model =
                             model.settingsForm
               }
             , Cmd.none
+            )
+
+        SetEmail val ->
+            let
+                form =
+                    model.settingsForm
+            in
+            ( { model | settingsForm = { form | email = val } }, Cmd.none )
+
+        SaveEmail ->
+            ( { model | saving = True, notice = Nothing }
+            , Api.saveEmail model.settingsForm.email SavedSettings
             )
 
         SetTiming change ->
@@ -1070,8 +1087,33 @@ totalFor credits milliPrice =
 settingsTab : Api.Session -> Model -> Html Msg
 settingsTab session model =
     let
+        accountEmail =
+            case model.settings of
+                Success s ->
+                    s.email
+
+                _ ->
+                    session.email
+
+        hasEmail =
+            not (String.isEmpty (String.trim accountEmail))
+
+        confirmTarget =
+            if hasEmail then
+                accountEmail
+
+            else
+                "DELETE"
+
         confirmed =
-            String.toLower (String.trim model.deleteConfirm) == String.toLower session.email
+            if hasEmail then
+                String.toLower (String.trim model.deleteConfirm)
+                    == String.toLower accountEmail
+                    || String.toUpper (String.trim model.deleteConfirm)
+                    == "DELETE"
+
+            else
+                String.toUpper (String.trim model.deleteConfirm) == "DELETE"
     in
     section []
         [ Ui.remote model.settings
@@ -1084,9 +1126,22 @@ settingsTab session model =
             )
         , Ui.card
             [ h2 [] [ text "Account" ]
-            , p [] [ text session.email ]
-            , p [ class "muted" ]
-                [ text "Handoff alert emails (when enabled above) are delivered to this address." ]
+            , Ui.field
+                { id = "account_email"
+                , label = "Notification email (optional)"
+                , value = model.settingsForm.email
+                , hint = "Handoff alert emails (when enabled above) are delivered here. Leave blank if you don't need email alerts."
+                , required = False
+                , onInput = SetEmail
+                }
+            , div [ class "card-actions" ]
+                [ Ui.button
+                    { label = "Save email"
+                    , onClick = SaveEmail
+                    , primary = True
+                    , busy = model.saving
+                    }
+                ]
             ]
         , Ui.card
             [ h2 [] [ text "Close your account" ]
@@ -1094,7 +1149,7 @@ settingsTab session model =
                 [ text "Deletes your settings, your connected WhatsApp numbers, and your message metadata. Payment records are kept with your account identifier removed, because tax and dispute rules require it. This cannot be undone." ]
             , Ui.field
                 { id = "confirm_email"
-                , label = "Type " ++ session.email ++ " to confirm"
+                , label = "Type " ++ confirmTarget ++ " to confirm"
                 , value = model.deleteConfirm
                 , hint = ""
                 , required = False

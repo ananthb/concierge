@@ -11,7 +11,7 @@ Defined in `migrations/0001_create_schema.sql`.
 | Column | Definition |
 |---|---|
 | `id` | `TEXT PRIMARY KEY` |
-| `email` | `TEXT NOT NULL UNIQUE` |
+| `email` | `TEXT UNIQUE` |
 | `name` | `TEXT` |
 | `facebook_id` | `TEXT` |
 | `plan` | `TEXT DEFAULT 'paid'` |

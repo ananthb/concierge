@@ -223,7 +223,7 @@ header session =
                 Nothing ->
                     [ navLink Route.Features "Features"
                     , navLink Route.Pricing "Pricing"
-                    , a [ href "/auth/login", class "btn btn-primary" ] [ text "Sign in" ]
+                    , a [ Route.href Route.Login, class "btn btn-primary" ] [ text "Sign in" ]
                     ]
 
                 Just s ->

@@ -9,7 +9,7 @@
 | `GET`, `POST` | `/webhook/whatsapp` | WhatsApp Cloud API verification & inbound messages (`src/handlers/webhook.rs`) |
 | `POST` | `/webhook/razorpay` | Razorpay payment webhook, HMAC-SHA256 verified (`src/billing/webhook.rs`) |
 | `POST` | `/data-deletion` | Meta data-deletion callback (`src/handlers/data_deletion.rs`) |
-| `GET` | `/auth/login`, `/auth/callback` | Google OAuth sign-in (`src/handlers/auth.rs`) |
+| `POST` | `/auth/whatsapp/start` | Start Meta / WhatsApp Embedded Signup login (`src/handlers/auth.rs`) |
 | `POST` | `/auth/dev-login` | Local dev sign-in when `DEV_MODE=1` (`src/handlers/auth.rs`) |
 | `POST` | `/whatsapp/signup/callback` | Meta Embedded Signup completion (`src/handlers/whatsapp_signup.rs`) |
 

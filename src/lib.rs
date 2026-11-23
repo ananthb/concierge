@@ -60,7 +60,7 @@ fn add_security_headers(resp: &mut Response, is_dev: bool) -> Result<()> {
          connect-src 'self' https://www.facebook.com https://graph.facebook.com https://*.facebook.com https://api.razorpay.com; \
          frame-src https://www.facebook.com https://*.facebook.com https://api.razorpay.com https://checkout.razorpay.com; \
          base-uri 'self'; \
-         form-action 'self' https://accounts.google.com{form_action_extra}; \
+         form-action 'self'{form_action_extra}; \
          object-src 'none'"
     );
     headers.set("Content-Security-Policy", &csp)?;

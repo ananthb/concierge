@@ -29,8 +29,6 @@ const ENV_FILE = join(tmpdir(), `replybots-playwright-${process.pid}.env`);
 writeFileSync(
   ENV_FILE,
   [
-    'GOOGLE_OAUTH_CLIENT_ID=screenshot-stub.apps.googleusercontent.com',
-    'GOOGLE_OAUTH_CLIENT_SECRET=screenshot-stub',
     'META_APP_ID=000000000000000',
     'META_APP_SECRET=screenshot-stub',
     'WHATSAPP_ACCESS_TOKEN=screenshot-stub',

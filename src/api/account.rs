@@ -88,13 +88,24 @@ pub async fn delete(mut req: Request, env: Env) -> Result<Response> {
         Ok(b) => b,
         Err(r) => return r,
     };
-    let confirm = super::field(&body, "confirm_email").to_lowercase();
+    let confirm = super::field(&body, "confirm_email");
+    let confirm = confirm.trim();
     let tenant = match storage::get_tenant(&db, &tenant_id).await? {
         Some(t) => t,
         None => return super::not_found("Account"),
     };
-    if confirm != tenant.email.to_lowercase() {
-        return super::invalid("Type your account's email address to confirm.");
+    let confirmed = if tenant.email.trim().is_empty() {
+        confirm.eq_ignore_ascii_case("DELETE")
+    } else {
+        confirm.eq_ignore_ascii_case(&tenant.email) || confirm.eq_ignore_ascii_case("DELETE")
+    };
+    if !confirmed {
+        let msg = if tenant.email.trim().is_empty() {
+            "Type DELETE to confirm."
+        } else {
+            "Type your account's email address to confirm."
+        };
+        return super::invalid(msg);
     }
 
     storage::delete_tenant_data(&db, &tenant_id).await?;

@@ -131,19 +131,6 @@ impl Component for Razorpay {
     }
 }
 
-pub struct GoogleOAuth;
-impl Component for GoogleOAuth {
-    fn name(&self) -> &'static str {
-        "Google OAuth"
-    }
-    fn requirements(&self) -> &'static [Requirement] {
-        &[
-            Requirement::Secret("GOOGLE_OAUTH_CLIENT_ID"),
-            Requirement::Secret("GOOGLE_OAUTH_CLIENT_SECRET"),
-        ]
-    }
-}
-
 pub struct AiBinding;
 impl Component for AiBinding {
     fn name(&self) -> &'static str {
@@ -238,25 +225,12 @@ impl D1Binding {
 // Registry + public API
 // ============================================================================
 
-const SHALLOW_COMPONENTS: &[&dyn Component] = &[
-    &AiBinding,
-    &EmailBinding,
-    &GoogleOAuth,
-    &WhatsAppSignup,
-    &Razorpay,
-];
+const SHALLOW_COMPONENTS: &[&dyn Component] =
+    &[&AiBinding, &EmailBinding, &WhatsAppSignup, &Razorpay];
 
 pub fn essentials_missing(env: &Env) -> Vec<&'static str> {
-    let essentials: &[&dyn Component] = &[&GoogleOAuth];
-    essentials
-        .iter()
-        .flat_map(|c| {
-            c.requirements()
-                .iter()
-                .filter(|r| !r.satisfied(env))
-                .map(|r| r.name())
-        })
-        .collect()
+    let _ = env;
+    Vec::new()
 }
 
 pub async fn handle_health(_req: Request, env: Env) -> Result<Response> {
@@ -359,7 +333,6 @@ mod tests {
         assert!(!Razorpay.required());
         assert!(!EmailBinding.required());
 
-        assert!(GoogleOAuth.required());
         assert!(AiBinding.required());
         assert!(D1Binding.required());
     }

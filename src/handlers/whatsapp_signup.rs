@@ -17,6 +17,7 @@ struct SignupParams {
 #[derive(Serialize)]
 struct SignupSuccessView {
     ok: bool,
+    destination: &'static str,
     account: SignupAccountView,
 }
 
@@ -66,12 +67,7 @@ pub async fn handle_whatsapp_signup(
 
             let db = env.d1("DB")?;
 
-            let Some(tenant_id) = super::auth::resolve_tenant_id(&req, &db).await else {
-                if wants_json {
-                    return crate::api::error("unauthenticated", "Sign in to continue.", 401);
-                }
-                return Response::error("Unauthorized", 401);
-            };
+            let logged_in_tenant = super::auth::resolve_tenant_id(&req, &db).await;
 
             let params = if !is_post {
                 parse_get_params(&req)?
@@ -89,16 +85,21 @@ pub async fn handle_whatsapp_signup(
                     400,
                 );
             }
-            match take_signup_state(&db, &params.state).await? {
-                Some(tid) if tid == tenant_id => {}
-                _ => {
-                    return fail(
-                        wants_json,
-                        "invalid_state",
-                        "Invalid or expired signup state.",
-                        400,
-                    );
-                }
+            let state_valid = match (
+                &logged_in_tenant,
+                take_signup_state(&db, &params.state).await?,
+            ) {
+                (Some(tid), Some(state_tid)) => state_tid == *tid,
+                (None, Some(state_tid)) => state_tid.is_empty(),
+                _ => false,
+            };
+            if !state_valid {
+                return fail(
+                    wants_json,
+                    "invalid_state",
+                    "Invalid or expired signup state.",
+                    400,
+                );
             }
 
             if params.code.is_empty() {
@@ -135,17 +136,64 @@ pub async fn handle_whatsapp_signup(
                 }
             };
 
-            // Best-effort: fetch Meta user id and persist `tenants.facebook_id`
-            // so `POST /data-deletion` can locate this tenant for Meta App Review.
-            if let Some(fb_id) = fetch_fb_user_id(&user_token).await {
-                if let Err(e) = set_tenant_facebook_id(&db, &tenant_id, &fb_id).await {
-                    console_log!(
-                        "Failed to save facebook_id on tenant {}: {:?}",
-                        tenant_id,
-                        e
-                    );
+            let meta_user = fetch_meta_user(&user_token).await;
+            let tenant_id = match logged_in_tenant.clone() {
+                Some(tid) => {
+                    // Best-effort: persist `tenants.facebook_id` so `POST /data-deletion`
+                    // can locate this tenant for Meta App Review.
+                    if let Some(ref user) = meta_user {
+                        if let Err(e) = set_tenant_facebook_id(&db, &tid, &user.id).await {
+                            console_log!("Failed to save facebook_id on tenant {}: {:?}", tid, e);
+                        }
+                    }
+                    tid
                 }
-            }
+                None => {
+                    let Some(user) = meta_user else {
+                        return fail(
+                            wants_json,
+                            "meta_profile_failed",
+                            "Could not verify your Meta account.",
+                            502,
+                        );
+                    };
+                    let existing = match get_tenant_by_facebook_id(&db, &user.id).await? {
+                        Some(t) => Some(t),
+                        None => match user.email.as_deref() {
+                            Some(email) => {
+                                let found = get_tenant_by_email(&db, email).await?;
+                                if let Some(ref t) = found {
+                                    if t.facebook_id.is_none() {
+                                        let _ = set_tenant_facebook_id(&db, &t.id, &user.id).await;
+                                    }
+                                }
+                                found
+                            }
+                            None => None,
+                        },
+                    };
+                    match existing {
+                        Some(t) => t.id,
+                        None => {
+                            let signup_locale = crate::locale::Locale::from_request(&req);
+                            let now = now_iso();
+                            let tenant = Tenant {
+                                id: generate_id(),
+                                email: user.email.unwrap_or_default(),
+                                name: user.name,
+                                facebook_id: Some(user.id),
+                                plan: Plan::Paid,
+                                locale: signup_locale.langid.to_string(),
+                                currency: signup_locale.currency,
+                                created_at: now.clone(),
+                                updated_at: now,
+                            };
+                            save_tenant(&db, &tenant).await?;
+                            tenant.id
+                        }
+                    }
+                }
+            };
 
             let tenant_supplied_waba = params.waba_id.clone().filter(|s| !s.is_empty());
             let effective_waba_id = tenant_supplied_waba.clone().unwrap_or(fallback_waba_id);
@@ -188,44 +236,73 @@ pub async fn handle_whatsapp_signup(
                 }
             };
 
-            if get_whatsapp_account_by_phone(&db, &phone_number_id)
-                .await?
-                .is_some()
-            {
-                return fail(
-                    wants_json,
-                    "already_connected",
-                    "That WhatsApp phone number is already connected.",
-                    409,
-                );
-            }
-
-            let now = now_iso();
-            let account = WhatsAppAccount {
-                id: generate_id(),
-                tenant_id,
-                name: format!("WhatsApp {}", phone_number),
-                phone_number,
-                phone_number_id,
-                waba_id: if effective_waba_id.is_empty() {
-                    None
-                } else {
-                    Some(effective_waba_id)
-                },
-                auto_reply: ReplyConfig {
-                    enabled: true,
-                    response: ReplyResponse::Ai,
-                    wait_seconds: 3,
-                },
-                canned_safety: SafetyState::default(),
-                created_at: now.clone(),
-                updated_at: now,
+            let waba_opt = if effective_waba_id.is_empty() {
+                None
+            } else {
+                Some(effective_waba_id)
             };
-            save_whatsapp_account(&db, &account).await?;
+            let existing_account =
+                match get_whatsapp_account_by_phone(&db, &phone_number_id).await? {
+                    Some(id) => get_whatsapp_account(&db, &id).await?,
+                    None => None,
+                };
+            let account = match existing_account {
+                Some(mut existing) if existing.tenant_id == tenant_id => {
+                    existing.phone_number = phone_number;
+                    if let Some(waba) = waba_opt {
+                        existing.waba_id = Some(waba);
+                    }
+                    existing.updated_at = now_iso();
+                    save_whatsapp_account(&db, &existing).await?;
+                    existing
+                }
+                Some(_) => {
+                    return fail(
+                        wants_json,
+                        "phone_in_use",
+                        "That WhatsApp phone number is already connected to another account.",
+                        409,
+                    );
+                }
+                None => {
+                    let now = now_iso();
+                    let created = WhatsAppAccount {
+                        id: generate_id(),
+                        tenant_id: tenant_id.clone(),
+                        name: format!("WhatsApp {}", phone_number),
+                        phone_number,
+                        phone_number_id,
+                        waba_id: waba_opt,
+                        auto_reply: ReplyConfig {
+                            enabled: true,
+                            response: ReplyResponse::Ai,
+                            wait_seconds: 3,
+                        },
+                        canned_safety: SafetyState::default(),
+                        created_at: now.clone(),
+                        updated_at: now,
+                    };
+                    save_whatsapp_account(&db, &created).await?;
+                    created
+                }
+            };
+
+            let onboarding = get_onboarding(&db, &tenant_id).await?;
+            let destination = if onboarding.completed {
+                "dashboard"
+            } else {
+                "wizard"
+            };
+            let session_cookie = if logged_in_tenant.is_none() {
+                Some(super::auth::mint_session_cookie(&req, &db, &tenant_id).await?)
+            } else {
+                None
+            };
 
             if wants_json {
-                crate::api::json(&SignupSuccessView {
+                let mut resp = crate::api::json(&SignupSuccessView {
                     ok: true,
+                    destination,
                     account: SignupAccountView {
                         id: account.id,
                         name: account.name,
@@ -233,10 +310,18 @@ pub async fn handle_whatsapp_signup(
                         phone_number_id: account.phone_number_id,
                         waba_id: account.waba_id,
                     },
-                })
+                })?;
+                if let Some(cookie) = session_cookie {
+                    resp.headers_mut().set("Set-Cookie", &cookie)?;
+                }
+                Ok(resp)
             } else {
                 let headers = Headers::new();
-                headers.set("Location", "/wizard")?;
+                headers.set("Location", &format!("/{destination}"))?;
+                headers.set("Cache-Control", "no-store")?;
+                if let Some(cookie) = session_cookie {
+                    headers.set("Set-Cookie", &cookie)?;
+                }
                 Ok(Response::empty()?.with_status(302).with_headers(headers))
             }
         }
@@ -331,9 +416,15 @@ fn fail(wants_json: bool, code: &str, message: &str, status: u16) -> Result<Resp
     }
 }
 
-async fn fetch_fb_user_id(user_token: &str) -> Option<String> {
+struct MetaUserInfo {
+    id: String,
+    name: Option<String>,
+    email: Option<String>,
+}
+
+async fn fetch_meta_user(user_token: &str) -> Option<MetaUserInfo> {
     let url = format!(
-        "https://graph.facebook.com/{}/me?fields=id&access_token={}",
+        "https://graph.facebook.com/{}/me?fields=id,name,email&access_token={}",
         crate::META_API_VERSION,
         urlencoding::encode(user_token),
     );
@@ -345,11 +436,25 @@ async fn fetch_fb_user_id(user_token: &str) -> Option<String> {
         return None;
     }
     let body: serde_json::Value = response.json().await.ok()?;
-    body.get("id")
+    let id = body
+        .get("id")
         .and_then(|v| v.as_str())
         .map(str::trim)
         .filter(|s| !s.is_empty())
-        .map(String::from)
+        .map(String::from)?;
+    let name = body
+        .get("name")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(String::from);
+    let email = body
+        .get("email")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_lowercase());
+    Some(MetaUserInfo { id, name, email })
 }
 
 async fn subscribe_waba_app(waba_id: &str, platform_token: &str) {

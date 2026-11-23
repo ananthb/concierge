@@ -17,6 +17,7 @@ const SUPPORTED_CURRENCIES: &[&str] = &["INR", "USD"];
 
 #[derive(Serialize)]
 pub struct SettingsView {
+    email: String,
     conversation: ConversationView,
     notifications: NotificationsView,
     locale: String,
@@ -75,6 +76,7 @@ async fn get(env: &Env, tenant_id: &str) -> Result<Response> {
         return super::not_found("Account");
     };
     super::json(&view(
+        &tenant.email,
         &state.conversation,
         &state.notifications,
         &tenant.locale,
@@ -112,6 +114,33 @@ async fn put(env: &Env, tenant_id: &str, body: &serde_json::Value) -> Result<Res
     }
 
     let mut tenant_changed = false;
+    if let Some(value) = body.get("email") {
+        let raw = value.as_str().unwrap_or("").trim();
+        if raw.is_empty() {
+            if !tenant.email.is_empty() {
+                tenant.email = String::new();
+                tenant_changed = true;
+            }
+        } else {
+            let normalized = raw.to_lowercase();
+            if !is_valid_email(&normalized) {
+                return super::invalid("Enter a valid email address.");
+            }
+            if let Some(other) = storage::get_tenant_by_email(&db, &normalized).await? {
+                if other.id != tenant_id {
+                    return super::error(
+                        "email_in_use",
+                        "That email address is already in use.",
+                        409,
+                    );
+                }
+            }
+            if tenant.email != normalized {
+                tenant.email = normalized;
+                tenant_changed = true;
+            }
+        }
+    }
     if let Some(value) = body.get("locale") {
         match parse_locale(value) {
             Ok(tag) => {
@@ -136,6 +165,7 @@ async fn put(env: &Env, tenant_id: &str, body: &serde_json::Value) -> Result<Res
     }
 
     super::json(&view(
+        &tenant.email,
         &state.conversation,
         &state.notifications,
         &tenant.locale,
@@ -210,13 +240,30 @@ fn parse_currency(value: &serde_json::Value) -> std::result::Result<Currency, St
     Ok(Currency::parse(&code))
 }
 
+fn is_valid_email(email: &str) -> bool {
+    if email.len() > 254 || email.chars().any(char::is_whitespace) {
+        return false;
+    }
+    let Some((local, domain)) = email.split_once('@') else {
+        return false;
+    };
+    !local.is_empty()
+        && !domain.is_empty()
+        && !domain.contains('@')
+        && domain.contains('.')
+        && !domain.starts_with('.')
+        && !domain.ends_with('.')
+}
+
 fn view(
+    email: &str,
     conversation: &ConversationConfig,
     notifications: &NotificationConfig,
     locale: &str,
     currency: Currency,
 ) -> SettingsView {
     SettingsView {
+        email: email.to_string(),
         conversation: ConversationView {
             idle_gap_mins: conversation.idle_gap_mins,
             handoff_cooldown_mins: conversation.handoff_cooldown_mins,

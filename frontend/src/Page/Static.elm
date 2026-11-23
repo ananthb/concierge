@@ -7,14 +7,15 @@ sign-in screen, and the 404.
 import Api
 import Dict
 import Format
-import Html exposing (Html, a, div, h1, h2, h3, li, p, section, text, ul)
-import Html.Attributes exposing (class, href)
+import Html exposing (Html, a, button, div, h1, h2, h3, li, p, section, text, ul)
+import Html.Attributes exposing (class, disabled, type_)
+import Html.Events exposing (onClick)
 import Route
 import Ui
 
 
-pricing : Api.Data Api.Pricing -> Html msg
-pricing rates =
+pricing : { onLogin : msg, busy : Bool } -> Api.Data Api.Pricing -> Html msg
+pricing opts rates =
     div [ class "page page-pricing" ]
         [ h1 [] [ text "Pay per reply, nothing else" ]
         , p [ class "page-sub" ]
@@ -47,7 +48,21 @@ pricing rates =
                         ]
             ]
         , div [ class "page-cta" ]
-            [ a [ href "/auth/login", class "btn btn-primary btn-lg" ] [ text "Get started" ] ]
+            [ button
+                [ class "btn btn-primary btn-lg"
+                , type_ "button"
+                , disabled opts.busy
+                , onClick opts.onLogin
+                ]
+                [ text
+                    (if opts.busy then
+                        "Connecting…"
+
+                     else
+                        "Continue with WhatsApp"
+                    )
+                ]
+            ]
         ]
 
 
@@ -61,8 +76,8 @@ rateCard _ ( code, unitPriceMilli ) =
         ]
 
 
-features : Html msg
-features =
+features : { onLogin : msg, busy : Bool } -> Html msg
+features opts =
     div [ class "page page-features" ]
         [ h1 [] [ text "Built for small businesses on WhatsApp" ]
         , section [ class "feature-list" ]
@@ -82,7 +97,21 @@ features =
                 "Prepaid credits only (1 credit = 1 reply). Buy what you need when you need it with Razorpay — no subscriptions or lock-in."
             ]
         , div [ class "page-cta" ]
-            [ a [ href "/auth/login", class "btn btn-primary btn-lg" ] [ text "Get started" ] ]
+            [ button
+                [ class "btn btn-primary btn-lg"
+                , type_ "button"
+                , disabled opts.busy
+                , onClick opts.onLogin
+                ]
+                [ text
+                    (if opts.busy then
+                        "Connecting…"
+
+                     else
+                        "Continue with WhatsApp"
+                    )
+                ]
+            ]
         ]
 
 
@@ -94,13 +123,32 @@ feature title body =
         ]
 
 
-login : Html msg
-login =
+login : { onLogin : msg, busy : Bool, error : Maybe String } -> Html msg
+login opts =
     div [ class "page page-login" ]
         [ h1 [] [ text "Sign in to replybots" ]
         , p [ class "page-sub" ]
-            [ text "We use your Google account. There's no password to remember." ]
-        , a [ href "/auth/login", class "btn btn-primary btn-lg" ] [ text "Continue with Google" ]
+            [ text "Sign in with your WhatsApp Business account via Meta. There's no password to remember." ]
+        , case opts.error of
+            Just err ->
+                Ui.banner "error" err
+
+            Nothing ->
+                text ""
+        , button
+            [ class "btn btn-primary btn-lg"
+            , type_ "button"
+            , disabled opts.busy
+            , onClick opts.onLogin
+            ]
+            [ text
+                (if opts.busy then
+                    "Connecting…"
+
+                 else
+                    "Continue with WhatsApp"
+                )
+            ]
         , p [ class "fine-print" ]
             [ text "By signing in you agree to our "
             , a [ Route.href Route.Terms ] [ text "terms" ]
@@ -166,14 +214,13 @@ privacy =
           )
         , ( "What we store"
           , [ "Message metadata: channel, direction (inbound or outbound), sender and recipient identifiers, timestamp, and handling outcome (replied or handed off) — never the message body."
-            , "Account records: your Google account email and name, business and invoicing details you enter during setup, your WhatsApp Business connection metadata (phone number ID and display number), notification preferences, and your prepaid credit balance and Razorpay payment records."
+            , "Account records: your Meta account name and optional notification email, business and invoicing details you enter during setup, your WhatsApp Business connection metadata (phone number ID and display number), notification preferences, and your prepaid credit balance and Razorpay payment records."
             ]
           )
         , ( "Third-party processors"
-          , [ "Meta / WhatsApp: delivers and receives your WhatsApp Business messages and powers Meta Embedded Signup."
+          , [ "Meta / WhatsApp: authenticates your sign-in, delivers and receives your WhatsApp Business messages, and powers Meta Embedded Signup."
             , "Cloudflare: hosts the application and runs Workers AI inference and safety guardrails. Message text sent for reply generation is not used to train models."
             , "Razorpay: processes prepaid credit payments. We never receive or store your card or bank details."
-            , "Google: authenticates your sign-in and provides your email address and display name."
             ]
           )
         , ( "Retention and deletion"

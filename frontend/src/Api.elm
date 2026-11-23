@@ -38,9 +38,11 @@ module Api exposing
     , put
     , saveBasics
     , saveConversation
+    , saveEmail
     , saveLocale
     , saveNotifications
     , startCheckout
+    , startWhatsAppLogin
     , stepWizard
     , unitPriceFor
     , updateWhatsApp
@@ -51,7 +53,7 @@ module Api exposing
 Two conventions the whole module rests on:
 
 **Cookies are the credential.** The SPA and the worker are always on the same
-origin, so the `HttpOnly` session cookie set by `/auth/callback` travels on
+origin, so the `HttpOnly` session cookie set by `/whatsapp/signup/callback` travels on
 every request automatically. There is no token to store, attach or refresh,
 and nothing here reads or writes `document.cookie`.
 
@@ -745,11 +747,19 @@ creditDecoder =
 
 
 type alias SettingsView =
-    { conversation : ConversationSettings
+    { email : String
+    , conversation : ConversationSettings
     , notifications : NotificationSettings
     , locale : String
     , currency : String
     }
+
+
+{-| Start a logged-out Meta Embedded Signup flow to sign in or create an account.
+-}
+startWhatsAppLogin : (Data MetaSignup -> msg) -> Cmd msg
+startWhatsAppLogin =
+    post "/auth/whatsapp/start" (E.object []) signupDecoder
 
 
 type alias NotificationSettings =
@@ -832,6 +842,13 @@ saveNotifications notifications =
         settingsDecoder
 
 
+saveEmail : String -> (Data SettingsView -> msg) -> Cmd msg
+saveEmail email =
+    put "/api/settings"
+        (E.object [ ( "email", E.string email ) ])
+        settingsDecoder
+
+
 saveLocale : { locale : String, currency : String } -> (Data SettingsView -> msg) -> Cmd msg
 saveLocale fields =
     put "/api/settings"
@@ -850,7 +867,8 @@ maybeInt =
 
 settingsDecoder : Decoder SettingsView
 settingsDecoder =
-    D.map4 SettingsView
+    D.map5 SettingsView
+        (withDefault "" (D.field "email" D.string))
         (D.field "conversation" conversationDecoder)
         (D.field "notifications" notificationsDecoder)
         (D.field "locale" D.string)

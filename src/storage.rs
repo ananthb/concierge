@@ -69,9 +69,13 @@ pub async fn get_tenant(db: &D1Database, id: &str) -> Result<Option<Tenant>> {
 }
 
 pub async fn get_tenant_by_email(db: &D1Database, email: &str) -> Result<Option<Tenant>> {
+    let trimmed = email.trim();
+    if trimmed.is_empty() {
+        return Ok(None);
+    }
     let row = db
         .prepare("SELECT * FROM tenants WHERE email = ? COLLATE NOCASE")
-        .bind(&[email.into()])?
+        .bind(&[trimmed.into()])?
         .first::<serde_json::Value>(None)
         .await?;
     Ok(row.as_ref().map(row_to_tenant))
@@ -90,6 +94,11 @@ pub async fn get_tenant_by_facebook_id(
 }
 
 pub async fn save_tenant(db: &D1Database, tenant: &Tenant) -> Result<()> {
+    let email_val: JsValue = if tenant.email.trim().is_empty() {
+        JsValue::NULL
+    } else {
+        tenant.email.trim().into()
+    };
     let name_val: JsValue = match &tenant.name {
         Some(n) => n.as_str().into(),
         None => JsValue::NULL,
@@ -112,7 +121,7 @@ pub async fn save_tenant(db: &D1Database, tenant: &Tenant) -> Result<()> {
     )
     .bind(&[
         tenant.id.as_str().into(),
-        tenant.email.as_str().into(),
+        email_val,
         name_val,
         fb_val,
         tenant.plan.as_str().into(),
