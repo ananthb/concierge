@@ -9,7 +9,7 @@
 //!   * `crate::safety` short-circuits content classification to `Approved`.
 //!   * `PUT /api/wizard/basics` and `PUT /api/whatsapp/:id` synchronously mark
 //!     saved content `Approved` without needing a live Queue consumer.
-//!   * `POST /auth/dev-login` mints a local session without Google OAuth.
+//!   * `POST /auth/dev-login` mints a local session without Meta OAuth.
 
 use worker::*;
 

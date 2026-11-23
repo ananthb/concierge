@@ -1,4 +1,4 @@
-module Page.Landing exposing (Model, Msg, init, subscriptions, update, view)
+module Page.Landing exposing (Model, Msg(..), init, subscriptions, update, view)
 
 {-| The landing page and the interactive WhatsApp demo.
 
@@ -77,6 +77,7 @@ type Msg
     | GotReply (Api.Data Api.DemoReply)
     | CloseChat
     | Tick
+    | LoginClicked
     | NoOp
 
 
@@ -178,6 +179,9 @@ update _ msg model =
         Tick ->
             ( { model | idleSeconds = model.idleSeconds + 1 }, Cmd.none )
 
+        LoginClicked ->
+            ( model, Cmd.none )
+
         NoOp ->
             ( model, Cmd.none )
 
@@ -214,13 +218,13 @@ subscriptions config model =
 -- VIEW
 
 
-view : Api.Data Api.Pricing -> Api.Data Api.DemoConfig -> Model -> Html Msg
-view pricing demo model =
+view : Bool -> Api.Data Api.Pricing -> Api.Data Api.DemoConfig -> Model -> Html Msg
+view authBusy pricing demo model =
     div [ class "landing" ]
-        [ hero pricing demo
+        [ hero authBusy pricing demo
         , case ( model.chat, demo ) of
             ( Just chat, Success config ) ->
-                chatPanel config model chat
+                chatPanel authBusy config model chat
 
             ( _, Success config ) ->
                 if config.enabled && not (List.isEmpty config.personas) then
@@ -235,15 +239,27 @@ view pricing demo model =
         ]
 
 
-hero : Api.Data Api.Pricing -> Api.Data Api.DemoConfig -> Html Msg
-hero pricing demo =
+hero : Bool -> Api.Data Api.Pricing -> Api.Data Api.DemoConfig -> Html Msg
+hero authBusy pricing demo =
     section [ class "hero" ]
         [ h1 [] [ text "Answer every WhatsApp customer, even when you're busy." ]
         , p [ class "hero-sub" ]
             [ text "Quick auto-replies for small businesses, built to hand off to you fast — greet customers, answer simple questions, and alert you the moment a person is needed." ]
         , div [ class "hero-actions" ]
-            [ Html.a [ Html.Attributes.href "/auth/login", class "btn btn-primary btn-lg" ]
-                [ text "Get started" ]
+            [ button
+                [ Html.Attributes.type_ "button"
+                , class "btn btn-primary btn-lg"
+                , disabled authBusy
+                , onClick LoginClicked
+                ]
+                [ text
+                    (if authBusy then
+                        "Connecting…"
+
+                     else
+                        "Continue with WhatsApp"
+                    )
+                ]
             , Html.a [ Route.href Route.Pricing, class "btn btn-secondary btn-lg" ]
                 [ text (rateLabel pricing) ]
             ]
@@ -304,8 +320,8 @@ personaCard persona =
         ]
 
 
-chatPanel : Api.DemoConfig -> Model -> Chat -> Html Msg
-chatPanel config model chat =
+chatPanel : Bool -> Api.DemoConfig -> Model -> Chat -> Html Msg
+chatPanel authBusy config model chat =
     let
         userTurns =
             chat.messages |> List.filter (\m -> m.role == "user") |> List.length
@@ -351,7 +367,7 @@ chatPanel config model chat =
                 ++ [ pendingBubble chat.pending ]
             )
         , if finished then
-            closingCta idledOut
+            closingCta authBusy idledOut
 
           else
             composer chat
@@ -406,8 +422,8 @@ composer chat =
         ]
 
 
-closingCta : Bool -> Html Msg
-closingCta idledOut =
+closingCta : Bool -> Bool -> Html Msg
+closingCta authBusy idledOut =
     div [ class "demo-cta" ]
         [ p []
             [ text
@@ -418,8 +434,20 @@ closingCta idledOut =
                     "That's the demo. Quick replies when customers message, and fast handoff to you when it matters."
                 )
             ]
-        , Html.a [ Html.Attributes.href "/auth/login", class "btn btn-primary btn-lg" ]
-            [ text "Set this up for my business" ]
+        , button
+            [ Html.Attributes.type_ "button"
+            , class "btn btn-primary btn-lg"
+            , disabled authBusy
+            , onClick LoginClicked
+            ]
+            [ text
+                (if authBusy then
+                    "Connecting…"
+
+                 else
+                    "Continue with WhatsApp"
+                )
+            ]
         , button [ class "btn btn-ghost", onClick CloseChat ] [ text "Try another business" ]
         ]
 

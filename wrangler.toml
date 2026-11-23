@@ -63,8 +63,6 @@ invocation_logs = true
 
 # ============================================================================
 # Secrets the worker reads (set via `wrangler secret put`):
-#   GOOGLE_OAUTH_CLIENT_ID     Google OAuth client ID
-#   GOOGLE_OAUTH_CLIENT_SECRET Google OAuth client secret
 #   WHATSAPP_ACCESS_TOKEN      System user token for WhatsApp Graph API calls
 #   WHATSAPP_VERIFY_TOKEN      WhatsApp webhook verification token
 #   META_APP_ID                Meta app ID (WhatsApp Embedded Signup)

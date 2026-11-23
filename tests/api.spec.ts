@@ -102,12 +102,30 @@ test.describe('auth', () => {
     expect(body).toHaveProperty('error.message');
   });
 
-  test('sign-in is a redirect to Google, not a rendered page', async ({ request }) => {
-    const resp = await request.get('/auth/login', { maxRedirects: 0 });
-    expect([302, 503]).toContain(resp.status());
-    if (resp.status() === 302) {
-      expect(resp.headers()['location']).toContain('accounts.google.com');
-    }
+  test('removed Google OAuth endpoints return 404', async ({ request }) => {
+    const loginResp = await request.get('/auth/login', { maxRedirects: 0 });
+    expect(loginResp.status()).toBe(404);
+    const callbackResp = await request.get('/auth/callback', { maxRedirects: 0 });
+    expect(callbackResp.status()).toBe(404);
+  });
+
+  test('POST /auth/whatsapp/start requires X-Replybots-Request and returns signup config', async ({ request }) => {
+    const unmarked = await request.post('/auth/whatsapp/start', { data: {} });
+    expect(unmarked.status()).toBe(403);
+    expect((await unmarked.json()).error.code).toBe('missing_request_header');
+
+    const ok = await request.post('/auth/whatsapp/start', {
+      data: {},
+      headers: { 'X-Replybots-Request': '1' },
+    });
+    expect(ok.status()).toBe(200);
+    const body = await ok.json();
+    expect(typeof body.app_id).toBe('string');
+    expect(body.app_id.length).toBeGreaterThan(0);
+    expect(typeof body.config_id).toBe('string');
+    expect(body.config_id.length).toBeGreaterThan(0);
+    expect(typeof body.state).toBe('string');
+    expect(body.state.length).toBeGreaterThan(0);
   });
 });
 

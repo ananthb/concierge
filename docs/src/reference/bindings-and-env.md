@@ -34,8 +34,6 @@ Default values in `wrangler.toml`:
 
 | Secret | Description | Read in |
 |---|---|---|
-| `GOOGLE_OAUTH_CLIENT_ID` | Google OAuth client ID | `src/handlers/auth.rs` |
-| `GOOGLE_OAUTH_CLIENT_SECRET` | Google OAuth client secret | `src/handlers/auth.rs` |
 | `META_APP_ID` | Meta app ID (WhatsApp Embedded Signup) | `src/api/whatsapp.rs`, `src/handlers/whatsapp_signup.rs` |
 | `META_APP_SECRET` | Meta app secret | `src/handlers/data_deletion.rs`, `src/handlers/webhook.rs`, `src/handlers/whatsapp_signup.rs` |
 | `RAZORPAY_KEY_ID` | Razorpay key ID | `src/api/billing.rs` |

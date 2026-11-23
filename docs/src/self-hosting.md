@@ -6,7 +6,6 @@
 
 - Cloudflare account with Workers, D1, and Workers AI enabled
 - Meta App with WhatsApp Business API & Embedded Signup configured
-- Google OAuth client (for tenant sign-in)
 - Razorpay account (for prepaid credit top-ups)
 
 ## 2. Create the D1 Database & Apply Migrations
@@ -32,7 +31,6 @@ Set runtime variables at deploy time (or in `wrangler.toml`):
 
 Set secrets via `wrangler secret put`:
 
-- `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`
 - `WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_VERIFY_TOKEN`
 - `META_APP_ID`, `META_APP_SECRET`
 - `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET`
@@ -55,7 +53,7 @@ wrangler deploy
 
 ## Local Development
 
-Set `DEV_MODE=1` to stub Workers AI / safety checks and enable `POST /auth/dev-login` without Google OAuth:
+Set `DEV_MODE=1` to stub Workers AI / safety checks and enable `POST /auth/dev-login` without Meta OAuth:
 
 ```sh
 node scripts/test-server.mjs

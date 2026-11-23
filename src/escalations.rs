@@ -73,8 +73,8 @@ async fn dispatch_email(
     risk: Option<crate::risk::RiskReason>,
 ) -> Result<()> {
     let recipient = match get_tenant(db, tenant_id).await? {
-        Some(t) => t.email,
-        None => return Ok(()),
+        Some(t) if !t.email.trim().is_empty() => t.email,
+        _ => return Ok(()),
     };
 
     let email_domain = env

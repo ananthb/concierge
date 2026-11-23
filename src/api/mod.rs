@@ -8,7 +8,7 @@ mod billing;
 mod bootstrap;
 pub mod demo;
 mod settings;
-mod whatsapp;
+pub mod whatsapp;
 mod wizard;
 
 const REQUEST_HEADER: &str = "X-Replybots-Request";

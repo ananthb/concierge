@@ -1,146 +1,34 @@
-//! Google OAuth sign-in.
+//! Meta / WhatsApp sign-in and local dev login.
 
-use serde::Deserialize;
 use worker::*;
 
-use super::get_base_url;
 use crate::helpers::*;
 use crate::storage::*;
 use crate::types::*;
 
-const GOOGLE_AUTH_URL: &str = "https://accounts.google.com/o/oauth2/v2/auth";
-const GOOGLE_TOKEN_URL: &str = "https://oauth2.googleapis.com/token";
-const GOOGLE_USERINFO_URL: &str = "https://www.googleapis.com/oauth2/v2/userinfo";
-
 const SESSION_TTL_SECONDS: u64 = 7 * 24 * 60 * 60;
-
-#[derive(Deserialize)]
-struct TokenResponse {
-    access_token: String,
-}
-
-#[derive(Deserialize)]
-struct GoogleUserInfo {
-    email: String,
-    name: Option<String>,
-}
+const REQUEST_HEADER: &str = "X-Replybots-Request";
 
 /// Handle auth routes (`/auth/*`).
 pub async fn handle_auth(req: Request, env: Env, path: &str, method: Method) -> Result<Response> {
-    let base_url = get_base_url(&req);
-
     match (method, path) {
-        (Method::Get, "/auth/login") => {
+        (Method::Post, "/auth/whatsapp/start") => {
+            if req.headers().get(REQUEST_HEADER).ok().flatten().is_none() {
+                return crate::api::error(
+                    "missing_request_header",
+                    "Refusing an unmarked request.",
+                    403,
+                );
+            }
             let db = env.d1("DB")?;
-            if resolve_tenant_id(&req, &db).await.is_some() {
-                return redirect("/");
+            match crate::api::whatsapp::SignupView::resolve(&env, &db, "").await? {
+                Some(view) => crate::api::json(&view),
+                None => crate::api::error(
+                    "signup_not_configured",
+                    "WhatsApp login is not configured on this deploy.",
+                    503,
+                ),
             }
-
-            let client_id = env
-                .secret("GOOGLE_OAUTH_CLIENT_ID")
-                .map(|s| s.to_string())
-                .unwrap_or_default();
-            if client_id.is_empty() {
-                return Response::error("Sign-in is not configured on this deploy.", 503);
-            }
-            let redirect_uri = format!("{base_url}/auth/callback");
-            let consent = format!(
-                "{GOOGLE_AUTH_URL}?client_id={}&redirect_uri={}&response_type=code&scope={}&access_type=online&prompt=select_account",
-                urlencoding::encode(&client_id),
-                urlencoding::encode(&redirect_uri),
-                urlencoding::encode("openid email profile"),
-            );
-            redirect(&consent)
-        }
-
-        (Method::Get, "/auth/callback") => {
-            let url = req.url()?;
-            let query: std::collections::HashMap<_, _> = url.query_pairs().collect();
-
-            let code = match query.get("code") {
-                Some(c) => c.to_string(),
-                None => {
-                    let reason = query
-                        .get("error")
-                        .map(|e| e.to_string())
-                        .unwrap_or_default();
-                    console_log!("OAuth callback without a code: {reason}");
-                    return redirect("/?auth=failed");
-                }
-            };
-
-            let client_id = env.secret("GOOGLE_OAUTH_CLIENT_ID")?.to_string();
-            let client_secret = env.secret("GOOGLE_OAUTH_CLIENT_SECRET")?.to_string();
-            let redirect_uri = format!("{base_url}/auth/callback");
-
-            let token_body = format!(
-                "code={}&client_id={}&client_secret={}&redirect_uri={}&grant_type=authorization_code",
-                urlencoding::encode(&code),
-                urlencoding::encode(&client_id),
-                urlencoding::encode(&client_secret),
-                urlencoding::encode(&redirect_uri),
-            );
-
-            let headers = Headers::new();
-            headers.set("Content-Type", "application/x-www-form-urlencoded")?;
-            let mut init = RequestInit::new();
-            init.with_method(Method::Post)
-                .with_headers(headers)
-                .with_body(Some(wasm_bindgen::JsValue::from_str(&token_body)));
-
-            let token_req = Request::new_with_init(GOOGLE_TOKEN_URL, &init)?;
-            let mut token_resp = Fetch::Request(token_req).send().await?;
-            let token_text = token_resp.text().await?;
-
-            if token_resp.status_code() != 200 {
-                console_log!("Google token exchange failed: {token_text}");
-                return redirect("/?auth=failed");
-            }
-
-            let tokens: TokenResponse = serde_json::from_str(&token_text)
-                .map_err(|e| Error::from(format!("Failed to parse token response: {e}")))?;
-
-            let headers = Headers::new();
-            headers.set("Authorization", &format!("Bearer {}", tokens.access_token))?;
-            let mut init = RequestInit::new();
-            init.with_method(Method::Get).with_headers(headers);
-
-            let userinfo_req = Request::new_with_init(GOOGLE_USERINFO_URL, &init)?;
-            let mut userinfo_resp = Fetch::Request(userinfo_req).send().await?;
-            let userinfo_text = userinfo_resp.text().await?;
-
-            if userinfo_resp.status_code() != 200 {
-                console_log!("Google userinfo failed: {userinfo_text}");
-                return redirect("/?auth=failed");
-            }
-
-            let user: GoogleUserInfo = serde_json::from_str(&userinfo_text)
-                .map_err(|e| Error::from(format!("Failed to parse user info: {e}")))?;
-
-            let db = env.d1("DB")?;
-
-            let tenant = match get_tenant_by_email(&db, &user.email).await? {
-                Some(t) => t,
-                None => {
-                    let signup_locale = crate::locale::Locale::from_request(&req);
-                    let now = now_iso();
-                    let tenant = Tenant {
-                        id: generate_id(),
-                        email: user.email.clone(),
-                        name: user.name,
-                        facebook_id: None,
-                        plan: Plan::Paid,
-                        locale: signup_locale.langid.to_string(),
-                        currency: signup_locale.currency,
-                        created_at: now.clone(),
-                        updated_at: now,
-                    };
-                    save_tenant(&db, &tenant).await?;
-                    tenant
-                }
-            };
-
-            create_session_and_redirect(&req, &db, &tenant.id).await
         }
 
         // Dev-only login shortcut gated on `DEV_MODE` (`dev_bypass::active`).
@@ -190,18 +78,11 @@ pub async fn handle_auth(req: Request, env: Env, path: &str, method: Method) -> 
     }
 }
 
-fn redirect(location: &str) -> Result<Response> {
-    let headers = Headers::new();
-    headers.set("Location", location)?;
-    headers.set("Cache-Control", "no-store")?;
-    Ok(Response::empty()?.with_status(302).with_headers(headers))
-}
-
-pub(super) async fn create_session_and_redirect(
+pub(super) async fn mint_session_cookie(
     req: &Request,
     db: &D1Database,
     tenant_id: &str,
-) -> Result<Response> {
+) -> Result<String> {
     let session_token = generate_token()?;
     save_session(db, &session_token, tenant_id, SESSION_TTL_SECONDS).await?;
 
@@ -212,18 +93,25 @@ pub(super) async fn create_session_and_redirect(
         .unwrap_or(true);
     let secure_attr = if is_https { "; Secure" } else { "" };
 
+    Ok(format!(
+        "session={token}; Path=/; HttpOnly{secure}; SameSite=Lax; Max-Age={ttl}",
+        token = session_token,
+        secure = secure_attr,
+        ttl = SESSION_TTL_SECONDS,
+    ))
+}
+
+pub(super) async fn create_session_and_redirect(
+    req: &Request,
+    db: &D1Database,
+    tenant_id: &str,
+) -> Result<Response> {
+    let cookie = mint_session_cookie(req, db, tenant_id).await?;
+
     let headers = Headers::new();
     headers.set("Location", "/")?;
     headers.set("Cache-Control", "no-store")?;
-    headers.set(
-        "Set-Cookie",
-        &format!(
-            "session={token}; Path=/; HttpOnly{secure}; SameSite=Lax; Max-Age={ttl}",
-            token = session_token,
-            secure = secure_attr,
-            ttl = SESSION_TTL_SECONDS,
-        ),
-    )?;
+    headers.set("Set-Cookie", &cookie)?;
     Ok(Response::empty()?.with_status(302).with_headers(headers))
 }
 

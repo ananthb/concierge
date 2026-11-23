@@ -27,6 +27,7 @@ import Page.Dashboard as Dashboard
 import Page.Landing as Landing
 import Page.Static as Static
 import Page.Wizard as Wizard
+import Ports
 import RemoteData exposing (RemoteData(..))
 import Route exposing (Route)
 import Ui
@@ -59,6 +60,8 @@ type alias Model =
     , boot : Api.Data Api.Bootstrap
     , session : Maybe Api.Session
     , page : Page
+    , authBusy : Bool
+    , authError : Maybe String
     }
 
 
@@ -76,6 +79,8 @@ init _ url key =
       , boot = Loading
       , session = Nothing
       , page = Stateless
+      , authBusy = False
+      , authError = Nothing
       }
     , Api.getBootstrap GotBootstrap
     )
@@ -89,6 +94,10 @@ type Msg
     = UrlChanged Url
     | LinkClicked Browser.UrlRequest
     | GotBootstrap (Api.Data Api.Bootstrap)
+    | StartWhatsAppLogin
+    | GotWhatsAppLogin (Api.Data Api.MetaSignup)
+    | MetaLoginOutcome Ports.MetaSignupOutcome
+    | GotPostLoginBootstrap (Api.Data Api.Bootstrap)
     | LandingMsg Landing.Msg
     | WizardMsg Wizard.Msg
     | DashboardMsg Dashboard.Msg
@@ -119,6 +128,86 @@ update msg model =
                             Nothing
             in
             enterRoute model.route { model | boot = result, session = session }
+
+        StartWhatsAppLogin ->
+            ( { model | authBusy = True, authError = Nothing }
+            , Api.startWhatsAppLogin GotWhatsAppLogin
+            )
+
+        GotWhatsAppLogin result ->
+            case result of
+                Success signup ->
+                    ( model
+                    , Ports.openMetaSignup
+                        { appId = signup.appId
+                        , configId = signup.configId
+                        , state = signup.state
+                        }
+                    )
+
+                Failure err ->
+                    ( { model | authBusy = False, authError = Just (Api.errorMessage err) }
+                    , Cmd.none
+                    )
+
+                _ ->
+                    ( model, Cmd.none )
+
+        MetaLoginOutcome outcome ->
+            case outcome of
+                Ports.MetaSignupOk ->
+                    ( model, Api.getBootstrap GotPostLoginBootstrap )
+
+                Ports.MetaSignupCancelled ->
+                    ( { model | authBusy = False }, Cmd.none )
+
+                Ports.MetaSignupError err ->
+                    ( { model | authBusy = False, authError = Just err }, Cmd.none )
+
+        GotPostLoginBootstrap result ->
+            case result of
+                Success boot ->
+                    case boot.session of
+                        Just session ->
+                            let
+                                dest =
+                                    if session.destination == "dashboard" then
+                                        Route.Dashboard
+
+                                    else
+                                        Route.Wizard
+
+                                ( settled, cmd ) =
+                                    enterRoute dest
+                                        { model
+                                            | boot = Success boot
+                                            , session = Just session
+                                            , authBusy = False
+                                            , authError = Nothing
+                                        }
+                            in
+                            ( settled, Cmd.batch [ Nav.pushUrl model.key (Route.toPath dest), cmd ] )
+
+                        Nothing ->
+                            ( { model
+                                | boot = Success boot
+                                , session = Nothing
+                                , authBusy = False
+                                , authError = Just "Sign-in did not complete. Please try again."
+                              }
+                            , Cmd.none
+                            )
+
+                Failure err ->
+                    ( { model | authBusy = False, authError = Just (Api.errorMessage err) }
+                    , Cmd.none
+                    )
+
+                _ ->
+                    ( model, Cmd.none )
+
+        LandingMsg Landing.LoginClicked ->
+            update StartWhatsAppLogin model
 
         LandingMsg sub ->
             case ( model.page, model.boot ) of
@@ -271,18 +360,29 @@ redirectTo route model =
 
 subscriptions : Model -> Sub Msg
 subscriptions model =
-    case ( model.page, model.boot ) of
-        ( LandingPage landing, Success boot ) ->
-            Sub.map LandingMsg (Landing.subscriptions boot.demo landing)
+    let
+        pageSub =
+            case ( model.page, model.boot ) of
+                ( LandingPage landing, Success boot ) ->
+                    Sub.map LandingMsg (Landing.subscriptions boot.demo landing)
 
-        ( WizardPage _, _ ) ->
-            Sub.map WizardMsg Wizard.subscriptions
+                ( WizardPage _, _ ) ->
+                    Sub.map WizardMsg Wizard.subscriptions
 
-        ( DashboardPage _, _ ) ->
-            Sub.map DashboardMsg Dashboard.subscriptions
+                ( DashboardPage _, _ ) ->
+                    Sub.map DashboardMsg Dashboard.subscriptions
 
-        _ ->
-            Sub.none
+                _ ->
+                    Sub.none
+
+        authSub =
+            if model.authBusy then
+                Ports.metaSignupOutcome (Ports.decodeMetaSignupOutcome >> MetaLoginOutcome)
+
+            else
+                Sub.none
+    in
+    Sub.batch [ pageSub, authSub ]
 
 
 
@@ -333,9 +433,22 @@ title route =
 
 content : Model -> Html Msg
 content model =
+    let
+        loginHtml =
+            Static.login
+                { onLogin = StartWhatsAppLogin
+                , busy = model.authBusy
+                , error = model.authError
+                }
+
+        ctaOpts =
+            { onLogin = StartWhatsAppLogin
+            , busy = model.authBusy
+            }
+    in
     case model.route of
         Route.Features ->
-            Static.features
+            Static.features ctaOpts
 
         Route.Terms ->
             Static.terms
@@ -344,19 +457,20 @@ content model =
             Static.privacy
 
         Route.Login ->
-            Static.login
+            loginHtml
 
         Route.NotFound ->
             Static.notFound
 
         Route.Pricing ->
-            Static.pricing (RemoteData.map .pricing model.boot)
+            Static.pricing ctaOpts (RemoteData.map .pricing model.boot)
 
         Route.Landing ->
             case model.page of
                 LandingPage landing ->
                     Html.map LandingMsg
                         (Landing.view
+                            model.authBusy
                             (RemoteData.map .pricing model.boot)
                             (RemoteData.map .demo model.boot)
                             landing
@@ -378,7 +492,7 @@ content model =
                                     Html.map DashboardMsg (Dashboard.view session dash)
 
                                 Nothing ->
-                                    Static.login
+                                    loginHtml
 
                         _ ->
                             Static.notFound
