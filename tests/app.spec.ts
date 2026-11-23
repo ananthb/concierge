@@ -279,7 +279,7 @@ test.describe('authenticated wizard and dashboard', () => {
     await devLogin(page.request, `dash-ui-${Date.now()}@local.test`);
 
     // Allow reaching /dashboard directly in UI tests while keeping all /api/{whatsapp,billing,settings}
-    // requests backed by the live local Worker + D1/KV.
+    // requests backed by the live local Worker + D1.
     await page.route('**/api/bootstrap', async (route) => {
       const resp = await route.fetch();
       const json = await resp.json();

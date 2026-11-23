@@ -116,11 +116,11 @@ pub async fn require_tenant(
     req: &Request,
     env: &Env,
 ) -> std::result::Result<String, Result<Response>> {
-    let kv = match env.kv("KV") {
-        Ok(kv) => kv,
+    let db = match env.d1("DB") {
+        Ok(db) => db,
         Err(e) => return Err(Err(e)),
     };
-    match crate::handlers::auth::resolve_tenant_id(req, &kv).await {
+    match crate::handlers::auth::resolve_tenant_id(req, &db).await {
         Some(id) => Ok(id),
         None => Err(error("unauthenticated", "Sign in to continue.", 401)),
     }

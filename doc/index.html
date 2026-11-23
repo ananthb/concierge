@@ -88,7 +88,7 @@
         <span><b>License</b> AGPL&#8209;3.0</span>
         <span><b>Runtime</b> Rust + WebAssembly</span>
         <span><b>Frontend</b> Elm</span>
-        <span><b>Storage</b> D1 &middot; KV</span>
+        <span><b>Storage</b> D1</span>
       </div>
 
       <!-- HERO PIPELINE -->
@@ -152,7 +152,7 @@
             <span class="card__title">Architecture</span>
             <span class="card__arrow">&rarr;</span>
           </div>
-          <p class="card__desc">The Worker and the Elm app, API conventions, the safety queue, the reply buffer, storage layout, auth.</p>
+          <p class="card__desc">The Worker and the Elm app, API conventions, inline content safety checks, the D1 burst buffer, storage layout, auth.</p>
           <div class="card__foot"><span>technical reference</span></div>
         </a>
         <a href="deployment.html" class="card">
@@ -218,7 +218,7 @@
             </tr>
             <tr>
               <td><code>Reply batching</code></td>
-              <td>A Durable Object holds inbound messages for a tunable window (default 5&nbsp;s) so a burst of three short messages gets one considered answer instead of three.</td>
+              <td>A D1 burst buffer (<code>pending_inbound</code>) holds inbound messages for a tunable window (default 3&nbsp;s) so a burst of three short messages gets one considered answer instead of three.</td>
             </tr>
             <tr>
               <td><code>Interactive demo</code></td>
@@ -329,23 +329,23 @@
 
       <h2 id="model">Architecture model</h2>
       <p>
-        Concierge runs as a single Worker serving a JSON API, plus an Elm single&#8209;page app compiled to one static asset. State lives in Cloudflare primitives: <strong>D1</strong> for append&#8209;only message metadata, billing and the archetype catalog; <strong>KV</strong> for tenant config, sessions and conversation state; <strong>Workers AI</strong> for reply generation and the safety classifier; <strong>Queues</strong> for persona safety jobs; a <strong>Durable Object</strong> for the reply buffer. Email is outbound only, through the <code>EMAIL</code> binding, and carries nothing but handoff notifications.
+        Concierge runs as a single Worker serving a JSON API, plus an Elm single&#8209;page app compiled to one static asset. All persistent state lives in <strong>Cloudflare D1</strong> (tenants, sessions, WhatsApp accounts, onboarding state, conversation sessions, burst buffer, rate limits, append&#8209;only message metadata, and billing), with <strong>Workers AI</strong> for reply generation, injection detection, and inline safety classification. Email is outbound only, through the <code>EMAIL</code> binding, and carries nothing but handoff notifications.
       </p>
       <p>
-        Nothing stores a per&#8209;tenant access token, so there is no secret whose rotation forces customers to reconnect &mdash; WhatsApp uses one platform token. Message <em>content</em> is never persisted: only metadata (channel, direction, sender, recipient, timestamp, and what was done with it).
+        Nothing stores a per&#8209;tenant access token, so there is no secret whose rotation forces customers to reconnect &mdash; WhatsApp uses one platform token. Message <em>content</em> is never persisted in the message log: only metadata (channel, direction, sender, recipient, timestamp, and what was done with it).
       </p>
 
       <div class="callout callout--note">
         <div class="callout__icon">i</div>
         <div class="callout__body">
           <strong>What gets stored</strong>
-          <p>Inbound bodies pass through the Worker and are never written to D1. Replies are generated from in&#8209;memory data and discarded after send. Recent conversation turns <em>do</em> live in KV, because multi&#8209;turn context needs them, and are cleared by the idle gap. A <code>/data-deletion</code> endpoint wipes the metadata; full account deletion is on the dashboard&rsquo;s Settings tab.</p>
+          <p>Inbound bodies pass through the Worker and are never written to the <code>messages</code> log. Replies are generated from in&#8209;memory data and discarded after send. Recent conversation turns live in D1 (<code>conversation_sessions</code>) for multi&#8209;turn context and are cleared by the idle gap. A <code>/data-deletion</code> endpoint wipes the tenant&rsquo;s data; full account deletion is on the dashboard&rsquo;s Settings tab.</p>
         </div>
       </div>
 
       <h2 id="getting-started">Getting started</h2>
       <p>
-        <strong>Self&#8209;host:</strong> deploy the Worker, then walk the <a href="deployment.html">deployment guide</a>. You&rsquo;ll need a Cloudflare account (Workers, D1, KV, Queues, Durable Objects, Workers AI, Email Service), a Meta Developer app with the WhatsApp product, a Google OAuth client, and a Razorpay account if you intend to charge anyone.
+        <strong>Self&#8209;host:</strong> deploy the Worker, then walk the <a href="deployment.html">deployment guide</a>. You&rsquo;ll need a Cloudflare account (Workers, D1, Workers AI, Email Service), a Meta Developer app with the WhatsApp product, a Google OAuth client, and a Razorpay account if you intend to charge anyone.
       </p>
 
       <div class="codeblock">
@@ -358,11 +358,8 @@
 <span class="tok-k">git</span> clone <span class="tok-s">https://github.com/ananthb/concierge</span>
 <span class="tok-k">cd</span> concierge
 
-<span class="tok-c"># 2. provision Cloudflare resources</span>
+<span class="tok-c"># 2. provision Cloudflare D1 database</span>
 <span class="tok-k">wrangler</span> d1 create concierge
-<span class="tok-k">wrangler</span> kv namespace create KV
-<span class="tok-k">wrangler</span> queues create concierge-safety
-<span class="tok-k">wrangler</span> queues create concierge-safety-dlq
 
 <span class="tok-c"># 3. apply migrations &middot; D1 schema</span>
 <span class="tok-k">wrangler</span> d1 migrations apply concierge <span class="tok-v">--remote</span>
@@ -379,9 +376,9 @@
       <ul>
         <li><a href="https://workers.cloudflare.com/">Cloudflare Workers</a>: Rust compiled to WebAssembly via <code>worker-rs</code>.</li>
         <li><a href="https://elm-lang.org/">Elm</a>: the frontend, one <code>Browser.application</code> compiled to a single bundle.</li>
-        <li><strong>Cloudflare D1, KV, Workers AI, Queues, Durable Objects, Email Service</strong>: the entire data plane.</li>
+        <li><strong>Cloudflare D1, Workers AI, Email Service</strong>: the entire data plane.</li>
         <li><strong>Meta Graph API</strong>: WhatsApp Business messaging and Embedded Signup.</li>
-        <li><strong>Razorpay</strong>: prepaid credit purchases and the sign&#8209;up verification charge.</li>
+        <li><strong>Razorpay</strong>: prepaid credit purchases.</li>
       </ul>
 
       <!-- PAGER -->

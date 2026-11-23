@@ -21,15 +21,14 @@ pub struct SessionView {
 }
 
 pub async fn resolve_session(req: &Request, env: &Env) -> Result<Option<SessionView>> {
-    let kv = env.kv("KV")?;
-    let Some(tenant_id) = crate::handlers::auth::resolve_tenant_id(req, &kv).await else {
+    let db = env.d1("DB")?;
+    let Some(tenant_id) = crate::handlers::auth::resolve_tenant_id(req, &db).await else {
         return Ok(None);
     };
-    let db = env.d1("DB")?;
     let Some(tenant) = storage::get_tenant(&db, &tenant_id).await? else {
         return Ok(None);
     };
-    let state = storage::get_onboarding(&kv, &tenant_id).await?;
+    let state = storage::get_onboarding(&db, &tenant_id).await?;
 
     Ok(Some(SessionView {
         tenant_id: tenant.id.clone(),
@@ -64,9 +63,9 @@ pub async fn get_session(req: Request, env: Env) -> Result<Response> {
 
 /// `DELETE /api/session` — sign out.
 pub async fn logout(req: Request, env: Env) -> Result<Response> {
-    let kv = env.kv("KV")?;
+    let db = env.d1("DB")?;
     if let Some(token) = crate::handlers::auth::get_session_cookie(&req) {
-        let _ = storage::delete_session(&kv, &token).await;
+        let _ = storage::delete_session(&db, &token).await;
     }
     let headers = Headers::new();
     headers.set("Cache-Control", "no-store")?;
@@ -83,7 +82,6 @@ pub async fn delete(mut req: Request, env: Env) -> Result<Response> {
         Ok(t) => t,
         Err(r) => return r,
     };
-    let kv = env.kv("KV")?;
     let db = env.d1("DB")?;
 
     let body = match super::read_json(&mut req).await {
@@ -99,9 +97,9 @@ pub async fn delete(mut req: Request, env: Env) -> Result<Response> {
         return super::invalid("Type your account's email address to confirm.");
     }
 
-    storage::delete_tenant_data(&kv, &db, &tenant_id).await?;
+    storage::delete_tenant_data(&db, &tenant_id).await?;
     if let Some(token) = crate::handlers::auth::get_session_cookie(&req) {
-        let _ = storage::delete_session(&kv, &token).await;
+        let _ = storage::delete_session(&db, &token).await;
     }
 
     let headers = Headers::new();

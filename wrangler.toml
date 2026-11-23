@@ -26,7 +26,9 @@ command = "./scripts/build-worker.sh"
 directory = "./public"
 
 # ============================================================================
-# D1 Database for tenants, messages, payments, and billing.
+# D1 Database for all persistent state: tenants, sessions, onboarding,
+# WhatsApp accounts, conversation state, burst buffer, rate limits,
+# message metadata, payments, and billing.
 # ============================================================================
 [[d1_databases]]
 binding = "DB"
@@ -34,21 +36,20 @@ database_name = "concierge"
 database_id = "95687fdd-d529-4993-8b84-e55db87159c2"
 
 # ============================================================================
-# KV Namespace for channel configs, onboarding state, sessions, and rate limits.
+# AI Binding for auto-reply generation, injection detection, and safety checks.
 # ============================================================================
-[[kv_namespaces]]
-binding = "KV"
+[ai]
+binding = "AI"
 
 # ============================================================================
-# Durable Objects:
-#   REPLY_BUFFER  — buffers inbound messages so we can reply to a batch.
-#
-# The v3 migration tells Cloudflare to drop the legacy ApprovalsDO class.
+# Outbound email notifications (platform-to-tenant handoff alerts only).
 # ============================================================================
-[[durable_objects.bindings]]
-name = "REPLY_BUFFER"
-class_name = "ReplyBufferDO"
+[[send_email]]
+name = "EMAIL"
 
+# ============================================================================
+# Durable Object migration history (v1-v3 applied live; v4 removes ReplyBufferDO)
+# ============================================================================
 [[migrations]]
 tag = "v1"
 new_classes = ["ReplyBufferDO"]
@@ -61,38 +62,9 @@ new_classes = ["ApprovalsDO"]
 tag = "v3"
 deleted_classes = ["ApprovalsDO"]
 
-# ============================================================================
-# AI Binding for auto-reply generation, injection detection, and safety checks.
-# ============================================================================
-[ai]
-binding = "AI"
-
-# ============================================================================
-# Queues: content safety classifier
-#
-# Producer: PUT /api/wizard/basics (tenant brand_name) and PUT /api/whatsapp/:id
-# (canned reply text) enqueue a SafetyJob.
-#
-# Consumer: src/safety_queue.rs:handle_batch (wired via #[event(queue)] in
-# src/lib.rs) classifies the content with @cf/meta/llama-guard-3-8b and writes
-# the verdict back. Failed jobs go to the DLQ after 3 retries.
-# ============================================================================
-[[queues.producers]]
-queue = "concierge-safety"
-binding = "SAFETY_QUEUE"
-
-[[queues.consumers]]
-queue = "concierge-safety"
-max_batch_size = 10
-max_batch_timeout = 5
-max_retries = 3
-dead_letter_queue = "concierge-safety-dlq"
-
-# ============================================================================
-# Outbound email notifications (platform-to-tenant handoff alerts only).
-# ============================================================================
-[[send_email]]
-name = "EMAIL"
+[[migrations]]
+tag = "v4"
+deleted_classes = ["ReplyBufferDO"]
 
 [vars]
 ENVIRONMENT = "production"

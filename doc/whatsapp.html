@@ -141,7 +141,7 @@
           <tbody>
             <tr><td><code>enabled</code></td><td><code>bool</code></td><td class="muted">Master switch. Off means nothing is answered; the inbound is still logged.</td></tr>
             <tr><td><code>response</code></td><td><code>ReplyResponse</code></td><td class="muted"><code>Canned { text }</code> sends verbatim and free. <code>Prompt { text }</code> appends the instruction to the persona and runs the model for one credit.</td></tr>
-            <tr><td><code>wait_seconds</code></td><td><code>u32</code></td><td class="muted">0&ndash;30&nbsp;s buffer, so quick-fire bursts collapse into one reply via the <code>REPLY_BUFFER</code> Durable Object. 0 replies immediately.</td></tr>
+            <tr><td><code>wait_seconds</code></td><td><code>u32</code></td><td class="muted">0&ndash;30&nbsp;s buffer, so quick-fire bursts collapse into one reply via the D1 <code>pending_inbound</code> burst buffer. 0 replies immediately.</td></tr>
           </tbody>
         </table>
       </div>

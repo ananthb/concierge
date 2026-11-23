@@ -39,14 +39,21 @@ SCHEMA="$(dirname "$0")/../migrations/0001_create_schema.sql"
 TABLES=(
     archetypes
     audit_log
+    conversation_sessions
     instagram_messages
     messages
     payments
     pending_approvals
+    pending_inbound
     pricing_amount
     pricing_config
+    rate_limits
+    sessions
+    signup_states
     tenant_billing
+    tenant_onboarding
     tenants
+    whatsapp_accounts
     whatsapp_messages
     d1_migrations
 )

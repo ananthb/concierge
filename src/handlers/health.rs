@@ -154,26 +154,6 @@ impl Component for AiBinding {
     }
 }
 
-pub struct ReplyBufferBinding;
-impl Component for ReplyBufferBinding {
-    fn name(&self) -> &'static str {
-        "REPLY_BUFFER binding"
-    }
-    fn requirements(&self) -> &'static [Requirement] {
-        &[Requirement::Binding("REPLY_BUFFER")]
-    }
-}
-
-pub struct SafetyQueueBinding;
-impl Component for SafetyQueueBinding {
-    fn name(&self) -> &'static str {
-        "SAFETY_QUEUE binding"
-    }
-    fn requirements(&self) -> &'static [Requirement] {
-        &[Requirement::Binding("SAFETY_QUEUE")]
-    }
-}
-
 /// Outbound handoff notification email (`[[send_email]]` + `EMAIL_DOMAIN`).
 /// Optional: missing `EMAIL_DOMAIN` never fails `/health` 503.
 pub struct EmailBinding;
@@ -254,48 +234,12 @@ impl D1Binding {
     }
 }
 
-pub struct KvBinding;
-impl Component for KvBinding {
-    fn name(&self) -> &'static str {
-        "KV (KV binding)"
-    }
-    fn requirements(&self) -> &'static [Requirement] {
-        &[Requirement::Binding("KV")]
-    }
-}
-impl KvBinding {
-    pub async fn probe(env: &Env) -> Check {
-        let mut check = KvBinding.shallow_check(env);
-        if !matches!(check.status, Status::Ok) {
-            return check;
-        }
-        let kv = match env.kv("KV") {
-            Ok(k) => k,
-            Err(_) => {
-                check.status = Status::Error;
-                check.detail = "binding missing".into();
-                return check;
-            }
-        };
-        match kv.get("__healthcheck").text().await {
-            Ok(_) => check.detail = "reachable".into(),
-            Err(e) => {
-                check.status = Status::Error;
-                check.detail = format!("get failed: {e}");
-            }
-        }
-        check
-    }
-}
-
 // ============================================================================
 // Registry + public API
 // ============================================================================
 
 const SHALLOW_COMPONENTS: &[&dyn Component] = &[
     &AiBinding,
-    &ReplyBufferBinding,
-    &SafetyQueueBinding,
     &EmailBinding,
     &GoogleOAuth,
     &WhatsAppSignup,
@@ -318,7 +262,6 @@ pub fn essentials_missing(env: &Env) -> Vec<&'static str> {
 pub async fn handle_health(_req: Request, env: Env) -> Result<Response> {
     let mut checks = Vec::new();
     checks.push(D1Binding::probe(&env).await);
-    checks.push(KvBinding::probe(&env).await);
     for c in SHALLOW_COMPONENTS {
         checks.push(c.shallow_check(&env));
     }
@@ -398,14 +341,14 @@ mod tests {
         assert_eq!(
             rollup(&[
                 check("D1", Status::Ok),
-                check("KV", Status::Ok),
+                check("AI", Status::Ok),
                 check("Razorpay", Status::Warn),
                 check("EMAIL handoff alerts", Status::Warn),
             ]),
             Status::Warn
         );
         assert_eq!(
-            rollup(&[check("KV", Status::Ok), check("D1", Status::Error)]),
+            rollup(&[check("AI", Status::Ok), check("D1", Status::Error)]),
             Status::Error
         );
     }
@@ -419,8 +362,5 @@ mod tests {
         assert!(GoogleOAuth.required());
         assert!(AiBinding.required());
         assert!(D1Binding.required());
-        assert!(KvBinding.required());
-        assert!(ReplyBufferBinding.required());
-        assert!(SafetyQueueBinding.required());
     }
 }

@@ -31,8 +31,8 @@ pub async fn handle_auth(req: Request, env: Env, path: &str, method: Method) -> 
 
     match (method, path) {
         (Method::Get, "/auth/login") => {
-            let kv = env.kv("KV")?;
-            if resolve_tenant_id(&req, &kv).await.is_some() {
+            let db = env.d1("DB")?;
+            if resolve_tenant_id(&req, &db).await.is_some() {
                 return redirect("/");
             }
 
@@ -117,7 +117,6 @@ pub async fn handle_auth(req: Request, env: Env, path: &str, method: Method) -> 
             let user: GoogleUserInfo = serde_json::from_str(&userinfo_text)
                 .map_err(|e| Error::from(format!("Failed to parse user info: {e}")))?;
 
-            let kv = env.kv("KV")?;
             let db = env.d1("DB")?;
 
             let tenant = match get_tenant_by_email(&db, &user.email).await? {
@@ -141,7 +140,7 @@ pub async fn handle_auth(req: Request, env: Env, path: &str, method: Method) -> 
                 }
             };
 
-            create_session_and_redirect(&req, &kv, &tenant.id).await
+            create_session_and_redirect(&req, &db, &tenant.id).await
         }
 
         // Dev-only login shortcut gated on `DEV_MODE` (`dev_bypass::active`).
@@ -162,7 +161,6 @@ pub async fn handle_auth(req: Request, env: Env, path: &str, method: Method) -> 
                 email_raw.trim().to_lowercase()
             };
 
-            let kv = env.kv("KV")?;
             let db = env.d1("DB")?;
             let tenant = match get_tenant_by_email(&db, &email).await? {
                 Some(t) => t,
@@ -185,7 +183,7 @@ pub async fn handle_auth(req: Request, env: Env, path: &str, method: Method) -> 
                 }
             };
 
-            create_session_and_redirect(&req, &kv, &tenant.id).await
+            create_session_and_redirect(&req, &db, &tenant.id).await
         }
 
         _ => Response::error("Not Found", 404),
@@ -201,11 +199,11 @@ fn redirect(location: &str) -> Result<Response> {
 
 pub(super) async fn create_session_and_redirect(
     req: &Request,
-    kv: &kv::KvStore,
+    db: &D1Database,
     tenant_id: &str,
 ) -> Result<Response> {
     let session_token = generate_token()?;
-    save_session(kv, &session_token, tenant_id, SESSION_TTL_SECONDS).await?;
+    save_session(db, &session_token, tenant_id, SESSION_TTL_SECONDS).await?;
 
     let is_https = req
         .url()
@@ -247,7 +245,7 @@ pub fn get_session_cookie(req: &Request) -> Option<String> {
     get_cookie(req, "session")
 }
 
-pub async fn resolve_tenant_id(req: &Request, kv: &kv::KvStore) -> Option<String> {
+pub async fn resolve_tenant_id(req: &Request, db: &D1Database) -> Option<String> {
     let token = get_session_cookie(req)?;
-    get_session(kv, &token).await.ok()?
+    get_session(db, &token).await.ok()?
 }

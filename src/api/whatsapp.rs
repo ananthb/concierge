@@ -4,7 +4,7 @@ use serde::Serialize;
 use worker::*;
 
 use crate::helpers::{generate_token, now_iso, sha256_hex, truncate};
-use crate::safety_queue::{self, SafetyJob, SafetyTarget};
+use crate::safety;
 use crate::storage::*;
 use crate::types::*;
 
@@ -38,7 +38,7 @@ pub struct SignupView {
 impl SignupView {
     pub async fn resolve(
         env: &Env,
-        kv: &kv::KvStore,
+        db: &D1Database,
         tenant_id: &str,
     ) -> Result<Option<SignupView>> {
         use crate::handlers::health::Component;
@@ -55,10 +55,7 @@ impl SignupView {
             .unwrap_or_default();
 
         let state = generate_token()?;
-        kv.put(&format!("wa_signup_state:{state}"), tenant_id)?
-            .expiration_ttl(600)
-            .execute()
-            .await?;
+        save_signup_state(db, &state, tenant_id, 600).await?;
 
         Ok(Some(SignupView {
             app_id,
@@ -103,20 +100,20 @@ pub async fn handle(mut req: Request, env: Env, rest: &[&str]) -> Result<Respons
         Ok(t) => t,
         Err(r) => return r,
     };
-    let kv = env.kv("KV")?;
+    let db = env.d1("DB")?;
     let method = req.method();
 
     match (method, rest) {
         (Method::Get, []) => {
-            let accounts = list_whatsapp_accounts(&kv, &tenant_id).await?;
+            let accounts = list_whatsapp_accounts(&db, &tenant_id).await?;
             super::json(&ListView {
                 accounts: accounts.iter().map(AccountView::from).collect(),
-                signup: SignupView::resolve(&env, &kv, &tenant_id).await?,
+                signup: SignupView::resolve(&env, &db, &tenant_id).await?,
             })
         }
 
         (Method::Put, [id]) => {
-            let Some(mut account) = owned(&kv, &tenant_id, id).await? else {
+            let Some(mut account) = owned(&db, &tenant_id, id).await? else {
                 return super::not_found("WhatsApp number");
             };
             let body = match super::read_json(&mut req).await {
@@ -139,7 +136,6 @@ pub async fn handle(mut req: Request, env: Env, rest: &[&str]) -> Result<Respons
                 account.auto_reply.wait_seconds = n.clamp(0, 30) as u32;
             }
 
-            let mut enqueue_job: Option<SafetyJob> = None;
             if reply_src.get("mode").is_some() {
                 let mode = super::field(reply_src, "mode");
                 match mode.as_str() {
@@ -157,29 +153,9 @@ pub async fn handle(mut req: Request, env: Env, rest: &[&str]) -> Result<Respons
                             );
                         }
                         let content_hash = sha256_hex(&text);
+                        let verdict = safety::classify_text(&env, &text).await;
                         account.auto_reply.response = ReplyResponse::Canned { text };
-                        if crate::dev_bypass::active(&env) {
-                            account.canned_safety = SafetyState {
-                                status: SafetyStatus::Approved,
-                                content_hash: Some(content_hash),
-                                checked_at: Some(now_iso()),
-                                vague_reason: None,
-                            };
-                        } else {
-                            account.canned_safety = SafetyState {
-                                status: SafetyStatus::Pending,
-                                content_hash: None,
-                                checked_at: None,
-                                vague_reason: None,
-                            };
-                            enqueue_job = Some(SafetyJob {
-                                tenant_id: tenant_id.clone(),
-                                target: SafetyTarget::CannedReply {
-                                    account_id: account.id.clone(),
-                                },
-                                content_hash,
-                            });
-                        }
+                        account.canned_safety = safety::verdict_to_state(verdict, content_hash);
                     }
                     _ => {
                         return super::invalid("Reply mode must be 'ai' or 'canned'.");
@@ -188,18 +164,15 @@ pub async fn handle(mut req: Request, env: Env, rest: &[&str]) -> Result<Respons
             }
 
             account.updated_at = now_iso();
-            save_whatsapp_account(&kv, &account).await?;
-            if let Some(job) = enqueue_job {
-                let _ = safety_queue::enqueue(&env, job).await;
-            }
+            save_whatsapp_account(&db, &account).await?;
             super::json(&AccountView::from(&account))
         }
 
         (Method::Delete, [id]) => {
-            if owned(&kv, &tenant_id, id).await?.is_none() {
+            if owned(&db, &tenant_id, id).await?.is_none() {
                 return super::not_found("WhatsApp number");
             }
-            delete_whatsapp_account(&kv, &tenant_id, id).await?;
+            delete_whatsapp_account(&db, &tenant_id, id).await?;
             super::no_content()
         }
 
@@ -207,8 +180,8 @@ pub async fn handle(mut req: Request, env: Env, rest: &[&str]) -> Result<Respons
     }
 }
 
-async fn owned(kv: &kv::KvStore, tenant_id: &str, id: &str) -> Result<Option<WhatsAppAccount>> {
-    Ok(get_whatsapp_account(kv, id)
+async fn owned(db: &D1Database, tenant_id: &str, id: &str) -> Result<Option<WhatsAppAccount>> {
+    Ok(get_whatsapp_account(db, id)
         .await?
         .filter(|a| a.tenant_id == tenant_id))
 }

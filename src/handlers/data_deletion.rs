@@ -56,11 +56,10 @@ pub async fn handle_data_deletion(mut req: Request, env: Env, method: Method) ->
         return Response::error("Missing user_id", 400);
     }
 
-    let kv = env.kv("KV")?;
     let db = env.d1("DB")?;
 
     if let Some(tenant) = get_tenant_by_facebook_id(&db, fb_user_id).await? {
-        delete_tenant_data(&kv, &db, &tenant.id).await?;
+        delete_tenant_data(&db, &tenant.id).await?;
     }
 
     let confirmation_code = generate_id();
