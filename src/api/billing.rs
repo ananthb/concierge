@@ -113,8 +113,21 @@ pub async fn handle(mut req: Request, env: Env, rest: &[&str]) -> Result<Respons
                 );
             }
 
-            let key_id = env.secret("RAZORPAY_KEY_ID")?.to_string();
-            let key_secret = env.secret("RAZORPAY_KEY_SECRET")?.to_string();
+            let key_id = env
+                .secret("RAZORPAY_KEY_ID")
+                .map(|v| v.to_string())
+                .unwrap_or_default();
+            let key_secret = env
+                .secret("RAZORPAY_KEY_SECRET")
+                .map(|v| v.to_string())
+                .unwrap_or_default();
+            if key_id.is_empty() || key_secret.is_empty() {
+                return super::error(
+                    "billing_unconfigured",
+                    "Razorpay billing is not configured on this deploy.",
+                    503,
+                );
+            }
             let receipt = generate_id();
             let order = razorpay::create_order_with_notes(
                 &key_id,

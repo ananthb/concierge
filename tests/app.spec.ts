@@ -25,11 +25,11 @@ test.describe('shell', () => {
     expect(consoleErrors, consoleErrors.join('\n')).toEqual([]);
   });
 
-  test('the shell carries no copy of its own', async ({ request }) => {
+  test('the shell carries no body copy of its own', async ({ request }) => {
     const body = await (await request.get('/wizard')).text();
     expect(body).toContain('/app.js');
     expect(body).toContain('/boot.js');
-    expect(body).not.toContain('WhatsApp auto-replies for small businesses.');
+    expect(body).toMatch(/<body>\s*<\/body>/);
   });
 
   test('an unknown path gets the shell under a 404', async ({ page, request }) => {

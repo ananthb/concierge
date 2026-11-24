@@ -487,8 +487,8 @@ howItWorks =
                 "2. Pick or edit 1 bot prompt"
                 "Choose a starter bot prompt or write your own (up to 600 chars), or send a static reply."
             , step "color-bar-amber"
-                "3. 1 credit = 1 reply via Razorpay"
-                "Prepaid credits only — no subscriptions or free trials. Pay as you go with Razorpay."
+                "3. 1 credit = 1 reply"
+                "Pay as you go with prepaid credits."
             ]
         ]
 

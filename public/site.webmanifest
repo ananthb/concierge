@@ -1,0 +1,27 @@
+{
+  "name": "replybots",
+  "short_name": "replybots",
+  "description": "Messaging automation for small businesses",
+  "start_url": "/admin",
+  "display": "standalone",
+  "background_color": "#F5EFE4",
+  "theme_color": "#E86A2C",
+  "icons": [
+    {
+      "src": "/logo-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/logo-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "/logo-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
