@@ -246,6 +246,25 @@ test.describe('demo chat', () => {
     await page.locator('.persona-btn').first().click();
     await expect(page.locator('.demo-composer button[type="submit"]')).toBeDisabled();
   });
+
+  test('clicking a selected persona unselects it and closes the demo box', async ({ page }) => {
+    const boot = await (await page.request.get('/api/bootstrap')).json();
+    test.skip(!boot.demo.enabled || boot.demo.personas.length === 0, 'demo is disabled');
+
+    await page.goto('/');
+    await expect(page.locator('#how-it-works')).toBeVisible();
+    await expect(page.locator('#pricing')).toBeVisible();
+    await expect(page.locator('#demo')).toBeVisible();
+
+    const firstPersona = page.locator('.persona-btn').first();
+    await firstPersona.click();
+    await expect(firstPersona).toHaveClass(/is-active/);
+    await expect(page.locator('.demo-box')).toBeVisible();
+
+    await firstPersona.click();
+    await expect(firstPersona).not.toHaveClass(/is-active/);
+    await expect(page.locator('.demo-box')).toHaveCount(0);
+  });
 });
 
 test.describe('authenticated wizard and dashboard', () => {

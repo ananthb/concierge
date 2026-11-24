@@ -7,6 +7,40 @@
   .preview-panel { margin-top: 16px; }
 }
 
+@media (max-width:767px) {
+  .persona-demo-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .persona-slot-0 { order: 1; }
+  .persona-slot-1 { order: 3; }
+  .persona-slot-2 { order: 5; }
+  .persona-slot-3 { order: 7; }
+  .demo-after-0 { order: 2; }
+  .demo-after-1 { order: 4; }
+  .demo-after-2 { order: 6; }
+  .demo-after-3 { order: 8; }
+  .demo-box { margin-top: 0; }
+  .persona-btn {
+    padding: 8px 10px;
+    height: auto;
+  }
+  .persona-head {
+    flex-wrap: nowrap;
+    margin-bottom: 2px;
+  }
+  .persona-label { font-size: 14px; }
+  .persona-tag { font-size: 10px; padding: 1px 5px; }
+  .persona-desc {
+    font-size: 12.5px;
+    line-height: 1.35;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
+
 @media (max-width:720px) {
   .landing { gap: 36px; }
   .landing, .dashboard, .page { padding-top: 28px; padding-bottom: 48px; }
@@ -22,7 +56,7 @@
   .site-header .nav-link { display: none; }
   .site-footer { padding: 18px 16px; line-height: 1.9; }
 
-  .hero h1 { font-size: clamp(26px, 7.2vw, 34px); }
+  .hero h1 { font-size: clamp(26px, 7.2vw, 34px); min-height: 2.3em; }
   .hero-sub { font-size: 16px; }
   /* Full-width stacked CTAs beat two half-width buttons that wrap awkwardly. */
   .hero-actions { flex-direction: column; align-items: stretch; }

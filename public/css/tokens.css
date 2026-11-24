@@ -112,6 +112,7 @@
   --f-display: "Inter", system-ui, -apple-system, sans-serif;
   --f-body: "Inter", system-ui, -apple-system, sans-serif;
   --f-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  --t-lg: 18px;
 
   --page-pad: 28px;
   --card-pad: 22px;

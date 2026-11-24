@@ -18,8 +18,9 @@
   // Clear whatever the document already holds before handing <body> to Elm.
   if (document.body) document.body.replaceChildren();
 
+  var reducedMotion = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
   var app = window.Elm.Main.init({
-    flags: { width: window.innerWidth },
+    flags: { width: window.innerWidth, reducedMotion: reducedMotion },
   });
 
   // A signal that the app is live, for tests to wait on.
