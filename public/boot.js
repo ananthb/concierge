@@ -19,14 +19,44 @@
   if (document.body) document.body.replaceChildren();
 
   var reducedMotion = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+  var savedTheme = null;
+  try {
+    savedTheme = localStorage.getItem('replybots-theme');
+  } catch (e) {}
+  if (savedTheme === 'dark' || savedTheme === 'light') {
+    document.documentElement.setAttribute('data-theme', savedTheme);
+  }
+  var isDark =
+    savedTheme === 'dark'
+      ? true
+      : savedTheme === 'light'
+        ? false
+        : !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+
   var app = window.Elm.Main.init({
-    flags: { width: window.innerWidth, reducedMotion: reducedMotion },
+    flags: { width: window.innerWidth, reducedMotion: reducedMotion, isDark: isDark },
   });
 
   // A signal that the app is live, for tests to wait on.
   window.__replybotsBooted = true;
 
   if (!app.ports) return;
+
+  if (app.ports.setTheme) {
+    app.ports.setTheme.subscribe(function (theme) {
+      if (theme === 'dark' || theme === 'light') {
+        document.documentElement.setAttribute('data-theme', theme);
+        try {
+          localStorage.setItem('replybots-theme', theme);
+        } catch (e) {}
+      } else {
+        document.documentElement.removeAttribute('data-theme');
+        try {
+          localStorage.removeItem('replybots-theme');
+        } catch (e) {}
+      }
+    });
+  }
 
   // Idempotent external script loader for on-demand SDKs (Razorpay, Facebook).
   var loadingScripts = {};

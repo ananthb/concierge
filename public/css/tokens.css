@@ -61,6 +61,8 @@
 }
 
 :root {
+  color-scheme: light;
+
   /* Light canvas & structural ink */
   --paper: #FFFFFF;
   --cream: #F8FAFC;
@@ -76,6 +78,7 @@
   --accent: #2563EB;
   --accent-2: #1D4ED8;
   --accent-soft: #DBEAFE;
+  --on-accent: #FFFFFF;
 
   --emerald: #059669;
   --emerald-soft: #D1FAE5;
@@ -123,4 +126,82 @@
 /* Density step-down at the phone/large-phone band. */
 @media (max-width:720px) {
   :root { --page-pad: 16px; --card-pad: 16px; --stat-n: 26px; }
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+
+    /* Dark canvas & structural ink */
+    --paper: #0E1117;
+    --cream: #161B22;
+    --cream-2: #1F2630;
+    --ink: #F3F4F6;
+    --ink-2: #D1D5DB;
+    --muted: #9CA3AF;
+    --line: #525B68;
+    --hair: #2D333B;
+    --hair-2: #3F4752;
+
+    /* Multi-color accents */
+    --accent: #3B82F6;
+    --accent-2: #2563EB;
+    --accent-soft: #172554;
+    --on-accent: #FFFFFF;
+
+    --emerald: #10B981;
+    --emerald-soft: #064E3B;
+
+    --amber: #F59E0B;
+    --amber-soft: #451A03;
+
+    --violet: #8B5CF6;
+    --violet-soft: #2E1065;
+
+    --danger: #EF4444;
+    --danger-2: #DC2626;
+    --danger-soft: #450A0A;
+
+    /* Crisp offset blocks */
+    --shadow-1: 2px 2px 0 var(--hair);
+    --shadow-2: 3px 3px 0 var(--line);
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  /* Dark canvas & structural ink */
+  --paper: #0E1117;
+  --cream: #161B22;
+  --cream-2: #1F2630;
+  --ink: #F3F4F6;
+  --ink-2: #D1D5DB;
+  --muted: #9CA3AF;
+  --line: #525B68;
+  --hair: #2D333B;
+  --hair-2: #3F4752;
+
+  /* Multi-color accents */
+  --accent: #3B82F6;
+  --accent-2: #2563EB;
+  --accent-soft: #172554;
+  --on-accent: #FFFFFF;
+
+  --emerald: #10B981;
+  --emerald-soft: #064E3B;
+
+  --amber: #F59E0B;
+  --amber-soft: #451A03;
+
+  --violet: #8B5CF6;
+  --violet-soft: #2E1065;
+
+  --danger: #EF4444;
+  --danger-2: #DC2626;
+  --danger-soft: #450A0A;
+
+  /* Crisp offset blocks */
+  --shadow-1: 2px 2px 0 var(--hair);
+  --shadow-2: 3px 3px 0 var(--line);
 }
