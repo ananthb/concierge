@@ -219,7 +219,8 @@ test.describe('demo chat', () => {
     await firstPersona.click();
     await expect(firstPersona).toHaveClass(/is-active/);
 
-    await expect(page.locator('.demo-transcript .bubble-assistant')).toBeVisible();
+    await expect(page.locator('.demo-transcript .bubble-assistant')).toHaveCount(0);
+    await expect(page.locator('.demo-transcript .demo-empty')).toBeVisible();
     await expect(page.locator('.prompt-panel .prompt-preview')).toBeVisible();
     await expect(page.locator('.prompt-panel .prompt-panel-note')).toBeVisible();
 
@@ -229,7 +230,7 @@ test.describe('demo chat', () => {
     await expect(page.locator('.demo-transcript .bubble-user')).toHaveText(
       'What time do you open?',
     );
-    await expect(page.locator('.demo-transcript .bubble-assistant').nth(1)).toBeVisible({
+    await expect(page.locator('.demo-transcript .bubble-assistant').first()).toBeVisible({
       timeout: 30_000,
     });
     expect(consoleErrors, consoleErrors.join('\n')).toEqual([]);

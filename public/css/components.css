@@ -330,6 +330,12 @@
   background: var(--cream);
 }
 
+.demo-empty {
+  margin: 0;
+  font-size: 14px;
+  color: var(--muted);
+}
+
 .demo-msg {
   animation: msg-in 120ms ease-out both;
 }
@@ -591,7 +597,7 @@
 
 .feature-list {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  grid-template-columns: repeat(3, 1fr);
   gap: 18px;
   margin-bottom: 28px;
 }
