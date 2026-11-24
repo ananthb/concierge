@@ -1,6 +1,6 @@
 //! `/api/billing/*` — prepaid reply credit balance and Razorpay checkout.
 //!
-//! Strict prepaid model: static (Canned) replies are free; 1 credit = 1 AI-generated reply.
+//! Strict prepaid model: 1 credit = 1 reply.
 //! Credits are granted exclusively by the Razorpay `payment.captured` webhook.
 
 use serde::Serialize;
