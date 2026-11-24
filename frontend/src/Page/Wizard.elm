@@ -511,9 +511,9 @@ launchStep model wizard =
             [ h2 [] [ text "Prepaid credits" ]
             , p []
                 [ text
-                    ("Static replies are free; AI-generated replies cost 1 credit each"
+                    ("1 credit = 1 reply"
                         ++ (if unitPrice > 0 then
-                                " (from " ++ Format.milliRate "en-IN" wizard.pricing.defaultCurrency unitPrice ++ " per AI reply)"
+                                " (from " ++ Format.milliRate "en-IN" wizard.pricing.defaultCurrency unitPrice ++ " per reply)"
 
                             else
                                 ""

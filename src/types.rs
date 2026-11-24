@@ -139,7 +139,7 @@ pub struct ReplyConfig {
     #[serde(default = "crate::prompt::default_bot_prompt")]
     pub bot_prompt: String,
     /// Optional natural-language rule describing which inbound messages should
-    /// receive the static reply. When empty, all messages match.
+    /// receive the rule-matched reply. When empty, all messages match.
     #[serde(default)]
     pub match_rule: String,
 }
@@ -157,7 +157,7 @@ impl Default for ReplyConfig {
 }
 
 impl ReplyConfig {
-    /// True when the response is static text (`Canned`).
+    /// True when the response is rule-matched text (`Canned`).
     pub fn is_canned(&self) -> bool {
         matches!(self.response, ReplyResponse::Canned { .. })
     }
@@ -185,7 +185,7 @@ pub fn default_wait_seconds() -> u32 {
 pub enum ReplyResponse {
     /// Use the single small-business core persona via Workers AI.
     Ai,
-    /// Send this static text verbatim. Costs 1 reply credit.
+    /// Send this verbatim text when matched. Costs 1 reply credit.
     Canned { text: String },
 }
 
@@ -315,7 +315,7 @@ impl MessageDirection {
 pub enum MessageAction {
     /// Auto-reply sent.
     AutoReply,
-    /// Canned static reply sent (free).
+    /// Rule-matched reply sent (1 credit).
     CannedReply,
     /// Draft tripped the risk gate: holding sentence sent and tenant paged.
     HandedOff,

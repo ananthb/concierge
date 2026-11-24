@@ -391,7 +391,7 @@ hero authBusy demo model =
                    )
             )
         , p [ class "hero-sub" ]
-            [ text "Static replies are free. 1 credit = 1 AI-generated reply." ]
+            [ text "One bot prompt, fast human handoff, 1 credit = 1 reply." ]
         , div [ class "hero-actions" ]
             [ button
                 [ Html.Attributes.type_ "button"
@@ -423,10 +423,10 @@ featuresSection =
     section [ id "features", class "landing-features" ]
         [ Ui.sectionTitle "Features"
         , div [ class "feature-list" ]
-            [ featureCard "Static or AI quick-handoff replies"
-                "Choose a fixed static message or let replybots's built-in front-desk assistant answer briefly on your WhatsApp Business number."
-            , featureCard "Fast human handoff + email alert"
-                "The moment a customer asks for a quote, a commitment, or personal attention, replybots hands off cleanly and optionally emails you so you can step in."
+            [ featureCard "AI-generated replies"
+                "One built-in bot prompt handles everyday customer questions and hands off to a human when it shouldn't decide alone."
+            , featureCard "Static replies for simple questions"
+                "Set a natural-language match rule for common questions. High-confidence matches send your preset reply; anything uncertain falls back to AI."
             , featureCard "Burst message batching"
                 "Wait 0 to 30 seconds for customers who send multiple short messages in a row, so they get one coherent reply instead of three."
             , featureCard "Conversation session window"
@@ -452,7 +452,7 @@ pricingSection pricing =
     section [ id "pricing", class "landing-pricing" ]
         [ Ui.sectionTitle "Simple, prepaid pricing"
         , p [ class "pricing-lead" ]
-            [ text "Static replies are free. 1 credit = 1 AI-generated reply. No subscriptions, no per-seat fees, no expiry." ]
+            [ text "1 credit = 1 WhatsApp reply. No subscriptions, no per-seat fees." ]
         , case pricing of
             Success p_ ->
                 div [ class "price-cards__inner" ]
@@ -728,10 +728,10 @@ howItWorks =
                 "Connect your WhatsApp Business number via Meta Embedded Signup. No new number or app needed."
             , step "color-bar-green"
                 "2. Pick or edit 1 bot prompt"
-                "Choose a starter bot prompt or write your own (up to 600 chars), or send a static reply."
+                "Choose a starter bot prompt or write your own (up to 600 chars), with optional rule-matched replies."
             , step "color-bar-amber"
-                "3. 1 credit = 1 AI reply"
-                "Static replies are free. 1 credit = 1 AI-generated reply."
+                "3. 1 credit = 1 reply"
+                "Pay as you go with prepaid credits."
             ]
         ]
 

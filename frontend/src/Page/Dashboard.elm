@@ -640,13 +640,13 @@ safetyNotice session =
     if session.safetyStatus == "rejected" then
         Ui.banner "error"
             (Maybe.withDefault
-                "AI replies are paused because your account did not pass the safety check. Static replies still go out."
+                "AI replies are paused because your account did not pass the safety check. Rule-matched replies still go out."
                 session.safetyReason
             )
 
     else if session.safetyStatus == "pending" || not session.aiReady then
         Ui.banner "info"
-            "AI replies are paused while safety checks complete. Static replies still go out."
+            "AI replies are paused while safety checks complete. Rule-matched replies still go out."
 
     else
         text ""
@@ -704,7 +704,7 @@ overviewBillingCard session billing =
         , p [ class "muted" ]
             [ text
                 (Format.count session.locale billing.repliesUsed
-                    ++ " replies used so far · Static replies are free; AI-generated replies cost 1 credit each."
+                    ++ " replies used so far · 1 credit = 1 reply."
                 )
             ]
         , if billing.metered && billing.balance == 0 then
@@ -867,9 +867,9 @@ accountCard model botPresets account =
                         div []
                             [ Ui.textarea
                                 { id = "reply-text-" ++ account.id
-                                , label = "Static reply message"
+                                , label = "Matched reply text"
                                 , value = edit.reply.text
-                                , hint = "Sent word for word whenever a customer messages (or matches the rule below). Static replies are free."
+                                , hint = "Sent word for word whenever a customer messages (or matches the rule below). 1 credit = 1 reply."
                                 , rows = 4
                                 , onInput = \v -> SetEditReply (setText v edit.reply)
                                 }
@@ -889,7 +889,7 @@ accountCard model botPresets account =
                                 , p [ class "hint" ]
                                     [ text
                                         (String.fromInt (String.length edit.reply.matchRule)
-                                            ++ "/300 chars · If set, incoming messages are checked against this rule. Confident matches send the free static reply; uncertain messages fall back to AI generation (1 credit)."
+                                            ++ "/300 chars · If set, incoming messages are checked against this rule; uncertain messages fall back to AI. 1 credit = 1 reply."
                                         )
                                     ]
                                 ]
@@ -950,7 +950,7 @@ accountCard model botPresets account =
                         [ text
                             (if account.reply.enabled then
                                 if account.reply.mode == "canned" then
-                                    "Sending static reply · "
+                                    "Sending rule-matched reply · "
                                         ++ String.fromInt account.reply.waitSeconds
                                         ++ "s burst wait."
 
@@ -1044,7 +1044,7 @@ modePicker reply =
                         ]
                         [ text label_ ]
                 )
-                [ ( "ai", "AI (1 credit per reply)" ), ( "canned", "Static reply (free)" ) ]
+                [ ( "ai", "AI reply" ), ( "canned", "Rule-matched reply" ) ]
             )
         ]
 
@@ -1069,7 +1069,7 @@ billingTab session model =
                     , p [ class "muted" ]
                         [ text
                             (Format.count session.locale billing.repliesUsed
-                                ++ " replies used so far · Static replies are free; AI-generated replies cost 1 credit each."
+                                ++ " replies used so far · 1 credit = 1 reply."
                             )
                         ]
                     ]

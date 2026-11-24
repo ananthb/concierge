@@ -607,7 +607,7 @@ type alias WhatsAppAccount =
     }
 
 
-{-| `mode` is "ai" or "canned". `text` is the static message when `mode` is "canned".
+{-| `mode` is "ai" or "canned". `text` is the rule-matched message when `mode` is "canned".
 -}
 type alias ReplyConfig =
     { enabled : Bool

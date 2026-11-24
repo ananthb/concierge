@@ -2,7 +2,7 @@
 
 `replybots` uses strict prepaid credits:
 
-- **Static replies are free; 1 credit = 1 AI-generated reply.** When a static reply has an optional match rule, confident matches send the static reply for free while non-matching or uncertain messages fall back to AI generation (1 credit).
+- **1 credit = 1 reply.** Every reply — whether rule-matched or AI-generated — costs 1 credit. When a rule-matched reply has an optional match rule, confident matches send the configured reply while non-matching or uncertain messages fall back to AI generation (still 1 credit).
 - **No subscriptions, no free trials** — accounts start with 0 credits and top up via Razorpay Orders.
 - **No charge on held or failed replies** — if the risk gate withholds a draft or AI generation / delivery fails before sending, no credit is deducted.
 - **Purchased credits do not expire**.
