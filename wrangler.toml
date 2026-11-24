@@ -49,11 +49,15 @@ name = "EMAIL"
 
 [vars]
 ENVIRONMENT = "production"
-PUBLIC_BASE_URL = "https://replybots.io"
-EMAIL_DOMAIN = "replybots.io"
 
-# These non-secret IDs are injected at deploy time from build environment variables
-# (or can also be added to [vars] above):
+# Runtime vars and secrets are managed in the Cloudflare dashboard
+# (Workers -> replybots -> Settings -> Variables and Secrets) so this file
+# stays portable for forks. Cloudflare Builds redeploys preserve them.
+#
+# Required / optional runtime vars:
+#   PUBLIC_BASE_URL            Primary site URL, e.g. https://replybots.io
+#   EMAIL_DOMAIN               Domain outbound handoff emails are sent from, e.g. replybots.io
+#                              (optional — no MX needed, nothing received here)
 #   WHATSAPP_WABA_ID           Fallback WhatsApp Business Account ID
 #   WHATSAPP_SIGNUP_CONFIG_ID  Meta Embedded Signup config ID
 
