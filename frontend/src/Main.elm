@@ -20,9 +20,11 @@ a state, not a failure.
 
 import Api
 import Browser
+import Browser.Dom as Dom
 import Browser.Navigation as Nav
 import Html exposing (Html, main_)
 import Html.Attributes exposing (class)
+import Json.Decode as D
 import Page.Dashboard as Dashboard
 import Page.Landing as Landing
 import Page.Static as Static
@@ -30,6 +32,7 @@ import Page.Wizard as Wizard
 import Ports
 import RemoteData exposing (RemoteData(..))
 import Route exposing (Route)
+import Task
 import Ui
 import Url exposing (Url)
 
@@ -47,7 +50,7 @@ main =
 
 
 type alias Flags =
-    { width : Int }
+    D.Value
 
 
 
@@ -62,6 +65,7 @@ type alias Model =
     , page : Page
     , authBusy : Bool
     , authError : Maybe String
+    , reducedMotion : Bool
     }
 
 
@@ -73,7 +77,12 @@ type Page
 
 
 init : Flags -> Url -> Nav.Key -> ( Model, Cmd Msg )
-init _ url key =
+init flags url key =
+    let
+        reducedMotion =
+            D.decodeValue (D.field "reducedMotion" D.bool) flags
+                |> Result.withDefault False
+    in
     ( { key = key
       , route = Route.fromUrl url
       , boot = Loading
@@ -81,6 +90,7 @@ init _ url key =
       , page = Stateless
       , authBusy = False
       , authError = Nothing
+      , reducedMotion = reducedMotion
       }
     , Api.getBootstrap GotBootstrap
     )
@@ -101,6 +111,7 @@ type Msg
     | LandingMsg Landing.Msg
     | WizardMsg Wizard.Msg
     | DashboardMsg Dashboard.Msg
+    | NoOp
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -115,7 +126,19 @@ update msg model =
                     ( model, Nav.load href )
 
         UrlChanged url ->
-            enterRoute (Route.fromUrl url) model
+            let
+                nextRoute =
+                    Route.fromUrl url
+            in
+            if nextRoute == Route.Landing && model.route == Route.Landing then
+                ( model, scrollToFragment url.fragment )
+
+            else
+                let
+                    ( nextModel, cmd ) =
+                        enterRoute nextRoute model
+                in
+                ( nextModel, Cmd.batch [ cmd, scrollToFragment url.fragment ] )
 
         GotBootstrap result ->
             let
@@ -210,11 +233,11 @@ update msg model =
             update StartWhatsAppLogin model
 
         LandingMsg sub ->
-            case ( model.page, model.boot ) of
-                ( LandingPage landing, Success boot ) ->
+            case model.page of
+                LandingPage landing ->
                     let
                         ( updated, cmd ) =
-                            Landing.update boot.demo sub landing
+                            Landing.update sub landing
                     in
                     ( { model | page = LandingPage updated }, Cmd.map LandingMsg cmd )
 
@@ -266,6 +289,21 @@ update msg model =
                 _ ->
                     ( model, Cmd.none )
 
+        NoOp ->
+            ( model, Cmd.none )
+
+
+scrollToFragment : Maybe String -> Cmd Msg
+scrollToFragment maybeFrag =
+    case maybeFrag of
+        Just frag ->
+            Dom.getElement frag
+                |> Task.andThen (\info -> Dom.setViewport 0 info.element.y)
+                |> Task.attempt (\_ -> NoOp)
+
+        Nothing ->
+            Cmd.none
+
 
 markOnboarded : Api.Session -> Api.Session
 markOnboarded session =
@@ -287,7 +325,7 @@ enterRoute route model =
     in
     case route of
         Route.Landing ->
-            ( { settled | page = LandingPage Landing.init }, Cmd.none )
+            ( { settled | page = LandingPage (Landing.init model.reducedMotion) }, Cmd.none )
 
         Route.Wizard ->
             case model.session of
@@ -362,14 +400,23 @@ subscriptions : Model -> Sub Msg
 subscriptions model =
     let
         pageSub =
-            case ( model.page, model.boot ) of
-                ( LandingPage landing, Success boot ) ->
-                    Sub.map LandingMsg (Landing.subscriptions boot.demo landing)
+            case model.page of
+                LandingPage landing ->
+                    let
+                        maybeDemo =
+                            case model.boot of
+                                Success boot ->
+                                    Just boot.demo
 
-                ( WizardPage _, _ ) ->
+                                _ ->
+                                    Nothing
+                    in
+                    Sub.map LandingMsg (Landing.subscriptions maybeDemo landing)
+
+                WizardPage _ ->
                     Sub.map WizardMsg Wizard.subscriptions
 
-                ( DashboardPage _, _ ) ->
+                DashboardPage _ ->
                     Sub.map DashboardMsg Dashboard.subscriptions
 
                 _ ->

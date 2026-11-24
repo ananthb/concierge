@@ -170,7 +170,16 @@
 
 .landing { display: flex; flex-direction: column; gap: 48px; }
 .hero { max-width: 52ch; }
-.hero h1 { margin: 0 0 16px; }
+.hero h1 { margin: 0 0 16px; min-height: 2.2em; }
+.hero-word { color: var(--accent); }
+.hero-word-fade {
+  display: inline-block;
+  animation: hero-fade 320ms ease-out both;
+}
+@keyframes hero-fade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
 .hero-sub { margin: 0 0 24px; max-width: 56ch; font-size: 17px; line-height: 1.6; color: var(--ink-2); }
 .hero-actions { display: flex; flex-wrap: wrap; gap: 12px; }
 .hero-nudge {
@@ -181,22 +190,37 @@
   color: var(--muted);
 }
 
-.demo-picker-sub { margin: 0 0 18px; color: var(--muted); }
-.persona-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 12px;
+.landing-pricing { display: flex; flex-direction: column; gap: 16px; }
+.pricing-lead { margin: 0; font-size: 16px; line-height: 1.55; color: var(--ink-2); max-width: 60ch; }
+.pricing-rules {
   margin: 0;
-  padding: 0;
-  list-style: none;
+  padding-left: 20px;
+  color: var(--ink-2);
+  font-size: 14px;
+  line-height: 1.65;
+}
+.pricing-rules li { margin-bottom: 4px; }
+
+.demo-lead {
+  margin: 0 0 18px;
+  font-size: var(--t-lg);
+  line-height: 1.55;
+  color: var(--ink-2);
+  max-width: 60ch;
+}
+.persona-demo-wrap {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
 }
 .persona-card,
 .persona-btn {
+  order: 1;
   width: 100%;
   height: 100%;
   min-height: 44px;
   text-align: left;
-  padding: 16px;
+  padding: 14px;
   border: 1px solid var(--line);
   border-top: 3px solid var(--violet);
   border-radius: 0px;
@@ -224,33 +248,62 @@
   background: var(--accent-soft);
   box-shadow: var(--shadow-2);
 }
+.persona-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.persona-label,
 .persona-card h3,
-.persona-btn h3 { margin: 0 0 6px; font-size: 16px; font-weight: 700; color: var(--ink); }
+.persona-btn h3 { margin: 0; font-size: 15px; font-weight: 700; color: var(--ink); }
+.persona-desc,
 .persona-card p,
-.persona-btn p { margin: 0; font-size: 13.5px; line-height: 1.55; color: var(--muted); }
+.persona-btn p { margin: 0; font-size: 13px; line-height: 1.45; color: var(--muted); }
 .persona-tag {
   display: inline-block;
-  margin-bottom: 6px;
   padding: 2px 6px;
   border: 1px solid var(--violet);
   background: var(--violet-soft);
   color: var(--violet);
   font-family: var(--f-mono);
-  font-size: 11px;
+  font-size: 10.5px;
   font-weight: 500;
   letter-spacing: .04em;
   text-transform: uppercase;
+  white-space: nowrap;
 }
 
 /* The demo conversation. */
+.demo-box {
+  grid-column: 1 / -1;
+  order: 10;
+  margin-top: 8px;
+}
 .demo-chat {
   max-width: 720px;
+  width: 100%;
   background: var(--paper);
   border: 2px solid var(--line);
   border-top: 4px solid var(--accent);
   border-radius: 0px;
   box-shadow: var(--shadow-2);
   overflow: hidden;
+}
+.demo-badge-bar {
+  padding: 6px 18px;
+  border-bottom: 1px solid var(--line);
+  background: var(--ink);
+  color: var(--paper);
+}
+.demo-badge {
+  font-family: var(--f-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .1em;
+  text-transform: uppercase;
 }
 .demo-chat-head {
   display: flex;

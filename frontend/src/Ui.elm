@@ -227,8 +227,9 @@ header session =
         , nav [ class "site-nav" ]
             (case session of
                 Nothing ->
-                    [ navLink Route.Features "Features"
-                    , navLink Route.Pricing "Pricing"
+                    [ anchorNavLink "/#how-it-works" "How it works"
+                    , anchorNavLink "/#pricing" "Pricing"
+                    , anchorNavLink "/#demo" "Demo"
                     , a [ Route.href Route.Login, class "btn btn-primary" ] [ text "Sign in" ]
                     ]
 
@@ -241,17 +242,18 @@ header session =
                             else
                                 ( Route.Dashboard, "Dashboard" )
                     in
-                    [ navLink Route.Features "Features"
-                    , navLink Route.Pricing "Pricing"
+                    [ anchorNavLink "/#how-it-works" "How it works"
+                    , anchorNavLink "/#pricing" "Pricing"
+                    , anchorNavLink "/#demo" "Demo"
                     , a [ Route.href route, class "btn btn-primary" ] [ text label_ ]
                     ]
             )
         ]
 
 
-navLink : Route -> String -> Html msg
-navLink route label_ =
-    a [ Route.href route, class "nav-link" ] [ text label_ ]
+anchorNavLink : String -> String -> Html msg
+anchorNavLink url label_ =
+    a [ href url, class "nav-link" ] [ text label_ ]
 
 
 footer : Html msg

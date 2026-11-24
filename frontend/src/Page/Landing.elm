@@ -19,10 +19,12 @@ Three limits shape the conversation, all arriving in `/api/bootstrap`:
 
 import Api
 import Browser.Dom as Dom
+import Dict
 import Format
 import Html exposing (Html, button, div, h1, h2, h3, input, li, p, section, span, text, ul)
 import Html.Attributes exposing (attribute, class, classList, disabled, id, placeholder, value)
 import Html.Events exposing (onClick, onInput, onSubmit)
+import Html.Keyed as Keyed
 import RemoteData exposing (RemoteData(..))
 import Route
 import Task
@@ -39,7 +41,41 @@ type alias Model =
 
     -- Seconds since the visitor last typed or sent. Drives the idle timeout.
     , idleSeconds : Int
+    , reducedMotion : Bool
+    , wordIndex : Int
+    , phase : TypePhase
     }
+
+
+type TypePhase
+    = Holding Int
+    | Erasing Int
+    | PausingEmpty Int
+    | Typing Int
+
+
+heroWords : List String
+heroWords =
+    [ "small businesses"
+    , "creators"
+    , "design studios"
+    , "artists"
+    , "side-hustles"
+    , "event venues"
+    , "local shops"
+    ]
+
+
+wordAt : Int -> String
+wordAt idx =
+    let
+        len =
+            List.length heroWords
+    in
+    heroWords
+        |> List.drop (modBy len idx)
+        |> List.head
+        |> Maybe.withDefault "small businesses"
 
 
 type alias Chat =
@@ -59,10 +95,13 @@ type alias Turn =
     }
 
 
-init : Model
-init =
+init : Bool -> Model
+init reducedMotion =
     { chat = Nothing
     , idleSeconds = 0
+    , reducedMotion = reducedMotion
+    , wordIndex = 0
+    , phase = Holding 34
     }
 
 
@@ -77,27 +116,26 @@ type Msg
     | GotReply (Api.Data Api.DemoReply)
     | CloseChat
     | Tick
+    | TypeTick
+    | ReducedSwapTick
     | LoginClicked
     | NoOp
 
 
-update : Api.DemoConfig -> Msg -> Model -> ( Model, Cmd Msg )
-update _ msg model =
+update : Msg -> Model -> ( Model, Cmd Msg )
+update msg model =
     case msg of
         PickPersona persona ->
-            ( { model
-                | chat =
-                    Just
-                        { persona = persona
-                        , messages = [ { role = "assistant", content = persona.opener } ]
-                        , draft = ""
-                        , pending = NotAsked
-                        , handoff = False
-                        }
-                , idleSeconds = 0
-              }
-            , focusInput
-            )
+            case model.chat of
+                Just current ->
+                    if current.persona.id == persona.id then
+                        ( { model | chat = Nothing, idleSeconds = 0 }, Cmd.none )
+
+                    else
+                        openPersona persona model
+
+                Nothing ->
+                    openPersona persona model
 
         Draft text_ ->
             ( { model
@@ -179,11 +217,74 @@ update _ msg model =
         Tick ->
             ( { model | idleSeconds = model.idleSeconds + 1 }, Cmd.none )
 
+        TypeTick ->
+            ( stepTypewriter model, Cmd.none )
+
+        ReducedSwapTick ->
+            ( { model | wordIndex = modBy (List.length heroWords) (model.wordIndex + 1) }, Cmd.none )
+
         LoginClicked ->
             ( model, Cmd.none )
 
         NoOp ->
             ( model, Cmd.none )
+
+
+stepTypewriter : Model -> Model
+stepTypewriter model =
+    let
+        currentWord =
+            wordAt model.wordIndex
+    in
+    case model.phase of
+        Holding n ->
+            if n > 1 then
+                { model | phase = Holding (n - 1) }
+
+            else
+                { model | phase = Erasing (max 0 (String.length currentWord - 1)) }
+
+        Erasing len ->
+            if len > 0 then
+                { model | phase = Erasing (len - 1) }
+
+            else
+                { model | phase = PausingEmpty 4 }
+
+        PausingEmpty n ->
+            if n > 1 then
+                { model | phase = PausingEmpty (n - 1) }
+
+            else
+                let
+                    nextIdx =
+                        modBy (List.length heroWords) (model.wordIndex + 1)
+                in
+                { model | wordIndex = nextIdx, phase = Typing 1 }
+
+        Typing len ->
+            if len < String.length currentWord then
+                { model | phase = Typing (len + 1) }
+
+            else
+                { model | phase = Holding 34 }
+
+
+openPersona : Api.DemoPersona -> Model -> ( Model, Cmd Msg )
+openPersona persona model =
+    ( { model
+        | chat =
+            Just
+                { persona = persona
+                , messages = [ { role = "assistant", content = persona.opener } ]
+                , draft = ""
+                , pending = NotAsked
+                , handoff = False
+                }
+        , idleSeconds = 0
+      }
+    , focusInput
+    )
 
 
 focusInput : Cmd Msg
@@ -198,20 +299,31 @@ scrollToBottom =
         |> Task.attempt (\_ -> NoOp)
 
 
-{-| Tick once a second only while a chat is open and not already timed out.
+{-| Tick the hero word cycler and, when a demo chat is open, the idle timer.
 -}
-subscriptions : Api.DemoConfig -> Model -> Sub Msg
-subscriptions config model =
-    case model.chat of
-        Just _ ->
-            if model.idleSeconds < config.idleTimeoutSecs then
-                Time.every 1000 (\_ -> Tick)
+subscriptions : Maybe Api.DemoConfig -> Model -> Sub Msg
+subscriptions maybeConfig model =
+    let
+        idleSub =
+            case ( maybeConfig, model.chat ) of
+                ( Just config, Just _ ) ->
+                    if model.idleSeconds < config.idleTimeoutSecs then
+                        Time.every 1000 (\_ -> Tick)
+
+                    else
+                        Sub.none
+
+                _ ->
+                    Sub.none
+
+        heroSub =
+            if model.reducedMotion then
+                Time.every 3500 (\_ -> ReducedSwapTick)
 
             else
-                Sub.none
-
-        Nothing ->
-            Sub.none
+                Time.every 65 (\_ -> TypeTick)
+    in
+    Sub.batch [ idleSub, heroSub ]
 
 
 
@@ -221,40 +333,72 @@ subscriptions config model =
 view : Bool -> Api.Data Api.Pricing -> Api.Data Api.DemoConfig -> Model -> Html Msg
 view authBusy pricing demo model =
     div [ class "landing" ]
-        [ hero authBusy pricing demo
+        [ hero authBusy demo model
+        , howItWorks
+        , pricingSection pricing
         , case demo of
             Success config ->
                 if config.enabled && not (List.isEmpty config.personas) then
-                    let
-                        selectedId =
-                            Maybe.map (.persona >> .id) model.chat
-                    in
-                    div []
-                        [ personaPicker selectedId config
-                        , case model.chat of
-                            Just chat ->
-                                chatPanel authBusy config model chat
-
-                            Nothing ->
-                                text ""
-                        ]
+                    demoSection authBusy config model
 
                 else
                     text ""
 
             _ ->
                 text ""
-        , howItWorks
         ]
 
 
-hero : Bool -> Api.Data Api.Pricing -> Api.Data Api.DemoConfig -> Html Msg
-hero authBusy pricing demo =
+hero : Bool -> Api.Data Api.DemoConfig -> Model -> Html Msg
+hero authBusy demo model =
+    let
+        demoEnabled =
+            case demo of
+                Success config ->
+                    config.enabled && not (List.isEmpty config.personas)
+
+                _ ->
+                    True
+
+        currentWord =
+            wordAt model.wordIndex
+
+        displayedWord =
+            if model.reducedMotion then
+                currentWord
+
+            else
+                case model.phase of
+                    Holding _ ->
+                        currentWord
+
+                    Erasing len ->
+                        String.left len currentWord
+
+                    PausingEmpty _ ->
+                        ""
+
+                    Typing len ->
+                        String.left len currentWord
+    in
     section [ class "hero" ]
         [ h1 []
-            [ text "WhatsApp auto-replies for small businesses."
-            , span [ class "cursor-blink", attribute "aria-hidden" "true" ] []
-            ]
+            (text "WhatsApp auto-replies for "
+                :: (if model.reducedMotion then
+                        [ Keyed.node "span"
+                            [ class "hero-word" ]
+                            [ ( String.fromInt model.wordIndex
+                              , span [ class "hero-word-fade" ] [ text displayedWord ]
+                              )
+                            ]
+                        ]
+
+                    else
+                        [ span [ class "hero-word" ] [ text displayedWord ]
+                        , span [ class "cursor-blink", attribute "aria-hidden" "true" ] []
+                        ]
+                   )
+            )
         , p [ class "hero-sub" ]
             [ text "One bot prompt, fast human handoff, 1 credit = 1 reply." ]
         , div [ class "hero-actions" ]
@@ -272,76 +416,127 @@ hero authBusy pricing demo =
                         "Continue with WhatsApp"
                     )
                 ]
-            , Html.a [ Route.href Route.Pricing, class "btn btn-secondary btn-lg" ]
-                [ text (rateLabel pricing) ]
-            ]
-        , case demo of
-            Success config ->
-                if config.enabled && not (List.isEmpty config.personas) then
-                    p [ class "hero-nudge" ] [ text "Try the live demo below — pick a bot persona and send a message." ]
+            , if demoEnabled then
+                Html.a [ Html.Attributes.href "#demo", class "btn btn-secondary btn-lg" ]
+                    [ text "Try the demo" ]
 
-                else
-                    text ""
+              else
+                Html.a [ Html.Attributes.href "#pricing", class "btn btn-secondary btn-lg" ]
+                    [ text "See pricing" ]
+            ]
+        ]
+
+
+pricingSection : Api.Data Api.Pricing -> Html Msg
+pricingSection pricing =
+    section [ id "pricing", class "landing-pricing" ]
+        [ Ui.sectionTitle "Simple, prepaid pricing"
+        , p [ class "pricing-lead" ]
+            [ text "1 credit = 1 WhatsApp reply (static or AI). No subscriptions, no per-seat fees, no expiry." ]
+        , case pricing of
+            Success p_ ->
+                div [ class "price-cards__inner" ]
+                    (List.map landingRateCard (Dict.toList p_.unitPriceMilli))
 
             _ ->
                 text ""
+        , ul [ class "pricing-rules" ]
+            [ li [] [ text "No charge if replybots holds back a message or AI generation fails." ]
+            , li []
+                [ text
+                    (case pricing of
+                        Success p_ ->
+                            "Top up anytime from "
+                                ++ Format.count "en-IN" p_.minCredits
+                                ++ " to "
+                                ++ Format.count "en-IN" p_.maxCredits
+                                ++ " credits per order."
+
+                        _ ->
+                            "Top up anytime in your dashboard — purchased credits never expire."
+                    )
+                ]
+            ]
         ]
 
 
-rateLabel : Api.Data Api.Pricing -> String
-rateLabel pricing =
-    case pricing of
-        Success p_ ->
-            let
-                unitPrice =
-                    Api.unitPriceFor p_.defaultCurrency p_
-            in
-            if unitPrice > 0 then
-                "From " ++ Format.milliRate "en-IN" p_.defaultCurrency unitPrice ++ " per reply"
-
-            else
-                "See pricing"
-
-        _ ->
-            "See pricing"
-
-
-personaPicker : Maybe String -> Api.DemoConfig -> Html Msg
-personaPicker selectedId config =
-    section [ class "demo-picker" ]
-        [ Ui.sectionTitle "Pick a bot persona"
-        , p [ class "demo-picker-sub" ]
-            [ text "4 starter prompts on one shared system prompt with quick human handoff." ]
-        , ul [ class "persona-grid" ]
-            (List.map (personaBtn selectedId) config.personas)
+landingRateCard : ( String, Int ) -> Html Msg
+landingRateCard ( code, unitPriceMilli ) =
+    div [ class "price-card" ]
+        [ h3 [] [ text code ]
+        , p [ class "price" ]
+            [ text (Format.milliRate "en-IN" code unitPriceMilli) ]
+        , p [ class "muted" ] [ text "per reply" ]
         ]
 
 
-personaBtn : Maybe String -> Api.DemoPersona -> Html Msg
-personaBtn selectedId persona =
+demoSection : Bool -> Api.DemoConfig -> Model -> Html Msg
+demoSection authBusy config model =
+    let
+        selectedId =
+            Maybe.map (.persona >> .id) model.chat
+
+        selectedWithIndex =
+            model.chat
+                |> Maybe.andThen
+                    (\chat ->
+                        config.personas
+                            |> List.indexedMap Tuple.pair
+                            |> List.filter (\( _, p ) -> p.id == chat.persona.id)
+                            |> List.head
+                            |> Maybe.map (\( idx, _ ) -> ( idx, chat ))
+                    )
+    in
+    section [ id "demo", class "demo-picker" ]
+        [ Ui.sectionTitle "Live demo"
+        , p [ class "demo-lead" ]
+            [ text "Pick a bot persona below to test a simulated WhatsApp chat." ]
+        , div [ class "persona-demo-wrap" ]
+            (List.indexedMap (personaBtn selectedId) config.personas
+                ++ [ case selectedWithIndex of
+                        Just ( idx, chat ) ->
+                            chatPanel authBusy config model idx chat
+
+                        Nothing ->
+                            text ""
+                   ]
+            )
+        ]
+
+
+personaBtn : Maybe String -> Int -> Api.DemoPersona -> Html Msg
+personaBtn selectedId index persona =
     let
         isSelected =
             selectedId == Just persona.id
     in
-    li []
-        [ button
-            [ classList
-                [ ( "persona-btn", True )
-                , ( "is-active", isSelected )
-                ]
-            , Html.Attributes.type_ "button"
-            , onClick (PickPersona persona)
-            , attribute "aria-label" ("Message " ++ persona.label ++ " — " ++ persona.businessName)
+    button
+        [ classList
+            [ ( "persona-btn", True )
+            , ( "persona-slot-" ++ String.fromInt index, True )
+            , ( "is-active", isSelected )
             ]
-            [ span [ class "persona-tag" ] [ text persona.tag ]
-            , h3 [] [ text persona.label ]
-            , p [] [ text persona.businessName ]
+        , Html.Attributes.type_ "button"
+        , onClick (PickPersona persona)
+        , attribute "aria-pressed"
+            (if isSelected then
+                "true"
+
+             else
+                "false"
+            )
+        , attribute "aria-label" ("Message " ++ persona.label ++ " — " ++ persona.businessName)
+        ]
+        [ div [ class "persona-head" ]
+            [ h3 [ class "persona-label" ] [ text persona.label ]
+            , span [ class "persona-tag" ] [ text persona.tag ]
             ]
+        , p [ class "persona-desc" ] [ text persona.businessName ]
         ]
 
 
-chatPanel : Bool -> Api.DemoConfig -> Model -> Chat -> Html Msg
-chatPanel authBusy config model chat =
+chatPanel : Bool -> Api.DemoConfig -> Model -> Int -> Chat -> Html Msg
+chatPanel authBusy config model index chat =
     let
         userTurns =
             chat.messages |> List.filter (\m -> m.role == "user") |> List.length
@@ -358,8 +553,11 @@ chatPanel authBusy config model chat =
         finished =
             turnsSpent || idledOut
     in
-    section [ class "demo-chat" ]
-        [ div [ class "demo-chat-head" ]
+    section [ class ("demo-box demo-chat demo-after-" ++ String.fromInt index) ]
+        [ div [ class "demo-badge-bar" ]
+            [ span [ class "demo-badge" ] [ text "DEMO — SIMULATED CHAT" ]
+            ]
+        , div [ class "demo-chat-head" ]
             [ div []
                 [ h2 [] [ text chat.persona.businessName ]
                 , div [ class "demo-chat-head-actions" ]
@@ -477,7 +675,7 @@ closingCta authBusy idledOut =
 
 howItWorks : Html Msg
 howItWorks =
-    section [ class "how-it-works" ]
+    section [ id "how-it-works", class "how-it-works" ]
         [ Ui.sectionTitle "How it works"
         , ul [ class "steps" ]
             [ step "color-bar-blue"
