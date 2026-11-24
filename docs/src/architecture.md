@@ -6,7 +6,7 @@
 
 All persistent state is stored in Cloudflare D1 (`migrations/0001_create_schema.sql`):
 
-- **No KV, no Durable Objects, no Queues** — burst debouncing, conversation sessions, rate limits, and billing ledgers all use atomic D1 queries.
+- **Single-database storage on Cloudflare D1** — burst debouncing, conversation sessions, rate limits, and billing ledgers all run on atomic D1 queries.
 - **Metadata-only `messages` table** — stores `channel`, `direction`, `sender`, `recipient`, `action_taken`, `conversation_id`, and `created_at`, never message bodies.
 
 ## Inbound Reply Pipeline
