@@ -78,6 +78,7 @@ invocation_logs = true
 # Optional overrides (defaults baked into the worker):
 #   AI_MODEL                   Workers AI reply model (default @cf/meta/llama-4-scout-17b-16e-instruct)
 #   AI_INJECTION_MODEL         Workers AI injection classifier (default @cf/meta/prompt-guard-2-86m)
+#   AI_DECISION_MODEL          Workers AI canned-match decision model (default @cf/meta/llama-3.1-8b-instruct-fast)
 #   AI_SAFETY_MODEL            Workers AI safety classifier (default @cf/meta/llama-guard-3-8b)
 #   DEV_MODE                   Set to "1" or "true" in local dev to stub AI/safety & enable /auth/dev-login
 # ============================================================================

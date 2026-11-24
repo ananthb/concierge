@@ -303,6 +303,7 @@ update msg model =
                                     , enabled = edit.reply.enabled
                                     , mode = edit.reply.mode
                                     , text = edit.reply.text
+                                    , matchRule = edit.reply.matchRule
                                     , botPrompt = edit.reply.botPrompt
                                     , waitSeconds = waitSecs
                                     }
@@ -863,14 +864,36 @@ accountCard model botPresets account =
                         }
                     , modePicker edit.reply
                     , if edit.reply.mode == "canned" then
-                        Ui.textarea
-                            { id = "reply-text-" ++ account.id
-                            , label = "Static reply message"
-                            , value = edit.reply.text
-                            , hint = "Sent word for word whenever a customer messages. Static replies are free."
-                            , rows = 4
-                            , onInput = \v -> SetEditReply (setText v edit.reply)
-                            }
+                        div []
+                            [ Ui.textarea
+                                { id = "reply-text-" ++ account.id
+                                , label = "Static reply message"
+                                , value = edit.reply.text
+                                , hint = "Sent word for word whenever a customer messages (or matches the rule below). Static replies are free."
+                                , rows = 4
+                                , onInput = \v -> SetEditReply (setText v edit.reply)
+                                }
+                            , div [ class "field" ]
+                                [ Html.label [ Html.Attributes.for ("match-rule-" ++ account.id) ]
+                                    [ text "Match rule (optional)" ]
+                                , Html.input
+                                    [ Html.Attributes.id ("match-rule-" ++ account.id)
+                                    , Html.Attributes.name ("match-rule-" ++ account.id)
+                                    , Html.Attributes.type_ "text"
+                                    , Html.Attributes.value edit.reply.matchRule
+                                    , Html.Attributes.placeholder "e.g. Customer asks for opening hours or address"
+                                    , Html.Attributes.maxlength 300
+                                    , Html.Events.onInput (\v -> SetEditReply (setMatchRule v edit.reply))
+                                    ]
+                                    []
+                                , p [ class "hint" ]
+                                    [ text
+                                        (String.fromInt (String.length edit.reply.matchRule)
+                                            ++ "/300 chars · If set, incoming messages are checked against this rule. Confident matches send the free static reply; uncertain messages fall back to AI generation (1 credit)."
+                                        )
+                                    ]
+                                ]
+                            ]
 
                       else
                         div []
@@ -995,6 +1018,11 @@ setEnabled enabled reply =
 setText : String -> Api.ReplyConfig -> Api.ReplyConfig
 setText txt reply =
     { reply | text = txt }
+
+
+setMatchRule : String -> Api.ReplyConfig -> Api.ReplyConfig
+setMatchRule rule reply =
+    { reply | matchRule = rule }
 
 
 setBotPrompt : String -> Api.ReplyConfig -> Api.ReplyConfig
