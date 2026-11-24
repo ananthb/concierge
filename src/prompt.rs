@@ -91,6 +91,9 @@ pub fn detect_and_strip_handoff(raw: &str) -> HandoffStripped {
 /// Maximum length (in Unicode scalar values) of a Reply Bot's single `"user"` prompt.
 pub const MAX_BOT_PROMPT: usize = 600;
 
+/// Maximum length (in Unicode scalar values) of a canned-reply match rule.
+pub const MAX_MATCH_RULE: usize = 300;
+
 /// Default `"user"` prompt for a new Reply Bot (Front Desk persona).
 pub const DEFAULT_BOT_PROMPT: &str = "You are a friendly neighborhood bakery front desk. Answer store hours (8am–8pm) and location briefly; hand off custom cake orders, prices, or complaints to a human right away.";
 

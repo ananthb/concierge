@@ -138,6 +138,10 @@ pub struct ReplyConfig {
     /// system prompt envelope when `response` is `ReplyResponse::Ai`).
     #[serde(default = "crate::prompt::default_bot_prompt")]
     pub bot_prompt: String,
+    /// Optional natural-language rule describing which inbound messages should
+    /// receive the static reply. When empty, all messages match.
+    #[serde(default)]
+    pub match_rule: String,
 }
 
 impl Default for ReplyConfig {
@@ -147,6 +151,7 @@ impl Default for ReplyConfig {
             response: default_response(),
             wait_seconds: default_wait_seconds(),
             bot_prompt: crate::prompt::default_bot_prompt(),
+            match_rule: String::new(),
         }
     }
 }
@@ -310,6 +315,8 @@ impl MessageDirection {
 pub enum MessageAction {
     /// Auto-reply sent.
     AutoReply,
+    /// Canned static reply sent (free).
+    CannedReply,
     /// Draft tripped the risk gate: holding sentence sent and tenant paged.
     HandedOff,
     /// Reply suppressed because the tenant had no remaining reply credits.
@@ -320,6 +327,7 @@ impl MessageAction {
     pub fn as_str(self) -> &'static str {
         match self {
             MessageAction::AutoReply => "auto_reply",
+            MessageAction::CannedReply => "canned_reply",
             MessageAction::HandedOff => "handed_off",
             MessageAction::NoCredits => "no_credits",
         }

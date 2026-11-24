@@ -25,6 +25,7 @@ pub struct ReplyView {
     pub enabled: bool,
     pub mode: &'static str,
     pub text: String,
+    pub match_rule: String,
     pub wait_seconds: u32,
     pub bot_prompt: String,
 }
@@ -90,6 +91,7 @@ impl From<&WhatsAppAccount> for AccountView {
                 enabled: a.auto_reply.enabled,
                 mode,
                 text,
+                match_rule: a.auto_reply.match_rule.clone(),
                 wait_seconds: a.auto_reply.wait_seconds,
                 bot_prompt: a.auto_reply.bot_prompt.clone(),
             },
@@ -174,6 +176,14 @@ pub async fn handle(mut req: Request, env: Env, rest: &[&str]) -> Result<Respons
                 bot_prompt_updated = true;
             }
 
+            if let Some(raw_rule) = reply_src.get("match_rule").and_then(|v| v.as_str()) {
+                let rule = raw_rule.trim().to_string();
+                if rule.chars().count() > crate::prompt::MAX_MATCH_RULE {
+                    return super::invalid("Match rule must be 300 characters or fewer.");
+                }
+                account.auto_reply.match_rule = rule;
+            }
+
             let mut need_ai_safety = false;
             if reply_src.get("mode").is_some() {
                 let mode = super::field(reply_src, "mode");
@@ -193,7 +203,13 @@ pub async fn handle(mut req: Request, env: Env, rest: &[&str]) -> Result<Respons
                             );
                         }
                         let content_hash = sha256_hex(&text);
-                        let verdict = safety::classify_text(&env, &text).await;
+                        let mut verdict = safety::classify_text(&env, &text).await;
+                        if matches!(verdict, safety::SafetyVerdict::Approved)
+                            && !account.auto_reply.match_rule.is_empty()
+                        {
+                            verdict =
+                                safety::classify_text(&env, &account.auto_reply.match_rule).await;
+                        }
                         account.auto_reply.response = ReplyResponse::Canned { text };
                         account.canned_safety = safety::verdict_to_state(verdict, content_hash);
                     }

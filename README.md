@@ -12,7 +12,7 @@ Automatic WhatsApp replies for small businesses. Answers in your voice with the 
 
 ## Features
 
-- **WhatsApp auto-reply**: inbound messages get a canned message or an AI reply via the Meta Business API and Embedded Signup. You keep your number; existing threads continue seamlessly.
+- **WhatsApp auto-reply**: inbound messages get a canned message (optionally gated by a natural-language match rule with AI fallback) or an AI reply via the Meta Business API and Embedded Signup. You keep your number; existing threads continue seamlessly.
 - **Single core persona**: built-in small-business core persona designed to answer briefly and hand off quickly. No persona builder, archetypes catalog, or custom prompts.
 - **Prompt Guard & Safety Vetting**: incoming messages are screened by `@cf/meta/prompt-guard-2-86m` for prompt injections. Business profiles and canned replies are vetted inline via `@cf/meta/llama-guard-3-8b`.
 - **Risk gate**: a draft that quotes an unauthorised price, makes a commitment, or strays past boundaries is withheld. The customer gets a holding sentence, the conversation enters handoff, and an alert email is sent to the tenant.
@@ -27,7 +27,7 @@ Automatic WhatsApp replies for small businesses. Answers in your voice with the 
 - **[Cloudflare Workers](https://workers.cloudflare.com/)** — Rust compiled to WebAssembly, serving a JSON API
 - **[Elm](https://elm-lang.org/)** — Frontend, compiled to a single `public/app.js`
 - **[Cloudflare D1](https://developers.cloudflare.com/d1/)** — Single SQLite database for all persistent state (tenants, sessions, WhatsApp accounts, onboarding state, conversation sessions, burst buffer, rate limits, metadata logs, and billing)
-- **[Cloudflare Workers AI](https://workers.cloudflare.com/)** — Reply generation (`@cf/meta/llama-4-scout-17b-16e-instruct`), prompt injection detection (`@cf/meta/prompt-guard-2-86m`), and inline safety vetting (`@cf/meta/llama-guard-3-8b`)
+- **[Cloudflare Workers AI](https://workers.cloudflare.com/)** — Reply generation (`@cf/meta/llama-4-scout-17b-16e-instruct`), canned-reply match decision (`@cf/meta/llama-3.1-8b-instruct-fast`), prompt injection detection (`@cf/meta/prompt-guard-2-86m`), and inline safety vetting (`@cf/meta/llama-guard-3-8b`)
 - Meta WhatsApp Business API & Embedded Signup
 - **[Razorpay](https://razorpay.com/)** — Prepaid credits payments
 

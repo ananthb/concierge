@@ -172,11 +172,14 @@ pub(crate) fn merge_inbound_batch(pending: &[InboundMessage]) -> Option<InboundM
 /// Handle auto-reply for an inbound message:
 ///   1. Load `ReplyConfig` + canned safety via `get_channel_reply_info`.
 ///   2. Skip if disabled.
-///   3. Gate on content safety (`profile_safety` for AI, `canned_safety` for Canned).
-///   4. Run prompt-injection scan via `@cf/meta/prompt-guard-2-86m`.
-///   5. Check conversation handoff state (`Silent` exits without spending a credit).
-///   6. For AI replies, deduct 1 credit (`billing::try_deduct`). Static (`Canned`) replies are free.
-///   7. Generate AI reply (or use Canned text), run handoff + risk gate, send reply.
+///   3. Run prompt-injection scan via `@cf/meta/prompt-guard-2-86m`.
+///   4. Decide canned vs AI: if `Canned` with a non-empty `match_rule`, check
+///      `ai::matches_canned_rule`; non-matches fall back to AI generation.
+///   5. Gate on content safety (`canned_safety` for canned, `profile_safety` for AI).
+///   6. Check conversation handoff state (`Silent` exits without spending a credit).
+///   7. For AI replies, deduct 1 credit (`billing::try_deduct`). Static (`Canned`) replies are free.
+///   8. Generate AI reply (or use Canned text), run handoff + risk gate, send reply,
+///      log `canned_reply` / `auto_reply`, and update the conversation session.
 ///      For AI replies, restore credit on AI failure, empty reply, or channel send failure.
 async fn handle_auto_reply(msg: &InboundMessage, db: &D1Database, env: &Env) -> Result<()> {
     let info = match get_channel_reply_info(db, &msg.channel, &msg.channel_account_id).await? {
@@ -184,32 +187,59 @@ async fn handle_auto_reply(msg: &InboundMessage, db: &D1Database, env: &Env) -> 
         _ => return Ok(()),
     };
     let config = info.config;
-    let is_ai = matches!(config.response, ReplyResponse::Ai);
+    let safe_body: String = msg.body.chars().take(1000).collect();
 
-    let effective_bot_prompt = if is_ai {
-        let prompt_hash = crate::helpers::sha256_hex(&config.bot_prompt);
-        if info.canned_safety.status == SafetyStatus::Rejected
-            && info.canned_safety.content_hash.as_deref() == Some(prompt_hash.as_str())
-        {
-            console_log!(
-                "Bot prompt rejected by safety (action_taken=unsafe_bot_prompt) for account {}, skipping reply",
-                msg.channel_account_id
-            );
-            return Ok(());
+    if ai::is_prompt_injection(env, &safe_body).await {
+        console_log!(
+            "Prompt injection detected from {} in tenant {}, skipping reply",
+            msg.sender,
+            msg.tenant_id
+        );
+        return Ok(());
+    }
+
+    let send_canned = match &config.response {
+        ReplyResponse::Ai => false,
+        ReplyResponse::Canned { .. } => {
+            if config.match_rule.trim().is_empty() {
+                true
+            } else {
+                ai::matches_canned_rule(env, &safe_body, &config.match_rule).await
+            }
         }
-        if info.canned_safety.is_approved_for(&config.bot_prompt)
-            || config.bot_prompt.trim().is_empty()
-            || config.bot_prompt.trim() == crate::prompt::DEFAULT_BOT_PROMPT
-        {
-            config.bot_prompt.as_str()
-        } else {
+    };
+    let use_ai = !send_canned;
+
+    let effective_bot_prompt = if use_ai {
+        if matches!(config.response, ReplyResponse::Ai) {
+            let prompt_hash = crate::helpers::sha256_hex(&config.bot_prompt);
+            if info.canned_safety.status == SafetyStatus::Rejected
+                && info.canned_safety.content_hash.as_deref() == Some(prompt_hash.as_str())
+            {
+                console_log!(
+                    "Bot prompt rejected by safety (action_taken=unsafe_bot_prompt) for account {}, skipping reply",
+                    msg.channel_account_id
+                );
+                return Ok(());
+            }
+            if info.canned_safety.is_approved_for(&config.bot_prompt)
+                || config.bot_prompt.trim().is_empty()
+                || config.bot_prompt.trim() == crate::prompt::DEFAULT_BOT_PROMPT
+            {
+                config.bot_prompt.as_str()
+            } else {
+                crate::prompt::DEFAULT_BOT_PROMPT
+            }
+        } else if config.bot_prompt.trim().is_empty() {
             crate::prompt::DEFAULT_BOT_PROMPT
+        } else {
+            config.bot_prompt.as_str()
         }
     } else {
         ""
     };
 
-    let onboarding = if is_ai {
+    let onboarding = if use_ai {
         let o = get_onboarding(db, &msg.tenant_id).await?;
         if !o.profile_safety.is_approved_for(&o.business.name) {
             console_log!(
@@ -232,17 +262,6 @@ async fn handle_auto_reply(msg: &InboundMessage, db: &D1Database, env: &Env) -> 
         None
     };
 
-    let safe_body: String = msg.body.chars().take(1000).collect();
-
-    if ai::is_prompt_injection(env, &safe_body).await {
-        console_log!(
-            "Prompt injection detected from {} in tenant {}, skipping reply",
-            msg.sender,
-            msg.tenant_id
-        );
-        return Ok(());
-    }
-
     let window = onboarding
         .as_ref()
         .map(|o| o.conversation.resolve())
@@ -255,19 +274,15 @@ async fn handle_auto_reply(msg: &InboundMessage, db: &D1Database, env: &Env) -> 
     }
 
     let conv_key = msg.conversation_key();
-    let existing_session = if is_ai {
-        get_conversation_session(
-            db,
-            &msg.tenant_id,
-            &msg.channel,
-            &msg.channel_account_id,
-            &conv_key,
-        )
-        .await
-        .unwrap_or(None)
-    } else {
-        None
-    };
+    let existing_session = get_conversation_session(
+        db,
+        &msg.tenant_id,
+        &msg.channel,
+        &msg.channel_account_id,
+        &conv_key,
+    )
+    .await
+    .unwrap_or(None);
 
     let conversation_ended = match existing_session.as_ref() {
         Some(s) => match age_minutes(&s.last_inbound_at) {
@@ -302,10 +317,8 @@ async fn handle_auto_reply(msg: &InboundMessage, db: &D1Database, env: &Env) -> 
         None => HandoffMode::None,
     };
 
-    if is_ai {
-        if let Err(e) = update_message_conversation_id(db, &msg.id, &conversation_id).await {
-            console_log!("Failed to stamp inbound conversation_id: {:?}", e);
-        }
+    if let Err(e) = update_message_conversation_id(db, &msg.id, &conversation_id).await {
+        console_log!("Failed to stamp inbound conversation_id: {:?}", e);
     }
 
     if matches!(handoff_mode, HandoffMode::Silent) {
@@ -341,12 +354,7 @@ async fn handle_auto_reply(msg: &InboundMessage, db: &D1Database, env: &Env) -> 
     let metered = tenant.plan.is_metered();
 
     // Deduct 1 credit BEFORE generating an AI reply. Static (Canned) replies are free.
-    let outbound_conversation_id: Option<&str> = if is_ai {
-        Some(conversation_id.as_str())
-    } else {
-        None
-    };
-    if is_ai && !billing::try_deduct(db, &msg.tenant_id, metered).await? {
+    if use_ai && !billing::try_deduct(db, &msg.tenant_id, metered).await? {
         console_log!(
             "Insufficient credits for tenant {}, skipping reply",
             msg.tenant_id
@@ -361,7 +369,7 @@ async fn handle_auto_reply(msg: &InboundMessage, db: &D1Database, env: &Env) -> 
             &msg.tenant_id,
             &msg.channel_account_id,
             Some(MessageAction::NoCredits),
-            outbound_conversation_id,
+            Some(conversation_id.as_str()),
         )
         .await
         {
@@ -379,53 +387,55 @@ async fn handle_auto_reply(msg: &InboundMessage, db: &D1Database, env: &Env) -> 
         window.max_history_messages,
     );
 
-    let raw_reply = match &config.response {
-        ReplyResponse::Canned { text } => text.clone(),
-        ReplyResponse::Ai => {
-            let brand_name = onboarding
-                .as_ref()
-                .map(|o| o.business.name.as_str())
-                .unwrap_or("");
-            let system_prompt = match handoff_mode {
-                HandoffMode::Silent => unreachable!("Silent handoff returned earlier"),
-                HandoffMode::HoldingPattern => {
-                    crate::prompt::wrap(crate::prompt::HOLDING_PATTERN_MIDDLE)
-                }
-                HandoffMode::None => {
-                    crate::prompt::compose_bot_system_prompt(brand_name, effective_bot_prompt)
-                }
-            };
-
-            let history: Vec<(String, String)> = session_messages
-                .iter()
-                .map(|m| (m.role.as_wire().to_string(), m.content.clone()))
-                .collect();
-
-            match ai::generate_chat_reply(env, &system_prompt, &history).await {
-                Ok(r) => r,
-                Err(e) => {
-                    console_log!("AI auto-reply error: {:?}", e);
-                    let _ = billing::restore_credit(db, &msg.tenant_id, metered).await;
-                    return Ok(());
-                }
+    let (mut reply, mut new_handoff, mut risk_reason) = if send_canned {
+        (config.canned_text().to_string(), false, None)
+    } else {
+        let brand_name = onboarding
+            .as_ref()
+            .map(|o| o.business.name.as_str())
+            .unwrap_or("");
+        let system_prompt = match handoff_mode {
+            HandoffMode::Silent => unreachable!("Silent handoff returned earlier"),
+            HandoffMode::HoldingPattern => {
+                crate::prompt::wrap(crate::prompt::HOLDING_PATTERN_MIDDLE)
             }
+            HandoffMode::None => {
+                crate::prompt::compose_bot_system_prompt(brand_name, effective_bot_prompt)
+            }
+        };
+
+        let history: Vec<(String, String)> = session_messages
+            .iter()
+            .map(|m| (m.role.as_wire().to_string(), m.content.clone()))
+            .collect();
+
+        let raw_reply = match ai::generate_chat_reply(env, &system_prompt, &history).await {
+            Ok(r) => r,
+            Err(e) => {
+                console_log!("AI auto-reply error: {:?}", e);
+                let _ = billing::restore_credit(db, &msg.tenant_id, metered).await;
+                return Ok(());
+            }
+        };
+
+        let stripped = crate::prompt::detect_and_strip_handoff(&raw_reply);
+        if stripped.reply.is_empty() {
+            let _ = billing::restore_credit(db, &msg.tenant_id, metered).await;
+            return Ok(());
         }
+        (
+            stripped.reply,
+            stripped.handoff && matches!(handoff_mode, HandoffMode::None),
+            None,
+        )
     };
 
-    let stripped = crate::prompt::detect_and_strip_handoff(&raw_reply);
-    let mut reply = stripped.reply;
-    let mut new_handoff = stripped.handoff && matches!(handoff_mode, HandoffMode::None);
-
     if reply.is_empty() {
-        if is_ai {
-            let _ = billing::restore_credit(db, &msg.tenant_id, metered).await;
-        }
         return Ok(());
     }
 
     let in_handoff_mode = matches!(handoff_mode, HandoffMode::HoldingPattern);
-    let mut risk_reason = None;
-    if is_ai && !in_handoff_mode && !new_handoff {
+    if use_ai && !in_handoff_mode && !new_handoff {
         if let Some(reason) = crate::risk::signal(&reply) {
             console_log!(
                 "Risk gate withheld a draft for tenant={} sender={}: {}",
@@ -457,12 +467,17 @@ async fn handle_auto_reply(msg: &InboundMessage, db: &D1Database, env: &Env) -> 
 
     if let Err(e) = channel::send_reply(env, msg, &reply).await {
         console_log!("Auto-reply send error: {:?}", e);
-        if is_ai {
+        if use_ai {
             let _ = billing::restore_credit(db, &msg.tenant_id, metered).await;
         }
         return Ok(());
     }
 
+    let action = if send_canned {
+        MessageAction::CannedReply
+    } else {
+        MessageAction::AutoReply
+    };
     if let Err(e) = save_message(
         db,
         &generate_id(),
@@ -472,19 +487,15 @@ async fn handle_auto_reply(msg: &InboundMessage, db: &D1Database, env: &Env) -> 
         &msg.sender,
         &msg.tenant_id,
         &msg.channel_account_id,
-        Some(MessageAction::AutoReply),
-        outbound_conversation_id,
+        Some(action),
+        Some(conversation_id.as_str()),
     )
     .await
     {
         console_log!("Failed to log outbound message: {:?}", e);
     }
 
-    if !is_ai {
-        return Ok(());
-    }
-
-    let mut session_handoff = if new_handoff {
+    let mut session_handoff = if use_ai && new_handoff {
         Some(HandoffState {
             signaled_at: now_iso.clone(),
             notified: false,
@@ -493,7 +504,7 @@ async fn handle_auto_reply(msg: &InboundMessage, db: &D1Database, env: &Env) -> 
         active_handoff
     };
 
-    if new_handoff {
+    if use_ai && new_handoff {
         if let Err(e) = crate::escalations::notify_human_requested(
             env,
             db,

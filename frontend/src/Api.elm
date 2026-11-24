@@ -613,6 +613,7 @@ type alias ReplyConfig =
     { enabled : Bool
     , mode : String
     , text : String
+    , matchRule : String
     , botPrompt : String
     , waitSeconds : Int
     }
@@ -654,7 +655,7 @@ botPresetDecoder =
 
 updateWhatsApp :
     String
-    -> { name : String, enabled : Bool, mode : String, text : String, botPrompt : String, waitSeconds : Int }
+    -> { name : String, enabled : Bool, mode : String, text : String, matchRule : String, botPrompt : String, waitSeconds : Int }
     -> (Data WhatsAppAccount -> msg)
     -> Cmd msg
 updateWhatsApp id args =
@@ -664,6 +665,7 @@ updateWhatsApp id args =
             , ( "enabled", E.bool args.enabled )
             , ( "mode", E.string args.mode )
             , ( "text", E.string args.text )
+            , ( "match_rule", E.string args.matchRule )
             , ( "bot_prompt", E.string args.botPrompt )
             , ( "wait_seconds", E.int args.waitSeconds )
             ]
@@ -688,10 +690,11 @@ whatsAppDecoder =
 
 replyDecoder : Decoder ReplyConfig
 replyDecoder =
-    D.map5 ReplyConfig
+    D.map6 ReplyConfig
         (D.field "enabled" D.bool)
         (D.field "mode" D.string)
         (D.field "text" D.string)
+        (D.oneOf [ D.field "match_rule" D.string, D.succeed "" ])
         (D.field "bot_prompt" D.string)
         (D.field "wait_seconds" D.int)
 
