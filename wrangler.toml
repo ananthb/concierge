@@ -49,11 +49,11 @@ name = "EMAIL"
 
 [vars]
 ENVIRONMENT = "production"
+PUBLIC_BASE_URL = "https://replybots.io"
+EMAIL_DOMAIN = "replybots.io"
 
-# These are injected at deploy time from build environment variables:
-#   PUBLIC_BASE_URL            Primary site URL, e.g. https://replybots.io
-#   EMAIL_DOMAIN               Domain outbound handoff emails are sent from, e.g. replybots.io
-#                              (optional — no MX needed, nothing received here)
+# These non-secret IDs are injected at deploy time from build environment variables
+# (or can also be added to [vars] above):
 #   WHATSAPP_WABA_ID           Fallback WhatsApp Business Account ID
 #   WHATSAPP_SIGNUP_CONFIG_ID  Meta Embedded Signup config ID
 

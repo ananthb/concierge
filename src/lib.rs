@@ -129,18 +129,6 @@ async fn handle_request(req: Request, env: Env, ctx: &Context) -> Result<Respons
     let path = url.path();
     let method = req.method();
 
-    let public_base = env
-        .var("PUBLIC_BASE_URL")
-        .map(|v| v.to_string())
-        .unwrap_or_default();
-    if public_base.is_empty() {
-        console_log!("PUBLIC_BASE_URL is not set");
-        return Response::error(
-            "Service unavailable: PUBLIC_BASE_URL is not configured",
-            503,
-        );
-    }
-
     let host = url.host_str().unwrap_or("");
     let req_base = format!("{}://{}", url.scheme(), host);
 
@@ -166,8 +154,23 @@ async fn handle_request(req: Request, env: Env, ctx: &Context) -> Result<Respons
         "/logo-192.png" => return serve_png(LOGO_192),
         "/logo-512.png" => return serve_png(LOGO_512),
         "/mstile-150x150.png" => return serve_png(MSTILE_150),
-        "/health" => return handlers::health::handle_health(req, env).await,
         _ => {}
+    }
+
+    let public_base = env
+        .var("PUBLIC_BASE_URL")
+        .map(|v| v.to_string())
+        .unwrap_or_default();
+    if public_base.is_empty() {
+        console_log!("PUBLIC_BASE_URL is not set");
+        return Response::error(
+            "Service unavailable: PUBLIC_BASE_URL is not configured",
+            503,
+        );
+    }
+
+    if path == "/health" {
+        return handlers::health::handle_health(req, env).await;
     }
 
     if path == "/api" || path.starts_with("/api/") {

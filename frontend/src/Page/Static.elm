@@ -19,7 +19,7 @@ pricing opts rates =
     div [ class "page page-pricing" ]
         [ h1 [] [ text "Pay per reply, nothing else" ]
         , p [ class "page-sub" ]
-            [ text "Prepaid credits only — 1 credit = 1 reply (static or AI), no subscriptions, no free trials, top up anytime with Razorpay." ]
+            [ text "Prepaid credits only — 1 credit = 1 reply (static or AI), no subscriptions, no free trials, top up anytime." ]
         , section [ class "price-cards" ]
             [ Ui.remote rates <|
                 \p_ ->
@@ -39,7 +39,7 @@ pricing opts rates =
                 \p_ ->
                     p []
                         [ text
-                            ("Top up anytime in your dashboard with Razorpay, starting from "
+                            ("Top up anytime in your dashboard, starting from "
                                 ++ Format.count "en-IN" p_.minCredits
                                 ++ " credits up to "
                                 ++ Format.count "en-IN" p_.maxCredits
@@ -93,8 +93,8 @@ features opts =
                 "Every reply passes through Cloudflare AI safety and prompt-injection guardrails designed to stop off-topic drift and unauthorized promises."
             , feature "Metadata-only privacy"
                 "Customer message text passes through in memory to produce a reply and is never stored in our database — only channel, direction, sender, recipient, and timestamp are kept."
-            , feature "Self-service Razorpay prepaid credits"
-                "Prepaid credits only (1 credit = 1 reply). Buy what you need when you need it with Razorpay — no subscriptions or lock-in."
+            , feature "Self-service prepaid credits"
+                "Prepaid credits only (1 credit = 1 reply). Buy what you need when you need it — no subscriptions or lock-in."
             ]
         , div [ class "page-cta" ]
             [ button

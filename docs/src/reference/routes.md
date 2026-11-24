@@ -28,7 +28,6 @@ Static files in `public/` are served directly by Cloudflare's `[assets]` edge la
 - `/logo-192.png`
 - `/logo-512.png`
 - `/mstile-150x150.png`
-- `/health`
 
 ## JSON API (`/api/*`)
 
