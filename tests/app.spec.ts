@@ -107,7 +107,7 @@ test.describe('shell', () => {
 });
 
 test.describe('prerendered pages', () => {
-  const STATIC = ['/', '/pricing', '/features', '/terms', '/privacy'];
+  const STATIC = ['/', '/demo', '/terms', '/privacy'];
 
   for (const path of STATIC) {
     test(`${path} carries its copy without JavaScript`, async ({ request }) => {
@@ -129,9 +129,9 @@ test.describe('prerendered pages', () => {
       (window as unknown as { __stillHere: boolean }).__stillHere = true;
     });
 
-    await page.locator('.footer-links a[href="/features"]').click();
+    await page.locator('.footer-links a[href="/demo"]').click();
     await expect(page.locator('main.site-main').getByRole('heading', { level: 1 })).toHaveText(
-      /Built for small businesses on WhatsApp/,
+      /Live demo/,
     );
 
     const stillHere = await page.evaluate(
@@ -143,8 +143,7 @@ test.describe('prerendered pages', () => {
 
 test.describe('routing', () => {
   const routes: Array<[string, string]> = [
-    ['/pricing', 'Pay per reply, nothing else'],
-    ['/features', 'Built for small businesses on WhatsApp'],
+    ['/demo', 'Live demo'],
     ['/terms', 'Terms of Service'],
     ['/privacy', 'Privacy Policy'],
     ['/login', 'Sign in to replybots'],
@@ -165,8 +164,8 @@ test.describe('routing', () => {
       (window as unknown as { __stillHere: boolean }).__stillHere = true;
     });
 
-    await page.locator('.footer-links a[href="/pricing"]').click();
-    await expect(app(page).getByRole('heading', { name: /Pay per reply, nothing else/ })).toBeVisible();
+    await page.locator('.footer-links a[href="/demo"]').click();
+    await expect(app(page).getByRole('heading', { name: /Live demo/ })).toBeVisible();
 
     const stillHere = await page.evaluate(
       () => (window as unknown as { __stillHere?: boolean }).__stillHere === true,
@@ -177,10 +176,8 @@ test.describe('routing', () => {
   test('the back button returns to the previous route', async ({ page }) => {
     await page.goto('/');
     await waitForBoot(page);
-    await page.locator('.footer-links a[href="/features"]').click();
-    await expect(
-      app(page).getByRole('heading', { name: /Built for small businesses on WhatsApp/ }),
-    ).toBeVisible();
+    await page.locator('.footer-links a[href="/demo"]').click();
+    await expect(app(page).getByRole('heading', { name: /Live demo/ })).toBeVisible();
     await page.goBack();
     await expect(app(page).locator('.landing')).toBeVisible();
   });
@@ -196,16 +193,16 @@ test.describe('pricing', () => {
     const bootstrap = await page.request.get('/api/bootstrap');
     const { pricing } = await bootstrap.json();
 
-    await page.goto('/pricing');
-    await expect(app(page).getByRole('heading', { name: /Pay per reply, nothing else/ })).toBeVisible();
+    await page.goto('/#pricing');
+    await expect(app(page).locator('#pricing')).toBeVisible();
 
     for (const rate of pricing.currencies) {
-      await expect(app(page).getByRole('heading', { name: rate.code })).toBeVisible();
+      await expect(app(page).locator('#pricing').getByRole('heading', { name: rate.code })).toBeVisible();
     }
   });
 
   test('Indian amounts use lakh grouping', async ({ page }) => {
-    await page.goto('/pricing');
+    await page.goto('/#pricing');
     const body = await app(page).textContent();
     expect(body).not.toMatch(/₹1,000,000/);
   });
@@ -216,7 +213,7 @@ test.describe('demo chat', () => {
     const boot = await (await page.request.get('/api/bootstrap')).json();
     test.skip(!boot.demo.enabled || boot.demo.personas.length === 0, 'demo is disabled');
 
-    await page.goto('/');
+    await page.goto('/demo');
     const firstPersona = page.locator('.persona-btn').first();
     await expect(firstPersona).toBeVisible();
     await firstPersona.click();
@@ -242,7 +239,7 @@ test.describe('demo chat', () => {
     const boot = await (await page.request.get('/api/bootstrap')).json();
     test.skip(!boot.demo.enabled || boot.demo.personas.length === 0, 'demo is disabled');
 
-    await page.goto('/');
+    await page.goto('/demo');
     await page.locator('.persona-btn').first().click();
     await expect(page.locator('.demo-composer button[type="submit"]')).toBeDisabled();
   });
@@ -253,9 +250,10 @@ test.describe('demo chat', () => {
 
     await page.goto('/');
     await expect(page.locator('#how-it-works')).toBeVisible();
+    await expect(page.locator('#features')).toBeVisible();
     await expect(page.locator('#pricing')).toBeVisible();
-    await expect(page.locator('#demo')).toBeVisible();
 
+    await page.goto('/demo');
     const firstPersona = page.locator('.persona-btn').first();
     await firstPersona.click();
     await expect(firstPersona).toHaveClass(/is-active/);

@@ -58,8 +58,7 @@ Handled by `is_app_route` in `src/lib.rs` (plus `/wizard/*`):
 
 - `/`
 - `/index.html`
-- `/pricing`
-- `/features`
+- `/demo`
 - `/terms`
 - `/privacy`
 - `/login`

@@ -327,6 +327,9 @@ enterRoute route model =
         Route.Landing ->
             ( { settled | page = LandingPage (Landing.init model.reducedMotion) }, Cmd.none )
 
+        Route.Demo ->
+            ( { settled | page = LandingPage (Landing.init model.reducedMotion) }, Cmd.none )
+
         Route.Wizard ->
             case model.session of
                 Nothing ->
@@ -453,11 +456,8 @@ title route =
         Route.Landing ->
             "replybots — automatic WhatsApp replies for small businesses"
 
-        Route.Pricing ->
-            "Pricing — replybots"
-
-        Route.Features ->
-            "Features — replybots"
+        Route.Demo ->
+            "Live demo — replybots"
 
         Route.Terms ->
             "Terms of Service — replybots"
@@ -487,16 +487,8 @@ content model =
                 , busy = model.authBusy
                 , error = model.authError
                 }
-
-        ctaOpts =
-            { onLogin = StartWhatsAppLogin
-            , busy = model.authBusy
-            }
     in
     case model.route of
-        Route.Features ->
-            Static.features ctaOpts
-
         Route.Terms ->
             Static.terms
 
@@ -509,8 +501,18 @@ content model =
         Route.NotFound ->
             Static.notFound
 
-        Route.Pricing ->
-            Static.pricing ctaOpts (RemoteData.map .pricing model.boot)
+        Route.Demo ->
+            case model.page of
+                LandingPage landing ->
+                    Html.map LandingMsg
+                        (Landing.demoPage
+                            model.authBusy
+                            (RemoteData.map .demo model.boot)
+                            landing
+                        )
+
+                _ ->
+                    Ui.spinner
 
         Route.Landing ->
             case model.page of

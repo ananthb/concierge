@@ -43,8 +43,7 @@ type Route = { path: string; file: string; ready: string };
 
 const ROUTES: Route[] = [
   { path: '/', file: 'index.html', ready: '.landing .hero h1' },
-  { path: '/pricing', file: 'pricing.html', ready: '.page-pricing h1' },
-  { path: '/features', file: 'features.html', ready: '.page-features h1' },
+  { path: '/demo', file: 'demo.html', ready: '.page-demo h1' },
   { path: '/terms', file: 'terms.html', ready: '.page-legal h1' },
   { path: '/privacy', file: 'privacy.html', ready: '.page-legal h1' },
 ];

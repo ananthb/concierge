@@ -42,6 +42,9 @@
 }
 
 @media (max-width:720px) {
+  .site-header { gap: 12px; }
+  .site-header .site-nav { gap: 2px; }
+  .nav-link { padding: 6px 7px; font-size: 12.5px; }
   .landing { gap: 36px; }
   .landing, .dashboard, .page { padding-top: 28px; padding-bottom: 48px; }
   .wizard { padding-top: 24px; }

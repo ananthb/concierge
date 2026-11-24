@@ -111,8 +111,7 @@ fn is_app_route(path: &str) -> bool {
     matches!(
         path,
         "/" | "/index.html"
-            | "/pricing"
-            | "/features"
+            | "/demo"
             | "/terms"
             | "/privacy"
             | "/login"
@@ -135,14 +134,13 @@ async fn handle_request(req: Request, env: Env, ctx: &Context) -> Result<Respons
     match path {
         "/robots.txt" => {
             let body = format!(
-                "User-agent: *\nAllow: /\nAllow: /features\nAllow: /pricing\nAllow: /terms\nAllow: /privacy\nDisallow: /api\nDisallow: /dashboard\nDisallow: /wizard\nDisallow: /auth\nDisallow: /webhook\nDisallow: /whatsapp\n\nSitemap: {req_base}/sitemap.txt\n"
+                "User-agent: *\nAllow: /\nAllow: /demo\nAllow: /terms\nAllow: /privacy\nDisallow: /api\nDisallow: /dashboard\nDisallow: /wizard\nDisallow: /auth\nDisallow: /webhook\nDisallow: /whatsapp\n\nSitemap: {req_base}/sitemap.txt\n"
             );
             return serve_text(&body, "text/plain");
         }
         "/sitemap.txt" => {
-            let body = format!(
-                "{req_base}/\n{req_base}/features\n{req_base}/pricing\n{req_base}/terms\n{req_base}/privacy\n"
-            );
+            let body =
+                format!("{req_base}/\n{req_base}/demo\n{req_base}/terms\n{req_base}/privacy\n");
             return serve_text(&body, "text/plain");
         }
         "/logo.svg" => return serve_text(LOGO_SVG, "image/svg+xml"),
@@ -155,6 +153,12 @@ async fn handle_request(req: Request, env: Env, ctx: &Context) -> Result<Respons
         "/logo-512.png" => return serve_png(LOGO_512),
         "/mstile-150x150.png" => return serve_png(MSTILE_150),
         _ => {}
+    }
+
+    if (path == "/api/bootstrap" && method == Method::Get)
+        || (path == "/api/demo/chat" && method == Method::Post)
+    {
+        return api::handle(req, env, path).await;
     }
 
     let public_base = env

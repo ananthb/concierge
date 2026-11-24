@@ -268,10 +268,6 @@ const PUBLIC_SHOTS: Array<{
   { name: 'home-mobile.png', path: '/', wait: '.landing', viewport: MOBILE },
   { name: 'login.png', path: '/login', wait: '.page-login', viewport: DESKTOP },
   { name: 'login-mobile.png', path: '/login', wait: '.page-login', viewport: MOBILE },
-  { name: 'features.png', path: '/features', wait: '.page-features', viewport: DESKTOP },
-  { name: 'features-mobile.png', path: '/features', wait: '.page-features', viewport: MOBILE },
-  { name: 'pricing.png', path: '/pricing', wait: '.page-pricing', viewport: DESKTOP },
-  { name: 'pricing-mobile.png', path: '/pricing', wait: '.page-pricing', viewport: MOBILE },
   { name: 'terms.png', path: '/terms', wait: '.page-legal', viewport: DESKTOP },
   { name: 'terms-mobile.png', path: '/terms', wait: '.page-legal', viewport: MOBILE },
   { name: 'privacy.png', path: '/privacy', wait: '.page-legal', viewport: DESKTOP },
@@ -297,7 +293,7 @@ const DEMO_REPLY =
 async function openDemoConversation(page: import('@playwright/test').Page) {
   await stubPublic(page);
   await stub(page, '**/api/demo/chat', { reply: DEMO_REPLY, handed_off: false });
-  await page.goto('/');
+  await page.goto('/demo');
   await page.locator('.persona-btn').first().click();
   await page.locator('#demo-input').fill('Are you open on Sundays?');
   await page.locator('.demo-composer button[type="submit"]').click();
@@ -373,10 +369,8 @@ test('capture dashboard-mobile.png', async ({ page }) => {
 // ── CSS coverage checks ────────────────────────────────────────────────
 
 const STRUCTURAL = new Set([
-  'demo-picker',
   'how-it-works',
-  'page-features',
-  'page-pricing',
+  'page-demo',
 ]);
 
 async function unstyledClasses(page: import('@playwright/test').Page): Promise<string[]> {
@@ -432,7 +426,7 @@ test('the demo conversation has a rule for every class it renders', async ({ pag
   await expectFullyStyled(page);
 });
 
-for (const path of ['/pricing', '/features', '/terms', '/privacy']) {
+for (const path of ['/demo', '/terms', '/privacy']) {
   test(`${path} has a rule for every class it renders`, async ({ page }) => {
     await stubPublic(page);
     await page.goto(path);

@@ -1,4 +1,4 @@
-module Page.Landing exposing (Model, Msg(..), init, subscriptions, update, view)
+module Page.Landing exposing (Model, Msg(..), demoPage, init, subscriptions, update, view)
 
 {-| The landing page and the interactive WhatsApp demo.
 
@@ -335,17 +335,8 @@ view authBusy pricing demo model =
     div [ class "landing" ]
         [ hero authBusy demo model
         , howItWorks
+        , featuresSection
         , pricingSection pricing
-        , case demo of
-            Success config ->
-                if config.enabled && not (List.isEmpty config.personas) then
-                    demoSection authBusy config model
-
-                else
-                    text ""
-
-            _ ->
-                text ""
         ]
 
 
@@ -417,13 +408,44 @@ hero authBusy demo model =
                     )
                 ]
             , if demoEnabled then
-                Html.a [ Html.Attributes.href "#demo", class "btn btn-secondary btn-lg" ]
+                Html.a [ Route.href Route.Demo, class "btn btn-secondary btn-lg" ]
                     [ text "Try the demo" ]
 
               else
                 Html.a [ Html.Attributes.href "#pricing", class "btn btn-secondary btn-lg" ]
                     [ text "See pricing" ]
             ]
+        ]
+
+
+featuresSection : Html Msg
+featuresSection =
+    section [ id "features", class "landing-features" ]
+        [ Ui.sectionTitle "Features"
+        , div [ class "feature-list" ]
+            [ featureCard "Static or AI quick-handoff replies"
+                "Choose a fixed static message or let replybots's built-in front-desk assistant answer briefly on your WhatsApp Business number."
+            , featureCard "Fast human handoff + email alert"
+                "The moment a customer asks for a quote, a commitment, or personal attention, replybots hands off cleanly and optionally emails you so you can step in."
+            , featureCard "Burst message batching"
+                "Wait 0 to 30 seconds for customers who send multiple short messages in a row, so they get one coherent reply instead of three."
+            , featureCard "Conversation session window"
+                "Configure the idle gap, handoff cooldown, and recent message context so threads stay relevant without repeating stale history."
+            , featureCard "Cloudflare AI safety & guardrails"
+                "Every reply passes through Cloudflare AI safety and prompt-injection guardrails designed to stop off-topic drift and unauthorized promises."
+            , featureCard "Metadata-only privacy"
+                "Customer message text passes through in memory to produce a reply and is never stored in our database — only channel, direction, sender, recipient, and timestamp are kept."
+            , featureCard "Self-service prepaid credits"
+                "Prepaid credits only (1 credit = 1 reply). Buy what you need when you need it — no subscriptions or lock-in."
+            ]
+        ]
+
+
+featureCard : String -> String -> Html Msg
+featureCard title body =
+    div [ class "feature" ]
+        [ h3 [] [ text title ]
+        , p [] [ text body ]
         ]
 
 
@@ -446,16 +468,17 @@ pricingSection pricing =
                 [ text
                     (case pricing of
                         Success p_ ->
-                            "Top up anytime from "
+                            "Top up anytime in your dashboard ("
                                 ++ Format.count "en-IN" p_.minCredits
                                 ++ " to "
                                 ++ Format.count "en-IN" p_.maxCredits
-                                ++ " credits per order."
+                                ++ " credits per order)."
 
                         _ ->
-                            "Top up anytime in your dashboard — purchased credits never expire."
+                            "Top up anytime in your dashboard."
                     )
                 ]
+            , li [] [ text "Purchased credits never expire." ]
             ]
         ]
 
@@ -470,8 +493,30 @@ landingRateCard ( code, unitPriceMilli ) =
         ]
 
 
-demoSection : Bool -> Api.DemoConfig -> Model -> Html Msg
-demoSection authBusy config model =
+demoPage : Bool -> Api.Data Api.DemoConfig -> Model -> Html Msg
+demoPage authBusy demo model =
+    div [ class "page page-demo" ]
+        [ h1 [] [ text "Live demo" ]
+        , p [ class "demo-lead" ]
+            [ text "Pick a bot persona below to test a simulated WhatsApp chat." ]
+        , case demo of
+            Success config ->
+                if config.enabled && not (List.isEmpty config.personas) then
+                    personaPicker authBusy config model
+
+                else
+                    p [ class "muted" ] [ text "The live demo is currently unavailable." ]
+
+            Loading ->
+                Ui.spinner
+
+            _ ->
+                text ""
+        ]
+
+
+personaPicker : Bool -> Api.DemoConfig -> Model -> Html Msg
+personaPicker authBusy config model =
     let
         selectedId =
             Maybe.map (.persona >> .id) model.chat
@@ -487,21 +532,16 @@ demoSection authBusy config model =
                             |> Maybe.map (\( idx, _ ) -> ( idx, chat ))
                     )
     in
-    section [ id "demo", class "demo-picker" ]
-        [ Ui.sectionTitle "Live demo"
-        , p [ class "demo-lead" ]
-            [ text "Pick a bot persona below to test a simulated WhatsApp chat." ]
-        , div [ class "persona-demo-wrap" ]
-            (List.indexedMap (personaBtn selectedId) config.personas
-                ++ [ case selectedWithIndex of
-                        Just ( idx, chat ) ->
-                            chatPanel authBusy config model idx chat
+    div [ class "persona-demo-wrap" ]
+        (List.indexedMap (personaBtn selectedId) config.personas
+            ++ [ case selectedWithIndex of
+                    Just ( idx, chat ) ->
+                        chatPanel authBusy config model idx chat
 
-                        Nothing ->
-                            text ""
-                   ]
-            )
-        ]
+                    Nothing ->
+                        text ""
+               ]
+        )
 
 
 personaBtn : Maybe String -> Int -> Api.DemoPersona -> Html Msg

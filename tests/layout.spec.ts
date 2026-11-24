@@ -18,7 +18,7 @@ import { checkLayout } from './_helpers/layout';
 const WIDTHS = [320, 360, 375, 414, 601, 700, 768, 1024];
 // The operator panel used to be swept here too. It's API-only now, so
 // there's no markup to measure.
-const PATHS = ['/', '/features', '/pricing', '/login', '/terms', '/privacy'];
+const PATHS = ['/', '/demo', '/login', '/terms', '/privacy'];
 
 // Each test sets its own viewport, so we don't actually depend on project-
 // level viewport defaults. The mobile project ignores this file via

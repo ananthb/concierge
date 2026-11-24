@@ -219,19 +219,11 @@ open their dashboard — is a button and stays visible at every width.
 -}
 header : Maybe Api.Session -> Html msg
 header session =
-    Html.header [ class "site-header" ]
-        [ a [ Route.href Route.Landing, class "brand" ]
-            [ Html.img [ Html.Attributes.src "/logo.svg", Html.Attributes.alt "", class "brand-mark" ] []
-            , span [] [ text "replybots" ]
-            ]
-        , nav [ class "site-nav" ]
-            (case session of
+    let
+        ctaLink =
+            case session of
                 Nothing ->
-                    [ anchorNavLink "/#how-it-works" "How it works"
-                    , anchorNavLink "/#pricing" "Pricing"
-                    , anchorNavLink "/#demo" "Demo"
-                    , a [ Route.href Route.Login, class "btn btn-primary" ] [ text "Sign in" ]
-                    ]
+                    a [ Route.href Route.Login, class "btn btn-primary" ] [ text "Sign in" ]
 
                 Just s ->
                     let
@@ -242,12 +234,20 @@ header session =
                             else
                                 ( Route.Dashboard, "Dashboard" )
                     in
-                    [ anchorNavLink "/#how-it-works" "How it works"
-                    , anchorNavLink "/#pricing" "Pricing"
-                    , anchorNavLink "/#demo" "Demo"
-                    , a [ Route.href route, class "btn btn-primary" ] [ text label_ ]
-                    ]
-            )
+                    a [ Route.href route, class "btn btn-primary" ] [ text label_ ]
+    in
+    Html.header [ class "site-header" ]
+        [ a [ Route.href Route.Landing, class "brand" ]
+            [ Html.img [ Html.Attributes.src "/logo.svg", Html.Attributes.alt "", class "brand-mark" ] []
+            , span [] [ text "replybots" ]
+            ]
+        , nav [ class "site-nav" ]
+            [ anchorNavLink "/#how-it-works" "How it works"
+            , anchorNavLink "/#features" "Features"
+            , anchorNavLink "/#pricing" "Pricing"
+            , a [ Route.href Route.Demo, class "nav-link" ] [ text "Demo" ]
+            , ctaLink
+            ]
         ]
 
 
@@ -260,10 +260,7 @@ footer : Html msg
 footer =
     Html.footer [ class "site-footer" ]
         [ ul [ class "footer-links" ]
-            -- Features and Pricing are here as well as in the header, because
-            -- the header hides them on phones. See `header`.
-            [ li [] [ a [ Route.href Route.Features ] [ text "Features" ] ]
-            , li [] [ a [ Route.href Route.Pricing ] [ text "Pricing" ] ]
+            [ li [] [ a [ Route.href Route.Demo ] [ text "Demo" ] ]
             , li [] [ a [ Route.href Route.Terms ] [ text "Terms" ] ]
             , li [] [ a [ Route.href Route.Privacy ] [ text "Privacy" ] ]
             , li [] [ a [ href "https://replybots.dev" ] [ text "Docs" ] ]
