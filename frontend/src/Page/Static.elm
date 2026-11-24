@@ -1,126 +1,14 @@
-module Page.Static exposing (features, login, notFound, pricing, privacy, terms)
+module Page.Static exposing (login, notFound, privacy, terms)
 
-{-| Pages with no state of their own: marketing copy, the legal text, the
-sign-in screen, and the 404.
+{-| Pages with no state of their own: the legal text, the sign-in screen, and
+the 404.
 -}
 
-import Api
-import Dict
-import Format
-import Html exposing (Html, a, button, div, h1, h2, h3, li, p, section, text, ul)
+import Html exposing (Html, a, button, div, h1, h2, p, section, text)
 import Html.Attributes exposing (class, disabled, type_)
 import Html.Events exposing (onClick)
 import Route
 import Ui
-
-
-pricing : { onLogin : msg, busy : Bool } -> Api.Data Api.Pricing -> Html msg
-pricing opts rates =
-    div [ class "page page-pricing" ]
-        [ h1 [] [ text "Pay per reply, nothing else" ]
-        , p [ class "page-sub" ]
-            [ text "Prepaid credits only — 1 credit = 1 reply (static or AI), no subscriptions, no free trials, top up anytime." ]
-        , section [ class "price-cards" ]
-            [ Ui.remote rates <|
-                \p_ ->
-                    div [ class "price-cards__inner" ]
-                        (List.map (rateCard p_) (Dict.toList p_.unitPriceMilli))
-            ]
-        , section [ class "price-notes" ]
-            [ h2 [] [ text "How credits work" ]
-            , ul []
-                [ li [] [ text "Prepaid credits only — 1 credit = 1 WhatsApp reply (static or AI)." ]
-                , li [] [ text "No subscriptions, no per-seat fees, and no free trials." ]
-                , li [] [ text "A message replybots holds back — or if AI generation fails — is not charged." ]
-                , li [] [ text "Purchased credits do not expire." ]
-                ]
-            , h2 [] [ text "Topping up" ]
-            , Ui.remote rates <|
-                \p_ ->
-                    p []
-                        [ text
-                            ("Top up anytime in your dashboard, starting from "
-                                ++ Format.count "en-IN" p_.minCredits
-                                ++ " credits up to "
-                                ++ Format.count "en-IN" p_.maxCredits
-                                ++ " credits per order."
-                            )
-                        ]
-            ]
-        , div [ class "page-cta" ]
-            [ button
-                [ class "btn btn-primary btn-lg"
-                , type_ "button"
-                , disabled opts.busy
-                , onClick opts.onLogin
-                ]
-                [ text
-                    (if opts.busy then
-                        "Connecting…"
-
-                     else
-                        "Continue with WhatsApp"
-                    )
-                ]
-            ]
-        ]
-
-
-rateCard : Api.Pricing -> ( String, Int ) -> Html msg
-rateCard _ ( code, unitPriceMilli ) =
-    div [ class "price-card" ]
-        [ h3 [] [ text code ]
-        , p [ class "price" ]
-            [ text (Format.milliRate "en-IN" code unitPriceMilli) ]
-        , p [ class "muted" ] [ text "per reply (1 credit = 1 reply)" ]
-        ]
-
-
-features : { onLogin : msg, busy : Bool } -> Html msg
-features opts =
-    div [ class "page page-features" ]
-        [ h1 [] [ text "Built for small businesses on WhatsApp" ]
-        , section [ class "feature-list" ]
-            [ feature "Static or AI quick-handoff replies"
-                "Choose a fixed static message or let replybots's built-in front-desk assistant answer briefly on your WhatsApp Business number."
-            , feature "Fast human handoff + email alert"
-                "The moment a customer asks for a quote, a commitment, or personal attention, replybots hands off cleanly and optionally emails you so you can step in."
-            , feature "Burst message batching"
-                "Wait 0 to 30 seconds for customers who send multiple short messages in a row, so they get one coherent reply instead of three."
-            , feature "Conversation session window"
-                "Configure the idle gap, handoff cooldown, and recent message context so threads stay relevant without repeating stale history."
-            , feature "Cloudflare AI safety & guardrails"
-                "Every reply passes through Cloudflare AI safety and prompt-injection guardrails designed to stop off-topic drift and unauthorized promises."
-            , feature "Metadata-only privacy"
-                "Customer message text passes through in memory to produce a reply and is never stored in our database — only channel, direction, sender, recipient, and timestamp are kept."
-            , feature "Self-service prepaid credits"
-                "Prepaid credits only (1 credit = 1 reply). Buy what you need when you need it — no subscriptions or lock-in."
-            ]
-        , div [ class "page-cta" ]
-            [ button
-                [ class "btn btn-primary btn-lg"
-                , type_ "button"
-                , disabled opts.busy
-                , onClick opts.onLogin
-                ]
-                [ text
-                    (if opts.busy then
-                        "Connecting…"
-
-                     else
-                        "Continue with WhatsApp"
-                    )
-                ]
-            ]
-        ]
-
-
-feature : String -> String -> Html msg
-feature title body =
-    div [ class "feature" ]
-        [ h2 [] [ text title ]
-        , p [] [ text body ]
-        ]
 
 
 login : { onLogin : msg, busy : Bool, error : Maybe String } -> Html msg

@@ -15,8 +15,7 @@ import Url.Parser as Parser exposing ((</>), Parser, oneOf, s, top)
 
 type Route
     = Landing
-    | Pricing
-    | Features
+    | Demo
     | Terms
     | Privacy
     | Login
@@ -34,8 +33,7 @@ parser : Parser (Route -> a) a
 parser =
     oneOf
         [ Parser.map Landing top
-        , Parser.map Pricing (s "pricing")
-        , Parser.map Features (s "features")
+        , Parser.map Demo (s "demo")
         , Parser.map Terms (s "terms")
         , Parser.map Privacy (s "privacy")
         , Parser.map Login (s "login")
@@ -58,11 +56,8 @@ toPath route =
         Landing ->
             "/"
 
-        Pricing ->
-            "/pricing"
-
-        Features ->
-            "/features"
+        Demo ->
+            "/demo"
 
         Terms ->
             "/terms"

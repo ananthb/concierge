@@ -135,6 +135,7 @@
   font-size: 13px;
   font-weight: 500;
   text-decoration: none;
+  white-space: nowrap;
 }
 .nav-link:hover {
   background: var(--cream-2);
@@ -190,6 +191,7 @@
   color: var(--muted);
 }
 
+.landing-features,
 .landing-pricing { display: flex; flex-direction: column; gap: 16px; }
 .pricing-lead { margin: 0; font-size: 16px; line-height: 1.55; color: var(--ink-2); max-width: 60ch; }
 .pricing-rules {
@@ -603,7 +605,8 @@
 }
 .feature:nth-child(2n) { border-left-color: var(--emerald); }
 .feature:nth-child(3n) { border-left-color: var(--amber); }
-.feature h2 { margin: 0 0 8px; font-size: 17px; font-weight: 700; }
+.feature h2,
+.feature h3 { margin: 0 0 8px; font-size: 17px; font-weight: 700; }
 .feature p { margin: 0; color: var(--muted); line-height: 1.65; }
 
 .page-cta { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }

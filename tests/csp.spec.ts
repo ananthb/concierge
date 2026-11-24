@@ -23,7 +23,7 @@ import { test, expect } from './_helpers/fixtures';
 const WORKER_PAGES = ['/wizard', '/dashboard'];
 
 /** Prerendered static files, served without the Worker running. */
-const STATIC_PAGES = ['/', '/pricing', '/features', '/terms', '/privacy'];
+const STATIC_PAGES = ['/', '/demo', '/terms', '/privacy'];
 
 const ALL_PAGES = [...STATIC_PAGES, ...WORKER_PAGES];
 

@@ -52,10 +52,7 @@
 /
   Cache-Control: public, max-age=0, must-revalidate
 
-/pricing
-  Cache-Control: public, max-age=0, must-revalidate
-
-/features
+/demo
   Cache-Control: public, max-age=0, must-revalidate
 
 /terms
