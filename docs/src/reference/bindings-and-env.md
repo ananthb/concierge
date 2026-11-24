@@ -18,8 +18,6 @@ Worker name: `replybots` (compatibility date `2024-01-01`).
 Default values in `wrangler.toml`:
 
 - `ENVIRONMENT` = `"production"`
-- `PUBLIC_BASE_URL` = `"https://replybots.io"`
-- `EMAIL_DOMAIN` = `"replybots.io"`
 
 | Variable | Description | Read in |
 |---|---|---|
@@ -27,8 +25,8 @@ Default values in `wrangler.toml`:
 | `AI_MODEL` | Workers AI reply model (default @cf/meta/llama-4-scout-17b-16e-instruct) | `src/ai.rs` |
 | `AI_SAFETY_MODEL` | Workers AI safety classifier (default @cf/meta/llama-guard-3-8b) | `src/safety.rs` |
 | `DEV_MODE` | Set to "1" or "true" in local dev to stub AI/safety & enable /auth/dev-login | `src/dev_bypass.rs` |
-| `EMAIL_DOMAIN` | Runtime variable | `src/escalations.rs` |
-| `PUBLIC_BASE_URL` | Runtime variable | `src/escalations.rs`, `src/handlers/data_deletion.rs`, `src/lib.rs` |
+| `EMAIL_DOMAIN` | Domain outbound handoff emails are sent from, e.g. replybots.io | `src/escalations.rs` |
+| `PUBLIC_BASE_URL` | Primary site URL, e.g. https://replybots.io | `src/escalations.rs`, `src/handlers/data_deletion.rs`, `src/lib.rs` |
 | `WHATSAPP_SIGNUP_CONFIG_ID` | Meta Embedded Signup config ID | `src/api/whatsapp.rs` |
 | `WHATSAPP_WABA_ID` | Fallback WhatsApp Business Account ID | `src/handlers/whatsapp_signup.rs` |
 
