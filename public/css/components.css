@@ -21,7 +21,7 @@
   border-color: var(--danger);
   border-left-color: var(--danger);
   background: var(--danger-soft);
-  color: var(--danger-2);
+  color: var(--ink);
 }
 .banner.success {
   border-color: var(--emerald);
@@ -90,12 +90,12 @@
 }
 .pill-ok {
   border-color: var(--emerald);
-  color: var(--emerald);
+  color: var(--ink);
   background: var(--emerald-soft);
 }
 .pill-warn {
   border-color: var(--amber);
-  color: var(--amber);
+  color: var(--ink);
   background: var(--amber-soft);
 }
 
@@ -467,13 +467,13 @@
 .wizard-progress .is-current .wizard-step-index {
   background: var(--accent);
   border-color: var(--line);
-  color: #FFFFFF;
+  color: var(--on-accent);
 }
 .wizard-progress .is-done { color: var(--ink-2); }
 .wizard-progress .is-done .wizard-step-index {
   background: var(--emerald);
   border-color: var(--line);
-  color: #FFFFFF;
+  color: var(--on-accent);
 }
 .wizard-step h1 { font-size: clamp(26px, 3.6vw, 38px); }
 .wizard-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 24px; }

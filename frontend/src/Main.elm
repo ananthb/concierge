@@ -66,6 +66,7 @@ type alias Model =
     , authBusy : Bool
     , authError : Maybe String
     , reducedMotion : Bool
+    , isDark : Bool
     }
 
 
@@ -82,6 +83,10 @@ init flags url key =
         reducedMotion =
             D.decodeValue (D.field "reducedMotion" D.bool) flags
                 |> Result.withDefault False
+
+        isDark =
+            D.decodeValue (D.field "isDark" D.bool) flags
+                |> Result.withDefault False
     in
     ( { key = key
       , route = Route.fromUrl url
@@ -91,6 +96,7 @@ init flags url key =
       , authBusy = False
       , authError = Nothing
       , reducedMotion = reducedMotion
+      , isDark = isDark
       }
     , Api.getBootstrap GotBootstrap
     )
@@ -111,6 +117,7 @@ type Msg
     | LandingMsg Landing.Msg
     | WizardMsg Wizard.Msg
     | DashboardMsg Dashboard.Msg
+    | ToggleTheme
     | NoOp
 
 
@@ -289,6 +296,20 @@ update msg model =
                 _ ->
                     ( model, Cmd.none )
 
+        ToggleTheme ->
+            let
+                nextDark =
+                    not model.isDark
+
+                themeStr =
+                    if nextDark then
+                        "dark"
+
+                    else
+                        "light"
+            in
+            ( { model | isDark = nextDark }, Ports.setTheme themeStr )
+
         NoOp ->
             ( model, Cmd.none )
 
@@ -445,7 +466,7 @@ view model =
     , body =
         [ Ui.header model.session
         , main_ [ class "site-main" ] [ content model ]
-        , Ui.footer
+        , Ui.footer model.isDark ToggleTheme
         ]
     }
 

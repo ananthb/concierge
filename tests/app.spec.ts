@@ -25,6 +25,17 @@ test.describe('shell', () => {
     expect(consoleErrors, consoleErrors.join('\n')).toEqual([]);
   });
 
+  test('clicking .theme-toggle toggles data-theme="dark" on <html>', async ({ page }) => {
+    await page.goto('/');
+    await waitForBoot(page);
+    const toggle = page.locator('.theme-toggle');
+    await expect(toggle).toBeVisible();
+    await toggle.click();
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+    await toggle.click();
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+  });
+
   test('the shell carries no body copy of its own', async ({ request }) => {
     const body = await (await request.get('/wizard')).text();
     expect(body).toContain('/app.js');
