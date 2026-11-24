@@ -2,7 +2,7 @@
 
 `replybots` uses strict prepaid credits:
 
-- **1 credit = 1 reply** (whether static or AI-generated).
+- **Static replies are free; 1 credit = 1 AI-generated reply.**
 - **No subscriptions, no free trials** — accounts start with 0 credits and top up via Razorpay Orders.
 - **No charge on held or failed replies** — if the risk gate withholds a draft or AI generation / delivery fails before sending, no credit is deducted.
 - **Purchased credits do not expire**.

@@ -175,9 +175,9 @@ pub(crate) fn merge_inbound_batch(pending: &[InboundMessage]) -> Option<InboundM
 ///   3. Gate on content safety (`profile_safety` for AI, `canned_safety` for Canned).
 ///   4. Run prompt-injection scan via `@cf/meta/prompt-guard-2-86m`.
 ///   5. Check conversation handoff state (`Silent` exits without spending a credit).
-///   6. Deduct 1 credit (`billing::try_deduct`) for BOTH Canned and AI replies.
+///   6. For AI replies, deduct 1 credit (`billing::try_deduct`). Static (`Canned`) replies are free.
 ///   7. Generate AI reply (or use Canned text), run handoff + risk gate, send reply.
-///      Restore credit on AI failure, empty reply, or channel send failure.
+///      For AI replies, restore credit on AI failure, empty reply, or channel send failure.
 async fn handle_auto_reply(msg: &InboundMessage, db: &D1Database, env: &Env) -> Result<()> {
     let info = match get_channel_reply_info(db, &msg.channel, &msg.channel_account_id).await? {
         Some(i) if i.config.enabled => i,
@@ -340,13 +340,13 @@ async fn handle_auto_reply(msg: &InboundMessage, db: &D1Database, env: &Env) -> 
     };
     let metered = tenant.plan.is_metered();
 
-    // Deduct 1 credit BEFORE generating AI reply or sending Canned reply.
+    // Deduct 1 credit BEFORE generating an AI reply. Static (Canned) replies are free.
     let outbound_conversation_id: Option<&str> = if is_ai {
         Some(conversation_id.as_str())
     } else {
         None
     };
-    if !billing::try_deduct(db, &msg.tenant_id, metered).await? {
+    if is_ai && !billing::try_deduct(db, &msg.tenant_id, metered).await? {
         console_log!(
             "Insufficient credits for tenant {}, skipping reply",
             msg.tenant_id
@@ -417,7 +417,9 @@ async fn handle_auto_reply(msg: &InboundMessage, db: &D1Database, env: &Env) -> 
     let mut new_handoff = stripped.handoff && matches!(handoff_mode, HandoffMode::None);
 
     if reply.is_empty() {
-        let _ = billing::restore_credit(db, &msg.tenant_id, metered).await;
+        if is_ai {
+            let _ = billing::restore_credit(db, &msg.tenant_id, metered).await;
+        }
         return Ok(());
     }
 
@@ -455,7 +457,9 @@ async fn handle_auto_reply(msg: &InboundMessage, db: &D1Database, env: &Env) -> 
 
     if let Err(e) = channel::send_reply(env, msg, &reply).await {
         console_log!("Auto-reply send error: {:?}", e);
-        let _ = billing::restore_credit(db, &msg.tenant_id, metered).await;
+        if is_ai {
+            let _ = billing::restore_credit(db, &msg.tenant_id, metered).await;
+        }
         return Ok(());
     }
 

@@ -703,7 +703,7 @@ overviewBillingCard session billing =
         , p [ class "muted" ]
             [ text
                 (Format.count session.locale billing.repliesUsed
-                    ++ " replies used so far · 1 credit = 1 reply (static or AI)."
+                    ++ " replies used so far · Static replies are free; AI-generated replies cost 1 credit each."
                 )
             ]
         , if billing.metered && billing.balance == 0 then
@@ -867,7 +867,7 @@ accountCard model botPresets account =
                             { id = "reply-text-" ++ account.id
                             , label = "Static reply message"
                             , value = edit.reply.text
-                            , hint = "Sent word for word whenever a customer messages. 1 credit per reply."
+                            , hint = "Sent word for word whenever a customer messages. Static replies are free."
                             , rows = 4
                             , onInput = \v -> SetEditReply (setText v edit.reply)
                             }
@@ -1016,7 +1016,7 @@ modePicker reply =
                         ]
                         [ text label_ ]
                 )
-                [ ( "ai", "AI (1 user prompt)" ), ( "canned", "Static reply" ) ]
+                [ ( "ai", "AI (1 credit per reply)" ), ( "canned", "Static reply (free)" ) ]
             )
         ]
 
@@ -1041,7 +1041,7 @@ billingTab session model =
                     , p [ class "muted" ]
                         [ text
                             (Format.count session.locale billing.repliesUsed
-                                ++ " replies used so far · 1 credit = 1 reply (static or AI)."
+                                ++ " replies used so far · Static replies are free; AI-generated replies cost 1 credit each."
                             )
                         ]
                     ]

@@ -17,7 +17,7 @@ Automatic WhatsApp replies for small businesses. Answers in your voice with the 
 - **Prompt Guard & Safety Vetting**: incoming messages are screened by `@cf/meta/prompt-guard-2-86m` for prompt injections. Business profiles and canned replies are vetted inline via `@cf/meta/llama-guard-3-8b`.
 - **Risk gate**: a draft that quotes an unauthorised price, makes a commitment, or strays past boundaries is withheld. The customer gets a holding sentence, the conversation enters handoff, and an alert email is sent to the tenant.
 - **Human handoff**: the model can request human intervention via `[[HANDOFF]]`. Follow-ups enter a holding-pattern cooldown before going silent.
-- **Prepaid Razorpay billing**: 1 credit = 1 reply (for both static and AI replies). No free trials, no card-verification gates. Default pricing: ₹0.10/reply INR, $0.001/reply USD (min 100 / max 100,000 credits). Authoritative webhook `POST /webhook/razorpay` with fail-closed HMAC-SHA256 validation.
+- **Prepaid Razorpay billing**: Static replies are free; 1 credit = 1 AI-generated reply. No free trials, no card-verification gates. Default pricing: ₹0.10/reply INR, $0.001/reply USD (min 100 / max 100,000 credits). Authoritative webhook `POST /webhook/razorpay` with fail-closed HMAC-SHA256 validation.
 - **Meta App Review compliance**: Facebook JS SDK Embedded Signup (`FB.login` + `WA_EMBEDDED_SIGNUP`), `tenants.facebook_id` stored for `POST /data-deletion`, metadata-only D1 `messages` logging, and prerendered `/privacy` & `/terms`.
 - **Live demo**: landing page hosts a live chat backed by 3 static sample SMB fixtures in Rust.
 - **Local dev**: `DEV_MODE=1` enables `POST /auth/dev-login` and local AI/safety stubs.

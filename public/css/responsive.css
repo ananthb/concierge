@@ -5,6 +5,7 @@
 @media (max-width:900px) {
   /* The editor and its live preview stop sitting side by side. */
   .preview-panel { margin-top: 16px; }
+  .feature-list { grid-template-columns: repeat(2, 1fr); }
 }
 
 @media (max-width:767px) {
@@ -69,6 +70,7 @@
   .demo-transcript { padding: 14px; }
   .demo-composer { padding: 12px 14px; }
   .demo-composer .btn { padding: 10px 14px; }
+  .feature-list { grid-template-columns: 1fr; }
 
   /* The tab strip scrolls sideways rather than wrapping to two rows. */
   .tabs {

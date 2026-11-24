@@ -276,7 +276,7 @@ openPersona persona model =
         | chat =
             Just
                 { persona = persona
-                , messages = [ { role = "assistant", content = persona.opener } ]
+                , messages = []
                 , draft = ""
                 , pending = NotAsked
                 , handoff = False
@@ -391,7 +391,7 @@ hero authBusy demo model =
                    )
             )
         , p [ class "hero-sub" ]
-            [ text "One bot prompt, fast human handoff, 1 credit = 1 reply." ]
+            [ text "Static replies are free. 1 credit = 1 AI-generated reply." ]
         , div [ class "hero-actions" ]
             [ button
                 [ Html.Attributes.type_ "button"
@@ -431,12 +431,10 @@ featuresSection =
                 "Wait 0 to 30 seconds for customers who send multiple short messages in a row, so they get one coherent reply instead of three."
             , featureCard "Conversation session window"
                 "Configure the idle gap, handoff cooldown, and recent message context so threads stay relevant without repeating stale history."
-            , featureCard "Cloudflare AI safety & guardrails"
-                "Every reply passes through Cloudflare AI safety and prompt-injection guardrails designed to stop off-topic drift and unauthorized promises."
+            , featureCard "AI safety & guardrails"
+                "Every reply passes through AI safety and prompt-injection guardrails designed to stop off-topic drift and unauthorized promises."
             , featureCard "Metadata-only privacy"
                 "Customer message text passes through in memory to produce a reply and is never stored in our database — only channel, direction, sender, recipient, and timestamp are kept."
-            , featureCard "Self-service prepaid credits"
-                "Prepaid credits only (1 credit = 1 reply). Buy what you need when you need it — no subscriptions or lock-in."
             ]
         ]
 
@@ -454,7 +452,7 @@ pricingSection pricing =
     section [ id "pricing", class "landing-pricing" ]
         [ Ui.sectionTitle "Simple, prepaid pricing"
         , p [ class "pricing-lead" ]
-            [ text "1 credit = 1 WhatsApp reply (static or AI). No subscriptions, no per-seat fees, no expiry." ]
+            [ text "Static replies are free. 1 credit = 1 AI-generated reply. No subscriptions, no per-seat fees, no expiry." ]
         , case pricing of
             Success p_ ->
                 div [ class "price-cards__inner" ]
@@ -623,8 +621,15 @@ chatPanel authBusy config model index chat =
                 [ text "Shared system prompt + quick human handoff built in." ]
             ]
         , div [ class "demo-transcript", id "demo-transcript" ]
-            (List.map bubble chat.messages
-                ++ [ pendingBubble chat.pending ]
+            (if List.isEmpty chat.messages && not (RemoteData.isLoading chat.pending) then
+                [ p [ class "demo-empty" ]
+                    [ text "Send a message as a customer to test this bot." ]
+                , pendingBubble chat.pending
+                ]
+
+             else
+                List.map bubble chat.messages
+                    ++ [ pendingBubble chat.pending ]
             )
         , if finished then
             closingCta authBusy idledOut
@@ -725,8 +730,8 @@ howItWorks =
                 "2. Pick or edit 1 bot prompt"
                 "Choose a starter bot prompt or write your own (up to 600 chars), or send a static reply."
             , step "color-bar-amber"
-                "3. 1 credit = 1 reply"
-                "Pay as you go with prepaid credits."
+                "3. 1 credit = 1 AI reply"
+                "Static replies are free. 1 credit = 1 AI-generated reply."
             ]
         ]
 

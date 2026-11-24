@@ -11,7 +11,7 @@ It supports two reply modes per WhatsApp Business number:
 
 - **D1-only state** — all tenants, sessions, WhatsApp accounts, conversation state, inbound burst buffers, rate limits, metadata logs, and billing records live in a single Cloudflare D1 SQLite database.
 - **Metadata-only logging** — inbound and outbound message text passes through in memory and is never persisted to D1.
-- **Strict prepaid billing** — 1 credit = 1 reply (static or AI), powered by Razorpay Orders and fail-closed webhooks.
+- **Strict prepaid billing** — Static replies are free; 1 credit = 1 AI-generated reply, powered by Razorpay Orders and fail-closed webhooks.
 
 ## Links
 

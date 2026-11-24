@@ -1,6 +1,6 @@
 //! Billing: prepaid reply credit tracking + Razorpay payments.
 //!
-//! 1 credit = 1 reply (both static/canned and AI replies cost 1 credit).
+//! Static (Canned) replies are free; 1 credit = 1 AI-generated reply.
 //! Deduction happens BEFORE send (optimistic); on AI/send failure, the
 //! credit is restored. Soonest-expiring credits are consumed first.
 

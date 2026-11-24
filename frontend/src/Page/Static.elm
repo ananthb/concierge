@@ -70,7 +70,7 @@ terms =
             ]
           )
         , ( "Prepaid credits and payment"
-          , [ "replybots operates strictly on prepaid credits: 1 credit = 1 reply (whether static or AI). There are no subscriptions and no free trials."
+          , [ "Static replies are free; AI-generated replies cost 1 credit each. There are no subscriptions and no free trials."
             , "You can purchase credits anytime through Razorpay in your dashboard. A reply that fails before delivery or is withheld before sending is not charged. Purchased credits do not expire."
             ]
           )

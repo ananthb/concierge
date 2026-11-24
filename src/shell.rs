@@ -81,16 +81,16 @@ pub fn html() -> String {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>replybots</title>
-<meta name="description" content="WhatsApp auto-replies for small businesses. One bot prompt, fast human handoff, 1 credit = 1 reply.">
+<meta name="description" content="WhatsApp auto-replies for small businesses. Static replies are free; 1 credit = 1 AI-generated reply.">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="replybots">
 <meta property="og:title" content="replybots — automatic WhatsApp replies for small businesses">
-<meta property="og:description" content="WhatsApp auto-replies for small businesses. One bot prompt, fast human handoff, 1 credit = 1 reply.">
+<meta property="og:description" content="WhatsApp auto-replies for small businesses. Static replies are free; 1 credit = 1 AI-generated reply.">
 <meta property="og:url" content="https://replybots.io/">
 <meta property="og:image" content="https://replybots.io/logo-512.png">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="replybots — automatic WhatsApp replies for small businesses">
-<meta name="twitter:description" content="WhatsApp auto-replies for small businesses. One bot prompt, fast human handoff, 1 credit = 1 reply.">
+<meta name="twitter:description" content="WhatsApp auto-replies for small businesses. Static replies are free; 1 credit = 1 AI-generated reply.">
 <meta name="twitter:image" content="https://replybots.io/logo-512.png">
 <link rel="icon" href="/logo.svg" type="image/svg+xml">
 <link rel="icon" href="/favicon-32.png" sizes="32x32">
