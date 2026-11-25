@@ -284,7 +284,10 @@ type alias DemoPersona =
     , label : String
     , tag : String
     , businessName : String
+    , mode : String
     , prompt : String
+    , matchRule : String
+    , cannedText : String
     , opener : String
     }
 
@@ -360,13 +363,29 @@ demoDecoder =
 
 demoPersonaDecoder : Decoder DemoPersona
 demoPersonaDecoder =
-    D.map6 DemoPersona
+    D.map8
+        (\id label tag businessName mode prompt matchRule cannedText ->
+            \opener ->
+                { id = id
+                , label = label
+                , tag = tag
+                , businessName = businessName
+                , mode = mode
+                , prompt = prompt
+                , matchRule = matchRule
+                , cannedText = cannedText
+                , opener = opener
+                }
+        )
         (D.field "id" D.string)
         (D.field "label" D.string)
         (D.field "tag" D.string)
         (D.field "business_name" D.string)
+        (withDefault "ai" (D.field "mode" D.string))
         (D.field "prompt" D.string)
-        (D.field "opener" D.string)
+        (withDefault "" (D.field "match_rule" D.string))
+        (withDefault "" (D.field "canned_text" D.string))
+        |> D.andThen (\build -> D.map build (D.field "opener" D.string))
 
 
 sessionDecoder : Decoder Session
@@ -411,11 +430,17 @@ sessionDecoder =
 type alias DemoReply =
     { reply : String
     , handedOff : Bool
+    , matchedRule : Bool
     }
 
 
 demoChat :
     { personaId : String
+    , businessName : String
+    , mode : String
+    , botPrompt : String
+    , matchRule : String
+    , cannedText : String
     , history : List { role : String, content : String }
     , message : String
     , handoff : Bool
@@ -426,6 +451,11 @@ demoChat args =
     post "/api/demo/chat"
         (E.object
             [ ( "persona_id", E.string args.personaId )
+            , ( "business_name", E.string args.businessName )
+            , ( "mode", E.string args.mode )
+            , ( "bot_prompt", E.string args.botPrompt )
+            , ( "match_rule", E.string args.matchRule )
+            , ( "canned_text", E.string args.cannedText )
             , ( "history"
               , E.list
                     (\m ->
@@ -440,9 +470,10 @@ demoChat args =
             , ( "handoff", E.bool args.handoff )
             ]
         )
-        (D.map2 DemoReply
+        (D.map3 DemoReply
             (D.field "reply" D.string)
             (D.field "handed_off" D.bool)
+            (withDefault False (D.field "matched_rule" D.bool))
         )
 
 
@@ -623,7 +654,10 @@ type alias BotPreset =
     { id : String
     , label : String
     , tag : String
+    , mode : String
     , prompt : String
+    , matchRule : String
+    , cannedText : String
     }
 
 
@@ -646,11 +680,14 @@ getWhatsApp =
 
 botPresetDecoder : Decoder BotPreset
 botPresetDecoder =
-    D.map4 BotPreset
+    D.map7 BotPreset
         (D.field "id" D.string)
         (D.field "label" D.string)
         (D.field "tag" D.string)
+        (withDefault "ai" (D.field "mode" D.string))
         (D.field "prompt" D.string)
+        (withDefault "" (D.field "match_rule" D.string))
+        (withDefault "" (D.field "canned_text" D.string))
 
 
 updateWhatsApp :

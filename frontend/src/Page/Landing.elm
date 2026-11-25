@@ -1,28 +1,20 @@
 module Page.Landing exposing (Model, Msg(..), demoPage, init, subscriptions, update, view)
 
-{-| The landing page and the interactive WhatsApp demo.
+{-| The landing page and the interactive live demo.
 
-A visitor picks a sample small business, chats with it as a customer, and
-watches replybots's built-in front-desk assistant reply briefly and hand off to
-a human as soon as a real decision or quote is needed.
-
-Three limits shape the conversation, all arriving in `/api/bootstrap`:
-
-  - **Turn cap** (`maxUserTurns`): after this many messages the input is
-    replaced by the sign-up call to action.
-  - **Idle timeout** (`idleTimeoutSecs`): a conversation nobody is typing in
-    swaps to the CTA. Restarts on every keystroke.
-  - **Handoff** (`handed_off`): once the assistant hands off, the demo shows
-    the holding-pattern pill just as a real customer thread would.
+The `/demo` route renders the shared production `BotEditor` setup screen in the
+main column and a visually separate floating "Chat as if you're the customer"
+widget in the bottom-right corner.
 
 -}
 
 import Api
+import BotEditor
 import Browser.Dom as Dom
 import Dict
 import Format
-import Html exposing (Html, button, div, h1, h2, h3, input, li, p, section, span, text, ul)
-import Html.Attributes exposing (attribute, class, classList, disabled, id, placeholder, value)
+import Html exposing (Html, button, div, h1, h2, h3, input, label, li, p, section, span, text, ul)
+import Html.Attributes exposing (attribute, class, classList, disabled, for, id, placeholder, type_, value)
 import Html.Events exposing (onClick, onInput, onSubmit)
 import Html.Keyed as Keyed
 import RemoteData exposing (RemoteData(..))
@@ -37,13 +29,37 @@ import Ui
 
 
 type alias Model =
-    { chat : Maybe Chat
+    { demo : Maybe DemoState
 
-    -- Seconds since the visitor last typed or sent. Drives the idle timeout.
+    -- Seconds since the visitor last typed or sent. Drives the silent idle reset.
     , idleSeconds : Int
     , reducedMotion : Bool
     , wordIndex : Int
     , phase : TypePhase
+    }
+
+
+type WidgetState
+    = WidgetDefault
+    | WidgetOpen
+    | WidgetMinimized
+
+
+type alias DemoState =
+    { personaId : String
+    , businessName : String
+    , config : BotEditor.Config
+    , messages : List Turn
+    , draft : String
+
+    -- The in-flight reply. `Loading` renders the typing indicator.
+    , pending : Api.Data Api.DemoReply
+    , handoff : Bool
+    , validationError : Maybe String
+    , safetyError : Maybe String
+    , widget : WidgetState
+    , maxUserTurns : Int
+    , idleTimeoutSecs : Int
     }
 
 
@@ -78,30 +94,54 @@ wordAt idx =
         |> Maybe.withDefault "small businesses"
 
 
-type alias Chat =
-    { persona : Api.DemoPersona
-    , messages : List Turn
-    , draft : String
-
-    -- The in-flight reply. `Loading` renders the typing indicator.
-    , pending : Api.Data Api.DemoReply
-    , handoff : Bool
-    }
-
-
 type alias Turn =
     { role : String
     , content : String
     }
 
 
-init : Bool -> Model
-init reducedMotion =
-    { chat = Nothing
+init : Bool -> Maybe Api.DemoConfig -> Model
+init reducedMotion maybeConfig =
+    let
+        initialDemo =
+            maybeConfig
+                |> Maybe.andThen
+                    (\cfg ->
+                        if cfg.enabled then
+                            List.head cfg.personas
+                                |> Maybe.map (initDemoState cfg)
+
+                        else
+                            Nothing
+                    )
+    in
+    { demo = initialDemo
     , idleSeconds = 0
     , reducedMotion = reducedMotion
     , wordIndex = 0
     , phase = Holding 34
+    }
+
+
+initDemoState : Api.DemoConfig -> Api.DemoPersona -> DemoState
+initDemoState cfg persona =
+    { personaId = persona.id
+    , businessName = persona.businessName
+    , config =
+        { mode = persona.mode
+        , botPrompt = persona.prompt
+        , matchRule = persona.matchRule
+        , text = persona.cannedText
+        }
+    , messages = []
+    , draft = ""
+    , pending = NotAsked
+    , handoff = False
+    , validationError = Nothing
+    , safetyError = Nothing
+    , widget = WidgetDefault
+    , maxUserTurns = cfg.maxUserTurns
+    , idleTimeoutSecs = cfg.idleTimeoutSecs
     }
 
 
@@ -110,11 +150,15 @@ init reducedMotion =
 
 
 type Msg
-    = PickPersona Api.DemoPersona
+    = SelectPreset BotEditor.Preset
+    | SetBusinessName String
+    | UpdateBotConfig BotEditor.Config
+    | OpenWidget
+    | MinimizeWidget
     | Draft String
     | Send
     | GotReply (Api.Data Api.DemoReply)
-    | CloseChat
+    | ResetChat
     | Tick
     | TypeTick
     | ReducedSwapTick
@@ -125,97 +169,253 @@ type Msg
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
-        PickPersona persona ->
-            case model.chat of
-                Just current ->
-                    if current.persona.id == persona.id then
-                        ( { model | chat = Nothing, idleSeconds = 0 }, Cmd.none )
+        SelectPreset preset ->
+            ( { model
+                | demo =
+                    Maybe.map
+                        (\d ->
+                            { d
+                                | personaId = preset.id
+                                , businessName = preset.subtitle
+                                , config =
+                                    { mode = preset.mode
+                                    , botPrompt = preset.prompt
+                                    , matchRule = preset.matchRule
+                                    , text = preset.cannedText
+                                    }
+                                , messages = []
+                                , pending = NotAsked
+                                , handoff = False
+                                , validationError = Nothing
+                                , safetyError = Nothing
+                            }
+                        )
+                        model.demo
+                , idleSeconds = 0
+              }
+            , Cmd.none
+            )
 
-                    else
-                        openPersona persona model
+        SetBusinessName name ->
+            ( { model
+                | demo =
+                    Maybe.map
+                        (\d ->
+                            { d
+                                | businessName = name
+                                , validationError = Nothing
+                                , safetyError = Nothing
+                            }
+                        )
+                        model.demo
+                , idleSeconds = 0
+              }
+            , Cmd.none
+            )
 
-                Nothing ->
-                    openPersona persona model
+        UpdateBotConfig cfg ->
+            ( { model
+                | demo =
+                    Maybe.map
+                        (\d ->
+                            { d
+                                | config = cfg
+                                , validationError = Nothing
+                                , safetyError = Nothing
+                            }
+                        )
+                        model.demo
+                , idleSeconds = 0
+              }
+            , Cmd.none
+            )
+
+        OpenWidget ->
+            ( { model
+                | demo = Maybe.map (\d -> { d | widget = WidgetOpen }) model.demo
+              }
+            , focusInput
+            )
+
+        MinimizeWidget ->
+            ( { model
+                | demo = Maybe.map (\d -> { d | widget = WidgetMinimized }) model.demo
+              }
+            , Cmd.none
+            )
 
         Draft text_ ->
             ( { model
-                | chat = Maybe.map (\c -> { c | draft = text_ }) model.chat
+                | demo = Maybe.map (\d -> { d | draft = text_ }) model.demo
                 , idleSeconds = 0
               }
             , Cmd.none
             )
 
         Send ->
-            case model.chat of
-                Just chat ->
+            case model.demo of
+                Just d ->
                     let
                         body =
-                            String.trim chat.draft
+                            String.trim d.draft
                     in
-                    if String.isEmpty body || RemoteData.isLoading chat.pending then
+                    if String.isEmpty body || RemoteData.isLoading d.pending then
                         ( model, Cmd.none )
 
                     else
-                        let
-                            priorHistory =
-                                chat.messages
+                        case BotEditor.validate d.config of
+                            Just err ->
+                                ( { model
+                                    | demo =
+                                        Just
+                                            { d
+                                                | validationError = Just err
+                                                , safetyError = Nothing
+                                            }
+                                  }
+                                , Cmd.none
+                                )
 
-                            withUserTurn =
-                                priorHistory ++ [ { role = "user", content = body } ]
-                        in
-                        ( { model
-                            | chat =
-                                Just
-                                    { chat
-                                        | messages = withUserTurn
-                                        , draft = ""
-                                        , pending = Loading
-                                    }
-                            , idleSeconds = 0
-                          }
-                        , Cmd.batch
-                            [ Api.demoChat
-                                { personaId = chat.persona.id
-                                , history = priorHistory
-                                , message = body
-                                , handoff = chat.handoff
-                                }
-                                GotReply
-                            , scrollToBottom
-                            ]
-                        )
+                            Nothing ->
+                                let
+                                    userTurns =
+                                        d.messages
+                                            |> List.filter (\m -> m.role == "user")
+                                            |> List.length
+
+                                    startFresh =
+                                        userTurns >= d.maxUserTurns
+
+                                    priorHistory =
+                                        if startFresh then
+                                            []
+
+                                        else
+                                            d.messages
+
+                                    currentHandoff =
+                                        if startFresh then
+                                            False
+
+                                        else
+                                            d.handoff
+
+                                    withUserTurn =
+                                        priorHistory ++ [ { role = "user", content = body } ]
+                                in
+                                ( { model
+                                    | demo =
+                                        Just
+                                            { d
+                                                | messages = withUserTurn
+                                                , draft = ""
+                                                , pending = Loading
+                                                , handoff = currentHandoff
+                                                , validationError = Nothing
+                                                , safetyError = Nothing
+                                            }
+                                    , idleSeconds = 0
+                                  }
+                                , Cmd.batch
+                                    [ Api.demoChat
+                                        { personaId = d.personaId
+                                        , businessName = d.businessName
+                                        , mode = d.config.mode
+                                        , botPrompt = d.config.botPrompt
+                                        , matchRule = d.config.matchRule
+                                        , cannedText = d.config.text
+                                        , history = priorHistory
+                                        , message = body
+                                        , handoff = currentHandoff
+                                        }
+                                        GotReply
+                                    , scrollToBottom
+                                    ]
+                                )
 
                 Nothing ->
                     ( model, Cmd.none )
 
         GotReply result ->
-            case model.chat of
-                Just chat ->
+            case model.demo of
+                Just d ->
                     let
                         updated =
                             case result of
                                 Success reply ->
-                                    { chat
+                                    { d
                                         | messages =
-                                            chat.messages
+                                            d.messages
                                                 ++ [ { role = "assistant", content = reply.reply } ]
                                         , pending = NotAsked
-                                        , handoff = chat.handoff || reply.handedOff
+                                        , handoff = d.handoff || reply.handedOff
+                                        , safetyError = Nothing
                                     }
 
+                                Failure (Api.Fault { code, message }) ->
+                                    if code == "unsafe_content" then
+                                        { d
+                                            | pending = result
+                                            , safetyError = Just message
+                                        }
+
+                                    else
+                                        { d | pending = result }
+
                                 _ ->
-                                    { chat | pending = result }
+                                    { d | pending = result }
                     in
-                    ( { model | chat = Just updated }, scrollToBottom )
+                    ( { model | demo = Just updated }, scrollToBottom )
 
                 Nothing ->
                     ( model, Cmd.none )
 
-        CloseChat ->
-            ( { model | chat = Nothing, idleSeconds = 0 }, Cmd.none )
+        ResetChat ->
+            ( { model
+                | demo =
+                    Maybe.map
+                        (\d ->
+                            { d
+                                | messages = []
+                                , draft = ""
+                                , pending = NotAsked
+                                , handoff = False
+                                , validationError = Nothing
+                                , safetyError = Nothing
+                            }
+                        )
+                        model.demo
+                , idleSeconds = 0
+              }
+            , Cmd.none
+            )
 
         Tick ->
-            ( { model | idleSeconds = model.idleSeconds + 1 }, Cmd.none )
+            case model.demo of
+                Just d ->
+                    let
+                        nextIdle =
+                            model.idleSeconds + 1
+                    in
+                    if nextIdle >= d.idleTimeoutSecs then
+                        ( { model
+                            | demo =
+                                Just
+                                    { d
+                                        | messages = []
+                                        , pending = NotAsked
+                                        , handoff = False
+                                    }
+                            , idleSeconds = 0
+                          }
+                        , Cmd.none
+                        )
+
+                    else
+                        ( { model | idleSeconds = nextIdle }, Cmd.none )
+
+                Nothing ->
+                    ( model, Cmd.none )
 
         TypeTick ->
             ( stepTypewriter model, Cmd.none )
@@ -270,23 +470,6 @@ stepTypewriter model =
                 { model | phase = Holding 34 }
 
 
-openPersona : Api.DemoPersona -> Model -> ( Model, Cmd Msg )
-openPersona persona model =
-    ( { model
-        | chat =
-            Just
-                { persona = persona
-                , messages = []
-                , draft = ""
-                , pending = NotAsked
-                , handoff = False
-                }
-        , idleSeconds = 0
-      }
-    , focusInput
-    )
-
-
 focusInput : Cmd Msg
 focusInput =
     Task.attempt (\_ -> NoOp) (Dom.focus "demo-input")
@@ -299,15 +482,16 @@ scrollToBottom =
         |> Task.attempt (\_ -> NoOp)
 
 
-{-| Tick the hero word cycler and, when a demo chat is open, the idle timer.
+{-| Tick the hero word cycler and, when a demo conversation has messages, the
+silent idle reset timer.
 -}
 subscriptions : Maybe Api.DemoConfig -> Model -> Sub Msg
 subscriptions maybeConfig model =
     let
         idleSub =
-            case ( maybeConfig, model.chat ) of
-                ( Just config, Just _ ) ->
-                    if model.idleSeconds < config.idleTimeoutSecs then
+            case ( maybeConfig, model.demo ) of
+                ( Just _, Just d ) ->
+                    if not (List.isEmpty d.messages) || d.handoff then
                         Time.every 1000 (\_ -> Tick)
 
                     else
@@ -394,7 +578,7 @@ hero authBusy demo model =
             [ text "One bot prompt, fast human handoff, 1 credit = 1 reply." ]
         , div [ class "hero-actions" ]
             [ button
-                [ Html.Attributes.type_ "button"
+                [ type_ "button"
                 , class "btn btn-primary btn-lg"
                 , disabled authBusy
                 , onClick LoginClicked
@@ -492,151 +676,184 @@ landingRateCard ( code, unitPriceMilli ) =
 
 
 demoPage : Bool -> Api.Data Api.DemoConfig -> Model -> Html Msg
-demoPage authBusy demo model =
+demoPage _ demo model =
     div [ class "page page-demo" ]
-        [ h1 [] [ text "Live demo" ]
-        , p [ class "demo-lead" ]
-            [ text "Pick a bot persona below to test a simulated WhatsApp chat." ]
-        , case demo of
-            Success config ->
-                if config.enabled && not (List.isEmpty config.personas) then
-                    personaPicker authBusy config model
+        [ div [ class "demo-setup" ]
+            [ h1 [] [ text "Live demo" ]
+            , p [ class "demo-lead" ]
+                [ text "Configure a reply bot using the same setup screen as the app, then test it as a customer." ]
+            , case demo of
+                Success config ->
+                    if config.enabled && not (List.isEmpty config.personas) then
+                        case model.demo of
+                            Just d ->
+                                demoWorkspace config d
 
-                else
-                    p [ class "muted" ] [ text "The live demo is currently unavailable." ]
+                            Nothing ->
+                                p [ class "muted" ] [ text "The live demo is currently unavailable." ]
 
-            Loading ->
-                Ui.spinner
+                    else
+                        p [ class "muted" ] [ text "The live demo is currently unavailable." ]
 
-            _ ->
-                text ""
+                Loading ->
+                    Ui.spinner
+
+                _ ->
+                    text ""
+            ]
         ]
 
 
-personaPicker : Bool -> Api.DemoConfig -> Model -> Html Msg
-personaPicker authBusy config model =
+demoWorkspace : Api.DemoConfig -> DemoState -> Html Msg
+demoWorkspace config d =
     let
-        selectedId =
-            Maybe.map (.persona >> .id) model.chat
-
-        selectedWithIndex =
-            model.chat
-                |> Maybe.andThen
-                    (\chat ->
-                        config.personas
-                            |> List.indexedMap Tuple.pair
-                            |> List.filter (\( _, p ) -> p.id == chat.persona.id)
-                            |> List.head
-                            |> Maybe.map (\( idx, _ ) -> ( idx, chat ))
-                    )
+        presets =
+            List.map toBotEditorPreset config.personas
     in
-    div [ class "persona-demo-wrap" ]
-        (List.indexedMap (personaBtn selectedId) config.personas
-            ++ [ case selectedWithIndex of
-                    Just ( idx, chat ) ->
-                        chatPanel authBusy config model idx chat
+    div []
+        [ Ui.colorCard "color-bar-green"
+            [ case d.safetyError of
+                Just err ->
+                    Ui.banner "error" err
 
-                    Nothing ->
-                        text ""
-               ]
-        )
+                Nothing ->
+                    case d.validationError of
+                        Just err ->
+                            Ui.banner "error" err
 
-
-personaBtn : Maybe String -> Int -> Api.DemoPersona -> Html Msg
-personaBtn selectedId index persona =
-    let
-        isSelected =
-            selectedId == Just persona.id
-    in
-    button
-        [ classList
-            [ ( "persona-btn", True )
-            , ( "persona-slot-" ++ String.fromInt index, True )
-            , ( "is-active", isSelected )
+                        Nothing ->
+                            text ""
+            , div [ class "field" ]
+                [ label [ for "demo-business-name" ] [ text "Business name" ]
+                , input
+                    [ id "demo-business-name"
+                    , type_ "text"
+                    , value d.businessName
+                    , placeholder "Your business name"
+                    , onInput SetBusinessName
+                    ]
+                    []
+                ]
+            , BotEditor.view
+                { idPrefix = "demo"
+                , presets = presets
+                , config = d.config
+                , onSelectPreset = SelectPreset
+                , onChange = UpdateBotConfig
+                }
             ]
-        , Html.Attributes.type_ "button"
-        , onClick (PickPersona persona)
-        , attribute "aria-pressed"
-            (if isSelected then
-                "true"
-
-             else
-                "false"
-            )
-        , attribute "aria-label" ("Message " ++ persona.label ++ " — " ++ persona.businessName)
-        ]
-        [ div [ class "persona-head" ]
-            [ h3 [ class "persona-label" ] [ text persona.label ]
-            , span [ class "persona-tag" ] [ text persona.tag ]
-            ]
-        , p [ class "persona-desc" ] [ text persona.businessName ]
+        , customerChatDock d
         ]
 
 
-chatPanel : Bool -> Api.DemoConfig -> Model -> Int -> Chat -> Html Msg
-chatPanel authBusy config model index chat =
+toBotEditorPreset : Api.DemoPersona -> BotEditor.Preset
+toBotEditorPreset persona =
+    { id = persona.id
+    , label = persona.label
+    , tag = persona.tag
+    , subtitle = persona.businessName
+    , mode = persona.mode
+    , prompt = persona.prompt
+    , matchRule = persona.matchRule
+    , cannedText = persona.cannedText
+    }
+
+
+customerChatDock : DemoState -> Html Msg
+customerChatDock d =
     let
-        userTurns =
-            chat.messages |> List.filter (\m -> m.role == "user") |> List.length
+        dockClass =
+            case d.widget of
+                WidgetDefault ->
+                    "demo-dock"
 
-        turnsSpent =
-            userTurns >= config.maxUserTurns
+                WidgetOpen ->
+                    "demo-dock is-open"
 
-        idledOut =
-            model.idleSeconds >= config.idleTimeoutSecs
+                WidgetMinimized ->
+                    "demo-dock is-minimized"
 
-        remainingIdle =
-            max 0 (config.idleTimeoutSecs - model.idleSeconds)
+        launcherClass =
+            case d.widget of
+                WidgetDefault ->
+                    "demo-launcher"
 
-        finished =
-            turnsSpent || idledOut
+                WidgetOpen ->
+                    "demo-launcher is-hidden"
+
+                WidgetMinimized ->
+                    "demo-launcher is-visible"
     in
-    section [ class ("demo-box demo-chat demo-after-" ++ String.fromInt index) ]
-        [ div [ class "demo-badge-bar" ]
-            [ span [ class "demo-badge" ] [ text "DEMO — SIMULATED CHAT" ]
+    div []
+        [ section
+            [ class dockClass
+            , attribute "aria-label" "Chat as if you're the customer"
             ]
-        , div [ class "demo-chat-head" ]
-            [ div []
-                [ h2 [] [ text chat.persona.businessName ]
-                , div [ class "demo-chat-head-actions" ]
-                    [ if chat.handoff then
+            [ div [ class "demo-widget" ]
+                [ div [ class "demo-widget-head" ]
+                    [ div [ class "demo-widget-title" ]
+                        [ span [ class "demo-widget-kicker" ] [ text "Chat as if you're the customer" ]
+                        , h2 [] [ text (displayBusinessName d.businessName) ]
+                        ]
+                    , div [ class "demo-widget-actions" ]
+                        [ button
+                            [ type_ "button"
+                            , class "btn btn-ghost demo-widget-btn"
+                            , onClick ResetChat
+                            ]
+                            [ text "Reset" ]
+                        , button
+                            [ type_ "button"
+                            , class "btn btn-ghost demo-widget-btn"
+                            , attribute "aria-label" "Minimize customer chat"
+                            , onClick MinimizeWidget
+                            ]
+                            [ text "Minimize" ]
+                        ]
+                    ]
+                , div [ class "demo-widget-status" ]
+                    [ if d.handoff then
                         span [ class "pill pill-warn" ] [ text "Handed to a human" ]
 
                       else
                         span [ class "pill" ] [ text "Replying automatically" ]
-                    , span [ class "pill" ]
-                        [ text (String.fromInt userTurns ++ " / " ++ String.fromInt config.maxUserTurns ++ " turns") ]
-                    , span [ class "pill" ]
-                        [ text (String.fromInt remainingIdle ++ "s idle") ]
                     ]
-                ]
-            , div [ class "demo-chat-head-actions" ]
-                [ button [ class "btn btn-ghost", onClick CloseChat ] [ text "Start over" ]
+                , div [ class "demo-transcript", id "demo-transcript" ]
+                    (if List.isEmpty d.messages && not (RemoteData.isLoading d.pending) then
+                        [ p [ class "demo-empty" ]
+                            [ text "Send a message as a customer to test your bot." ]
+                        , pendingBubble d.pending
+                        ]
+
+                     else
+                        List.map bubble d.messages
+                            ++ [ pendingBubble d.pending ]
+                    )
+                , composer d
                 ]
             ]
-        , div [ class "prompt-panel" ]
-            [ p [ class "prompt-preview prompt-preview-middle" ]
-                [ text ("User prompt: " ++ chat.persona.prompt) ]
-            , p [ class "prompt-panel-note" ]
-                [ text "Shared system prompt + quick human handoff built in." ]
+        , button
+            [ type_ "button"
+            , class launcherClass
+            , onClick OpenWidget
             ]
-        , div [ class "demo-transcript", id "demo-transcript" ]
-            (if List.isEmpty chat.messages && not (RemoteData.isLoading chat.pending) then
-                [ p [ class "demo-empty" ]
-                    [ text "Send a message as a customer to test this bot." ]
-                , pendingBubble chat.pending
-                ]
-
-             else
-                List.map bubble chat.messages
-                    ++ [ pendingBubble chat.pending ]
-            )
-        , if finished then
-            closingCta authBusy idledOut
-
-          else
-            composer chat
+            [ span [ class "demo-launcher-compact" ] [ text "Customer chat" ]
+            , span [ class "demo-launcher-full" ] [ text "Chat as if you're the customer" ]
+            ]
         ]
+
+
+displayBusinessName : String -> String
+displayBusinessName name =
+    let
+        trimmed =
+            String.trim name
+    in
+    if String.isEmpty trimmed then
+        "Your business"
+
+    else
+        trimmed
 
 
 bubble : Turn -> Html Msg
@@ -666,14 +883,14 @@ pendingBubble pending =
             text ""
 
 
-composer : Chat -> Html Msg
-composer chat =
+composer : DemoState -> Html Msg
+composer d =
     Html.form [ class "demo-composer", onSubmit Send ]
         [ input
             [ id "demo-input"
             , class "demo-input"
             , placeholder "Ask them something…"
-            , value chat.draft
+            , value d.draft
             , onInput Draft
             , attribute "autocomplete" "off"
             , Html.Attributes.maxlength 300
@@ -681,40 +898,10 @@ composer chat =
             []
         , button
             [ class "btn btn-primary"
-            , Html.Attributes.type_ "submit"
-            , disabled (String.isEmpty (String.trim chat.draft) || RemoteData.isLoading chat.pending)
+            , type_ "submit"
+            , disabled (String.isEmpty (String.trim d.draft) || RemoteData.isLoading d.pending)
             ]
             [ text "Send" ]
-        ]
-
-
-closingCta : Bool -> Bool -> Html Msg
-closingCta authBusy idledOut =
-    div [ class "demo-cta" ]
-        [ p []
-            [ text
-                (if idledOut then
-                    "Timed out from inactivity — that's how replybots answers every WhatsApp thread day or night."
-
-                 else
-                    "That's the demo. Quick replies when customers message, and fast handoff to you when it matters."
-                )
-            ]
-        , button
-            [ Html.Attributes.type_ "button"
-            , class "btn btn-primary btn-lg"
-            , disabled authBusy
-            , onClick LoginClicked
-            ]
-            [ text
-                (if authBusy then
-                    "Connecting…"
-
-                 else
-                    "Continue with WhatsApp"
-                )
-            ]
-        , button [ class "btn btn-ghost", onClick CloseChat ] [ text "Try another business" ]
         ]
 
 
@@ -736,7 +923,7 @@ howItWorks =
         ]
 
 
-step : String -> String -> String -> Html Msg
+step : String -> String -> String -> Html msg
 step barClass title body =
     li [ class ("step " ++ barClass) ]
         [ h3 [] [ text title ]

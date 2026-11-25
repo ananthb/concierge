@@ -8,6 +8,7 @@ real routes, so they're linkable and the back button works.
 -}
 
 import Api
+import BotEditor
 import Browser.Navigation as Nav
 import Format
 import Html exposing (Html, a, div, h1, h2, li, p, section, span, text, ul)
@@ -289,26 +290,31 @@ update msg model =
                                 )
 
                             else
-                                let
-                                    name =
-                                        accounts
-                                            |> List.filter (\a -> a.id == edit.id)
-                                            |> List.head
-                                            |> Maybe.map .name
-                                            |> Maybe.withDefault ""
-                                in
-                                ( { model | saving = True, notice = Nothing }
-                                , Api.updateWhatsApp edit.id
-                                    { name = name
-                                    , enabled = edit.reply.enabled
-                                    , mode = edit.reply.mode
-                                    , text = edit.reply.text
-                                    , matchRule = edit.reply.matchRule
-                                    , botPrompt = edit.reply.botPrompt
-                                    , waitSeconds = waitSecs
-                                    }
-                                    SavedReply
-                                )
+                                case BotEditor.validate edit.reply of
+                                    Just err ->
+                                        ( { model | notice = Just ( "error", err ) }, Cmd.none )
+
+                                    Nothing ->
+                                        let
+                                            name =
+                                                accounts
+                                                    |> List.filter (\a -> a.id == edit.id)
+                                                    |> List.head
+                                                    |> Maybe.map .name
+                                                    |> Maybe.withDefault ""
+                                        in
+                                        ( { model | saving = True, notice = Nothing }
+                                        , Api.updateWhatsApp edit.id
+                                            { name = name
+                                            , enabled = edit.reply.enabled
+                                            , mode = edit.reply.mode
+                                            , text = edit.reply.text
+                                            , matchRule = edit.reply.matchRule
+                                            , botPrompt = edit.reply.botPrompt
+                                            , waitSeconds = waitSecs
+                                            }
+                                            SavedReply
+                                        )
 
                         Nothing ->
                             ( { model
@@ -862,74 +868,13 @@ accountCard model botPresets account =
                         , checked = edit.reply.enabled
                         , onCheck = \v -> SetEditReply (setEnabled v edit.reply)
                         }
-                    , modePicker edit.reply
-                    , if edit.reply.mode == "canned" then
-                        div []
-                            [ Ui.textarea
-                                { id = "reply-text-" ++ account.id
-                                , label = "Matched reply text"
-                                , value = edit.reply.text
-                                , hint = "Sent word for word whenever a customer messages (or matches the rule below). 1 credit = 1 reply."
-                                , rows = 4
-                                , onInput = \v -> SetEditReply (setText v edit.reply)
-                                }
-                            , div [ class "field" ]
-                                [ Html.label [ Html.Attributes.for ("match-rule-" ++ account.id) ]
-                                    [ text "Match rule (optional)" ]
-                                , Html.input
-                                    [ Html.Attributes.id ("match-rule-" ++ account.id)
-                                    , Html.Attributes.name ("match-rule-" ++ account.id)
-                                    , Html.Attributes.type_ "text"
-                                    , Html.Attributes.value edit.reply.matchRule
-                                    , Html.Attributes.placeholder "e.g. Customer asks for opening hours or address"
-                                    , Html.Attributes.maxlength 300
-                                    , Html.Events.onInput (\v -> SetEditReply (setMatchRule v edit.reply))
-                                    ]
-                                    []
-                                , p [ class "hint" ]
-                                    [ text
-                                        (String.fromInt (String.length edit.reply.matchRule)
-                                            ++ "/300 chars · If set, incoming messages are checked against this rule; uncertain messages fall back to AI. 1 credit = 1 reply."
-                                        )
-                                    ]
-                                ]
-                            ]
-
-                      else
-                        div []
-                            [ if List.isEmpty botPresets then
-                                text ""
-
-                              else
-                                div [ class "field" ]
-                                    [ Html.label [] [ text "Quick-fill starter prompt" ]
-                                    , div [ class "choice-row" ]
-                                        (List.map
-                                            (\preset ->
-                                                Html.button
-                                                    [ classList
-                                                        [ ( "choice", True )
-                                                        , ( "is-selected", edit.reply.botPrompt == preset.prompt )
-                                                        ]
-                                                    , Html.Attributes.type_ "button"
-                                                    , onClick (SetEditReply (setBotPrompt preset.prompt edit.reply))
-                                                    ]
-                                                    [ text preset.label ]
-                                            )
-                                            botPresets
-                                        )
-                                    ]
-                            , Ui.textarea
-                                { id = "bot-prompt-" ++ account.id
-                                , label = "Bot prompt (optional, up to 600 chars)"
-                                , value = edit.reply.botPrompt
-                                , hint =
-                                    String.fromInt (String.length edit.reply.botPrompt)
-                                        ++ "/600 chars · All bots share the same system prompt and hand off to a human quickly."
-                                , rows = 4
-                                , onInput = \v -> SetEditReply (setBotPrompt v edit.reply)
-                                }
-                            ]
+                    , BotEditor.view
+                        { idPrefix = "wa-" ++ account.id
+                        , presets = List.map toBotEditorPreset botPresets
+                        , config = toBotEditorConfig edit.reply
+                        , onSelectPreset = \preset -> SetEditReply (applyPreset preset edit.reply)
+                        , onChange = \cfg -> SetEditReply (applyBotConfig cfg edit.reply)
+                        }
                     , Ui.field
                         { id = "wait-" ++ account.id
                         , label = "Burst wait window (seconds, 0–30)"
@@ -1015,38 +960,46 @@ setEnabled enabled reply =
     { reply | enabled = enabled }
 
 
-setText : String -> Api.ReplyConfig -> Api.ReplyConfig
-setText txt reply =
-    { reply | text = txt }
+toBotEditorPreset : Api.BotPreset -> BotEditor.Preset
+toBotEditorPreset preset =
+    { id = preset.id
+    , label = preset.label
+    , tag = preset.tag
+    , subtitle = ""
+    , mode = preset.mode
+    , prompt = preset.prompt
+    , matchRule = preset.matchRule
+    , cannedText = preset.cannedText
+    }
 
 
-setMatchRule : String -> Api.ReplyConfig -> Api.ReplyConfig
-setMatchRule rule reply =
-    { reply | matchRule = rule }
+toBotEditorConfig : Api.ReplyConfig -> BotEditor.Config
+toBotEditorConfig reply =
+    { mode = reply.mode
+    , botPrompt = reply.botPrompt
+    , matchRule = reply.matchRule
+    , text = reply.text
+    }
 
 
-setBotPrompt : String -> Api.ReplyConfig -> Api.ReplyConfig
-setBotPrompt prompt reply =
-    { reply | botPrompt = prompt }
+applyPreset : BotEditor.Preset -> Api.ReplyConfig -> Api.ReplyConfig
+applyPreset preset reply =
+    { reply
+        | mode = preset.mode
+        , botPrompt = preset.prompt
+        , matchRule = preset.matchRule
+        , text = preset.cannedText
+    }
 
 
-modePicker : Api.ReplyConfig -> Html Msg
-modePicker reply =
-    div [ class "field" ]
-        [ Html.label [] [ text "Reply mode" ]
-        , div [ class "choice-row" ]
-            (List.map
-                (\( wire, label_ ) ->
-                    Html.button
-                        [ classList [ ( "choice", True ), ( "is-selected", reply.mode == wire ) ]
-                        , Html.Attributes.type_ "button"
-                        , onClick (SetEditReply { reply | mode = wire })
-                        ]
-                        [ text label_ ]
-                )
-                [ ( "ai", "AI reply" ), ( "canned", "Rule-matched reply" ) ]
-            )
-        ]
+applyBotConfig : BotEditor.Config -> Api.ReplyConfig -> Api.ReplyConfig
+applyBotConfig cfg reply =
+    { reply
+        | mode = cfg.mode
+        , botPrompt = cfg.botPrompt
+        , matchRule = cfg.matchRule
+        , text = cfg.text
+    }
 
 
 

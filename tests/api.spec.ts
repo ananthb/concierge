@@ -68,8 +68,11 @@ test.describe('bootstrap', () => {
       expect(persona.tag.length).toBeGreaterThan(0);
       expect(typeof persona.business_name).toBe('string');
       expect(persona.business_name.length).toBeGreaterThan(0);
+      expect(['ai', 'canned']).toContain(persona.mode);
       expect(typeof persona.prompt).toBe('string');
       expect(persona.prompt.length).toBeGreaterThan(0);
+      expect(typeof persona.match_rule).toBe('string');
+      expect(typeof persona.canned_text).toBe('string');
       expect(typeof persona.opener).toBe('string');
       expect(persona.opener.length).toBeGreaterThan(0);
     }
@@ -239,6 +242,29 @@ test.describe('demo chat', () => {
     expect(typeof body.reply).toBe('string');
     expect(body.reply.length).toBeGreaterThan(0);
     expect(typeof body.handed_off).toBe('boolean');
+    expect(typeof body.matched_rule).toBe('boolean');
+  });
+
+  test('answers with custom canned_text when mode is canned and match_rule is empty', async ({ request }) => {
+    const resp = await request.post('/api/demo/chat', {
+      data: {
+        persona_id: 'front-desk',
+        business_name: 'Custom Studio',
+        mode: 'canned',
+        bot_prompt: 'Fallback prompt',
+        match_rule: '',
+        canned_text: 'We are open Mon-Fri 9am-5pm.',
+        history: [],
+        message: 'When are you open?',
+        handoff: false,
+      },
+      headers: { 'X-Replybots-Request': '1' },
+    });
+    expect(resp.status()).toBe(200);
+    const body = await resp.json();
+    expect(body.reply).toBe('We are open Mon-Fri 9am-5pm.');
+    expect(body.matched_rule).toBe(true);
+    expect(body.handed_off).toBe(false);
   });
 });
 

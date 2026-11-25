@@ -292,9 +292,17 @@ const DEMO_REPLY =
 
 async function openDemoConversation(page: import('@playwright/test').Page) {
   await stubPublic(page);
-  await stub(page, '**/api/demo/chat', { reply: DEMO_REPLY, handed_off: false });
+  await stub(page, '**/api/demo/chat', {
+    reply: DEMO_REPLY,
+    handed_off: false,
+    matched_rule: false,
+  });
   await page.goto('/demo');
   await page.locator('.persona-btn').first().click();
+  const launcher = page.locator('.demo-launcher');
+  if (await launcher.isVisible()) {
+    await launcher.click();
+  }
   await page.locator('#demo-input').fill('Are you open on Sundays?');
   await page.locator('.demo-composer button[type="submit"]').click();
   await page.getByText(/8:00 AM/i).waitFor();

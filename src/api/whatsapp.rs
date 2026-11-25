@@ -35,7 +35,10 @@ pub struct BotPresetView {
     pub id: &'static str,
     pub label: &'static str,
     pub tag: &'static str,
+    pub mode: &'static str,
     pub prompt: &'static str,
+    pub match_rule: &'static str,
+    pub canned_text: &'static str,
 }
 
 #[derive(Serialize)]
@@ -115,7 +118,10 @@ fn bot_presets() -> Vec<BotPresetView> {
             id: p.id,
             label: p.label,
             tag: p.tag,
+            mode: p.mode,
             prompt: p.prompt,
+            match_rule: p.match_rule,
+            canned_text: p.canned_text,
         })
         .collect()
 }
@@ -197,7 +203,7 @@ pub async fn handle(mut req: Request, env: Env, rest: &[&str]) -> Result<Respons
                         if text.is_empty() {
                             return super::invalid("Write the canned reply message.");
                         }
-                        if text.chars().count() > 2000 {
+                        if text.chars().count() > crate::prompt::MAX_CANNED_TEXT {
                             return super::invalid(
                                 "Canned reply must be 2000 characters or fewer.",
                             );
