@@ -12,7 +12,7 @@ Automatic WhatsApp replies for small businesses. Answers in your voice with the 
 
 ## Features
 
-- **WhatsApp auto-reply**: inbound messages get a canned message (optionally gated by a natural-language match rule with AI fallback) or an AI reply via the Meta Business API and Embedded Signup. You keep your number; existing threads continue seamlessly.
+- **WhatsApp auto-reply**: inbound messages are answered by an AI bot persona with optional static rules (matched via natural-language rules for opening hours, booking links, or policies) over the Meta Business API and Embedded Signup. You keep your number; existing threads continue seamlessly.
 - **Single core persona**: built-in small-business core persona designed to answer briefly and hand off quickly. No persona builder, archetypes catalog, or custom prompts.
 - **Prompt Guard & Safety Vetting**: incoming messages are screened by `@cf/meta/prompt-guard-2-86m` for prompt injections. Business profiles and canned replies are vetted inline via `@cf/meta/llama-guard-3-8b`.
 - **Risk gate**: a draft that quotes an unauthorised price, makes a commitment, or strays past boundaries is withheld. The customer gets a holding sentence, the conversation enters handoff, and an alert email is sent to the tenant.

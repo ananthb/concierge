@@ -90,9 +90,8 @@ const WHATSAPP_ACCOUNT = {
   waba_id: 'waba-1',
   reply: {
     enabled: true,
-    mode: 'ai',
-    text: '',
     bot_prompt: '',
+    rules: [],
     wait_seconds: 3,
   },
   canned_safety_status: 'approved',

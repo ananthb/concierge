@@ -3,7 +3,7 @@
 use serde::Serialize;
 use worker::*;
 
-use crate::prompt::{BotPersona, BOT_PERSONAS};
+use crate::prompt::{BotPersona, PresetRule, BOT_PERSONAS};
 
 pub const DEMO_MAX_USER_TURNS: u32 = 6;
 pub const DEMO_IDLE_TIMEOUT_SECS: u32 = 300;
@@ -14,10 +14,8 @@ pub struct DemoPersonaView {
     pub label: &'static str,
     pub tag: &'static str,
     pub business_name: &'static str,
-    pub mode: &'static str,
     pub prompt: &'static str,
-    pub match_rule: &'static str,
-    pub canned_text: &'static str,
+    pub rules: &'static [PresetRule],
     pub opener: &'static str,
 }
 
@@ -28,10 +26,8 @@ impl From<&BotPersona> for DemoPersonaView {
             label: p.label,
             tag: p.tag,
             business_name: p.business_name,
-            mode: p.mode,
             prompt: p.prompt,
-            match_rule: p.match_rule,
-            canned_text: p.canned_text,
+            rules: p.rules,
             opener: p.opener,
         }
     }

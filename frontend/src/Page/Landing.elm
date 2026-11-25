@@ -128,10 +128,8 @@ initDemoState cfg persona =
     { personaId = persona.id
     , businessName = persona.businessName
     , config =
-        { mode = persona.mode
-        , botPrompt = persona.prompt
-        , matchRule = persona.matchRule
-        , text = persona.cannedText
+        { botPrompt = persona.prompt
+        , rules = persona.rules
         }
     , messages = []
     , draft = ""
@@ -178,10 +176,8 @@ update msg model =
                                 | personaId = preset.id
                                 , businessName = preset.subtitle
                                 , config =
-                                    { mode = preset.mode
-                                    , botPrompt = preset.prompt
-                                    , matchRule = preset.matchRule
-                                    , text = preset.cannedText
+                                    { botPrompt = preset.prompt
+                                    , rules = preset.rules
                                     }
                                 , messages = []
                                 , pending = NotAsked
@@ -320,10 +316,8 @@ update msg model =
                                     [ Api.demoChat
                                         { personaId = d.personaId
                                         , businessName = d.businessName
-                                        , mode = d.config.mode
                                         , botPrompt = d.config.botPrompt
-                                        , matchRule = d.config.matchRule
-                                        , cannedText = d.config.text
+                                        , rules = d.config.rules
                                         , history = priorHistory
                                         , message = body
                                         , handoff = currentHandoff
@@ -752,10 +746,8 @@ toBotEditorPreset persona =
     , label = persona.label
     , tag = persona.tag
     , subtitle = persona.businessName
-    , mode = persona.mode
     , prompt = persona.prompt
-    , matchRule = persona.matchRule
-    , cannedText = persona.cannedText
+    , rules = persona.rules
     }
 
 
@@ -914,8 +906,8 @@ howItWorks =
                 "1. Login with WhatsApp"
                 "Connect your WhatsApp Business number via Meta Embedded Signup. No new number or app needed."
             , step "color-bar-green"
-                "2. Pick or edit 1 bot prompt"
-                "Choose a starter bot prompt or write your own (up to 600 chars), with optional rule-matched replies."
+                "2. Write your bot persona"
+                "Write your bot persona prompt, then add optional static rules for opening hours, bookings, or policies."
             , step "color-bar-amber"
                 "3. 1 credit = 1 reply"
                 "Pay as you go with prepaid credits."

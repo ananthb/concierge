@@ -97,8 +97,49 @@ pub const MAX_MATCH_RULE: usize = 300;
 /// Maximum length (in Unicode scalar values) of a canned-reply message.
 pub const MAX_CANNED_TEXT: usize = 2000;
 
+/// Maximum number of static rules per Reply Bot.
+pub const MAX_STATIC_RULES: usize = 10;
+
+/// Validate and trim a list of static rules against length and count limits.
+pub fn validate_static_rules(
+    rules: &[crate::types::StaticRule],
+) -> Result<Vec<crate::types::StaticRule>, &'static str> {
+    if rules.len() > MAX_STATIC_RULES {
+        return Err("You can add up to 10 static rules.");
+    }
+    let mut cleaned = Vec::with_capacity(rules.len());
+    for r in rules {
+        let match_rule = r.match_rule.trim().to_string();
+        if match_rule.is_empty() {
+            return Err("Each rule needs a trigger condition.");
+        }
+        if match_rule.chars().count() > MAX_MATCH_RULE {
+            return Err("Match rule must be 300 characters or fewer.");
+        }
+        let reply_text = r.reply_text.trim().to_string();
+        if reply_text.is_empty() {
+            return Err("Each rule needs a reply message.");
+        }
+        if reply_text.chars().count() > MAX_CANNED_TEXT {
+            return Err("Canned reply must be 2000 characters or fewer.");
+        }
+        cleaned.push(crate::types::StaticRule {
+            match_rule,
+            reply_text,
+        });
+    }
+    Ok(cleaned)
+}
+
 /// Default `"user"` prompt for a new Reply Bot (Front Desk persona).
 pub const DEFAULT_BOT_PROMPT: &str = "You are the front-desk assistant for Nutmeg & Crumb Bakery at 48 12th Main, Indiranagar, Bengaluru. We are open Tue–Sun, 7:30 AM–8:00 PM (closed Mondays). Daily sourdough loaves come out at 8:00 AM alongside fresh croissants and pastries. Celebration cakes require 48 hours' notice. Answer hours, location, and general menu questions warmly and concisely. Hand off custom cake quotes, bulk corporate orders, or complaints to a human teammate right away.";
+
+/// A static rule attached to a built-in `BotPersona` preset.
+#[derive(serde::Serialize, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct PresetRule {
+    pub match_rule: &'static str,
+    pub reply_text: &'static str,
+}
 
 /// One of the 4 built-in Reply Bot presets (used for the landing-page demo
 /// selector and as starter presets in the dashboard).
@@ -108,10 +149,8 @@ pub struct BotPersona {
     pub label: &'static str,
     pub tag: &'static str,
     pub business_name: &'static str,
-    pub mode: &'static str,
     pub prompt: &'static str,
-    pub match_rule: &'static str,
-    pub canned_text: &'static str,
+    pub rules: &'static [PresetRule],
     pub opener: &'static str,
 }
 
@@ -122,10 +161,8 @@ pub const BOT_PERSONAS: &[BotPersona] = &[
         label: "Front Desk",
         tag: "General",
         business_name: "Nutmeg & Crumb Bakery",
-        mode: "ai",
         prompt: DEFAULT_BOT_PROMPT,
-        match_rule: "",
-        canned_text: "",
+        rules: &[],
         opener: "Hi! Welcome to Nutmeg & Crumb Bakery. How can we help today?",
     },
     BotPersona {
@@ -133,10 +170,17 @@ pub const BOT_PERSONAS: &[BotPersona] = &[
         label: "Order & Booking",
         tag: "Bookings",
         business_name: "ClearSmile Dental",
-        mode: "canned",
         prompt: "You are the appointment desk for ClearSmile Dental (Mon–Sat, 9:30 AM–7:30 PM, closed Sundays; 142 MG Road, 2nd Floor, basement parking). Routine consultations, X-rays, and dental cleaning slots are scheduled throughout clinic hours. Share general slot availability and ask for the patient's name and preferred day/time. Hand off dental pain emergencies, insurance or billing questions, and confirmed bookings to our receptionist immediately.",
-        match_rule: "Customer asks for clinic hours, address, parking, or walk-in availability",
-        canned_text: "ClearSmile Dental is open Mon–Sat, 9:30 AM – 7:30 PM (closed Sundays). Located at 142 MG Road, 2nd Floor with basement parking. Share your preferred day and our desk will confirm your slot.",
+        rules: &[
+            PresetRule {
+                match_rule: "Customer asks for clinic hours, address, or parking",
+                reply_text: "ClearSmile Dental is open Mon–Sat, 9:30 AM – 7:30 PM (closed Sundays). We're at 142 MG Road, 2nd Floor, with basement parking available.",
+            },
+            PresetRule {
+                match_rule: "Customer asks about walk-ins or how to prepare for an appointment",
+                reply_text: "We welcome scheduled appointments and limited same-day walk-ins. Please arrive 10 minutes early with a valid ID and any recent dental X-rays; share your preferred day and our desk will confirm your slot.",
+            },
+        ],
         opener: "Hello from ClearSmile Dental! How can we help you today?",
     },
     BotPersona {
@@ -144,10 +188,13 @@ pub const BOT_PERSONAS: &[BotPersona] = &[
         label: "After-Hours Triage",
         tag: "After-hours",
         business_name: "QuickFix Home Plumbing",
-        mode: "canned",
         prompt: "You are the triage assistant for QuickFix Home Plumbing, serving Koramangala, HSR Layout, and Indiranagar daily from 7:00 AM–10:00 PM with 60-minute emergency leak dispatch. Ask the customer for their leak severity, street or area, and best callback number in one short message, then hand off immediately to the on-call technician to dispatch or confirm.",
-        match_rule: "Customer asks about emergency visit availability, service areas, or operating hours",
-        canned_text: "QuickFix Plumbing operates daily 7:00 AM – 10:00 PM across Koramangala, HSR Layout, and Indiranagar (60-minute emergency leak dispatch). Share your area and issue so our on-call technician can confirm.",
+        rules: &[
+            PresetRule {
+                match_rule: "Customer asks about emergency visit availability, service areas, or operating hours",
+                reply_text: "QuickFix Plumbing operates daily 7:00 AM – 10:00 PM across Koramangala, HSR Layout, and Indiranagar (60-minute emergency leak dispatch). Share your area and issue so our on-call technician can confirm.",
+            },
+        ],
         opener: "Hi there! QuickFix Home Plumbing here. What issue can we help with?",
     },
     BotPersona {
@@ -155,10 +202,8 @@ pub const BOT_PERSONAS: &[BotPersona] = &[
         label: "Concise Support",
         tag: "Support",
         business_name: "Kala Craft Studio",
-        mode: "ai",
         prompt: "You are the support desk for Kala Craft Studio, open Mon–Fri 10:00 AM–6:30 PM and Sat 11:00 AM–4:00 PM (closed Sundays). We specialize in archival art prints and custom framing with a standard 5–7 business day turnaround. Give crisp, direct answers on studio hours, framing options, and turnaround times. Hand off order status checks, wholesale pricing inquiries, or damaged-package claims to a studio coordinator right away.",
-        match_rule: "",
-        canned_text: "",
+        rules: &[],
         opener: "Hi! Welcome to Kala Craft Studio support. How can we help?",
     },
 ];
@@ -223,12 +268,11 @@ mod tests {
         assert_eq!(BOT_PERSONAS[1].id, "orders");
         assert_eq!(BOT_PERSONAS[2].id, "after-hours");
         assert_eq!(BOT_PERSONAS[3].id, "concise");
-        assert_eq!(BOT_PERSONAS[0].mode, "ai");
-        assert_eq!(BOT_PERSONAS[1].mode, "canned");
-        assert_eq!(BOT_PERSONAS[2].mode, "canned");
-        assert_eq!(BOT_PERSONAS[3].mode, "ai");
+        assert_eq!(BOT_PERSONAS[0].rules.len(), 0);
+        assert_eq!(BOT_PERSONAS[1].rules.len(), 2);
+        assert_eq!(BOT_PERSONAS[2].rules.len(), 1);
+        assert_eq!(BOT_PERSONAS[3].rules.len(), 0);
         for p in BOT_PERSONAS {
-            assert!(p.mode == "ai" || p.mode == "canned");
             assert!(!p.prompt.trim().is_empty());
             assert!(
                 p.prompt.chars().count() <= MAX_BOT_PROMPT,
@@ -237,21 +281,48 @@ mod tests {
                 p.prompt.chars().count()
             );
             assert!(
-                p.match_rule.chars().count() <= MAX_MATCH_RULE,
-                "match_rule too long for {}: {}",
+                p.rules.len() <= MAX_STATIC_RULES,
+                "too many rules for {}: {}",
                 p.id,
-                p.match_rule.chars().count()
+                p.rules.len()
             );
-            assert!(
-                p.canned_text.chars().count() <= MAX_CANNED_TEXT,
-                "canned_text too long for {}: {}",
-                p.id,
-                p.canned_text.chars().count()
-            );
-            if p.mode == "canned" {
-                assert!(!p.canned_text.trim().is_empty());
+            for (idx, r) in p.rules.iter().enumerate() {
+                assert!(
+                    !r.match_rule.trim().is_empty(),
+                    "empty match_rule for {} rule {}",
+                    p.id,
+                    idx
+                );
+                assert!(
+                    !r.reply_text.trim().is_empty(),
+                    "empty reply_text for {} rule {}",
+                    p.id,
+                    idx
+                );
+                assert!(
+                    r.match_rule.chars().count() <= MAX_MATCH_RULE,
+                    "match_rule too long for {} rule {}: {}",
+                    p.id,
+                    idx,
+                    r.match_rule.chars().count()
+                );
+                assert!(
+                    r.reply_text.chars().count() <= MAX_CANNED_TEXT,
+                    "reply_text too long for {} rule {}: {}",
+                    p.id,
+                    idx,
+                    r.reply_text.chars().count()
+                );
+                for field in [r.match_rule, r.reply_text] {
+                    assert!(
+                        !field.to_ascii_lowercase().contains("whatsapp"),
+                        "preset {} rule {} must not mention WhatsApp",
+                        p.id,
+                        idx
+                    );
+                }
             }
-            for field in [p.prompt, p.match_rule, p.canned_text, p.opener] {
+            for field in [p.prompt, p.opener] {
                 assert!(
                     !field.to_ascii_lowercase().contains("whatsapp"),
                     "preset {} must not mention WhatsApp",
