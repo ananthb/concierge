@@ -248,9 +248,6 @@ pub async fn handle_demo_chat(mut req: Request, env: Env) -> Result<Response> {
         }
         ai::InjectionVerdict::Error => {
             crate::metrics::record(&env, "demo", "prompt_guard_error", "ai_error");
-            return crate::api::invalid(
-                "We can't process that message. Please rephrase your question.",
-            );
         }
     }
 

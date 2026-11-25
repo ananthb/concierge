@@ -172,7 +172,7 @@ pub(crate) fn merge_inbound_batch(pending: &[InboundMessage]) -> Option<InboundM
 /// Handle auto-reply for an inbound message:
 ///   1. Load `ReplyConfig` + canned safety via `get_channel_reply_info`.
 ///   2. Skip if disabled.
-///   3. Run prompt-injection scan via `@cf/meta/prompt-guard-2-86m`.
+///   3. Run prompt-injection scan via `@cf/meta/llama-3.1-8b-instruct-fast`.
 ///   4. Decide static rule vs AI: if `effective_rules()` is non-empty, check
 ///      `ai::pick_static_rule`; non-matches fall back to AI generation.
 ///   5. Gate on content safety (`canned_safety` for rules/bot_prompt, `profile_safety` for AI).
@@ -203,12 +203,11 @@ async fn handle_auto_reply(msg: &InboundMessage, db: &D1Database, env: &Env) -> 
         }
         ai::InjectionVerdict::Error => {
             console_log!(
-                "Prompt guard error for message from {} in tenant {}, skipping reply",
+                "Prompt guard error for message from {} in tenant {}, continuing",
                 msg.sender,
                 msg.tenant_id
             );
             crate::metrics::record(env, "whatsapp", "prompt_guard_error", "ai_error");
-            return Ok(());
         }
     }
 
