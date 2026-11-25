@@ -322,13 +322,21 @@ enterRoute route model =
     let
         settled =
             { model | route = route }
+
+        maybeDemo =
+            case model.boot of
+                Success boot ->
+                    Just boot.demo
+
+                _ ->
+                    Nothing
     in
     case route of
         Route.Landing ->
-            ( { settled | page = LandingPage (Landing.init model.reducedMotion) }, Cmd.none )
+            ( { settled | page = LandingPage (Landing.init model.reducedMotion maybeDemo) }, Cmd.none )
 
         Route.Demo ->
-            ( { settled | page = LandingPage (Landing.init model.reducedMotion) }, Cmd.none )
+            ( { settled | page = LandingPage (Landing.init model.reducedMotion maybeDemo) }, Cmd.none )
 
         Route.Wizard ->
             case model.session of

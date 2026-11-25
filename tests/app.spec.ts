@@ -221,20 +221,59 @@ test.describe('pricing', () => {
 });
 
 test.describe('demo chat', () => {
-  test('a visitor can pick a business and send a message', async ({ page, consoleErrors }) => {
+  test('renders shared BotEditor with zero WhatsApp copy and no visible timer', async ({
+    page,
+    consoleErrors,
+  }) => {
     const boot = await (await page.request.get('/api/bootstrap')).json();
     test.skip(!boot.demo.enabled || boot.demo.personas.length === 0, 'demo is disabled');
 
     await page.goto('/demo');
+    const demoPage = page.locator('.page-demo');
+    await expect(demoPage).toBeVisible();
+    await expect(demoPage).not.toContainText(/whatsapp/i);
+    await expect(demoPage).not.toContainText(/turns|idle|Demo resets in/i);
+
     const firstPersona = page.locator('.persona-btn').first();
     await expect(firstPersona).toBeVisible();
-    await firstPersona.click();
     await expect(firstPersona).toHaveClass(/is-active/);
+    await expect(page.locator('#demo-business-name')).toBeVisible();
+    await expect(page.locator('#demo-bot-prompt')).toBeVisible();
 
+    // Switching to Rule-matched reply shows matched reply text + match rule + fallback prompt.
+    await page.getByRole('button', { name: 'Rule-matched reply' }).click();
+    await expect(page.locator('#demo-reply-text')).toBeVisible();
+    await expect(page.locator('#demo-match-rule')).toBeVisible();
+    await expect(page.locator('label[for="demo-bot-prompt"]')).toContainText(
+      'Fallback AI bot prompt',
+    );
+
+    // Empty matched reply text shows inline error and blocks send.
+    await page.locator('#demo-reply-text').fill('');
+    await expect(page.locator('.field-error')).toContainText('Write the matched reply message.');
+
+    expect(consoleErrors, consoleErrors.join('\n')).toEqual([]);
+  });
+
+  test('a visitor can chat in the floating customer widget', async ({ page, consoleErrors }) => {
+    const boot = await (await page.request.get('/api/bootstrap')).json();
+    test.skip(!boot.demo.enabled || boot.demo.personas.length === 0, 'demo is disabled');
+
+    await page.goto('/demo');
+    await page.locator('.persona-btn').first().waitFor();
+
+    // On mobile (< 960px), open the drawer via the launcher button first.
+    const launcher = page.locator('.demo-launcher');
+    if (await launcher.isVisible()) {
+      await launcher.click();
+    }
+
+    await expect(page.locator('.demo-widget')).toBeVisible();
+    await expect(page.locator('.demo-widget-kicker')).toHaveText(
+      "Chat as if you're the customer",
+    );
     await expect(page.locator('.demo-transcript .bubble-assistant')).toHaveCount(0);
     await expect(page.locator('.demo-transcript .demo-empty')).toBeVisible();
-    await expect(page.locator('.prompt-panel .prompt-preview')).toBeVisible();
-    await expect(page.locator('.prompt-panel .prompt-panel-note')).toBeVisible();
 
     await page.locator('#demo-input').fill('What time do you open?');
     await page.locator('.demo-composer button[type="submit"]').click();
@@ -253,28 +292,19 @@ test.describe('demo chat', () => {
     test.skip(!boot.demo.enabled || boot.demo.personas.length === 0, 'demo is disabled');
 
     await page.goto('/demo');
-    await page.locator('.persona-btn').first().click();
+    await page.locator('.persona-btn').first().waitFor();
+    const launcher = page.locator('.demo-launcher');
+    if (await launcher.isVisible()) {
+      await launcher.click();
+    }
     await expect(page.locator('.demo-composer button[type="submit"]')).toBeDisabled();
   });
 
-  test('clicking a selected persona unselects it and closes the demo box', async ({ page }) => {
-    const boot = await (await page.request.get('/api/bootstrap')).json();
-    test.skip(!boot.demo.enabled || boot.demo.personas.length === 0, 'demo is disabled');
-
+  test('landing page keeps marketing sections', async ({ page }) => {
     await page.goto('/');
     await expect(page.locator('#how-it-works')).toBeVisible();
     await expect(page.locator('#features')).toBeVisible();
     await expect(page.locator('#pricing')).toBeVisible();
-
-    await page.goto('/demo');
-    const firstPersona = page.locator('.persona-btn').first();
-    await firstPersona.click();
-    await expect(firstPersona).toHaveClass(/is-active/);
-    await expect(page.locator('.demo-box')).toBeVisible();
-
-    await firstPersona.click();
-    await expect(firstPersona).not.toHaveClass(/is-active/);
-    await expect(page.locator('.demo-box')).toHaveCount(0);
   });
 });
 

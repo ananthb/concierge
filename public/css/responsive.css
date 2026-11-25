@@ -2,6 +2,41 @@
    Note that tokens.css already steps `--page-pad` and `--card-pad` down
    at 720px, so container padding tightens without a rule here. */
 
+@media (min-width:960px) {
+  .demo-setup {
+    max-width: min(680px, calc(100vw - 440px));
+  }
+}
+
+@media (max-width:959px) {
+  .page-demo { padding-bottom: 96px; }
+  .demo-dock {
+    display: none;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    max-width: 100%;
+    padding: 0 12px 12px;
+  }
+  .demo-dock.is-open {
+    display: block;
+  }
+  .demo-widget {
+    max-height: calc(100vh - 80px);
+  }
+  .demo-launcher {
+    display: inline-flex;
+    right: 16px;
+    bottom: 16px;
+  }
+  .demo-launcher.is-hidden {
+    display: none;
+  }
+  .demo-launcher-compact { display: none; }
+  .demo-launcher-full { display: inline; }
+}
+
 @media (max-width:900px) {
   /* The editor and its live preview stop sitting side by side. */
   .preview-panel { margin-top: 16px; }
@@ -9,6 +44,10 @@
 }
 
 @media (max-width:767px) {
+  .persona-grid {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
   .persona-demo-wrap {
     display: flex;
     flex-direction: column;

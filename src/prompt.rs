@@ -94,10 +94,13 @@ pub const MAX_BOT_PROMPT: usize = 600;
 /// Maximum length (in Unicode scalar values) of a canned-reply match rule.
 pub const MAX_MATCH_RULE: usize = 300;
 
-/// Default `"user"` prompt for a new Reply Bot (Front Desk persona).
-pub const DEFAULT_BOT_PROMPT: &str = "You are a friendly neighborhood bakery front desk. Answer store hours (8am–8pm) and location briefly; hand off custom cake orders, prices, or complaints to a human right away.";
+/// Maximum length (in Unicode scalar values) of a canned-reply message.
+pub const MAX_CANNED_TEXT: usize = 2000;
 
-/// One of the 4 built-in Reply Bot personas (used for the landing-page demo
+/// Default `"user"` prompt for a new Reply Bot (Front Desk persona).
+pub const DEFAULT_BOT_PROMPT: &str = "You are the front-desk assistant for Nutmeg & Crumb Bakery at 48 12th Main, Indiranagar, Bengaluru. We are open Tue–Sun, 7:30 AM–8:00 PM (closed Mondays). Daily sourdough loaves come out at 8:00 AM alongside fresh croissants and pastries. Celebration cakes require 48 hours' notice. Answer hours, location, and general menu questions warmly and concisely. Hand off custom cake quotes, bulk corporate orders, or complaints to a human teammate right away.";
+
+/// One of the 4 built-in Reply Bot presets (used for the landing-page demo
 /// selector and as starter presets in the dashboard).
 #[derive(serde::Serialize, Clone, Copy, Debug)]
 pub struct BotPersona {
@@ -105,7 +108,10 @@ pub struct BotPersona {
     pub label: &'static str,
     pub tag: &'static str,
     pub business_name: &'static str,
+    pub mode: &'static str,
     pub prompt: &'static str,
+    pub match_rule: &'static str,
+    pub canned_text: &'static str,
     pub opener: &'static str,
 }
 
@@ -116,7 +122,10 @@ pub const BOT_PERSONAS: &[BotPersona] = &[
         label: "Front Desk",
         tag: "General",
         business_name: "Nutmeg & Crumb Bakery",
+        mode: "ai",
         prompt: DEFAULT_BOT_PROMPT,
+        match_rule: "",
+        canned_text: "",
         opener: "Hi! Welcome to Nutmeg & Crumb Bakery. How can we help today?",
     },
     BotPersona {
@@ -124,23 +133,32 @@ pub const BOT_PERSONAS: &[BotPersona] = &[
         label: "Order & Booking",
         tag: "Bookings",
         business_name: "ClearSmile Dental",
-        prompt: "You are a clinic appointment desk. Ask for preferred day/time and patient name in one short message, then hand off to the receptionist to confirm.",
+        mode: "canned",
+        prompt: "You are the appointment desk for ClearSmile Dental (Mon–Sat, 9:30 AM–7:30 PM, closed Sundays; 142 MG Road, 2nd Floor, basement parking). Routine consultations, X-rays, and dental cleaning slots are scheduled throughout clinic hours. Share general slot availability and ask for the patient's name and preferred day/time. Hand off dental pain emergencies, insurance or billing questions, and confirmed bookings to our receptionist immediately.",
+        match_rule: "Customer asks for clinic hours, address, parking, or walk-in availability",
+        canned_text: "ClearSmile Dental is open Mon–Sat, 9:30 AM – 7:30 PM (closed Sundays). Located at 142 MG Road, 2nd Floor with basement parking. Share your preferred day and our desk will confirm your slot.",
         opener: "Hello from ClearSmile Dental! How can we help you today?",
     },
     BotPersona {
         id: "after-hours",
         label: "After-Hours Triage",
         tag: "After-hours",
-        business_name: "QuickFix Plumbing",
-        prompt: "You are an after-hours helper for a plumbing team. Ask if it's an active leak/emergency and grab their area/pincode, then hand off immediately.",
-        opener: "Hi there! QuickFix Plumbing here. What issue can we help with?",
+        business_name: "QuickFix Home Plumbing",
+        mode: "canned",
+        prompt: "You are the triage assistant for QuickFix Home Plumbing, serving Koramangala, HSR Layout, and Indiranagar daily from 7:00 AM–10:00 PM with 60-minute emergency leak dispatch. Ask the customer for their leak severity, street or area, and best callback number in one short message, then hand off immediately to the on-call technician to dispatch or confirm.",
+        match_rule: "Customer asks about emergency visit availability, service areas, or operating hours",
+        canned_text: "QuickFix Plumbing operates daily 7:00 AM – 10:00 PM across Koramangala, HSR Layout, and Indiranagar (60-minute emergency leak dispatch). Share your area and issue so our on-call technician can confirm.",
+        opener: "Hi there! QuickFix Home Plumbing here. What issue can we help with?",
     },
     BotPersona {
         id: "concise",
         label: "Concise Support",
         tag: "Support",
         business_name: "Kala Craft Studio",
-        prompt: "You are a crisp order-support desk. Give short, direct answers on shipping/returns policy and hand off anything needing order lookup to a human.",
+        mode: "ai",
+        prompt: "You are the support desk for Kala Craft Studio, open Mon–Fri 10:00 AM–6:30 PM and Sat 11:00 AM–4:00 PM (closed Sundays). We specialize in archival art prints and custom framing with a standard 5–7 business day turnaround. Give crisp, direct answers on studio hours, framing options, and turnaround times. Hand off order status checks, wholesale pricing inquiries, or damaged-package claims to a studio coordinator right away.",
+        match_rule: "",
+        canned_text: "",
         opener: "Hi! Welcome to Kala Craft Studio support. How can we help?",
     },
 ];
@@ -189,6 +207,7 @@ pub fn compose_bot_system_prompt(brand_name: &str, bot_prompt: &str) -> String {
 
 /// Build the system prompt for a landing-page demo persona using the shared
 /// system prompt envelope and that persona's single `"user"` prompt.
+#[cfg(test)]
 pub fn demo_system_prompt(persona: &BotPersona) -> String {
     compose_bot_system_prompt(persona.business_name, persona.prompt)
 }
@@ -204,9 +223,41 @@ mod tests {
         assert_eq!(BOT_PERSONAS[1].id, "orders");
         assert_eq!(BOT_PERSONAS[2].id, "after-hours");
         assert_eq!(BOT_PERSONAS[3].id, "concise");
+        assert_eq!(BOT_PERSONAS[0].mode, "ai");
+        assert_eq!(BOT_PERSONAS[1].mode, "canned");
+        assert_eq!(BOT_PERSONAS[2].mode, "canned");
+        assert_eq!(BOT_PERSONAS[3].mode, "ai");
         for p in BOT_PERSONAS {
+            assert!(p.mode == "ai" || p.mode == "canned");
             assert!(!p.prompt.trim().is_empty());
-            assert!(p.prompt.chars().count() <= MAX_BOT_PROMPT);
+            assert!(
+                p.prompt.chars().count() <= MAX_BOT_PROMPT,
+                "prompt too long for {}: {}",
+                p.id,
+                p.prompt.chars().count()
+            );
+            assert!(
+                p.match_rule.chars().count() <= MAX_MATCH_RULE,
+                "match_rule too long for {}: {}",
+                p.id,
+                p.match_rule.chars().count()
+            );
+            assert!(
+                p.canned_text.chars().count() <= MAX_CANNED_TEXT,
+                "canned_text too long for {}: {}",
+                p.id,
+                p.canned_text.chars().count()
+            );
+            if p.mode == "canned" {
+                assert!(!p.canned_text.trim().is_empty());
+            }
+            for field in [p.prompt, p.match_rule, p.canned_text, p.opener] {
+                assert!(
+                    !field.to_ascii_lowercase().contains("whatsapp"),
+                    "preset {} must not mention WhatsApp",
+                    p.id
+                );
+            }
             assert!(find_bot_persona(p.id).is_some());
         }
         assert!(find_bot_persona("unknown").is_none());
