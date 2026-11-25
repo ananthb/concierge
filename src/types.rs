@@ -124,23 +124,34 @@ pub struct WhatsAppAccount {
     pub updated_at: String,
 }
 
+/// A single static auto-reply rule: when an inbound message matches `match_rule`,
+/// reply verbatim with `reply_text`.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct StaticRule {
+    pub match_rule: String,
+    pub reply_text: String,
+}
+
 /// Per-channel reply configuration.
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct ReplyConfig {
     pub enabled: bool,
-    #[serde(default = "default_response")]
-    pub response: ReplyResponse,
+    /// Single `"user"` prompt for this Reply Bot (wrapped inside the shared
+    /// system prompt envelope).
+    #[serde(default = "crate::prompt::default_bot_prompt")]
+    pub bot_prompt: String,
+    /// Optional list of static rules checked before falling back to AI generation.
+    #[serde(default)]
+    pub rules: Vec<StaticRule>,
     /// Seconds to wait after the latest inbound message before replying.
     /// 0 = reply immediately (no buffering).
     #[serde(default = "default_wait_seconds")]
     pub wait_seconds: u32,
-    /// Single `"user"` prompt for this Reply Bot (wrapped inside the shared
-    /// system prompt envelope when `response` is `ReplyResponse::Ai`).
-    #[serde(default = "crate::prompt::default_bot_prompt")]
-    pub bot_prompt: String,
-    /// Optional natural-language rule describing which inbound messages should
-    /// receive the rule-matched reply. When empty, all messages match.
-    #[serde(default)]
+    /// Legacy field retained only for deserializing older D1 rows.
+    #[serde(default, skip_serializing)]
+    pub response: Option<ReplyResponse>,
+    /// Legacy field retained only for deserializing older D1 rows.
+    #[serde(default, skip_serializing)]
     pub match_rule: String,
 }
 
@@ -148,44 +159,61 @@ impl Default for ReplyConfig {
     fn default() -> Self {
         Self {
             enabled: true,
-            response: default_response(),
-            wait_seconds: default_wait_seconds(),
             bot_prompt: crate::prompt::default_bot_prompt(),
+            rules: Vec::new(),
+            wait_seconds: default_wait_seconds(),
+            response: None,
             match_rule: String::new(),
         }
     }
 }
 
 impl ReplyConfig {
-    /// True when the response is rule-matched text (`Canned`).
-    pub fn is_canned(&self) -> bool {
-        matches!(self.response, ReplyResponse::Canned { .. })
+    /// Effective static rules: returns `self.rules` if non-empty, otherwise
+    /// migrates a legacy `ReplyResponse::Canned` row into a single-element list.
+    pub fn effective_rules(&self) -> Vec<StaticRule> {
+        if !self.rules.is_empty() {
+            return self.rules.clone();
+        }
+        if let Some(ReplyResponse::Canned { ref text }) = self.response {
+            if !text.trim().is_empty() {
+                return vec![StaticRule {
+                    match_rule: self.match_rule.clone(),
+                    reply_text: text.clone(),
+                }];
+            }
+        }
+        Vec::new()
     }
 
-    /// Canned text when `Canned`, empty string when `Ai`.
-    pub fn canned_text(&self) -> &str {
-        match &self.response {
-            ReplyResponse::Ai => "",
-            ReplyResponse::Canned { text } => text,
-        }
+    /// Deterministic combined text of `bot_prompt` and `effective_rules` for
+    /// content safety hashing and classification.
+    pub fn safety_text(&self) -> String {
+        let rules = self.effective_rules();
+        static_rules_safety_text(&self.bot_prompt, &rules)
     }
 }
 
-pub fn default_response() -> ReplyResponse {
-    ReplyResponse::Ai
+/// Deterministic combined text of `bot_prompt` and `rules` for content safety
+/// hashing and classification.
+pub fn static_rules_safety_text(bot_prompt: &str, rules: &[StaticRule]) -> String {
+    let mut parts = vec![bot_prompt.trim().to_string()];
+    for r in rules {
+        parts.push(r.match_rule.trim().to_string());
+        parts.push(r.reply_text.trim().to_string());
+    }
+    parts.join("\n")
 }
 
 pub fn default_wait_seconds() -> u32 {
     3
 }
 
-/// What to send when an inbound message arrives.
+/// Legacy response mode enum retained only for migrating older D1 rows.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 #[serde(tag = "mode", rename_all = "snake_case")]
 pub enum ReplyResponse {
-    /// Use the single small-business core persona via Workers AI.
     Ai,
-    /// Send this verbatim text when matched. Costs 1 reply credit.
     Canned { text: String },
 }
 
@@ -648,9 +676,49 @@ mod tests {
         let legacy = r#"{"enabled":true,"response":{"mode":"ai"},"wait_seconds":3}"#;
         let parsed: ReplyConfig = serde_json::from_str(legacy).unwrap();
         assert!(parsed.enabled);
-        assert_eq!(parsed.response, ReplyResponse::Ai);
+        assert_eq!(parsed.response, Some(ReplyResponse::Ai));
         assert_eq!(parsed.wait_seconds, 3);
         assert_eq!(parsed.bot_prompt, crate::prompt::DEFAULT_BOT_PROMPT);
+        assert!(parsed.effective_rules().is_empty());
+    }
+
+    #[test]
+    fn reply_config_effective_rules_migrates_legacy_canned() {
+        let legacy = r#"{"enabled":true,"response":{"mode":"canned","text":"We are open 9-5."},"match_rule":"hours","wait_seconds":0}"#;
+        let parsed: ReplyConfig = serde_json::from_str(legacy).unwrap();
+        assert_eq!(
+            parsed.effective_rules(),
+            vec![StaticRule {
+                match_rule: "hours".to_string(),
+                reply_text: "We are open 9-5.".to_string(),
+            }]
+        );
+
+        let serialized = serde_json::to_string(&parsed).unwrap();
+        assert!(!serialized.contains("\"mode\""));
+        assert!(!serialized.contains("\"response\""));
+    }
+
+    #[test]
+    fn reply_config_effective_rules_prefers_new_rules_vec() {
+        let cfg = ReplyConfig {
+            rules: vec![StaticRule {
+                match_rule: "pricing".to_string(),
+                reply_text: "Starts at $10".to_string(),
+            }],
+            response: Some(ReplyResponse::Canned {
+                text: "old".to_string(),
+            }),
+            match_rule: "old rule".to_string(),
+            ..Default::default()
+        };
+        assert_eq!(
+            cfg.effective_rules(),
+            vec![StaticRule {
+                match_rule: "pricing".to_string(),
+                reply_text: "Starts at $10".to_string(),
+            }]
+        );
     }
 
     #[test]

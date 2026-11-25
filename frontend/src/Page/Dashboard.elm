@@ -307,10 +307,8 @@ update msg model =
                                         , Api.updateWhatsApp edit.id
                                             { name = name
                                             , enabled = edit.reply.enabled
-                                            , mode = edit.reply.mode
-                                            , text = edit.reply.text
-                                            , matchRule = edit.reply.matchRule
                                             , botPrompt = edit.reply.botPrompt
+                                            , rules = edit.reply.rules
                                             , waitSeconds = waitSecs
                                             }
                                             SavedReply
@@ -894,15 +892,25 @@ accountCard model botPresets account =
                     [ p []
                         [ text
                             (if account.reply.enabled then
-                                if account.reply.mode == "canned" then
-                                    "Sending rule-matched reply · "
-                                        ++ String.fromInt account.reply.waitSeconds
-                                        ++ "s burst wait."
+                                let
+                                    ruleCount =
+                                        List.length account.reply.rules
 
-                                else
-                                    "Answering with AI (1 user prompt) · "
-                                        ++ String.fromInt account.reply.waitSeconds
-                                        ++ "s burst wait."
+                                    rulesPart =
+                                        if ruleCount == 0 then
+                                            ""
+
+                                        else if ruleCount == 1 then
+                                            " · 1 static rule"
+
+                                        else
+                                            " · " ++ String.fromInt ruleCount ++ " static rules"
+                                in
+                                "Answering with bot persona"
+                                    ++ rulesPart
+                                    ++ " · "
+                                    ++ String.fromInt account.reply.waitSeconds
+                                    ++ "s burst wait."
 
                              else
                                 "Auto-reply paused."
@@ -966,39 +974,31 @@ toBotEditorPreset preset =
     , label = preset.label
     , tag = preset.tag
     , subtitle = ""
-    , mode = preset.mode
     , prompt = preset.prompt
-    , matchRule = preset.matchRule
-    , cannedText = preset.cannedText
+    , rules = preset.rules
     }
 
 
 toBotEditorConfig : Api.ReplyConfig -> BotEditor.Config
 toBotEditorConfig reply =
-    { mode = reply.mode
-    , botPrompt = reply.botPrompt
-    , matchRule = reply.matchRule
-    , text = reply.text
+    { botPrompt = reply.botPrompt
+    , rules = reply.rules
     }
 
 
 applyPreset : BotEditor.Preset -> Api.ReplyConfig -> Api.ReplyConfig
 applyPreset preset reply =
     { reply
-        | mode = preset.mode
-        , botPrompt = preset.prompt
-        , matchRule = preset.matchRule
-        , text = preset.cannedText
+        | botPrompt = preset.prompt
+        , rules = preset.rules
     }
 
 
 applyBotConfig : BotEditor.Config -> Api.ReplyConfig -> Api.ReplyConfig
 applyBotConfig cfg reply =
     { reply
-        | mode = cfg.mode
-        , botPrompt = cfg.botPrompt
-        , matchRule = cfg.matchRule
-        , text = cfg.text
+        | botPrompt = cfg.botPrompt
+        , rules = cfg.rules
     }
 
 

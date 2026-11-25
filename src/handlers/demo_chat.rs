@@ -13,6 +13,7 @@ use crate::helpers::truncate;
 use crate::prompt;
 use crate::risk;
 use crate::safety::{self, SafetyVerdict};
+use crate::types::StaticRule;
 
 const MAX_BODY_BYTES: usize = 16_384;
 const MAX_CONTENT_CHARS: usize = 300;
@@ -27,13 +28,9 @@ struct DemoChatReq {
     #[serde(default)]
     business_name: Option<String>,
     #[serde(default)]
-    mode: Option<String>,
-    #[serde(default)]
     bot_prompt: Option<String>,
     #[serde(default)]
-    match_rule: Option<String>,
-    #[serde(default)]
-    canned_text: Option<String>,
+    rules: Option<Vec<StaticRule>>,
     #[serde(default)]
     history: Vec<HistoryTurn>,
     message: String,
@@ -57,10 +54,19 @@ struct ChatReply {
 #[derive(Debug, PartialEq, Eq)]
 struct ResolvedBotConfig {
     business_name: String,
-    mode: String,
     bot_prompt: String,
-    match_rule: String,
-    canned_text: String,
+    rules: Vec<StaticRule>,
+}
+
+fn preset_rules(persona: &prompt::BotPersona) -> Vec<StaticRule> {
+    persona
+        .rules
+        .iter()
+        .map(|r| StaticRule {
+            match_rule: r.match_rule.to_string(),
+            reply_text: r.reply_text.to_string(),
+        })
+        .collect()
 }
 
 fn resolve_and_validate_config(
@@ -75,15 +81,6 @@ fn resolve_and_validate_config(
             .unwrap_or(persona.business_name),
         200,
     );
-    let mode = parsed
-        .mode
-        .as_deref()
-        .map(str::trim)
-        .unwrap_or(persona.mode)
-        .to_string();
-    if mode != "ai" && mode != "canned" {
-        return Err("Reply mode must be 'ai' or 'canned'.");
-    }
 
     let bot_prompt = parsed
         .bot_prompt
@@ -95,35 +92,15 @@ fn resolve_and_validate_config(
         return Err("Bot prompt must be 600 characters or fewer.");
     }
 
-    let match_rule = parsed
-        .match_rule
-        .as_deref()
-        .map(str::trim)
-        .unwrap_or(persona.match_rule)
-        .to_string();
-    if match_rule.chars().count() > prompt::MAX_MATCH_RULE {
-        return Err("Match rule must be 300 characters or fewer.");
-    }
-
-    let canned_text = parsed
-        .canned_text
-        .as_deref()
-        .map(str::trim)
-        .unwrap_or(persona.canned_text)
-        .to_string();
-    if canned_text.chars().count() > prompt::MAX_CANNED_TEXT {
-        return Err("Canned reply must be 2000 characters or fewer.");
-    }
-    if mode == "canned" && canned_text.is_empty() {
-        return Err("Write the canned reply message.");
-    }
+    let rules = match parsed.rules.as_ref() {
+        Some(raw) => prompt::validate_static_rules(raw)?,
+        None => preset_rules(persona),
+    };
 
     Ok(ResolvedBotConfig {
         business_name,
-        mode,
         bot_prompt,
-        match_rule,
-        canned_text,
+        rules,
     })
 }
 
@@ -132,38 +109,25 @@ fn user_edited_safety_text(
     persona: &prompt::BotPersona,
     resolved: &ResolvedBotConfig,
 ) -> Option<String> {
-    let candidates = [
-        (
-            parsed.business_name.is_some(),
-            resolved.business_name.as_str(),
-            persona.business_name,
-        ),
-        (
-            parsed.bot_prompt.is_some(),
-            resolved.bot_prompt.as_str(),
-            persona.prompt,
-        ),
-        (
-            parsed.match_rule.is_some(),
-            resolved.match_rule.as_str(),
-            persona.match_rule,
-        ),
-        (
-            parsed.canned_text.is_some(),
-            resolved.canned_text.as_str(),
-            persona.canned_text,
-        ),
-    ];
-    let edited: Vec<&str> = candidates
-        .into_iter()
-        .filter_map(|(provided, current, preset_val)| {
-            if provided && !current.is_empty() && current != preset_val {
-                Some(current)
-            } else {
-                None
-            }
-        })
-        .collect();
+    let mut edited: Vec<&str> = Vec::new();
+    if parsed.business_name.is_some()
+        && !resolved.business_name.is_empty()
+        && resolved.business_name != persona.business_name
+    {
+        edited.push(&resolved.business_name);
+    }
+    if parsed.bot_prompt.is_some()
+        && !resolved.bot_prompt.is_empty()
+        && resolved.bot_prompt != persona.prompt
+    {
+        edited.push(&resolved.bot_prompt);
+    }
+    if parsed.rules.is_some() && resolved.rules != preset_rules(persona) {
+        for r in &resolved.rules {
+            edited.push(&r.match_rule);
+            edited.push(&r.reply_text);
+        }
+    }
     if edited.is_empty() {
         None
     } else {
@@ -279,12 +243,10 @@ pub async fn handle_demo_chat(mut req: Request, env: Env) -> Result<Response> {
         );
     }
 
-    if !parsed.handoff && resolved.mode == "canned" {
-        let matched = resolved.match_rule.is_empty()
-            || ai::matches_canned_rule(&env, &message, &resolved.match_rule).await;
-        if matched {
+    if !parsed.handoff && !resolved.rules.is_empty() {
+        if let Some(idx) = ai::pick_static_rule(&env, &message, &resolved.rules).await {
             return crate::api::json(&ChatReply {
-                reply: resolved.canned_text,
+                reply: resolved.rules[idx].reply_text.clone(),
                 handed_off: false,
                 matched_rule: true,
             });
@@ -336,10 +298,8 @@ mod tests {
         DemoChatReq {
             persona_id: persona_id.to_string(),
             business_name: None,
-            mode: None,
             bot_prompt: None,
-            match_rule: None,
-            canned_text: None,
+            rules: None,
             history: vec![],
             message: "What are your hours?".to_string(),
             handoff: false,
@@ -352,33 +312,48 @@ mod tests {
         let req = base_req("orders");
         let resolved = resolve_and_validate_config(&req, persona).unwrap();
         assert_eq!(resolved.business_name, persona.business_name);
-        assert_eq!(resolved.mode, "canned");
         assert_eq!(resolved.bot_prompt, persona.prompt);
-        assert_eq!(resolved.match_rule, persona.match_rule);
-        assert_eq!(resolved.canned_text, persona.canned_text);
+        assert_eq!(resolved.rules, preset_rules(persona));
+        assert_eq!(resolved.rules.len(), 2);
         assert!(user_edited_safety_text(&req, persona, &resolved).is_none());
     }
 
     #[test]
-    fn rejects_invalid_mode() {
+    fn rejects_empty_rule_fields_and_too_many_rules() {
         let persona = prompt::find_bot_persona("front-desk").unwrap();
-        let mut req = base_req("front-desk");
-        req.mode = Some("voice".to_string());
-        assert_eq!(
-            resolve_and_validate_config(&req, persona),
-            Err("Reply mode must be 'ai' or 'canned'.")
-        );
-    }
 
-    #[test]
-    fn rejects_canned_mode_with_empty_canned_text() {
-        let persona = prompt::find_bot_persona("front-desk").unwrap();
-        let mut req = base_req("front-desk");
-        req.mode = Some("canned".to_string());
-        req.canned_text = Some("   ".to_string());
+        let mut req_empty_match = base_req("front-desk");
+        req_empty_match.rules = Some(vec![StaticRule {
+            match_rule: "   ".to_string(),
+            reply_text: "Open 9-5".to_string(),
+        }]);
         assert_eq!(
-            resolve_and_validate_config(&req, persona),
-            Err("Write the canned reply message.")
+            resolve_and_validate_config(&req_empty_match, persona),
+            Err("Each rule needs a trigger condition.")
+        );
+
+        let mut req_empty_reply = base_req("front-desk");
+        req_empty_reply.rules = Some(vec![StaticRule {
+            match_rule: "hours".to_string(),
+            reply_text: "   ".to_string(),
+        }]);
+        assert_eq!(
+            resolve_and_validate_config(&req_empty_reply, persona),
+            Err("Each rule needs a reply message.")
+        );
+
+        let mut req_too_many = base_req("front-desk");
+        req_too_many.rules = Some(
+            (0..=prompt::MAX_STATIC_RULES)
+                .map(|i| StaticRule {
+                    match_rule: format!("rule {i}"),
+                    reply_text: format!("reply {i}"),
+                })
+                .collect(),
+        );
+        assert_eq!(
+            resolve_and_validate_config(&req_too_many, persona),
+            Err("You can add up to 10 static rules.")
         );
     }
 
@@ -394,14 +369,20 @@ mod tests {
         );
 
         let mut req_rule = base_req("front-desk");
-        req_rule.match_rule = Some("a".repeat(prompt::MAX_MATCH_RULE + 1));
+        req_rule.rules = Some(vec![StaticRule {
+            match_rule: "a".repeat(prompt::MAX_MATCH_RULE + 1),
+            reply_text: "ok".to_string(),
+        }]);
         assert_eq!(
             resolve_and_validate_config(&req_rule, persona),
             Err("Match rule must be 300 characters or fewer.")
         );
 
         let mut req_canned = base_req("front-desk");
-        req_canned.canned_text = Some("a".repeat(prompt::MAX_CANNED_TEXT + 1));
+        req_canned.rules = Some(vec![StaticRule {
+            match_rule: "hours".to_string(),
+            reply_text: "a".repeat(prompt::MAX_CANNED_TEXT + 1),
+        }]);
         assert_eq!(
             resolve_and_validate_config(&req_canned, persona),
             Err("Canned reply must be 2000 characters or fewer.")

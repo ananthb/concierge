@@ -173,12 +173,12 @@ pub(crate) fn merge_inbound_batch(pending: &[InboundMessage]) -> Option<InboundM
 ///   1. Load `ReplyConfig` + canned safety via `get_channel_reply_info`.
 ///   2. Skip if disabled.
 ///   3. Run prompt-injection scan via `@cf/meta/prompt-guard-2-86m`.
-///   4. Decide canned vs AI: if `Canned` with a non-empty `match_rule`, check
-///      `ai::matches_canned_rule`; non-matches fall back to AI generation.
-///   5. Gate on content safety (`canned_safety` for canned, `profile_safety` for AI).
+///   4. Decide static rule vs AI: if `effective_rules()` is non-empty, check
+///      `ai::pick_static_rule`; non-matches fall back to AI generation.
+///   5. Gate on content safety (`canned_safety` for rules/bot_prompt, `profile_safety` for AI).
 ///   6. Check conversation handoff state (`Silent` exits without spending a credit).
 ///   7. Deduct 1 credit (`billing::try_deduct`) for every reply (rule-matched or AI).
-///   8. Generate AI reply (or use Canned text), run handoff + risk gate, send reply,
+///   8. Generate AI reply (or use matched rule text), run handoff + risk gate, send reply,
 ///      log `canned_reply` / `auto_reply`, and update the conversation session.
 ///      Restore credit on AI failure, empty reply, or channel send failure.
 async fn handle_auto_reply(msg: &InboundMessage, db: &D1Database, env: &Env) -> Result<()> {
@@ -198,42 +198,37 @@ async fn handle_auto_reply(msg: &InboundMessage, db: &D1Database, env: &Env) -> 
         return Ok(());
     }
 
-    let send_canned = match &config.response {
-        ReplyResponse::Ai => false,
-        ReplyResponse::Canned { .. } => {
-            if config.match_rule.trim().is_empty() {
-                true
-            } else {
-                ai::matches_canned_rule(env, &safe_body, &config.match_rule).await
-            }
-        }
+    let effective_rules = config.effective_rules();
+    let matched_rule_idx = if effective_rules.is_empty() {
+        None
+    } else {
+        ai::pick_static_rule(env, &safe_body, &effective_rules).await
     };
+    let send_canned = matched_rule_idx.is_some();
     let use_ai = !send_canned;
 
+    let safety_text = config.safety_text();
     let effective_bot_prompt = if use_ai {
-        if matches!(config.response, ReplyResponse::Ai) {
-            let prompt_hash = crate::helpers::sha256_hex(&config.bot_prompt);
-            if info.canned_safety.status == SafetyStatus::Rejected
-                && info.canned_safety.content_hash.as_deref() == Some(prompt_hash.as_str())
-            {
-                console_log!(
-                    "Bot prompt rejected by safety (action_taken=unsafe_bot_prompt) for account {}, skipping reply",
-                    msg.channel_account_id
-                );
-                return Ok(());
-            }
-            if info.canned_safety.is_approved_for(&config.bot_prompt)
-                || config.bot_prompt.trim().is_empty()
-                || config.bot_prompt.trim() == crate::prompt::DEFAULT_BOT_PROMPT
-            {
-                config.bot_prompt.as_str()
-            } else {
-                crate::prompt::DEFAULT_BOT_PROMPT
-            }
-        } else if config.bot_prompt.trim().is_empty() {
-            crate::prompt::DEFAULT_BOT_PROMPT
-        } else {
+        let safety_hash = crate::helpers::sha256_hex(&safety_text);
+        let prompt_hash = crate::helpers::sha256_hex(&config.bot_prompt);
+        if info.canned_safety.status == SafetyStatus::Rejected
+            && (info.canned_safety.content_hash.as_deref() == Some(safety_hash.as_str())
+                || info.canned_safety.content_hash.as_deref() == Some(prompt_hash.as_str()))
+        {
+            console_log!(
+                "Bot prompt rejected by safety (action_taken=unsafe_bot_prompt) for account {}, skipping reply",
+                msg.channel_account_id
+            );
+            return Ok(());
+        }
+        if info.canned_safety.is_approved_for(&safety_text)
+            || info.canned_safety.is_approved_for(&config.bot_prompt)
+            || config.bot_prompt.trim().is_empty()
+            || config.bot_prompt.trim() == crate::prompt::DEFAULT_BOT_PROMPT
+        {
             config.bot_prompt.as_str()
+        } else {
+            crate::prompt::DEFAULT_BOT_PROMPT
         }
     } else {
         ""
@@ -250,8 +245,11 @@ async fn handle_auto_reply(msg: &InboundMessage, db: &D1Database, env: &Env) -> 
         }
         Some(o)
     } else {
-        if let ReplyResponse::Canned { ref text } = config.response {
-            if !info.canned_safety.is_approved_for(text) {
+        if let Some(idx) = matched_rule_idx {
+            let text = &effective_rules[idx].reply_text;
+            if !info.canned_safety.is_approved_for(&safety_text)
+                && !info.canned_safety.is_approved_for(text)
+            {
                 console_log!(
                     "Canned reply not safety-approved for account {}, skipping reply",
                     msg.channel_account_id
@@ -387,8 +385,8 @@ async fn handle_auto_reply(msg: &InboundMessage, db: &D1Database, env: &Env) -> 
         window.max_history_messages,
     );
 
-    let (mut reply, mut new_handoff, mut risk_reason) = if send_canned {
-        (config.canned_text().to_string(), false, None)
+    let (mut reply, mut new_handoff, mut risk_reason) = if let Some(idx) = matched_rule_idx {
+        (effective_rules[idx].reply_text.clone(), false, None)
     } else {
         let brand_name = onboarding
             .as_ref()

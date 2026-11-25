@@ -18,6 +18,7 @@ module Api exposing
     , ReplyConfig
     , Session
     , SettingsView
+    , StaticRule
     , WhatsAppAccount
     , WhatsAppView
     , WizardView
@@ -28,6 +29,7 @@ module Api exposing
     , deleteWhatsApp
     , demoChat
     , emptyBasics
+    , encodeStaticRule
     , errorMessage
     , get
     , getBilling
@@ -45,6 +47,7 @@ module Api exposing
     , saveNotifications
     , startCheckout
     , startWhatsAppLogin
+    , staticRuleDecoder
     , stepWizard
     , unitPriceFor
     , updateWhatsApp
@@ -279,15 +282,34 @@ type alias DemoConfig =
     }
 
 
+type alias StaticRule =
+    { matchRule : String
+    , replyText : String
+    }
+
+
+staticRuleDecoder : Decoder StaticRule
+staticRuleDecoder =
+    D.map2 StaticRule
+        (D.field "match_rule" D.string)
+        (D.field "reply_text" D.string)
+
+
+encodeStaticRule : StaticRule -> E.Value
+encodeStaticRule rule =
+    E.object
+        [ ( "match_rule", E.string rule.matchRule )
+        , ( "reply_text", E.string rule.replyText )
+        ]
+
+
 type alias DemoPersona =
     { id : String
     , label : String
     , tag : String
     , businessName : String
-    , mode : String
     , prompt : String
-    , matchRule : String
-    , cannedText : String
+    , rules : List StaticRule
     , opener : String
     }
 
@@ -363,29 +385,14 @@ demoDecoder =
 
 demoPersonaDecoder : Decoder DemoPersona
 demoPersonaDecoder =
-    D.map8
-        (\id label tag businessName mode prompt matchRule cannedText ->
-            \opener ->
-                { id = id
-                , label = label
-                , tag = tag
-                , businessName = businessName
-                , mode = mode
-                , prompt = prompt
-                , matchRule = matchRule
-                , cannedText = cannedText
-                , opener = opener
-                }
-        )
+    D.map7 DemoPersona
         (D.field "id" D.string)
         (D.field "label" D.string)
         (D.field "tag" D.string)
         (D.field "business_name" D.string)
-        (withDefault "ai" (D.field "mode" D.string))
         (D.field "prompt" D.string)
-        (withDefault "" (D.field "match_rule" D.string))
-        (withDefault "" (D.field "canned_text" D.string))
-        |> D.andThen (\build -> D.map build (D.field "opener" D.string))
+        (withDefault [] (D.field "rules" (D.list staticRuleDecoder)))
+        (D.field "opener" D.string)
 
 
 sessionDecoder : Decoder Session
@@ -437,10 +444,8 @@ type alias DemoReply =
 demoChat :
     { personaId : String
     , businessName : String
-    , mode : String
     , botPrompt : String
-    , matchRule : String
-    , cannedText : String
+    , rules : List StaticRule
     , history : List { role : String, content : String }
     , message : String
     , handoff : Bool
@@ -452,10 +457,8 @@ demoChat args =
         (E.object
             [ ( "persona_id", E.string args.personaId )
             , ( "business_name", E.string args.businessName )
-            , ( "mode", E.string args.mode )
             , ( "bot_prompt", E.string args.botPrompt )
-            , ( "match_rule", E.string args.matchRule )
-            , ( "canned_text", E.string args.cannedText )
+            , ( "rules", E.list encodeStaticRule args.rules )
             , ( "history"
               , E.list
                     (\m ->
@@ -638,14 +641,10 @@ type alias WhatsAppAccount =
     }
 
 
-{-| `mode` is "ai" or "canned". `text` is the rule-matched message when `mode` is "canned".
--}
 type alias ReplyConfig =
     { enabled : Bool
-    , mode : String
-    , text : String
-    , matchRule : String
     , botPrompt : String
+    , rules : List StaticRule
     , waitSeconds : Int
     }
 
@@ -654,10 +653,10 @@ type alias BotPreset =
     { id : String
     , label : String
     , tag : String
-    , mode : String
+    , businessName : String
     , prompt : String
-    , matchRule : String
-    , cannedText : String
+    , rules : List StaticRule
+    , opener : String
     }
 
 
@@ -684,15 +683,15 @@ botPresetDecoder =
         (D.field "id" D.string)
         (D.field "label" D.string)
         (D.field "tag" D.string)
-        (withDefault "ai" (D.field "mode" D.string))
+        (withDefault "" (D.field "business_name" D.string))
         (D.field "prompt" D.string)
-        (withDefault "" (D.field "match_rule" D.string))
-        (withDefault "" (D.field "canned_text" D.string))
+        (withDefault [] (D.field "rules" (D.list staticRuleDecoder)))
+        (withDefault "" (D.field "opener" D.string))
 
 
 updateWhatsApp :
     String
-    -> { name : String, enabled : Bool, mode : String, text : String, matchRule : String, botPrompt : String, waitSeconds : Int }
+    -> { name : String, enabled : Bool, botPrompt : String, rules : List StaticRule, waitSeconds : Int }
     -> (Data WhatsAppAccount -> msg)
     -> Cmd msg
 updateWhatsApp id args =
@@ -700,10 +699,8 @@ updateWhatsApp id args =
         (E.object
             [ ( "name", E.string args.name )
             , ( "enabled", E.bool args.enabled )
-            , ( "mode", E.string args.mode )
-            , ( "text", E.string args.text )
-            , ( "match_rule", E.string args.matchRule )
             , ( "bot_prompt", E.string args.botPrompt )
+            , ( "rules", E.list encodeStaticRule args.rules )
             , ( "wait_seconds", E.int args.waitSeconds )
             ]
         )
@@ -727,12 +724,10 @@ whatsAppDecoder =
 
 replyDecoder : Decoder ReplyConfig
 replyDecoder =
-    D.map6 ReplyConfig
+    D.map4 ReplyConfig
         (D.field "enabled" D.bool)
-        (D.field "mode" D.string)
-        (D.field "text" D.string)
-        (D.oneOf [ D.field "match_rule" D.string, D.succeed "" ])
         (D.field "bot_prompt" D.string)
+        (withDefault [] (D.field "rules" (D.list staticRuleDecoder)))
         (D.field "wait_seconds" D.int)
 
 

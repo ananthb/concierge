@@ -23,11 +23,9 @@ pub struct AccountView {
 #[derive(Serialize)]
 pub struct ReplyView {
     pub enabled: bool,
-    pub mode: &'static str,
-    pub text: String,
-    pub match_rule: String,
-    pub wait_seconds: u32,
     pub bot_prompt: String,
+    pub rules: Vec<StaticRule>,
+    pub wait_seconds: u32,
 }
 
 #[derive(Serialize)]
@@ -35,10 +33,10 @@ pub struct BotPresetView {
     pub id: &'static str,
     pub label: &'static str,
     pub tag: &'static str,
-    pub mode: &'static str,
+    pub business_name: &'static str,
     pub prompt: &'static str,
-    pub match_rule: &'static str,
-    pub canned_text: &'static str,
+    pub rules: &'static [crate::prompt::PresetRule],
+    pub opener: &'static str,
 }
 
 #[derive(Serialize)]
@@ -80,10 +78,6 @@ impl SignupView {
 
 impl From<&WhatsAppAccount> for AccountView {
     fn from(a: &WhatsAppAccount) -> Self {
-        let (mode, text) = match &a.auto_reply.response {
-            ReplyResponse::Ai => ("ai", String::new()),
-            ReplyResponse::Canned { text } => ("canned", text.clone()),
-        };
         AccountView {
             id: a.id.clone(),
             name: a.name.clone(),
@@ -92,11 +86,9 @@ impl From<&WhatsAppAccount> for AccountView {
             waba_id: a.waba_id.clone(),
             reply: ReplyView {
                 enabled: a.auto_reply.enabled,
-                mode,
-                text,
-                match_rule: a.auto_reply.match_rule.clone(),
-                wait_seconds: a.auto_reply.wait_seconds,
                 bot_prompt: a.auto_reply.bot_prompt.clone(),
+                rules: a.auto_reply.effective_rules(),
+                wait_seconds: a.auto_reply.wait_seconds,
             },
             canned_safety_status: a.canned_safety.status.as_str().to_string(),
             created_at: a.created_at.clone(),
@@ -118,10 +110,10 @@ fn bot_presets() -> Vec<BotPresetView> {
             id: p.id,
             label: p.label,
             tag: p.tag,
-            mode: p.mode,
+            business_name: p.business_name,
             prompt: p.prompt,
-            match_rule: p.match_rule,
-            canned_text: p.canned_text,
+            rules: p.rules,
+            opener: p.opener,
         })
         .collect()
 }
@@ -157,7 +149,7 @@ pub async fn handle(mut req: Request, env: Env, rest: &[&str]) -> Result<Respons
                 account.name = truncate(name.trim(), 200);
             }
 
-            // Accept flat `{ name, enabled, mode, text, wait_seconds, bot_prompt }`
+            // Accept flat `{ name, enabled, bot_prompt, rules, wait_seconds }`
             // (and fall back to nested `reply` object if provided).
             let reply_src = body.get("reply").filter(|v| v.is_object()).unwrap_or(&body);
 
@@ -168,7 +160,7 @@ pub async fn handle(mut req: Request, env: Env, rest: &[&str]) -> Result<Respons
                 account.auto_reply.wait_seconds = n.clamp(0, 30) as u32;
             }
 
-            let mut bot_prompt_updated = false;
+            let mut safety_dirty = false;
             if let Some(raw_prompt) = reply_src.get("bot_prompt").and_then(|v| v.as_str()) {
                 let bp = raw_prompt.trim().to_string();
                 if bp.chars().count() > crate::prompt::MAX_BOT_PROMPT {
@@ -179,58 +171,33 @@ pub async fn handle(mut req: Request, env: Env, rest: &[&str]) -> Result<Respons
                 } else {
                     bp
                 };
-                bot_prompt_updated = true;
+                safety_dirty = true;
             }
 
-            if let Some(raw_rule) = reply_src.get("match_rule").and_then(|v| v.as_str()) {
-                let rule = raw_rule.trim().to_string();
-                if rule.chars().count() > crate::prompt::MAX_MATCH_RULE {
-                    return super::invalid("Match rule must be 300 characters or fewer.");
-                }
-                account.auto_reply.match_rule = rule;
+            if let Some(raw_rules_val) = reply_src.get("rules") {
+                let raw_rules: Vec<StaticRule> = match serde_json::from_value(raw_rules_val.clone())
+                {
+                    Ok(r) => r,
+                    Err(_) => {
+                        return super::invalid(
+                            "Rules must be an array of { match_rule, reply_text }.",
+                        )
+                    }
+                };
+                let cleaned = match crate::prompt::validate_static_rules(&raw_rules) {
+                    Ok(c) => c,
+                    Err(msg) => return super::invalid(msg),
+                };
+                account.auto_reply.rules = cleaned;
+                account.auto_reply.response = None;
+                account.auto_reply.match_rule.clear();
+                safety_dirty = true;
             }
 
-            let mut need_ai_safety = false;
-            if reply_src.get("mode").is_some() {
-                let mode = super::field(reply_src, "mode");
-                match mode.as_str() {
-                    "ai" => {
-                        account.auto_reply.response = ReplyResponse::Ai;
-                        need_ai_safety = true;
-                    }
-                    "canned" => {
-                        let text = super::field(reply_src, "text");
-                        if text.is_empty() {
-                            return super::invalid("Write the canned reply message.");
-                        }
-                        if text.chars().count() > crate::prompt::MAX_CANNED_TEXT {
-                            return super::invalid(
-                                "Canned reply must be 2000 characters or fewer.",
-                            );
-                        }
-                        let content_hash = sha256_hex(&text);
-                        let mut verdict = safety::classify_text(&env, &text).await;
-                        if matches!(verdict, safety::SafetyVerdict::Approved)
-                            && !account.auto_reply.match_rule.is_empty()
-                        {
-                            verdict =
-                                safety::classify_text(&env, &account.auto_reply.match_rule).await;
-                        }
-                        account.auto_reply.response = ReplyResponse::Canned { text };
-                        account.canned_safety = safety::verdict_to_state(verdict, content_hash);
-                    }
-                    _ => {
-                        return super::invalid("Reply mode must be 'ai' or 'canned'.");
-                    }
-                }
-            }
-
-            if (need_ai_safety
-                || (bot_prompt_updated && matches!(account.auto_reply.response, ReplyResponse::Ai)))
-                && !account.auto_reply.bot_prompt.trim().is_empty()
-            {
-                let content_hash = sha256_hex(&account.auto_reply.bot_prompt);
-                let verdict = safety::classify_text(&env, &account.auto_reply.bot_prompt).await;
+            if safety_dirty {
+                let combined = account.auto_reply.safety_text();
+                let content_hash = sha256_hex(&combined);
+                let verdict = safety::classify_text(&env, &combined).await;
                 account.canned_safety = safety::verdict_to_state(verdict, content_hash);
             }
 

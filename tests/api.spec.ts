@@ -68,11 +68,13 @@ test.describe('bootstrap', () => {
       expect(persona.tag.length).toBeGreaterThan(0);
       expect(typeof persona.business_name).toBe('string');
       expect(persona.business_name.length).toBeGreaterThan(0);
-      expect(['ai', 'canned']).toContain(persona.mode);
       expect(typeof persona.prompt).toBe('string');
       expect(persona.prompt.length).toBeGreaterThan(0);
-      expect(typeof persona.match_rule).toBe('string');
-      expect(typeof persona.canned_text).toBe('string');
+      expect(Array.isArray(persona.rules)).toBe(true);
+      for (const rule of persona.rules) {
+        expect(typeof rule.match_rule).toBe('string');
+        expect(typeof rule.reply_text).toBe('string');
+      }
       expect(typeof persona.opener).toBe('string');
       expect(persona.opener.length).toBeGreaterThan(0);
     }
@@ -245,26 +247,46 @@ test.describe('demo chat', () => {
     expect(typeof body.matched_rule).toBe('boolean');
   });
 
-  test('answers with custom canned_text when mode is canned and match_rule is empty', async ({ request }) => {
-    const resp = await request.post('/api/demo/chat', {
+  test('rejects invalid static rule with empty match_rule and accepts valid bot_prompt + rules', async ({
+    request,
+  }) => {
+    const badResp = await request.post('/api/demo/chat', {
       data: {
         persona_id: 'front-desk',
         business_name: 'Custom Studio',
-        mode: 'canned',
         bot_prompt: 'Fallback prompt',
-        match_rule: '',
-        canned_text: 'We are open Mon-Fri 9am-5pm.',
+        rules: [{ match_rule: '   ', reply_text: 'We are open Mon-Fri 9am-5pm.' }],
         history: [],
         message: 'When are you open?',
         handoff: false,
       },
       headers: { 'X-Replybots-Request': '1' },
     });
-    expect(resp.status()).toBe(200);
-    const body = await resp.json();
-    expect(body.reply).toBe('We are open Mon-Fri 9am-5pm.');
-    expect(body.matched_rule).toBe(true);
-    expect(body.handed_off).toBe(false);
+    expect(badResp.status()).toBe(400);
+
+    const okResp = await request.post('/api/demo/chat', {
+      data: {
+        persona_id: 'front-desk',
+        business_name: 'Custom Studio',
+        bot_prompt: 'Fallback prompt',
+        rules: [
+          {
+            match_rule: 'Customer asks for opening hours',
+            reply_text: 'We are open Mon-Fri 9am-5pm.',
+          },
+        ],
+        history: [],
+        message: 'When are you open?',
+        handoff: false,
+      },
+      headers: { 'X-Replybots-Request': '1' },
+    });
+    expect(okResp.status()).toBe(200);
+    const body = await okResp.json();
+    expect(typeof body.reply).toBe('string');
+    expect(body.reply.length).toBeGreaterThan(0);
+    expect(typeof body.matched_rule).toBe('boolean');
+    expect(typeof body.handed_off).toBe('boolean');
   });
 });
 

@@ -239,18 +239,23 @@ test.describe('demo chat', () => {
     await expect(firstPersona).toHaveClass(/is-active/);
     await expect(page.locator('#demo-business-name')).toBeVisible();
     await expect(page.locator('#demo-bot-prompt')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Rule-matched reply' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'AI reply' })).toHaveCount(0);
 
-    // Switching to Rule-matched reply shows matched reply text + match rule + fallback prompt.
-    await page.getByRole('button', { name: 'Rule-matched reply' }).click();
-    await expect(page.locator('#demo-reply-text')).toBeVisible();
-    await expect(page.locator('#demo-match-rule')).toBeVisible();
-    await expect(page.locator('label[for="demo-bot-prompt"]')).toContainText(
-      'Fallback AI bot prompt',
-    );
+    // Add a static rule, verify its inputs appear, then remove it.
+    const initialRules = await page.locator('.rule-card').count();
+    await page.getByRole('button', { name: '+ Add static rule' }).click();
+    await expect(page.locator('.rule-card')).toHaveCount(initialRules + 1);
+    await page.locator(`#demo-rule-${initialRules}-match`).fill('Customer asks for hours');
+    await page.locator(`#demo-rule-${initialRules}-reply`).fill('Open 9am to 6pm.');
+    await page.locator('.rule-card').last().getByRole('button', { name: 'Remove' }).click();
+    await expect(page.locator('.rule-card')).toHaveCount(initialRules);
 
-    // Empty matched reply text shows inline error and blocks send.
-    await page.locator('#demo-reply-text').fill('');
-    await expect(page.locator('.field-error')).toContainText('Write the matched reply message.');
+    // Scrolling to the bottom keeps .demo-dock (or .demo-launcher) above .site-footer.
+    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+    const dockZ = await page.locator('.demo-dock').evaluate((el) => getComputedStyle(el).zIndex);
+    const footerZ = await page.locator('.site-footer').evaluate((el) => getComputedStyle(el).zIndex);
+    expect(Number(dockZ)).toBeGreaterThan(Number(footerZ));
 
     expect(consoleErrors, consoleErrors.join('\n')).toEqual([]);
   });

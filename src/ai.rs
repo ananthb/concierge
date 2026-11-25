@@ -161,48 +161,54 @@ pub(crate) fn parse_prompt_guard_verdict(val: &serde_json::Value) -> bool {
 }
 
 // ============================================================================
-// Canned Response Match Rule Decision (@cf/meta/llama-3.1-8b-instruct-fast)
+// Static Rule Picker Decision (@cf/meta/llama-3.1-8b-instruct-fast)
 // ============================================================================
 
-const MATCH_RULE_SYSTEM: &str = "You are a strict binary intent classifier. Given a match rule and an inbound customer message, decide whether the customer's message clearly and unambiguously satisfies the match rule.
+const PICK_RULE_SYSTEM: &str = "You are a strict intent classifier. Given a numbered list of static auto-reply rules and an inbound customer message, decide whether the customer's message clearly and unambiguously matches one of the rules.
 
 Rules:
-- Err on the side of NOT matching. Only match when you are highly confident the message fits the rule.
-- Respond ONLY with a single JSON object: {\"match\": true|false, \"confidence\": 0.0..1.0}.
+- Err on the side of returning null. Only pick a rule_index when you are highly confident the message fits that specific rule.
+- Respond ONLY with a single JSON object: {\"rule_index\": <integer or null>, \"confidence\": 0.0..1.0}.
 - Output no markdown, no code fences, and no extra text.";
 
 #[derive(Deserialize)]
-struct MatchDecision {
-    #[serde(rename = "match")]
-    is_match: bool,
+struct RulePickDecision {
+    rule_index: Option<usize>,
     confidence: f64,
 }
 
-/// Decide whether `user_message` satisfies a natural-language `match_rule`.
+/// Pick the index of the static rule that `user_message` clearly satisfies, or
+/// `None` to fall back to AI generation.
 ///
-/// - Empty/whitespace `match_rule` always returns `true`.
-/// - In `DEV_MODE` stub mode, returns `false` (erring on the side of generation).
-/// - On AI error or uncertain/malformed output, returns `false`.
-pub async fn matches_canned_rule(env: &Env, user_message: &str, match_rule: &str) -> bool {
-    if match_rule.trim().is_empty() {
-        return true;
+/// - Empty `rules` or `DEV_MODE` stub mode always returns `None`.
+/// - On AI error or uncertain/malformed output, returns `None`.
+pub async fn pick_static_rule(
+    env: &Env,
+    user_message: &str,
+    rules: &[crate::types::StaticRule],
+) -> Option<usize> {
+    if rules.is_empty() || crate::dev_bypass::active(env) {
+        return None;
     }
-    if crate::dev_bypass::active(env) {
-        return false;
-    }
+
+    let numbered_rules = rules
+        .iter()
+        .enumerate()
+        .map(|(i, r)| format!("{}: {}", i, r.match_rule.trim()))
+        .collect::<Vec<_>>()
+        .join("\n");
 
     let request = AiRequest {
         messages: vec![
             Message {
                 role: "system".to_string(),
-                content: MATCH_RULE_SYSTEM.to_string(),
+                content: PICK_RULE_SYSTEM.to_string(),
             },
             Message {
                 role: "user".to_string(),
                 content: format!(
-                    "Match rule: {}\n\nCustomer message: {}",
-                    match_rule.trim(),
-                    user_message
+                    "Rules:\n{}\n\nCustomer message: {}",
+                    numbered_rules, user_message
                 ),
             },
         ],
@@ -210,31 +216,30 @@ pub async fn matches_canned_rule(env: &Env, user_message: &str, match_rule: &str
     };
     let model = get_decision_model(env);
     match run_ai_model(env, &model, &request).await {
-        Ok(raw) => parse_match_decision(&raw),
+        Ok(raw) => parse_rule_pick(&raw, rules.len()),
         Err(e) => {
-            console_log!("Match rule decision error: {:?}", e);
-            false
+            console_log!("Static rule picker error: {:?}", e);
+            None
         }
     }
 }
 
-/// Parse the decision model's JSON response (`{"match": bool, "confidence": f64}`).
-/// Returns `true` ONLY when `match == true && confidence >= 0.85`.
-/// Any error, missing field, or lower confidence returns `false`.
-pub fn parse_match_decision(raw: &str) -> bool {
-    let Some(start) = raw.find('{') else {
-        return false;
-    };
-    let Some(end) = raw.rfind('}') else {
-        return false;
-    };
+/// Parse the decision model's JSON response (`{"rule_index": <int or null>, "confidence": f64}`).
+/// Returns `Some(idx)` ONLY when `rule_index == Some(idx)` with `idx < rule_count`
+/// and `confidence.is_finite() && confidence >= 0.85`.
+pub fn parse_rule_pick(raw: &str, rule_count: usize) -> Option<usize> {
+    let start = raw.find('{')?;
+    let end = raw.rfind('}')?;
     if start >= end {
-        return false;
+        return None;
     }
     let slice = &raw[start..=end];
-    match serde_json::from_str::<MatchDecision>(slice) {
-        Ok(d) => d.is_match && d.confidence.is_finite() && d.confidence >= 0.85,
-        Err(_) => false,
+    let d = serde_json::from_str::<RulePickDecision>(slice).ok()?;
+    let idx = d.rule_index?;
+    if idx < rule_count && d.confidence.is_finite() && d.confidence >= 0.85 {
+        Some(idx)
+    } else {
+        None
     }
 }
 
@@ -337,40 +342,54 @@ mod tests {
     }
 
     #[test]
-    fn match_decision_accepts_high_confidence_true() {
-        assert!(parse_match_decision(
-            r#"{"match": true, "confidence": 0.85}"#
-        ));
-        assert!(parse_match_decision(
-            r#"{"match": true, "confidence": 0.96}"#
-        ));
-        assert!(parse_match_decision(
-            "Sure! ```json\n{\"match\": true, \"confidence\": 0.9}\n```"
-        ));
+    fn rule_pick_accepts_high_confidence_in_bounds() {
+        assert_eq!(
+            parse_rule_pick(r#"{"rule_index": 0, "confidence": 0.9}"#, 2),
+            Some(0)
+        );
+        assert_eq!(
+            parse_rule_pick(r#"{"rule_index": 1, "confidence": 0.85}"#, 2),
+            Some(1)
+        );
+        assert_eq!(
+            parse_rule_pick(
+                "Sure! ```json\n{\"rule_index\": 0, \"confidence\": 0.96}\n```",
+                3
+            ),
+            Some(0)
+        );
     }
 
     #[test]
-    fn match_decision_rejects_low_confidence_or_false() {
-        assert!(!parse_match_decision(
-            r#"{"match": true, "confidence": 0.84}"#
-        ));
-        assert!(!parse_match_decision(
-            r#"{"match": false, "confidence": 0.99}"#
-        ));
-        assert!(!parse_match_decision(
-            r#"{"match": false, "confidence": 0.1}"#
-        ));
+    fn rule_pick_rejects_low_confidence_null_or_oob() {
+        assert_eq!(
+            parse_rule_pick(r#"{"rule_index": 1, "confidence": 0.84}"#, 2),
+            None
+        );
+        assert_eq!(
+            parse_rule_pick(r#"{"rule_index": null, "confidence": 0.99}"#, 2),
+            None
+        );
+        assert_eq!(
+            parse_rule_pick(r#"{"rule_index": 5, "confidence": 0.95}"#, 2),
+            None
+        );
+        assert_eq!(
+            parse_rule_pick(r#"{"rule_index": 0, "confidence": 0.95}"#, 0),
+            None
+        );
     }
 
     #[test]
-    fn match_decision_rejects_malformed_or_missing_fields() {
-        assert!(!parse_match_decision(""));
-        assert!(!parse_match_decision("yes"));
-        assert!(!parse_match_decision("{not valid json}"));
-        assert!(!parse_match_decision(r#"{"match": true}"#));
-        assert!(!parse_match_decision(r#"{"confidence": 0.95}"#));
-        assert!(!parse_match_decision(
-            r#"{"match": "true", "confidence": 0.95}"#
-        ));
+    fn rule_pick_rejects_malformed_or_missing_fields() {
+        assert_eq!(parse_rule_pick("", 2), None);
+        assert_eq!(parse_rule_pick("yes", 2), None);
+        assert_eq!(parse_rule_pick("{not valid json}", 2), None);
+        assert_eq!(parse_rule_pick(r#"{"rule_index": 0}"#, 2), None);
+        assert_eq!(parse_rule_pick(r#"{"confidence": 0.95}"#, 2), None);
+        assert_eq!(
+            parse_rule_pick(r#"{"rule_index": "0", "confidence": 0.95}"#, 2),
+            None
+        );
     }
 }
