@@ -90,17 +90,29 @@ pub async fn generate_chat_reply(
 // Prompt Injection Detection (@cf/meta/prompt-guard-2-86m)
 // ============================================================================
 
+const PROMPT_GUARD_THRESHOLD: f64 = 0.85;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum InjectionVerdict {
+    Clean,
+    Blocked { reason: &'static str },
+    Error,
+}
+
 /// Check if a message looks like a prompt injection or jailbreak attempt.
-/// Returns `true` if injection is detected. Fails closed (`true` on error).
-pub async fn is_prompt_injection(env: &Env, text: &str) -> bool {
+/// Fails closed (`Blocked` or `Error`) on injection detection or AI error.
+pub async fn check_prompt_injection(env: &Env, text: &str) -> InjectionVerdict {
     if crate::dev_bypass::active(env) || text.trim().len() < 10 {
-        return false;
+        return InjectionVerdict::Clean;
     }
 
     let model = get_injection_model(env);
     let ai = match env.ai("AI") {
         Ok(a) => a,
-        Err(_) => return true,
+        Err(_) => {
+            console_log!("Prompt guard error: reason=ai_error (missing AI binding)");
+            return InjectionVerdict::Error;
+        }
     };
 
     let req = PromptGuardRequest {
@@ -108,19 +120,31 @@ pub async fn is_prompt_injection(env: &Env, text: &str) -> bool {
     };
     let result: std::result::Result<serde_json::Value, _> = ai.run(&model, &req).await;
     match result {
-        Ok(val) => parse_prompt_guard_verdict(&val),
+        Ok(val) => {
+            let verdict = parse_prompt_guard_verdict(&val);
+            if let InjectionVerdict::Blocked { reason } = verdict {
+                let raw_preview: String = val.to_string().chars().take(256).collect();
+                console_log!(
+                    "Prompt guard blocked: reason={} raw={}",
+                    reason,
+                    raw_preview
+                );
+            }
+            verdict
+        }
         Err(e) => {
-            console_log!("Prompt guard error: {:?}", e);
-            true
+            console_log!("Prompt guard error: reason=ai_error err={:?}", e);
+            InjectionVerdict::Error
         }
     }
 }
 
 /// Parse Cloudflare Workers AI `@cf/meta/prompt-guard-2-86m` classification
-/// output. Returns `true` (injection detected / fail-closed) if any entry has a
-/// malicious/injection/jailbreak label with `score >= 0.5`, OR if no recognized
-/// benign/malicious label is present.
-pub(crate) fn parse_prompt_guard_verdict(val: &serde_json::Value) -> bool {
+/// output. Returns `Blocked { reason: "label" }` if any entry has a
+/// malicious/injection/jailbreak/`LABEL_1` label with `score >= 0.85`,
+/// `Blocked { reason: "unrecognized" }` if no recognized benign/malicious label
+/// is present, and `Clean` otherwise.
+pub(crate) fn parse_prompt_guard_verdict(val: &serde_json::Value) -> InjectionVerdict {
     let items: Vec<&serde_json::Value> = if let Some(arr) = val.as_array() {
         arr.iter().collect()
     } else if let Some(arr) = val.get("result").and_then(|v| v.as_array()) {
@@ -134,7 +158,9 @@ pub(crate) fn parse_prompt_guard_verdict(val: &serde_json::Value) -> bool {
     } else if val.is_object() {
         vec![val]
     } else {
-        return true;
+        return InjectionVerdict::Blocked {
+            reason: "unrecognized",
+        };
     };
 
     let mut saw_recognized = false;
@@ -146,18 +172,27 @@ pub(crate) fn parse_prompt_guard_verdict(val: &serde_json::Value) -> bool {
             continue;
         };
         let upper = label.trim().to_ascii_uppercase();
-        if upper.contains("MALICIOUS") || upper.contains("INJECTION") || upper.contains("JAILBREAK")
+        if upper == "LABEL_1"
+            || upper.contains("MALICIOUS")
+            || upper.contains("INJECTION")
+            || upper.contains("JAILBREAK")
         {
             saw_recognized = true;
-            if score >= 0.5 {
-                return true;
+            if score >= PROMPT_GUARD_THRESHOLD {
+                return InjectionVerdict::Blocked { reason: "label" };
             }
-        } else if upper == "BENIGN" || upper == "SAFE" {
+        } else if upper == "LABEL_0" || upper == "BENIGN" || upper == "SAFE" {
             saw_recognized = true;
         }
     }
 
-    !saw_recognized
+    if saw_recognized {
+        InjectionVerdict::Clean
+    } else {
+        InjectionVerdict::Blocked {
+            reason: "unrecognized",
+        }
+    }
 }
 
 // ============================================================================
@@ -304,18 +339,52 @@ mod tests {
             { "label": "BENIGN", "score": 0.99 },
             { "label": "MALICIOUS", "score": 0.01 }
         ]);
-        assert!(!parse_prompt_guard_verdict(&val));
+        assert_eq!(parse_prompt_guard_verdict(&val), InjectionVerdict::Clean);
+    }
+
+    #[test]
+    fn prompt_guard_label_0_and_label_1_threshold() {
+        let benign = json!([
+            { "label": "LABEL_0", "score": 0.99 },
+            { "label": "LABEL_1", "score": 0.01 }
+        ]);
+        assert_eq!(parse_prompt_guard_verdict(&benign), InjectionVerdict::Clean);
+
+        let borderline = json!([
+            { "label": "LABEL_0", "score": 0.30 },
+            { "label": "LABEL_1", "score": 0.70 }
+        ]);
+        assert_eq!(
+            parse_prompt_guard_verdict(&borderline),
+            InjectionVerdict::Clean
+        );
+
+        let malicious = json!([
+            { "label": "LABEL_0", "score": 0.05 },
+            { "label": "LABEL_1", "score": 0.95 }
+        ]);
+        assert_eq!(
+            parse_prompt_guard_verdict(&malicious),
+            InjectionVerdict::Blocked { reason: "label" }
+        );
     }
 
     #[test]
     fn prompt_guard_malicious_or_injection_or_jailbreak_blocks() {
-        for label in ["MALICIOUS", "INJECTION", "JAILBREAK", "malicious"] {
+        for label in [
+            "MALICIOUS",
+            "INJECTION",
+            "JAILBREAK",
+            "malicious",
+            "LABEL_1",
+        ] {
             let val = json!([
-                { "label": "BENIGN", "score": 0.1 },
-                { "label": label, "score": 0.5 }
+                { "label": "BENIGN", "score": 0.08 },
+                { "label": label, "score": 0.92 }
             ]);
-            assert!(
+            assert_eq!(
                 parse_prompt_guard_verdict(&val),
+                InjectionVerdict::Blocked { reason: "label" },
                 "expected injection for {label}"
             );
         }
@@ -323,22 +392,34 @@ mod tests {
 
     #[test]
     fn prompt_guard_handles_result_and_response_wrappers() {
-        assert!(!parse_prompt_guard_verdict(&json!({
-            "result": [{ "label": "BENIGN", "score": 0.98 }]
-        })));
-        assert!(parse_prompt_guard_verdict(&json!({
-            "response": [{ "label": "INJECTION", "score": 0.87 }]
-        })));
+        assert_eq!(
+            parse_prompt_guard_verdict(&json!({
+                "result": [{ "label": "BENIGN", "score": 0.99 }]
+            })),
+            InjectionVerdict::Clean
+        );
+        assert_eq!(
+            parse_prompt_guard_verdict(&json!({
+                "response": [{ "label": "INJECTION", "score": 0.87 }]
+            })),
+            InjectionVerdict::Blocked { reason: "label" }
+        );
     }
 
     #[test]
     fn prompt_guard_fails_closed_on_unrecognized_shapes() {
-        assert!(parse_prompt_guard_verdict(&json!(null)));
-        assert!(parse_prompt_guard_verdict(&json!([])));
-        assert!(parse_prompt_guard_verdict(&json!({})));
-        assert!(parse_prompt_guard_verdict(&json!([
-            { "label": "UNKNOWN", "score": 0.99 }
-        ])));
+        let unrecognized = InjectionVerdict::Blocked {
+            reason: "unrecognized",
+        };
+        assert_eq!(parse_prompt_guard_verdict(&json!(null)), unrecognized);
+        assert_eq!(parse_prompt_guard_verdict(&json!([])), unrecognized);
+        assert_eq!(parse_prompt_guard_verdict(&json!({})), unrecognized);
+        assert_eq!(
+            parse_prompt_guard_verdict(&json!([
+                { "label": "UNKNOWN", "score": 0.99 }
+            ])),
+            unrecognized
+        );
     }
 
     #[test]

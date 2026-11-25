@@ -233,18 +233,30 @@ pub async fn handle_demo_chat(mut req: Request, env: Env) -> Result<Response> {
         if let SafetyVerdict::Rejected { vague_reason } =
             safety::classify_text(&env, &safety_text).await
         {
+            crate::metrics::record(&env, "demo", "safety_rejected", persona.id);
             return crate::api::error("unsafe_content", &vague_reason, 422);
         }
     }
 
-    if ai::is_prompt_injection(&env, &message).await {
-        return crate::api::invalid(
-            "We can't process that message. Please rephrase your question.",
-        );
+    match ai::check_prompt_injection(&env, &message).await {
+        ai::InjectionVerdict::Clean => {}
+        ai::InjectionVerdict::Blocked { reason } => {
+            crate::metrics::record(&env, "demo", "prompt_injection_blocked", reason);
+            return crate::api::invalid(
+                "We can't process that message. Please rephrase your question.",
+            );
+        }
+        ai::InjectionVerdict::Error => {
+            crate::metrics::record(&env, "demo", "prompt_guard_error", "ai_error");
+            return crate::api::invalid(
+                "We can't process that message. Please rephrase your question.",
+            );
+        }
     }
 
     if !parsed.handoff && !resolved.rules.is_empty() {
         if let Some(idx) = ai::pick_static_rule(&env, &message, &resolved.rules).await {
+            crate::metrics::record(&env, "demo", "reply_sent", "rule");
             return crate::api::json(&ChatReply {
                 reply: resolved.rules[idx].reply_text.clone(),
                 handed_off: false,
@@ -283,6 +295,12 @@ pub async fn handle_demo_chat(mut req: Request, env: Env) -> Result<Response> {
         handed_off = true;
     }
 
+    crate::metrics::record(
+        &env,
+        "demo",
+        "reply_sent",
+        if handed_off { "ai_handoff" } else { "ai" },
+    );
     crate::api::json(&ChatReply {
         reply,
         handed_off,
