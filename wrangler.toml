@@ -66,6 +66,23 @@ enabled = true
 invocation_logs = true
 
 # ============================================================================
+# Preview environment bindings for Cloudflare Workers Builds PR previews.
+# ============================================================================
+[previews.vars]
+ENVIRONMENT = "preview"
+
+[[previews.d1_databases]]
+binding = "DB"
+database_name = "replybots-preview"
+database_id = "aad6c801-b659-4beb-9b2c-1fb4b6972ce3"
+
+[[previews.send_email]]
+name = "EMAIL"
+
+[previews.ai]
+binding = "AI"
+
+# ============================================================================
 # Secrets the worker reads (set via `wrangler secret put`):
 #   WHATSAPP_ACCESS_TOKEN      System user token for WhatsApp Graph API calls
 #   WHATSAPP_VERIFY_TOKEN      WhatsApp webhook verification token
