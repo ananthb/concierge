@@ -189,13 +189,27 @@ async fn handle_auto_reply(msg: &InboundMessage, db: &D1Database, env: &Env) -> 
     let config = info.config;
     let safe_body: String = msg.body.chars().take(1000).collect();
 
-    if ai::is_prompt_injection(env, &safe_body).await {
-        console_log!(
-            "Prompt injection detected from {} in tenant {}, skipping reply",
-            msg.sender,
-            msg.tenant_id
-        );
-        return Ok(());
+    match ai::check_prompt_injection(env, &safe_body).await {
+        ai::InjectionVerdict::Clean => {}
+        ai::InjectionVerdict::Blocked { reason } => {
+            console_log!(
+                "Prompt injection detected (reason={}) from {} in tenant {}, skipping reply",
+                reason,
+                msg.sender,
+                msg.tenant_id
+            );
+            crate::metrics::record(env, "whatsapp", "prompt_injection_blocked", reason);
+            return Ok(());
+        }
+        ai::InjectionVerdict::Error => {
+            console_log!(
+                "Prompt guard error for message from {} in tenant {}, skipping reply",
+                msg.sender,
+                msg.tenant_id
+            );
+            crate::metrics::record(env, "whatsapp", "prompt_guard_error", "ai_error");
+            return Ok(());
+        }
     }
 
     let effective_rules = config.effective_rules();
@@ -219,6 +233,7 @@ async fn handle_auto_reply(msg: &InboundMessage, db: &D1Database, env: &Env) -> 
                 "Bot prompt rejected by safety (action_taken=unsafe_bot_prompt) for account {}, skipping reply",
                 msg.channel_account_id
             );
+            crate::metrics::record(env, "whatsapp", "safety_rejected", "bot_prompt");
             return Ok(());
         }
         if info.canned_safety.is_approved_for(&safety_text)
@@ -241,6 +256,7 @@ async fn handle_auto_reply(msg: &InboundMessage, db: &D1Database, env: &Env) -> 
                 "Profile not safety-approved for tenant {}, skipping AI reply",
                 msg.tenant_id
             );
+            crate::metrics::record(env, "whatsapp", "safety_rejected", "profile");
             return Ok(());
         }
         Some(o)
@@ -254,6 +270,7 @@ async fn handle_auto_reply(msg: &InboundMessage, db: &D1Database, env: &Env) -> 
                     "Canned reply not safety-approved for account {}, skipping reply",
                     msg.channel_account_id
                 );
+                crate::metrics::record(env, "whatsapp", "safety_rejected", "canned_reply");
                 return Ok(());
             }
         }
@@ -469,6 +486,13 @@ async fn handle_auto_reply(msg: &InboundMessage, db: &D1Database, env: &Env) -> 
         let _ = billing::restore_credit(db, &msg.tenant_id, metered).await;
         return Ok(());
     }
+
+    crate::metrics::record(
+        env,
+        "whatsapp",
+        "reply_sent",
+        if send_canned { "rule" } else { "ai" },
+    );
 
     let action = if send_canned {
         MessageAction::CannedReply

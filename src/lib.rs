@@ -15,6 +15,7 @@ mod escalations;
 mod handlers;
 mod helpers;
 mod locale;
+mod metrics;
 mod pipeline;
 mod prompt;
 mod risk;

@@ -47,6 +47,13 @@ binding = "AI"
 [[send_email]]
 name = "EMAIL"
 
+# ============================================================================
+# Analytics Engine for operational events & alerting (no PII).
+# ============================================================================
+[[analytics_engine_datasets]]
+binding = "EVENTS"
+dataset = "replybots_events"
+
 [vars]
 ENVIRONMENT = "production"
 
@@ -81,6 +88,10 @@ name = "EMAIL"
 
 [previews.ai]
 binding = "AI"
+
+[[previews.analytics_engine_datasets]]
+binding = "EVENTS"
+dataset = "replybots_events_preview"
 
 # ============================================================================
 # Secrets the worker reads (set via `wrangler secret put`):
