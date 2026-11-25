@@ -256,38 +256,14 @@ anchorNavLink url label_ =
     a [ href url, class "nav-link" ] [ text label_ ]
 
 
-footer : Bool -> msg -> Html msg
-footer isDark onToggleTheme =
-    let
-        toggleLabel =
-            if isDark then
-                "Light"
-
-            else
-                "Dark"
-
-        ariaLabel =
-            if isDark then
-                "Switch to light mode"
-
-            else
-                "Switch to dark mode"
-    in
+footer : Html msg
+footer =
     Html.footer [ class "site-footer" ]
         [ ul [ class "footer-links" ]
             [ li [] [ a [ Route.href Route.Demo ] [ text "Demo" ] ]
             , li [] [ a [ Route.href Route.Terms ] [ text "Terms" ] ]
             , li [] [ a [ Route.href Route.Privacy ] [ text "Privacy" ] ]
             , li [] [ a [ href "https://replybots.dev" ] [ text "Docs" ] ]
-            , li []
-                [ Html.button
-                    [ type_ "button"
-                    , class "theme-toggle"
-                    , onClick onToggleTheme
-                    , attribute "aria-label" ariaLabel
-                    ]
-                    [ text toggleLabel ]
-                ]
             ]
         , p [ class "footer-note" ]
             [ text "Message bodies pass through but are never stored. Only channel, direction, sender, recipient and timestamp are kept." ]

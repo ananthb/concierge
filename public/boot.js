@@ -18,45 +18,39 @@
   // Clear whatever the document already holds before handing <body> to Elm.
   if (document.body) document.body.replaceChildren();
 
-  var reducedMotion = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
-  var savedTheme = null;
-  try {
-    savedTheme = localStorage.getItem('replybots-theme');
-  } catch (e) {}
-  if (savedTheme === 'dark' || savedTheme === 'light') {
-    document.documentElement.setAttribute('data-theme', savedTheme);
+  function resolveTheme() {
+    if (window.matchMedia) {
+      if (window.matchMedia('(prefers-color-scheme: dark)').matches) return 'dark';
+      if (window.matchMedia('(prefers-color-scheme: light)').matches) return 'light';
+    }
+    var hour = new Date().getHours();
+    return (hour >= 6 && hour < 18) ? 'light' : 'dark';
   }
-  var isDark =
-    savedTheme === 'dark'
-      ? true
-      : savedTheme === 'light'
-        ? false
-        : !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+
+  function applyTheme() {
+    document.documentElement.setAttribute('data-theme', resolveTheme());
+  }
+
+  applyTheme();
+  if (window.matchMedia) {
+    var darkMq = window.matchMedia('(prefers-color-scheme: dark)');
+    var lightMq = window.matchMedia('(prefers-color-scheme: light)');
+    if (darkMq.addEventListener) {
+      darkMq.addEventListener('change', applyTheme);
+      lightMq.addEventListener('change', applyTheme);
+    }
+  }
+
+  var reducedMotion = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
 
   var app = window.Elm.Main.init({
-    flags: { width: window.innerWidth, reducedMotion: reducedMotion, isDark: isDark },
+    flags: { width: window.innerWidth, reducedMotion: reducedMotion },
   });
 
   // A signal that the app is live, for tests to wait on.
   window.__replybotsBooted = true;
 
   if (!app.ports) return;
-
-  if (app.ports.setTheme) {
-    app.ports.setTheme.subscribe(function (theme) {
-      if (theme === 'dark' || theme === 'light') {
-        document.documentElement.setAttribute('data-theme', theme);
-        try {
-          localStorage.setItem('replybots-theme', theme);
-        } catch (e) {}
-      } else {
-        document.documentElement.removeAttribute('data-theme');
-        try {
-          localStorage.removeItem('replybots-theme');
-        } catch (e) {}
-      }
-    });
-  }
 
   // Idempotent external script loader for on-demand SDKs (Razorpay, Facebook).
   var loadingScripts = {};
