@@ -6,7 +6,6 @@ port module Ports exposing
     , openCheckout
     , openMetaSignup
     , paymentOutcome
-    , setTheme
     )
 
 {-| The only JavaScript this app talks to.
@@ -52,11 +51,6 @@ type alias PaymentOutcome =
 
 
 port paymentOutcome : (PaymentOutcome -> msg) -> Sub msg
-
-
-{-| Persist and apply the selected color theme (`"light"`, `"dark"`, or `"auto"`).
--}
-port setTheme : String -> Cmd msg
 
 
 {-| Launch Meta's Embedded Signup JS SDK popup for WhatsApp Business.

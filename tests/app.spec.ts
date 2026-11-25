@@ -25,14 +25,15 @@ test.describe('shell', () => {
     expect(consoleErrors, consoleErrors.join('\n')).toEqual([]);
   });
 
-  test('clicking .theme-toggle toggles data-theme="dark" on <html>', async ({ page }) => {
+  test('boot.js sets data-theme automatically from prefers-color-scheme', async ({ page }) => {
+    await page.emulateMedia({ colorScheme: 'dark' });
     await page.goto('/');
     await waitForBoot(page);
-    const toggle = page.locator('.theme-toggle');
-    await expect(toggle).toBeVisible();
-    await toggle.click();
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
-    await toggle.click();
+
+    await page.emulateMedia({ colorScheme: 'light' });
+    await page.goto('/');
+    await waitForBoot(page);
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
   });
 
