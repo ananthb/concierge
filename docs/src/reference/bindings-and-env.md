@@ -22,7 +22,7 @@ Default values in `wrangler.toml`:
 | Variable | Description | Read in |
 |---|---|---|
 | `AI_DECISION_MODEL` | Workers AI canned-match decision model (default @cf/meta/llama-3.1-8b-instruct-fast) | `src/ai.rs` |
-| `AI_INJECTION_MODEL` | Workers AI injection classifier (default @cf/meta/prompt-guard-2-86m) | `src/ai.rs` |
+| `AI_INJECTION_MODEL` | Workers AI injection classifier (default @cf/meta/llama-3.1-8b-instruct-fast) | `src/ai.rs` |
 | `AI_MODEL` | Workers AI reply model (default @cf/meta/llama-4-scout-17b-16e-instruct) | `src/ai.rs` |
 | `AI_SAFETY_MODEL` | Workers AI safety classifier (default @cf/meta/llama-guard-3-8b) | `src/safety.rs` |
 | `DEV_MODE` | Set to "1" or "true" in local dev to stub AI/safety & enable /auth/dev-login | `src/dev_bypass.rs` |
