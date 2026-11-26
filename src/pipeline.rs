@@ -237,6 +237,7 @@ async fn handle_auto_reply(msg: &InboundMessage, db: &D1Database, env: &Env) -> 
         }
         if info.canned_safety.is_approved_for(&safety_text)
             || info.canned_safety.is_approved_for(&config.bot_prompt)
+            || info.canned_safety.status == SafetyStatus::Pending
             || config.bot_prompt.trim().is_empty()
             || config.bot_prompt.trim() == crate::prompt::DEFAULT_BOT_PROMPT
         {
@@ -250,9 +251,13 @@ async fn handle_auto_reply(msg: &InboundMessage, db: &D1Database, env: &Env) -> 
 
     let onboarding = if use_ai {
         let o = get_onboarding(db, &msg.tenant_id).await?;
-        if !o.profile_safety.is_approved_for(&o.business.name) {
+        if o.profile_safety.status == SafetyStatus::Rejected
+            && !o.business.name.trim().is_empty()
+            && o.profile_safety.content_hash.as_deref()
+                == Some(crate::helpers::sha256_hex(&o.business.name).as_str())
+        {
             console_log!(
-                "Profile not safety-approved for tenant {}, skipping AI reply",
+                "Profile rejected by safety for tenant {}, skipping AI reply",
                 msg.tenant_id
             );
             crate::metrics::record(env, "whatsapp", "safety_rejected", "profile");
@@ -262,11 +267,14 @@ async fn handle_auto_reply(msg: &InboundMessage, db: &D1Database, env: &Env) -> 
     } else {
         if let Some(idx) = matched_rule_idx {
             let text = &effective_rules[idx].reply_text;
-            if !info.canned_safety.is_approved_for(&safety_text)
-                && !info.canned_safety.is_approved_for(text)
+            let text_hash = crate::helpers::sha256_hex(text);
+            let safety_hash = crate::helpers::sha256_hex(&safety_text);
+            if info.canned_safety.status == SafetyStatus::Rejected
+                && (info.canned_safety.content_hash.as_deref() == Some(safety_hash.as_str())
+                    || info.canned_safety.content_hash.as_deref() == Some(text_hash.as_str()))
             {
                 console_log!(
-                    "Canned reply not safety-approved for account {}, skipping reply",
+                    "Canned reply rejected by safety for account {}, skipping reply",
                     msg.channel_account_id
                 );
                 crate::metrics::record(env, "whatsapp", "safety_rejected", "canned_reply");
@@ -323,11 +331,10 @@ async fn handle_auto_reply(msg: &InboundMessage, db: &D1Database, env: &Env) -> 
     };
 
     let handoff_mode = match active_handoff.as_ref() {
-        Some(h) => match age_minutes(&h.signaled_at) {
-            Some(mins) if mins < window.handoff_cooldown_mins => HandoffMode::HoldingPattern,
-            Some(_) => HandoffMode::Silent,
-            None => HandoffMode::None,
-        },
+        Some(h) if h.holding_replies_sent < crate::prompt::HANDOFF_HOLDING_REPLIES => {
+            HandoffMode::HoldingPattern
+        }
+        Some(_) => HandoffMode::Silent,
         None => HandoffMode::None,
     };
 
@@ -406,8 +413,9 @@ async fn handle_auto_reply(msg: &InboundMessage, db: &D1Database, env: &Env) -> 
     } else {
         let brand_name = onboarding
             .as_ref()
-            .map(|o| o.business.name.as_str())
-            .unwrap_or("");
+            .map(|o| o.business.name.trim())
+            .filter(|name| !name.is_empty())
+            .unwrap_or_else(|| info.account_name.trim());
         let system_prompt = match handoff_mode {
             HandoffMode::Silent => unreachable!("Silent handoff returned earlier"),
             HandoffMode::HoldingPattern => {
@@ -480,7 +488,7 @@ async fn handle_auto_reply(msg: &InboundMessage, db: &D1Database, env: &Env) -> 
         }
     }
 
-    if let Err(e) = channel::send_reply(env, msg, &reply).await {
+    if let Err(e) = channel::send_reply(env, msg, &reply, config.access_token.as_deref()).await {
         console_log!("Auto-reply send error: {:?}", e);
         let _ = billing::restore_credit(db, &msg.tenant_id, metered).await;
         return Ok(());
@@ -519,9 +527,16 @@ async fn handle_auto_reply(msg: &InboundMessage, db: &D1Database, env: &Env) -> 
         Some(HandoffState {
             signaled_at: now_iso.clone(),
             notified: false,
+            holding_replies_sent: 0,
         })
     } else {
-        active_handoff
+        let mut h = active_handoff;
+        if in_handoff_mode {
+            if let Some(ref mut state) = h {
+                state.holding_replies_sent = state.holding_replies_sent.saturating_add(1);
+            }
+        }
+        h
     };
 
     if use_ai && new_handoff {

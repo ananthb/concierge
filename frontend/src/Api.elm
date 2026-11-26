@@ -38,6 +38,7 @@ module Api exposing
     , getWhatsApp
     , getWizard
     , isUnauthenticated
+    , logout
     , post
     , put
     , saveBasics
@@ -498,6 +499,13 @@ deleteAccount confirmEmail =
         (D.succeed ())
 
 
+{-| End the current session (`DELETE /api/session`).
+-}
+logout : (Data () -> msg) -> Cmd msg
+logout =
+    delete "/api/session" (E.object []) (D.succeed ())
+
+
 
 -- WIZARD
 
@@ -746,9 +754,13 @@ type alias BillingView =
 
 
 type alias CreditEntry =
-    { amount : Int
+    { id : String
+    , amount : Int
+    , totalMinor : Int
+    , currency : String
     , source : String
     , expiresAt : Maybe String
+    , grantedAt : String
     }
 
 
@@ -799,10 +811,14 @@ billingDecoder =
 
 creditDecoder : Decoder CreditEntry
 creditDecoder =
-    D.map3 CreditEntry
+    D.map7 CreditEntry
+        (withDefault "credit-0" (D.field "id" D.string))
         (D.field "amount" D.int)
+        (withDefault 0 (D.field "total_minor" D.int))
+        (withDefault "INR" (D.field "currency" D.string))
         (D.field "source" D.string)
         (withDefault Nothing (D.field "expires_at" (D.nullable D.string)))
+        (withDefault "" (D.field "granted_at" D.string))
 
 
 
@@ -827,6 +843,7 @@ startWhatsAppLogin =
 
 type alias NotificationSettings =
     { handoffEmail : Bool
+    , emails : List String
     }
 
 
@@ -898,7 +915,9 @@ saveNotifications notifications =
         (E.object
             [ ( "notifications"
               , E.object
-                    [ ( "handoff_email", E.bool notifications.handoffEmail ) ]
+                    [ ( "handoff_email", E.bool notifications.handoffEmail )
+                    , ( "emails", E.list E.string notifications.emails )
+                    ]
               )
             ]
         )
@@ -940,8 +959,9 @@ settingsDecoder =
 
 notificationsDecoder : Decoder NotificationSettings
 notificationsDecoder =
-    D.map NotificationSettings
+    D.map2 NotificationSettings
         (D.field "handoff_email" D.bool)
+        (withDefault [] (D.field "emails" (D.list D.string)))
 
 
 conversationDecoder : Decoder ConversationSettings

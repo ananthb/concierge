@@ -62,9 +62,6 @@ pub async fn handle(mut req: Request, env: Env, rest: &[&str]) -> Result<Respons
             if name.is_empty() {
                 return super::invalid("Your brand name is required.");
             }
-            if phone.is_empty() {
-                return super::invalid("A contact phone number is required.");
-            }
             if business_type.is_empty() {
                 return super::invalid("Pick the entity type you're registered as.");
             }

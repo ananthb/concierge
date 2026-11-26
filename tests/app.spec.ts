@@ -325,7 +325,8 @@ test.describe('authenticated wizard and dashboard', () => {
     await expect(app(page).getByRole('heading', { name: 'Tell us about your business' })).toBeVisible();
 
     await page.locator('#name').fill('Nutmeg & Crumb');
-    await page.locator('#phone').fill('+91 98200 11223');
+    await expect(page.locator('#phone')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Individual' })).toBeVisible();
     await page.getByRole('button', { name: 'Sole proprietorship' }).click();
     await page.getByRole('button', { name: 'Continue' }).click();
 
@@ -339,7 +340,7 @@ test.describe('authenticated wizard and dashboard', () => {
     expect(consoleErrors, consoleErrors.join('\n')).toEqual([]);
   });
 
-  test('dashboard renders Overview, Channels, Credits, and Settings against real API', async ({
+  test('dashboard renders Bots, Credits, and Settings against real API', async ({
     page,
     consoleErrors,
   }) => {
@@ -358,12 +359,9 @@ test.describe('authenticated wizard and dashboard', () => {
     });
 
     await page.goto('/dashboard');
-    await expect(app(page).locator('.tabs .tab')).toHaveCount(4);
-    await expect(app(page).locator('.balance')).toHaveText('0 credits');
-    await expect(app(page).getByText('No WhatsApp number connected')).toBeVisible();
-
-    // Channels tab
-    await app(page).locator('.tabs a', { hasText: 'Channels' }).click();
+    await expect(page.locator('.site-header').getByRole('button', { name: 'Sign out' })).toBeVisible();
+    await expect(page.locator('.site-header .nav-link')).toHaveCount(0);
+    await expect(app(page).locator('.tabs .tab')).toHaveCount(3);
     await expect(app(page).getByRole('heading', { name: 'WhatsApp Business' })).toBeVisible();
     await expect(app(page).getByRole('button', { name: 'Connect WhatsApp number' })).toBeVisible();
 
@@ -372,10 +370,12 @@ test.describe('authenticated wizard and dashboard', () => {
     await expect(app(page).getByRole('heading', { name: 'Balance' })).toBeVisible();
     await expect(app(page).getByRole('heading', { name: 'Buy credits' })).toBeVisible();
     await expect(app(page).locator('.balance')).toHaveText('0 credits');
+    await expect(app(page).locator('.credit-input')).toBeVisible();
 
     // Settings tab: toggle handoff_email and persist to Worker
     await app(page).locator('.tabs a', { hasText: 'Settings' }).click();
     await expect(app(page).getByRole('heading', { name: 'Conversation timing' })).toBeVisible();
+    await expect(app(page).locator('#handoff_cooldown_mins')).toHaveCount(0);
     const handoffCheckbox = app(page).locator('#handoff_email');
     await expect(handoffCheckbox).toBeChecked();
     await handoffCheckbox.uncheck();

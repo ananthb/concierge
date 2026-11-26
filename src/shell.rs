@@ -87,11 +87,13 @@ pub fn html() -> String {
 <meta property="og:title" content="replybots — automatic WhatsApp replies for small businesses">
 <meta property="og:description" content="WhatsApp auto-replies for small businesses. 1 credit = 1 reply.">
 <meta property="og:url" content="https://replybots.io/">
-<meta property="og:image" content="https://replybots.io/logo-512.png">
+<meta property="og:image" content="https://replybots.io/logo-192.png">
+<meta property="og:image:width" content="192">
+<meta property="og:image:height" content="192">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="replybots — automatic WhatsApp replies for small businesses">
 <meta name="twitter:description" content="WhatsApp auto-replies for small businesses. 1 credit = 1 reply.">
-<meta name="twitter:image" content="https://replybots.io/logo-512.png">
+<meta name="twitter:image" content="https://replybots.io/logo-192.png">
 <link rel="icon" href="/logo.svg" type="image/svg+xml">
 <link rel="icon" href="/favicon-32.png" sizes="32x32">
 <link rel="icon" href="/favicon-16.png" sizes="16x16">

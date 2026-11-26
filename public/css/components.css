@@ -685,12 +685,74 @@
   border-bottom: 3px solid transparent;
   margin-bottom: -2px;
 }
-.tab:hover { color: var(--ink); background: var(--cream-2); }
-.tab.is-active {
+.tab:hover { color: var(--ink); background: var(--cream-2); border-bottom-color: var(--line); }
+.tab.is-active,
+.tab.is-active:hover {
   color: var(--ink);
   border-bottom-color: var(--accent);
   background: var(--paper);
   font-weight: 600;
+}
+
+.bot-card-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.bot-card-head h2 { margin: 0; }
+.bot-card-head .pill { margin-left: auto; }
+.bot-card-prompt {
+  margin: 0 0 10px;
+  padding: 10px 12px;
+  border-left: 3px solid var(--accent);
+  background: var(--cream);
+  color: var(--ink-2);
+  font-size: 13.5px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+.bot-card-rules {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0 0 12px;
+  padding: 0;
+  list-style: none;
+}
+.bot-card-rule {
+  padding: 8px 10px;
+  border: 1px solid var(--hair-2);
+  background: var(--cream-2);
+  font-size: 13px;
+  line-height: 1.45;
+}
+.bot-card-rule-match {
+  display: block;
+  font-weight: 600;
+  color: var(--ink);
+  margin-bottom: 2px;
+}
+.bot-card-rule-reply {
+  display: block;
+  color: var(--muted);
+}
+
+.email-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 12px 0;
+}
+.email-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.email-row .field {
+  flex: 1;
+  margin-bottom: 0;
 }
 
 .balance {

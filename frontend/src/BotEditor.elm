@@ -220,10 +220,10 @@ rulesSection args =
     div [ class "field" ]
         [ label [] [ text "Optional static rules" ]
         , p [ class "hint" ]
-            [ text "Optional static rules — instant answers for opening hours, appointment times, calendar links, or policies. Anything else falls back to your bot persona." ]
+            [ text "Instant answers for opening hours, appointment times, calendar links, or policies. Anything else falls back to your bot persona." ]
         , if List.isEmpty config.rules then
             p [ class "muted" ]
-                [ text "No static rules added — all replies will use your bot persona." ]
+                [ text "No static rules added. All replies will use your bot persona." ]
 
           else
             div [ class "rule-list" ]

@@ -32,6 +32,9 @@ pub const HOLDING_PATTERN_MIDDLE: &str = "Voice: brief, calm, polite. This conve
 pub const RISK_GATE_HOLDING_REPLY: &str =
     "Thanks for that — I'm passing this to a colleague who'll reply here shortly.";
 
+/// Number of holding-pattern replies sent after a handoff before going silent.
+pub const HANDOFF_HOLDING_REPLIES: u32 = 3;
+
 /// Default cooldown window (minutes) after a handoff before going silent.
 pub const DEFAULT_HANDOFF_COOLDOWN_MINS: i64 = 60;
 

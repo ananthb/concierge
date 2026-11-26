@@ -23,7 +23,7 @@ type Route
     | Dashboard
       -- Sub-pages of the signed-in app. Kept as distinct routes rather than
       -- tab state so they're linkable and the back button works.
-    | DashboardChannels
+    | DashboardBots
     | DashboardBilling
     | DashboardSettings
     | NotFound
@@ -38,7 +38,9 @@ parser =
         , Parser.map Privacy (s "privacy")
         , Parser.map Login (s "login")
         , Parser.map Wizard (s "wizard")
-        , Parser.map DashboardChannels (s "dashboard" </> s "channels")
+        , Parser.map DashboardBots (s "dashboard" </> s "bots")
+        , Parser.map DashboardBots (s "dashboard" </> s "channels")
+        , Parser.map DashboardBilling (s "dashboard" </> s "credits")
         , Parser.map DashboardBilling (s "dashboard" </> s "billing")
         , Parser.map DashboardSettings (s "dashboard" </> s "settings")
         , Parser.map Dashboard (s "dashboard")
@@ -74,8 +76,8 @@ toPath route =
         Dashboard ->
             "/dashboard"
 
-        DashboardChannels ->
-            "/dashboard/channels"
+        DashboardBots ->
+            "/dashboard/bots"
 
         DashboardBilling ->
             "/dashboard/billing"

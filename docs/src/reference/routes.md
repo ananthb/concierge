@@ -49,6 +49,7 @@ Mutations (`POST`, `PUT`, `DELETE`) require the `X-Replybots-Request: 1` header 
 | `PUT` | `/api/whatsapp` |
 | `DELETE` | `/api/whatsapp` |
 | `GET` | `/api/billing` |
+| `GET` | `/api/billing/invoices` |
 | `POST` | `/api/billing/checkout` |
 | `*` | `/api/settings/*` |
 
@@ -64,7 +65,9 @@ Handled by `is_app_route` in `src/lib.rs` (plus `/wizard/*`):
 - `/login`
 - `/wizard`
 - `/dashboard`
+- `/dashboard/bots`
 - `/dashboard/channels`
+- `/dashboard/credits`
 - `/dashboard/billing`
 - `/dashboard/settings`
 - `/wizard/`
