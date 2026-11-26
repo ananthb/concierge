@@ -34,7 +34,7 @@ if ! command -v worker-build >/dev/null 2>&1; then
     # refuses an older pin outright: "Unsupported version
     # worker@0.7.4, expected at least worker@0.8.6". The nix
     # devShell pins the same pair through flake.lock.
-    cargo install -q worker-build --version ^0.8
+    cargo install -q worker-build --version ^0.9
 fi
 
 exec worker-build --release
