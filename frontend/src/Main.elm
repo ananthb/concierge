@@ -82,6 +82,9 @@ init flags url key =
         reducedMotion =
             D.decodeValue (D.field "reducedMotion" D.bool) flags
                 |> Result.withDefault False
+
+        urlErr =
+            parseQueryError url.query
     in
     ( { key = key
       , route = Route.fromUrl url
@@ -89,11 +92,73 @@ init flags url key =
       , session = Nothing
       , page = Stateless
       , authBusy = False
-      , authError = Nothing
+      , authError = urlErr
       , reducedMotion = reducedMotion
       }
     , Api.getBootstrap GotBootstrap
     )
+
+
+parseQueryError : Maybe String -> Maybe String
+parseQueryError maybeQuery =
+    case maybeQuery of
+        Nothing ->
+            Nothing
+
+        Just q ->
+            q
+                |> String.split "&"
+                |> List.filterMap
+                    (\pair ->
+                        case String.split "=" pair of
+                            [ "error", code ] ->
+                                let
+                                    cleaned =
+                                        Url.percentDecode code
+                                            |> Maybe.withDefault code
+                                            |> String.trim
+                                in
+                                if String.isEmpty cleaned then
+                                    Nothing
+
+                                else
+                                    Just (errorCodeToMessage cleaned)
+
+                            _ ->
+                                Nothing
+                    )
+                |> List.head
+
+
+errorCodeToMessage : String -> String
+errorCodeToMessage code =
+    case code of
+        "missing_waba" ->
+            "No WhatsApp Business Account was found on your Meta account. Make sure your Meta Business Portfolio has a WhatsApp Business Account."
+
+        "no_phone_numbers" ->
+            "No WhatsApp phone numbers were found on that WhatsApp Business Account."
+
+        "phone_not_found" ->
+            "Could not verify that WhatsApp phone number."
+
+        "phone_in_use" ->
+            "That WhatsApp phone number is already connected to another account."
+
+        "token_exchange_failed" ->
+            "Could not exchange Meta authorization code. Please try again."
+
+        "meta_profile_failed" ->
+            "Could not verify your Meta account. Please try again."
+
+        "invalid_state" ->
+            "Your signup session expired. Please try again."
+
+        "missing_code" ->
+            "WhatsApp signup was cancelled or did not return an authorization code."
+
+        other ->
+            "WhatsApp signup failed (" ++ other ++ ")."
 
 
 
@@ -108,6 +173,8 @@ type Msg
     | GotWhatsAppLogin (Api.Data Api.MetaSignup)
     | MetaLoginOutcome Ports.MetaSignupOutcome
     | GotPostLoginBootstrap (Api.Data Api.Bootstrap)
+    | Logout
+    | LoggedOut (Api.Data ())
     | LandingMsg Landing.Msg
     | WizardMsg Wizard.Msg
     | DashboardMsg Dashboard.Msg
@@ -129,14 +196,25 @@ update msg model =
             let
                 nextRoute =
                     Route.fromUrl url
+
+                urlErr =
+                    parseQueryError url.query
+
+                modelWithErr =
+                    case urlErr of
+                        Just _ ->
+                            { model | authError = urlErr }
+
+                        Nothing ->
+                            model
             in
-            if nextRoute == Route.Landing && model.route == Route.Landing then
-                ( model, scrollToFragment url.fragment )
+            if nextRoute == Route.Landing && model.route == Route.Landing && model.session == Nothing then
+                ( modelWithErr, scrollToFragment url.fragment )
 
             else
                 let
                     ( nextModel, cmd ) =
-                        enterRoute nextRoute model
+                        enterRoute nextRoute modelWithErr
                 in
                 ( nextModel, Cmd.batch [ cmd, scrollToFragment url.fragment ] )
 
@@ -228,6 +306,30 @@ update msg model =
 
                 _ ->
                     ( model, Cmd.none )
+
+        Logout ->
+            let
+                maybeDemo =
+                    case model.boot of
+                        Success boot ->
+                            Just boot.demo
+
+                        _ ->
+                            Nothing
+            in
+            ( { model
+                | session = Nothing
+                , route = Route.Landing
+                , page = LandingPage (Landing.init model.reducedMotion maybeDemo)
+              }
+            , Cmd.batch
+                [ Api.logout LoggedOut
+                , Nav.pushUrl model.key (Route.toPath Route.Landing)
+                ]
+            )
+
+        LoggedOut _ ->
+            ( model, Cmd.none )
 
         LandingMsg Landing.LoginClicked ->
             update StartWhatsAppLogin model
@@ -333,7 +435,34 @@ enterRoute route model =
     in
     case route of
         Route.Landing ->
-            ( { settled | page = LandingPage (Landing.init model.reducedMotion maybeDemo) }, Cmd.none )
+            case model.session of
+                Just session ->
+                    redirectTo
+                        (if session.destination == "wizard" then
+                            Route.Wizard
+
+                         else
+                            Route.Dashboard
+                        )
+                        settled
+
+                Nothing ->
+                    ( { settled | page = LandingPage (Landing.init model.reducedMotion maybeDemo) }, Cmd.none )
+
+        Route.Login ->
+            case model.session of
+                Just session ->
+                    redirectTo
+                        (if session.destination == "wizard" then
+                            Route.Wizard
+
+                         else
+                            Route.Dashboard
+                        )
+                        settled
+
+                Nothing ->
+                    ( { settled | page = Stateless }, Cmd.none )
 
         Route.Demo ->
             ( { settled | page = LandingPage (Landing.init model.reducedMotion maybeDemo) }, Cmd.none )
@@ -350,15 +479,15 @@ enterRoute route model =
                     else
                         let
                             ( wizard, cmd ) =
-                                Wizard.init
+                                Wizard.init model.authError
                         in
-                        ( { settled | page = WizardPage wizard }, Cmd.map WizardMsg cmd )
+                        ( { settled | page = WizardPage wizard, authError = Nothing }, Cmd.map WizardMsg cmd )
 
         Route.Dashboard ->
-            dashboardRoute Dashboard.Overview settled
+            dashboardRoute Dashboard.Bots settled
 
-        Route.DashboardChannels ->
-            dashboardRoute Dashboard.Channels settled
+        Route.DashboardBots ->
+            dashboardRoute Dashboard.Bots settled
 
         Route.DashboardBilling ->
             dashboardRoute Dashboard.Billing settled
@@ -392,9 +521,9 @@ dashboardRoute tab model =
                     _ ->
                         let
                             ( dash, cmd ) =
-                                Dashboard.init tab
+                                Dashboard.init tab model.authError
                         in
-                        ( { model | page = DashboardPage dash }, Cmd.map DashboardMsg cmd )
+                        ( { model | page = DashboardPage dash, authError = Nothing }, Cmd.map DashboardMsg cmd )
 
 
 needsSignIn : Model -> ( Model, Cmd Msg )
@@ -451,7 +580,7 @@ view : Model -> Browser.Document Msg
 view model =
     { title = title model.route
     , body =
-        [ Ui.header model.session
+        [ Ui.header { session = model.session, onLogout = Logout }
         , main_ [ class "site-main" ] [ content model ]
         , Ui.footer
         ]

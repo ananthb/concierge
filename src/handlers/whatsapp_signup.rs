@@ -69,6 +69,17 @@ pub async fn handle_whatsapp_signup(
 
             let logged_in_tenant = super::auth::resolve_tenant_id(&req, &db).await;
             let is_logged_in = logged_in_tenant.is_some();
+            let err_destination = match &logged_in_tenant {
+                Some(tid) => {
+                    let ob = get_onboarding(&db, tid).await.unwrap_or_default();
+                    if ob.completed {
+                        "dashboard"
+                    } else {
+                        "wizard"
+                    }
+                }
+                None => "login",
+            };
 
             let params = if !is_post {
                 parse_get_params(&req)?
@@ -81,7 +92,7 @@ pub async fn handle_whatsapp_signup(
             if params.state.is_empty() {
                 return fail(
                     wants_json,
-                    is_logged_in,
+                    err_destination,
                     "invalid_state",
                     "Invalid or expired signup state.",
                     400,
@@ -98,7 +109,7 @@ pub async fn handle_whatsapp_signup(
             if !state_valid {
                 return fail(
                     wants_json,
-                    is_logged_in,
+                    err_destination,
                     "invalid_state",
                     "Invalid or expired signup state.",
                     400,
@@ -108,7 +119,7 @@ pub async fn handle_whatsapp_signup(
             if params.code.is_empty() {
                 return fail(
                     wants_json,
-                    is_logged_in,
+                    err_destination,
                     "missing_code",
                     "Missing Meta OAuth code.",
                     400,
@@ -177,7 +188,7 @@ pub async fn handle_whatsapp_signup(
                     console_log!("WhatsApp signup token exchange failed: {:?}", e);
                     return fail(
                         wants_json,
-                        is_logged_in,
+                        err_destination,
                         "token_exchange_failed",
                         "Could not exchange Meta authorization code.",
                         502,
@@ -201,7 +212,7 @@ pub async fn handle_whatsapp_signup(
                     let Some(user) = meta_user else {
                         return fail(
                             wants_json,
-                            is_logged_in,
+                            err_destination,
                             "meta_profile_failed",
                             "Could not verify your Meta account.",
                             502,
@@ -252,26 +263,28 @@ pub async fn handle_whatsapp_signup(
             }
             let effective_waba_id = tenant_supplied_waba.clone().unwrap_or(fallback_waba_id);
 
-            let subscribe_token = if platform_token.trim().is_empty() {
-                &user_token
-            } else {
-                &platform_token
-            };
-            if let Some(ref waba) = tenant_supplied_waba {
-                subscribe_waba_app(waba, subscribe_token).await;
+            if !effective_waba_id.is_empty() {
+                let mut subscribed = false;
+                if !user_token.trim().is_empty() {
+                    subscribed = subscribe_waba_app(&effective_waba_id, &user_token).await;
+                }
+                if !subscribed && !platform_token.trim().is_empty() && platform_token != user_token
+                {
+                    let _ = subscribe_waba_app(&effective_waba_id, &platform_token).await;
+                }
             }
 
             let resolved_phone = if let Some(pnid) = params.phone_number_id {
-                let mut found = if !platform_token.trim().is_empty() {
-                    get_phone_number_details(&effective_waba_id, &pnid, &platform_token)
+                let mut found = if !user_token.trim().is_empty() {
+                    get_phone_number_details(&effective_waba_id, &pnid, &user_token)
                         .await
                         .ok()
                         .flatten()
                 } else {
                     None
                 };
-                if found.is_none() {
-                    found = get_phone_number_details(&effective_waba_id, &pnid, &user_token)
+                if found.is_none() && !platform_token.trim().is_empty() {
+                    found = get_phone_number_details(&effective_waba_id, &pnid, &platform_token)
                         .await
                         .ok()
                         .flatten();
@@ -286,16 +299,16 @@ pub async fn handle_whatsapp_signup(
             } else if effective_waba_id.is_empty() {
                 Err(("missing_waba", "Missing WhatsApp Business Account ID."))
             } else {
-                let mut found = if !platform_token.trim().is_empty() {
-                    discover_new_phone(&effective_waba_id, &platform_token)
+                let mut found = if !user_token.trim().is_empty() {
+                    discover_new_phone(&effective_waba_id, &user_token)
                         .await
                         .ok()
                         .flatten()
                 } else {
                     None
                 };
-                if found.is_none() {
-                    found = discover_new_phone(&effective_waba_id, &user_token)
+                if found.is_none() && !platform_token.trim().is_empty() {
+                    found = discover_new_phone(&effective_waba_id, &platform_token)
                         .await
                         .ok()
                         .flatten();
@@ -316,6 +329,11 @@ pub async fn handle_whatsapp_signup(
                     } else {
                         Some(effective_waba_id)
                     };
+                    let token_opt = if user_token.trim().is_empty() {
+                        None
+                    } else {
+                        Some(user_token.trim().to_string())
+                    };
                     let existing_account =
                         match get_whatsapp_account_by_phone(&db, &phone_number_id).await? {
                             Some(id) => get_whatsapp_account(&db, &id).await?,
@@ -327,6 +345,9 @@ pub async fn handle_whatsapp_signup(
                             if let Some(waba) = waba_opt {
                                 existing.waba_id = Some(waba);
                             }
+                            if let Some(tok) = token_opt {
+                                existing.auto_reply.access_token = Some(tok);
+                            }
                             existing.updated_at = now_iso();
                             save_whatsapp_account(&db, &existing).await?;
                             existing
@@ -334,7 +355,7 @@ pub async fn handle_whatsapp_signup(
                         Some(_) => {
                             return fail(
                                 wants_json,
-                                is_logged_in,
+                                err_destination,
                                 "phone_in_use",
                                 "That WhatsApp phone number is already connected to another account.",
                                 409,
@@ -349,7 +370,10 @@ pub async fn handle_whatsapp_signup(
                                 phone_number,
                                 phone_number_id,
                                 waba_id: waba_opt,
-                                auto_reply: ReplyConfig::default(),
+                                auto_reply: ReplyConfig {
+                                    access_token: token_opt,
+                                    ..ReplyConfig::default()
+                                },
                                 canned_safety: SafetyState::default(),
                                 created_at: now.clone(),
                                 updated_at: now,
@@ -368,7 +392,7 @@ pub async fn handle_whatsapp_signup(
                 }
                 Err((code, msg)) => {
                     if is_logged_in {
-                        return fail(wants_json, is_logged_in, code, msg, 400);
+                        return fail(wants_json, err_destination, code, msg, 400);
                     }
                     None
                 }
@@ -489,7 +513,7 @@ async fn parse_form_params(req: &mut Request) -> Result<SignupParams> {
 
 fn fail(
     wants_json: bool,
-    is_logged_in: bool,
+    destination: &str,
     code: &str,
     message: &str,
     status: u16,
@@ -498,8 +522,7 @@ fn fail(
         crate::api::error(code, message, status)
     } else {
         let headers = Headers::new();
-        let target = if is_logged_in { "wizard" } else { "login" };
-        headers.set("Location", &format!("/{target}?error={code}"))?;
+        headers.set("Location", &format!("/{destination}?error={code}"))?;
         Ok(Response::empty()?.with_status(302).with_headers(headers))
     }
 }
@@ -509,25 +532,135 @@ async fn discover_waba_from_token(
     app_id: &str,
     app_secret: &str,
 ) -> Option<String> {
-    if app_id.trim().is_empty() || app_secret.trim().is_empty() {
-        return None;
+    if !app_id.trim().is_empty() && !app_secret.trim().is_empty() {
+        let app_token = format!("{}|{}", app_id.trim(), app_secret.trim());
+        let url = format!(
+            "https://graph.facebook.com/{}/debug_token?input_token={}&access_token={}",
+            crate::META_API_VERSION,
+            urlencoding::encode(user_token),
+            urlencoding::encode(&app_token),
+        );
+        let mut init = RequestInit::new();
+        init.with_method(Method::Get);
+        if let Ok(request) = Request::new_with_init(&url, &init) {
+            if let Ok(mut response) = Fetch::Request(request).send().await {
+                if response.status_code() == 200 {
+                    if let Ok(body) = response.json::<serde_json::Value>().await {
+                        if let Some(waba) = extract_waba_from_debug_token(&body) {
+                            return Some(waba);
+                        }
+                    }
+                }
+            }
+        }
     }
-    let app_token = format!("{}|{}", app_id.trim(), app_secret.trim());
-    let url = format!(
-        "https://graph.facebook.com/{}/debug_token?input_token={}&access_token={}",
-        crate::META_API_VERSION,
-        urlencoding::encode(user_token),
-        urlencoding::encode(&app_token),
-    );
-    let mut init = RequestInit::new();
-    init.with_method(Method::Get);
-    let request = Request::new_with_init(&url, &init).ok()?;
-    let mut response = Fetch::Request(request).send().await.ok()?;
-    if response.status_code() != 200 {
-        return None;
+
+    for path in [
+        "me/businesses?fields=id,owned_whatsapp_business_accounts{id},client_whatsapp_business_accounts{id}",
+        "me?fields=id,whatsapp_business_accounts{id},accounts{id,whatsapp_business_accounts{id}}",
+        "me/assigned_whatsapp_business_accounts?fields=id",
+    ] {
+        let url = format!(
+            "https://graph.facebook.com/{}/{}&access_token={}",
+            crate::META_API_VERSION,
+            path,
+            urlencoding::encode(user_token),
+        );
+        let mut init = RequestInit::new();
+        init.with_method(Method::Get);
+        let Ok(request) = Request::new_with_init(&url, &init) else {
+            continue;
+        };
+        let Ok(mut response) = Fetch::Request(request).send().await else {
+            continue;
+        };
+        if response.status_code() != 200 {
+            continue;
+        }
+        let Ok(body) = response.json::<serde_json::Value>().await else {
+            continue;
+        };
+        if let Some(waba) = extract_waba_from_businesses(&body) {
+            return Some(waba);
+        }
     }
-    let body: serde_json::Value = response.json().await.ok()?;
-    extract_waba_from_debug_token(&body)
+
+    None
+}
+
+fn extract_waba_from_businesses(body: &serde_json::Value) -> Option<String> {
+    let first_id = |arr: &Vec<serde_json::Value>| -> Option<String> {
+        for item in arr {
+            if let Some(id) = item
+                .get("id")
+                .and_then(|v| v.as_str())
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+            {
+                return Some(id.to_string());
+            }
+        }
+        None
+    };
+
+    if let Some(wabas) = body
+        .get("whatsapp_business_accounts")
+        .and_then(|w| w.get("data"))
+        .and_then(|d| d.as_array())
+    {
+        if let Some(id) = first_id(wabas) {
+            return Some(id);
+        }
+    }
+
+    if let Some(businesses) = body.get("data").and_then(|d| d.as_array()) {
+        if let Some(id) = first_id(businesses) {
+            // When querying /me/assigned_whatsapp_business_accounts, `data` is the WABA list itself
+            let has_nested = businesses.iter().any(|b| {
+                b.get("owned_whatsapp_business_accounts").is_some()
+                    || b.get("client_whatsapp_business_accounts").is_some()
+            });
+            if !has_nested {
+                return Some(id);
+            }
+        }
+        for biz in businesses {
+            for key in [
+                "owned_whatsapp_business_accounts",
+                "client_whatsapp_business_accounts",
+            ] {
+                if let Some(wabas) = biz
+                    .get(key)
+                    .and_then(|w| w.get("data"))
+                    .and_then(|d| d.as_array())
+                {
+                    if let Some(id) = first_id(wabas) {
+                        return Some(id);
+                    }
+                }
+            }
+        }
+    }
+
+    if let Some(accounts) = body
+        .get("accounts")
+        .and_then(|a| a.get("data"))
+        .and_then(|d| d.as_array())
+    {
+        for acct in accounts {
+            if let Some(wabas) = acct
+                .get("whatsapp_business_accounts")
+                .and_then(|w| w.get("data"))
+                .and_then(|d| d.as_array())
+            {
+                if let Some(id) = first_id(wabas) {
+                    return Some(id);
+                }
+            }
+        }
+    }
+
+    None
 }
 
 fn extract_waba_from_debug_token(body: &serde_json::Value) -> Option<String> {
@@ -604,7 +737,7 @@ async fn fetch_meta_user(user_token: &str) -> Option<MetaUserInfo> {
     None
 }
 
-async fn subscribe_waba_app(waba_id: &str, platform_token: &str) {
+async fn subscribe_waba_app(waba_id: &str, token: &str) -> bool {
     let url = format!(
         "https://graph.facebook.com/{}/{}/subscribed_apps",
         crate::META_API_VERSION,
@@ -612,18 +745,18 @@ async fn subscribe_waba_app(waba_id: &str, platform_token: &str) {
     );
     let headers = Headers::new();
     if headers
-        .set("Authorization", &format!("Bearer {platform_token}"))
+        .set("Authorization", &format!("Bearer {token}"))
         .is_err()
     {
-        return;
+        return false;
     }
     let mut init = RequestInit::new();
     init.with_method(Method::Post).with_headers(headers);
     let Ok(req) = Request::new_with_init(&url, &init) else {
-        return;
+        return false;
     };
     match Fetch::Request(req).send().await {
-        Ok(resp) if resp.status_code() < 300 => {}
+        Ok(resp) if resp.status_code() < 300 => true,
         Ok(mut resp) => {
             let text = resp.text().await.unwrap_or_default();
             console_log!(
@@ -632,6 +765,7 @@ async fn subscribe_waba_app(waba_id: &str, platform_token: &str) {
                 resp.status_code(),
                 text
             );
+            false
         }
         Err(e) => {
             console_log!(
@@ -639,6 +773,7 @@ async fn subscribe_waba_app(waba_id: &str, platform_token: &str) {
                 waba_id,
                 e
             );
+            false
         }
     }
 }
@@ -814,5 +949,34 @@ mod tests {
 
         let empty = serde_json::json!({ "data": { "granular_scopes": [] } });
         assert_eq!(extract_waba_from_debug_token(&empty), None);
+    }
+
+    #[test]
+    fn extract_waba_from_businesses_finds_owned_client_or_direct_waba() {
+        let biz = serde_json::json!({
+            "data": [
+                {
+                    "id": "biz-1",
+                    "owned_whatsapp_business_accounts": {
+                        "data": [{ "id": "waba-owned-1" }]
+                    }
+                }
+            ]
+        });
+        assert_eq!(
+            extract_waba_from_businesses(&biz),
+            Some("waba-owned-1".to_string())
+        );
+
+        let direct = serde_json::json!({
+            "id": "me-1",
+            "whatsapp_business_accounts": {
+                "data": [{ "id": "waba-direct-1" }]
+            }
+        });
+        assert_eq!(
+            extract_waba_from_businesses(&direct),
+            Some("waba-direct-1".to_string())
+        );
     }
 }

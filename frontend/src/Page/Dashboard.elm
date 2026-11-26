@@ -1,6 +1,6 @@
 module Page.Dashboard exposing (Model, Msg, Tab(..), init, subscriptions, switchTab, update, view)
 
-{-| The signed-in app: overview, WhatsApp channels, prepaid credits, settings.
+{-| The signed-in app: WhatsApp bots, prepaid credits, settings.
 
 Each tab owns one `RemoteData` field and fetches on first visit. Tabs are
 real routes, so they're linkable and the back button works.
@@ -22,8 +22,7 @@ import Ui
 
 
 type Tab
-    = Overview
-    | Channels
+    = Bots
     | Billing
     | Settings
 
@@ -45,9 +44,8 @@ type alias Model =
 
 
 type alias SettingsForm =
-    { email : String
+    { emails : List String
     , idleGap : String
-    , cooldown : String
     , history : String
     , handoffEmail : Bool
     , locale : String
@@ -57,9 +55,8 @@ type alias SettingsForm =
 
 emptySettingsForm : SettingsForm
 emptySettingsForm =
-    { email = ""
+    { emails = [ "" ]
     , idleGap = ""
-    , cooldown = ""
     , history = ""
     , handoffEmail = True
     , locale = ""
@@ -69,9 +66,20 @@ emptySettingsForm =
 
 formFromSettings : Api.SettingsView -> SettingsForm
 formFromSettings s =
-    { email = s.email
+    let
+        emails =
+            if List.isEmpty s.notifications.emails then
+                if String.isEmpty (String.trim s.email) then
+                    [ "" ]
+
+                else
+                    [ s.email ]
+
+            else
+                s.notifications.emails
+    in
+    { emails = emails
     , idleGap = maybeIntToString s.conversation.idleGapMins
-    , cooldown = maybeIntToString s.conversation.handoffCooldownMins
     , history = maybeIntToString s.conversation.maxHistoryMessages
     , handoffEmail = s.notifications.handoffEmail
     , locale = s.locale
@@ -84,8 +92,8 @@ maybeIntToString =
     Maybe.map String.fromInt >> Maybe.withDefault ""
 
 
-init : Tab -> ( Model, Cmd Msg )
-init tab =
+init : Tab -> Maybe String -> ( Model, Cmd Msg )
+init tab initialError =
     let
         model =
             { tab = tab
@@ -99,7 +107,7 @@ init tab =
             , deleteConfirm = ""
             , saving = False
             , connectingMeta = False
-            , notice = Nothing
+            , notice = Maybe.map (\msg -> ( "error", msg )) initialError
             }
     in
     ( model, fetchFor tab model )
@@ -108,7 +116,7 @@ init tab =
 fetchFor : Tab -> Model -> Cmd Msg
 fetchFor tab model =
     case tab of
-        Overview ->
+        Bots ->
             Cmd.batch
                 [ if RemoteData.isNotAsked model.channels then
                     Api.getWhatsApp GotChannels
@@ -121,13 +129,6 @@ fetchFor tab model =
                   else
                     Cmd.none
                 ]
-
-        Channels ->
-            if RemoteData.isNotAsked model.channels then
-                Api.getWhatsApp GotChannels
-
-            else
-                Cmd.none
 
         Billing ->
             if RemoteData.isNotAsked model.billing then
@@ -165,6 +166,7 @@ type Msg
     | SetWaitText String
     | CancelEdit
     | SaveReply
+    | ToggleBotEnabled Api.WhatsAppAccount
     | SavedReply (Api.Data Api.WhatsAppAccount)
     | AskDisconnect String
     | CancelDisconnect
@@ -175,8 +177,9 @@ type Msg
     | GotOrder (Api.Data Api.Order)
     | PaymentCame Ports.PaymentOutcome
     | GotSettings (Api.Data Api.SettingsView)
-    | SetEmail String
-    | SaveEmail
+    | SetNotificationEmail Int String
+    | AddNotificationEmail
+    | RemoveNotificationEmail Int
     | SetTiming (SettingsForm -> SettingsForm)
     | SaveTiming
     | SetHandoffEmail Bool
@@ -325,6 +328,18 @@ update msg model =
                 _ ->
                     ( model, Cmd.none )
 
+        ToggleBotEnabled account ->
+            ( { model | saving = True, notice = Nothing }
+            , Api.updateWhatsApp account.id
+                { name = account.name
+                , enabled = not account.reply.enabled
+                , botPrompt = account.reply.botPrompt
+                , rules = account.reply.rules
+                , waitSeconds = account.reply.waitSeconds
+                }
+                SavedReply
+            )
+
         SavedReply result ->
             case result of
                 Success account ->
@@ -471,17 +486,49 @@ update msg model =
             , Cmd.none
             )
 
-        SetEmail val ->
+        SetNotificationEmail idx val ->
+            let
+                form =
+                    model.settingsForm
+
+                nextEmails =
+                    List.indexedMap
+                        (\i e ->
+                            if i == idx then
+                                val
+
+                            else
+                                e
+                        )
+                        form.emails
+            in
+            ( { model | settingsForm = { form | emails = nextEmails } }, Cmd.none )
+
+        AddNotificationEmail ->
             let
                 form =
                     model.settingsForm
             in
-            ( { model | settingsForm = { form | email = val } }, Cmd.none )
+            ( { model | settingsForm = { form | emails = form.emails ++ [ "" ] } }, Cmd.none )
 
-        SaveEmail ->
-            ( { model | saving = True, notice = Nothing }
-            , Api.saveEmail model.settingsForm.email SavedSettings
-            )
+        RemoveNotificationEmail idx ->
+            let
+                form =
+                    model.settingsForm
+
+                remaining =
+                    List.indexedMap Tuple.pair form.emails
+                        |> List.filter (\( i, _ ) -> i /= idx)
+                        |> List.map Tuple.second
+
+                nextEmails =
+                    if List.isEmpty remaining then
+                        [ "" ]
+
+                    else
+                        remaining
+            in
+            ( { model | settingsForm = { form | emails = nextEmails } }, Cmd.none )
 
         SetTiming change ->
             ( { model | settingsForm = change model.settingsForm }, Cmd.none )
@@ -512,7 +559,6 @@ update msg model =
                     , Api.saveConversation
                         { conversation
                             | idleGapMins = read form.idleGap conversation.idleGapMins
-                            , handoffCooldownMins = read form.cooldown conversation.handoffCooldownMins
                             , maxHistoryMessages = read form.history conversation.maxHistoryMessages
                         }
                         SavedSettings
@@ -529,9 +575,17 @@ update msg model =
             ( { model | settingsForm = { form | handoffEmail = checked } }, Cmd.none )
 
         SaveNotifications ->
+            let
+                cleanedEmails =
+                    model.settingsForm.emails
+                        |> List.map String.trim
+                        |> List.filter (not << String.isEmpty)
+            in
             ( { model | saving = True, notice = Nothing }
             , Api.saveNotifications
-                { handoffEmail = model.settingsForm.handoffEmail }
+                { handoffEmail = model.settingsForm.handoffEmail
+                , emails = cleanedEmails
+                }
                 SavedSettings
             )
 
@@ -625,11 +679,8 @@ view session model =
             Nothing ->
                 text ""
         , case model.tab of
-            Overview ->
-                overviewTab session model
-
-            Channels ->
-                channelsTab model
+            Bots ->
+                botsTab model
 
             Billing ->
                 billingTab session model
@@ -679,88 +730,11 @@ tabs current =
                         [ text label_ ]
                     ]
             )
-            [ ( Overview, Route.Dashboard, "Overview" )
-            , ( Channels, Route.DashboardChannels, "Channels" )
+            [ ( Bots, Route.Dashboard, "Bots" )
             , ( Billing, Route.DashboardBilling, "Credits" )
             , ( Settings, Route.DashboardSettings, "Settings" )
             ]
         )
-
-
-
--- OVERVIEW TAB
-
-
-overviewTab : Api.Session -> Model -> Html Msg
-overviewTab session model =
-    section []
-        [ Ui.remote model.billing (overviewBillingCard session)
-        , Ui.remote model.channels overviewWhatsApp
-        ]
-
-
-overviewBillingCard : Api.Session -> Api.BillingView -> Html Msg
-overviewBillingCard session billing =
-    Ui.colorCard "color-bar-amber"
-        [ h2 [] [ text "Prepaid credits" ]
-        , p [ class "balance" ]
-            [ text (Format.count session.locale billing.balance ++ " credits") ]
-        , p [ class "muted" ]
-            [ text
-                (Format.count session.locale billing.repliesUsed
-                    ++ " replies used so far · 1 credit = 1 reply."
-                )
-            ]
-        , if billing.metered && billing.balance == 0 then
-            Ui.banner "info"
-                "You have 0 credits left. Buy credits to start sending WhatsApp auto-replies."
-
-          else
-            text ""
-        , if billing.metered then
-            div [ class "card-actions" ]
-                [ Ui.linkButton
-                    { label = "Buy credits"
-                    , url = Route.toPath Route.DashboardBilling
-                    , primary = billing.balance == 0
-                    }
-                ]
-
-          else
-            text ""
-        ]
-
-
-overviewWhatsApp : Api.WhatsAppView -> Html Msg
-overviewWhatsApp data =
-    if List.isEmpty data.accounts then
-        Ui.colorCard "color-bar-green"
-            [ h2 [] [ text "No WhatsApp number connected" ]
-            , p [] [ text "Connect a WhatsApp Business number so replybots can answer your customers." ]
-            , div [ class "card-actions" ]
-                [ Ui.linkButton
-                    { label = "Connect WhatsApp"
-                    , url = Route.toPath Route.DashboardChannels
-                    , primary = True
-                    }
-                ]
-            ]
-
-    else
-        Ui.colorCard "color-bar-green"
-            [ h2 [] [ text "Connected WhatsApp numbers" ]
-            , ul [ class "connected-list" ]
-                (List.map
-                    (\a ->
-                        li [ class "connected-item" ]
-                            [ span [ class "connected-name" ] [ text a.name ]
-                            , span [ class "connected-phone" ] [ text a.displayPhoneNumber ]
-                            , replyPill a.reply.enabled
-                            ]
-                    )
-                    data.accounts
-                )
-            ]
 
 
 replyPill : Bool -> Html msg
@@ -774,22 +748,38 @@ replyPill enabled =
         ]
         [ text
             (if enabled then
-                "Auto-reply on"
+                "Active"
 
              else
-                "Auto-reply off"
+                "Paused"
             )
         ]
 
 
 
--- CHANNELS TAB (WHATSAPP ONLY)
+-- BOTS TAB (WHATSAPP)
 
 
-channelsTab : Model -> Html Msg
-channelsTab model =
+botsTab : Model -> Html Msg
+botsTab model =
+    let
+        zeroCreditsBanner =
+            case model.billing of
+                Success billing ->
+                    if billing.metered && billing.balance == 0 then
+                        Ui.banner "info"
+                            "You have 0 credits left. Buy credits in the Credits tab to start sending WhatsApp auto-replies."
+
+                    else
+                        text ""
+
+                _ ->
+                    text ""
+    in
     section []
-        [ Ui.remote model.channels (whatsappSection model) ]
+        [ zeroCreditsBanner
+        , Ui.remote model.channels (whatsappSection model)
+        ]
 
 
 whatsappSection : Model -> Api.WhatsAppView -> Html Msg
@@ -855,8 +845,11 @@ accountCard model botPresets account =
                     Nothing
     in
     Ui.colorCard "color-bar-green"
-        [ h2 [] [ text account.name ]
-        , p [ class "muted" ] [ text account.displayPhoneNumber ]
+        [ div [ class "bot-card-head" ]
+            [ h2 [] [ text account.name ]
+            , span [ class "connected-phone" ] [ text account.displayPhoneNumber ]
+            , replyPill account.reply.enabled
+            ]
         , case editing of
             Just edit ->
                 div []
@@ -889,33 +882,25 @@ accountCard model botPresets account =
 
             Nothing ->
                 div []
-                    [ p []
-                        [ text
-                            (if account.reply.enabled then
-                                let
-                                    ruleCount =
-                                        List.length account.reply.rules
+                    [ if String.isEmpty (String.trim account.reply.botPrompt) then
+                        text ""
 
-                                    rulesPart =
-                                        if ruleCount == 0 then
-                                            ""
+                      else
+                        p [ class "bot-card-prompt" ] [ text account.reply.botPrompt ]
+                    , if List.isEmpty account.reply.rules then
+                        text ""
 
-                                        else if ruleCount == 1 then
-                                            " · 1 static rule"
-
-                                        else
-                                            " · " ++ String.fromInt ruleCount ++ " static rules"
-                                in
-                                "Answering with bot persona"
-                                    ++ rulesPart
-                                    ++ " · "
-                                    ++ String.fromInt account.reply.waitSeconds
-                                    ++ "s burst wait."
-
-                             else
-                                "Auto-reply paused."
+                      else
+                        ul [ class "bot-card-rules" ]
+                            (List.map
+                                (\rule ->
+                                    li [ class "bot-card-rule" ]
+                                        [ span [ class "bot-card-rule-match" ] [ text rule.matchRule ]
+                                        , span [ class "bot-card-rule-reply" ] [ text rule.replyText ]
+                                        ]
+                                )
+                                account.reply.rules
                             )
-                        ]
                     , if model.confirmDisconnect == Just account.id then
                         div []
                             [ Ui.banner "error" "Disconnect this WhatsApp number? replybots will stop replying on it immediately."
@@ -946,10 +931,21 @@ accountCard model botPresets account =
                       else
                         div [ class "card-actions" ]
                             [ Ui.button
-                                { label = "Edit replies"
+                                { label = "Edit bot"
                                 , onClick = EditReply account.id account.reply
                                 , primary = False
                                 , busy = False
+                                }
+                            , Ui.button
+                                { label =
+                                    if account.reply.enabled then
+                                        "Pause"
+
+                                    else
+                                        "Resume"
+                                , onClick = ToggleBotEnabled account
+                                , primary = False
+                                , busy = model.saving
                                 }
                             , Html.button
                                 [ class "btn btn-danger"
@@ -1025,6 +1021,12 @@ billingTab session model =
                                 ++ " replies used so far · 1 credit = 1 reply."
                             )
                         ]
+                    , if billing.metered && billing.balance == 0 then
+                        Ui.banner "info"
+                            "You have 0 credits left. Buy credits to start sending WhatsApp auto-replies."
+
+                      else
+                        text ""
                     ]
                 , if billing.metered then
                     Ui.colorCard "color-bar-blue"
@@ -1032,20 +1034,33 @@ billingTab session model =
                         , p []
                             [ text
                                 (Format.milliRate session.locale billing.currency unitPrice
-                                    ++ " per reply. Prepaid credits only — no subscriptions, no expiry."
+                                    ++ " per reply."
                                 )
                             ]
-                        , Html.input
-                            [ Html.Attributes.type_ "range"
-                            , Html.Attributes.min (String.fromInt billing.pricing.minCredits)
-                            , Html.Attributes.max (String.fromInt billing.pricing.maxCredits)
-                            , Html.Attributes.step (String.fromInt billing.pricing.minCredits)
-                            , Html.Attributes.value (String.fromInt model.creditsToBuy)
-                            , Html.Events.onInput SetCredits
-                            , class "credit-slider"
-                            , Html.Attributes.attribute "aria-label" "Number of credits to buy"
+                        , div [ class "credit-picker" ]
+                            [ Html.input
+                                [ Html.Attributes.type_ "range"
+                                , Html.Attributes.min (String.fromInt billing.pricing.minCredits)
+                                , Html.Attributes.max (String.fromInt billing.pricing.maxCredits)
+                                , Html.Attributes.step (String.fromInt billing.pricing.minCredits)
+                                , Html.Attributes.value (String.fromInt model.creditsToBuy)
+                                , Html.Events.onInput SetCredits
+                                , class "credit-slider"
+                                , Html.Attributes.attribute "aria-label" "Number of credits to buy"
+                                ]
+                                []
+                            , Html.input
+                                [ Html.Attributes.type_ "number"
+                                , Html.Attributes.min (String.fromInt billing.pricing.minCredits)
+                                , Html.Attributes.max (String.fromInt billing.pricing.maxCredits)
+                                , Html.Attributes.step (String.fromInt billing.pricing.minCredits)
+                                , Html.Attributes.value (String.fromInt model.creditsToBuy)
+                                , Html.Events.onInput SetCredits
+                                , class "credit-input"
+                                , Html.Attributes.attribute "aria-label" "Credits to buy"
+                                ]
+                                []
                             ]
-                            []
                         , p [ class "credit-total" ]
                             [ text
                                 (Format.count session.locale model.creditsToBuy
@@ -1073,19 +1088,28 @@ billingTab session model =
 
                   else
                     Ui.colorCard "color-bar-violet"
-                        [ h2 [] [ text "Credit ledger" ]
+                        [ h2 [] [ text "Invoices" ]
                         , ul [ class "ledger" ]
                             (List.map
                                 (\credit ->
                                     li []
-                                        [ span [] [ text (Format.count session.locale credit.amount) ]
-                                        , span [ class "muted" ] [ text credit.source ]
-                                        , case credit.expiresAt of
-                                            Just when ->
-                                                span [ class "muted" ] [ text ("expires " ++ String.left 10 when) ]
+                                        [ span []
+                                            [ text
+                                                (Format.count session.locale credit.amount
+                                                    ++ " credits"
+                                                )
+                                            ]
+                                        , if String.isEmpty credit.grantedAt then
+                                            text ""
 
-                                            Nothing ->
-                                                span [ class "muted" ] [ text "never expires" ]
+                                          else
+                                            span [ class "muted" ] [ text (String.left 10 credit.grantedAt) ]
+                                        , a
+                                            [ Html.Attributes.href ("/api/billing/invoices/" ++ credit.id)
+                                            , Html.Attributes.download ("invoice-" ++ credit.id ++ ".html")
+                                            , class "btn btn-secondary"
+                                            ]
+                                            [ text "Download invoice" ]
                                         ]
                                 )
                                 billing.ledger
@@ -1143,25 +1167,6 @@ settingsTab session model =
                     , localeCard model
                     ]
             )
-        , Ui.colorCard "color-bar-blue"
-            [ h2 [] [ text "Account" ]
-            , Ui.field
-                { id = "account_email"
-                , label = "Notification email (optional)"
-                , value = model.settingsForm.email
-                , hint = "Handoff alert emails (when enabled above) are delivered here. Leave blank if you don't need email alerts."
-                , required = False
-                , onInput = SetEmail
-                }
-            , div [ class "card-actions" ]
-                [ Ui.button
-                    { label = "Save email"
-                    , onClick = SaveEmail
-                    , primary = True
-                    , busy = model.saving
-                    }
-                ]
-            ]
         , Ui.card
             [ h2 [] [ text "Close your account" ]
             , p []
@@ -1202,43 +1207,33 @@ timingCard model settings =
 
         form =
             model.settingsForm
-
-        knob id label hint value bound change =
-            Ui.field
-                { id = id
-                , label = label
-                , value = value
-                , hint =
-                    hint
-                        ++ " Default "
-                        ++ String.fromInt bound
-                        ++ "; leave empty to use it."
-                , required = False
-                , onInput = \v -> SetTiming (change v)
-                }
     in
     Ui.colorCard "color-bar-green"
         [ h2 [] [ text "Conversation timing" ]
         , p [ class "muted" ]
             [ text "How replybots decides where one conversation ends and the next begins." ]
-        , knob "idle_gap_mins"
-            "Minutes of silence before a new conversation"
-            "After this long without a message, the next one starts fresh — no earlier context."
-            form.idleGap
-            c.defaults.idleGapMins
-            (\v f -> { f | idleGap = v })
-        , knob "handoff_cooldown_mins"
-            "Minutes to keep holding after a handoff"
-            "Once a conversation is handed to you, replybots answers in the holding voice for this long, then goes quiet."
-            form.cooldown
-            c.defaults.handoffCooldownMins
-            (\v f -> { f | cooldown = v })
-        , knob "max_history_messages"
-            "Recent messages sent to the AI"
-            "More context helps follow-ups; fewer messages keep replies concise."
-            form.history
-            c.defaults.maxHistoryMessages
-            (\v f -> { f | history = v })
+        , Ui.field
+            { id = "idle_gap_mins"
+            , label = "Minutes of silence before a new conversation"
+            , value = form.idleGap
+            , hint =
+                "After this long without a message, the next message starts a new conversation with no earlier context. Default is "
+                    ++ String.fromInt c.defaults.idleGapMins
+                    ++ " minutes. Leave empty to use the default."
+            , required = False
+            , onInput = \v -> SetTiming (\f -> { f | idleGap = v })
+            }
+        , Ui.field
+            { id = "max_history_messages"
+            , label = "Recent messages sent to the AI"
+            , value = form.history
+            , hint =
+                "How many recent messages the AI reads before replying. Default is "
+                    ++ String.fromInt c.defaults.maxHistoryMessages
+                    ++ ". Leave empty to use the default."
+            , required = False
+            , onInput = \v -> SetTiming (\f -> { f | history = v })
+            }
         , div [ class "card-actions" ]
             [ Ui.button
                 { label = "Save timing"
@@ -1252,6 +1247,38 @@ timingCard model settings =
 
 notificationsCard : Model -> Html Msg
 notificationsCard model =
+    let
+        emailRows =
+            List.indexedMap
+                (\idx addr ->
+                    let
+                        fieldId =
+                            "notification_email_" ++ String.fromInt idx
+                    in
+                    div [ class "email-row" ]
+                        [ Ui.field
+                            { id = fieldId
+                            , label =
+                                if idx == 0 then
+                                    "Notification email"
+
+                                else
+                                    "Additional email #" ++ String.fromInt (idx + 1)
+                            , value = addr
+                            , hint = ""
+                            , required = False
+                            , onInput = SetNotificationEmail idx
+                            }
+                        , Html.button
+                            [ class "btn btn-ghost"
+                            , Html.Attributes.type_ "button"
+                            , onClick (RemoveNotificationEmail idx)
+                            ]
+                            [ text "Remove" ]
+                        ]
+                )
+                model.settingsForm.emails
+    in
     Ui.colorCard "color-bar-violet"
         [ h2 [] [ text "Notifications" ]
         , Ui.toggle
@@ -1262,8 +1289,15 @@ notificationsCard model =
             }
         , p [ class "hint" ]
             [ text "Sends an email alert when replybots hands a WhatsApp conversation over to your team." ]
+        , div [ class "email-list" ] emailRows
         , div [ class "card-actions" ]
-            [ Ui.button
+            [ Html.button
+                [ class "btn btn-secondary"
+                , Html.Attributes.type_ "button"
+                , onClick AddNotificationEmail
+                ]
+                [ text "+ Add email" ]
+            , Ui.button
                 { label = "Save notifications"
                 , onClick = SaveNotifications
                 , primary = True

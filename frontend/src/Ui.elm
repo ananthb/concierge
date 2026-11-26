@@ -209,46 +209,48 @@ toggle config =
 
 
 {-| Site header. `session` decides whether the nav offers sign-in or the app.
-
-The stylesheet hides the two marketing links below 600px: the brand plus three
-items does not fit one row at 320px, and a wrapped header reads as broken. They
-are repeated in the footer, which is the navigation path on a phone, so nothing
-becomes unreachable. Whatever the visitor is actually here to do — sign in, or
-open their dashboard — is a button and stays visible at every width.
-
 -}
-header : Maybe Api.Session -> Html msg
-header session =
-    let
-        ctaLink =
-            case session of
-                Nothing ->
-                    a [ Route.href Route.Login, class "btn btn-primary" ] [ text "Sign in" ]
+header : { session : Maybe Api.Session, onLogout : msg } -> Html msg
+header config =
+    case config.session of
+        Nothing ->
+            Html.header [ class "site-header" ]
+                [ a [ Route.href Route.Landing, class "brand" ]
+                    [ Html.img [ Html.Attributes.src "/logo.svg", Html.Attributes.alt "", class "brand-mark" ] []
+                    , span [] [ text "replybots" ]
+                    ]
+                , nav [ class "site-nav" ]
+                    [ anchorNavLink "/#how-it-works" "How it works"
+                    , anchorNavLink "/#features" "Features"
+                    , anchorNavLink "/#pricing" "Pricing"
+                    , a [ Route.href Route.Demo, class "nav-link" ] [ text "Demo" ]
+                    , a [ Route.href Route.Login, class "btn btn-primary" ] [ text "Sign in" ]
+                    ]
+                ]
 
-                Just s ->
-                    let
-                        ( route, label_ ) =
-                            if s.destination == "wizard" then
-                                ( Route.Wizard, "Finish setup" )
+        Just s ->
+            let
+                homeRoute =
+                    if s.destination == "wizard" then
+                        Route.Wizard
 
-                            else
-                                ( Route.Dashboard, "Dashboard" )
-                    in
-                    a [ Route.href route, class "btn btn-primary" ] [ text label_ ]
-    in
-    Html.header [ class "site-header" ]
-        [ a [ Route.href Route.Landing, class "brand" ]
-            [ Html.img [ Html.Attributes.src "/logo.svg", Html.Attributes.alt "", class "brand-mark" ] []
-            , span [] [ text "replybots" ]
-            ]
-        , nav [ class "site-nav" ]
-            [ anchorNavLink "/#how-it-works" "How it works"
-            , anchorNavLink "/#features" "Features"
-            , anchorNavLink "/#pricing" "Pricing"
-            , a [ Route.href Route.Demo, class "nav-link" ] [ text "Demo" ]
-            , ctaLink
-            ]
-        ]
+                    else
+                        Route.Dashboard
+            in
+            Html.header [ class "site-header" ]
+                [ a [ Route.href homeRoute, class "brand" ]
+                    [ Html.img [ Html.Attributes.src "/logo.svg", Html.Attributes.alt "", class "brand-mark" ] []
+                    , span [] [ text "replybots" ]
+                    ]
+                , nav [ class "site-nav" ]
+                    [ Html.button
+                        [ class "btn btn-secondary"
+                        , type_ "button"
+                        , onClick config.onLogout
+                        ]
+                        [ text "Sign out" ]
+                    ]
+                ]
 
 
 anchorNavLink : String -> String -> Html msg

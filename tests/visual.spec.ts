@@ -90,8 +90,13 @@ const WHATSAPP_ACCOUNT = {
   waba_id: 'waba-1',
   reply: {
     enabled: true,
-    bot_prompt: '',
-    rules: [],
+    bot_prompt: 'You reply for Nutmeg & Crumb Bakery in Indiranagar, Bengaluru (Tue–Sun, 8 AM–8 PM).',
+    rules: [
+      {
+        match_rule: 'Customer asks for opening hours',
+        reply_text: 'We are open Tue–Sun, 8:00 AM – 8:00 PM.',
+      },
+    ],
     wait_seconds: 3,
   },
   canned_safety_status: 'approved',
@@ -121,6 +126,7 @@ const SETTINGS = {
   },
   notifications: {
     handoff_email: true,
+    emails: ['asha@nutmegandcrumb.in'],
   },
   locale: 'en-IN',
   currency: 'INR',
@@ -184,7 +190,10 @@ async function stubSignedIn(page: import('@playwright/test').Page) {
     },
     ledger: [
       {
+        id: 'pay-1',
         amount: 8450,
+        total_minor: 84500,
+        currency: 'INR',
         source: 'purchase',
         expires_at: null,
         granted_at: '2026-09-12T00:00:00Z',
@@ -455,7 +464,7 @@ test('the dashboard has a rule for every class it renders', async ({ page }) => 
   await stubSignedIn(page);
   for (const path of [
     '/dashboard',
-    '/dashboard/channels',
+    '/dashboard/bots',
     '/dashboard/billing',
     '/dashboard/settings',
   ]) {

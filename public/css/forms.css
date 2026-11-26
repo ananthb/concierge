@@ -98,6 +98,28 @@
 .voice-card h3, .voice-card strong { display: block; margin: 0 0 4px; font-size: 15px; color: var(--ink); }
 .voice-card p { margin: 0; font-size: 13px; line-height: 1.5; color: var(--muted); }
 
-/* Credit slider on the billing tab. */
-.credit-slider { width: 100%; margin: 14px 0 8px; accent-color: var(--accent); }
+/* Credit slider and manual input on the billing tab. */
+.credit-picker {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin: 14px 0 10px;
+}
+.credit-slider { width: 240px; max-width: 100%; margin: 0; accent-color: var(--accent); }
+.credit-input {
+  width: 110px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 0px;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--f-mono);
+  font-size: 15px;
+}
+.credit-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-soft);
+}
 .credit-total { margin: 0 0 14px; font-size: 16px; font-family: var(--f-mono); font-weight: 500; color: var(--ink); }

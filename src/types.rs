@@ -147,6 +147,10 @@ pub struct ReplyConfig {
     /// 0 = reply immediately (no buffering).
     #[serde(default = "default_wait_seconds")]
     pub wait_seconds: u32,
+    /// Per-account Meta OAuth access token obtained during WhatsApp signup.
+    /// Stored inside `reply_json` in D1 and never exposed in `ReplyView`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub access_token: Option<String>,
     /// Legacy field retained only for deserializing older D1 rows.
     #[serde(default, skip_serializing)]
     pub response: Option<ReplyResponse>,
@@ -162,6 +166,7 @@ impl Default for ReplyConfig {
             bot_prompt: crate::prompt::default_bot_prompt(),
             rules: Vec::new(),
             wait_seconds: default_wait_seconds(),
+            access_token: None,
             response: None,
             match_rule: String::new(),
         }
@@ -436,6 +441,8 @@ pub struct HandoffState {
     pub signaled_at: String,
     #[serde(default)]
     pub notified: bool,
+    #[serde(default)]
+    pub holding_replies_sent: u32,
 }
 
 /// Per-tenant overrides for the conversation timing knobs.
@@ -502,12 +509,15 @@ pub struct BusinessInfo {
 pub struct NotificationConfig {
     #[serde(default = "default_true", alias = "approval_email")]
     pub handoff_email: bool,
+    #[serde(default)]
+    pub emails: Vec<String>,
 }
 
 impl Default for NotificationConfig {
     fn default() -> Self {
         Self {
             handoff_email: true,
+            emails: Vec::new(),
         }
     }
 }

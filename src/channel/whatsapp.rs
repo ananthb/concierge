@@ -46,8 +46,9 @@ pub async fn send_reply(
     metadata: &serde_json::Value,
     to: &str,
     body: &str,
+    account_token: Option<&str>,
 ) -> Result<()> {
-    let access_token = env
+    let platform_token = env
         .secret("WHATSAPP_ACCESS_TOKEN")
         .map(|s| s.to_string())
         .unwrap_or_default();
@@ -57,7 +58,26 @@ pub async fn send_reply(
         .and_then(|v| v.as_str())
         .unwrap_or("");
 
-    crate::whatsapp::send_whatsapp_message(&access_token, phone_number_id, to, body).await
+    let acct_tok = account_token.map(str::trim).filter(|s| !s.is_empty());
+    if let Some(tok) = acct_tok {
+        match crate::whatsapp::send_whatsapp_message(tok, phone_number_id, to, body).await {
+            Ok(()) => return Ok(()),
+            Err(e) => {
+                if !platform_token.trim().is_empty() && platform_token.trim() != tok {
+                    return crate::whatsapp::send_whatsapp_message(
+                        platform_token.trim(),
+                        phone_number_id,
+                        to,
+                        body,
+                    )
+                    .await;
+                }
+                return Err(e);
+            }
+        }
+    }
+
+    crate::whatsapp::send_whatsapp_message(platform_token.trim(), phone_number_id, to, body).await
 }
 
 #[cfg(test)]

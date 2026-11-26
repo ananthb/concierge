@@ -118,7 +118,9 @@ fn is_app_route(path: &str) -> bool {
             | "/login"
             | "/wizard"
             | "/dashboard"
+            | "/dashboard/bots"
             | "/dashboard/channels"
+            | "/dashboard/credits"
             | "/dashboard/billing"
             | "/dashboard/settings"
     ) || path.starts_with("/wizard/")

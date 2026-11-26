@@ -29,6 +29,7 @@ pub struct SettingsView {
 #[derive(Serialize)]
 struct NotificationsView {
     handoff_email: bool,
+    emails: Vec<String>,
 }
 
 #[derive(Serialize)]
@@ -102,31 +103,48 @@ async fn put(env: &Env, tenant_id: &str, body: &serde_json::Value) -> Result<Res
         }
     }
 
+    let mut tenant_changed = false;
+    let mut next_emails: Option<Vec<String>> = None;
+
     if let Some(notif) = body.get("notifications") {
         if let Some(v) = notif.get("handoff_email").and_then(|v| v.as_bool()) {
             state.notifications.handoff_email = v;
             onboarding_changed = true;
         }
-    }
-
-    if onboarding_changed {
-        storage::save_onboarding(&db, tenant_id, &state).await?;
-    }
-
-    let mut tenant_changed = false;
-    if let Some(value) = body.get("email") {
-        let raw = value.as_str().unwrap_or("").trim();
-        if raw.is_empty() {
-            if !tenant.email.is_empty() {
-                tenant.email = String::new();
-                tenant_changed = true;
+        if let Some(arr) = notif.get("emails").and_then(|v| v.as_array()) {
+            let mut cleaned = Vec::new();
+            for item in arr {
+                let raw = item.as_str().unwrap_or("").trim().to_lowercase();
+                if raw.is_empty() {
+                    continue;
+                }
+                if !is_valid_email(&raw) {
+                    return super::invalid("Enter a valid email address.");
+                }
+                if !cleaned.contains(&raw) {
+                    cleaned.push(raw);
+                }
             }
+            next_emails = Some(cleaned);
+        }
+    }
+
+    if let Some(value) = body.get("email") {
+        let raw = value.as_str().unwrap_or("").trim().to_lowercase();
+        if raw.is_empty() {
+            next_emails = Some(Vec::new());
         } else {
-            let normalized = raw.to_lowercase();
-            if !is_valid_email(&normalized) {
+            if !is_valid_email(&raw) {
                 return super::invalid("Enter a valid email address.");
             }
-            if let Some(other) = storage::get_tenant_by_email(&db, &normalized).await? {
+            next_emails = Some(vec![raw]);
+        }
+    }
+
+    if let Some(emails) = next_emails {
+        let primary = emails.first().cloned().unwrap_or_default();
+        if !primary.is_empty() {
+            if let Some(other) = storage::get_tenant_by_email(&db, &primary).await? {
                 if other.id != tenant_id {
                     return super::error(
                         "email_in_use",
@@ -135,11 +153,17 @@ async fn put(env: &Env, tenant_id: &str, body: &serde_json::Value) -> Result<Res
                     );
                 }
             }
-            if tenant.email != normalized {
-                tenant.email = normalized;
-                tenant_changed = true;
-            }
         }
+        if tenant.email != primary {
+            tenant.email = primary;
+            tenant_changed = true;
+        }
+        state.notifications.emails = emails;
+        onboarding_changed = true;
+    }
+
+    if onboarding_changed {
+        storage::save_onboarding(&db, tenant_id, &state).await?;
     }
     if let Some(value) = body.get("locale") {
         match parse_locale(value) {
@@ -208,13 +232,6 @@ fn apply_conversation(
         }
     }
 
-    let window = next.resolve();
-    if window.handoff_cooldown_mins >= window.idle_gap_mins {
-        return Err(
-            "The handoff cooldown has to be shorter than the idle gap, or a handed-over conversation would end before the cooldown does."
-                .to_string(),
-        );
-    }
     Ok(next)
 }
 
@@ -286,6 +303,13 @@ fn view(
         },
         notifications: NotificationsView {
             handoff_email: notifications.handoff_email,
+            emails: if !notifications.emails.is_empty() {
+                notifications.emails.clone()
+            } else if !email.trim().is_empty() {
+                vec![email.trim().to_string()]
+            } else {
+                Vec::new()
+            },
         },
         locale: locale.to_string(),
         currency: currency.as_str().to_string(),
@@ -316,20 +340,10 @@ mod tests {
 
     #[test]
     fn a_number_sets_the_override_and_null_clears_it() {
-        let next = apply_conversation(&unset(), &json!({ "idle_gap_mins": 120 })).unwrap();
-        assert_eq!(next.idle_gap_mins, Some(120));
+        let next = apply_conversation(&unset(), &json!({ "idle_gap_mins": 30 })).unwrap();
+        assert_eq!(next.idle_gap_mins, Some(30));
         let cleared = apply_conversation(&next, &json!({ "idle_gap_mins": null })).unwrap();
         assert_eq!(cleared.idle_gap_mins, None);
-    }
-
-    #[test]
-    fn a_cooldown_at_or_past_the_gap_is_refused() {
-        let err = apply_conversation(
-            &unset(),
-            &json!({ "idle_gap_mins": 60, "handoff_cooldown_mins": 60 }),
-        )
-        .unwrap_err();
-        assert!(err.contains("shorter than the idle gap"), "{err}");
     }
 
     #[test]

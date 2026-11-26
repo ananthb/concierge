@@ -32,13 +32,13 @@ type alias Model =
     }
 
 
-init : ( Model, Cmd Msg )
-init =
+init : Maybe String -> ( Model, Cmd Msg )
+init initialProblem =
     ( { wizard = Loading
       , basics = Api.emptyBasics
       , saving = False
       , connectingMeta = False
-      , problem = Nothing
+      , problem = initialProblem
       }
     , Api.getWizard GotWizard
     )
@@ -78,7 +78,7 @@ update msg model =
                                 Just (Api.errorMessage err)
 
                         _ ->
-                            Nothing
+                            model.problem
               }
                 |> seedForm result
             , Cmd.none
@@ -291,14 +291,6 @@ basicsStep model =
                 , required = False
                 , onInput = \v -> EditBasics (\x -> { x | contactName = v })
                 }
-            , Ui.field
-                { id = "phone"
-                , label = "Contact phone"
-                , value = b.contactPhone
-                , hint = "For us to reach you — not the WhatsApp number you'll connect next."
-                , required = True
-                , onInput = \v -> EditBasics (\x -> { x | contactPhone = v })
-                }
             , entityPicker b.entityType
             , Ui.field
                 { id = "pan"
@@ -356,7 +348,8 @@ entityPicker : String -> Html Msg
 entityPicker current =
     let
         options =
-            [ ( "sole_proprietorship", "Sole proprietorship" )
+            [ ( "individual", "Individual" )
+            , ( "sole_proprietorship", "Sole proprietorship" )
             , ( "partnership", "Partnership" )
             , ( "pvt_ltd", "Private limited" )
             , ( "llp", "LLP" )

@@ -49,6 +49,7 @@ pub async fn notify_human_requested(
         env,
         db,
         tenant_id,
+        &onboarding.notifications.emails,
         inbound_channel,
         customer_sender,
         &preview,
@@ -67,15 +68,28 @@ async fn dispatch_email(
     env: &Env,
     db: &D1Database,
     tenant_id: &str,
+    configured_emails: &[String],
     inbound_channel: &Channel,
     customer_sender: &str,
     preview: &str,
     risk: Option<crate::risk::RiskReason>,
 ) -> Result<()> {
-    let recipient = match get_tenant(db, tenant_id).await? {
-        Some(t) if !t.email.trim().is_empty() => t.email,
-        _ => return Ok(()),
-    };
+    let mut recipients: Vec<String> = configured_emails
+        .iter()
+        .map(|e| e.trim().to_string())
+        .filter(|e| !e.is_empty())
+        .collect();
+    if recipients.is_empty() {
+        if let Some(t) = get_tenant(db, tenant_id).await? {
+            let e = t.email.trim().to_string();
+            if !e.is_empty() {
+                recipients.push(e);
+            }
+        }
+    }
+    if recipients.is_empty() {
+        return Ok(());
+    }
 
     let email_domain = env
         .var("EMAIL_DOMAIN")
@@ -115,18 +129,21 @@ async fn dispatch_email(
          More: {dashboard_url}\n",
     );
 
-    let outbound = OutboundEmail {
-        from: from_addr,
-        to: recipient,
-        subject: "replybots needs you on a customer message".into(),
-        text: Some(text),
-        html: None,
-        reply_to: None,
-        cc: vec![],
-        bcc: vec![],
-        headers: vec![],
-    };
-    send_outbound(env, &outbound).await
+    for recipient in recipients {
+        let outbound = OutboundEmail {
+            from: from_addr.clone(),
+            to: recipient,
+            subject: "replybots needs you on a customer message".into(),
+            text: Some(text.clone()),
+            html: None,
+            reply_to: None,
+            cc: vec![],
+            bcc: vec![],
+            headers: vec![],
+        };
+        send_outbound(env, &outbound).await?;
+    }
+    Ok(())
 }
 
 /// Clamp the customer excerpt to [`PREVIEW_LEN`] characters and strip

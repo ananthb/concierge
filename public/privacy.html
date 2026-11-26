@@ -9,11 +9,13 @@
 <meta property="og:title" content="replybots — automatic WhatsApp replies for small businesses">
 <meta property="og:description" content="WhatsApp auto-replies for small businesses. 1 credit = 1 reply.">
 <meta property="og:url" content="https://replybots.io/">
-<meta property="og:image" content="https://replybots.io/logo-512.png">
+<meta property="og:image" content="https://replybots.io/logo-192.png">
+<meta property="og:image:width" content="192">
+<meta property="og:image:height" content="192">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="replybots — automatic WhatsApp replies for small businesses">
 <meta name="twitter:description" content="WhatsApp auto-replies for small businesses. 1 credit = 1 reply.">
-<meta name="twitter:image" content="https://replybots.io/logo-512.png">
+<meta name="twitter:image" content="https://replybots.io/logo-192.png">
 <link rel="icon" href="/logo.svg" type="image/svg+xml">
 <link rel="icon" href="/favicon-32.png" sizes="32x32">
 <link rel="icon" href="/favicon-16.png" sizes="16x16">
@@ -21,12 +23,12 @@
 <link rel="manifest" href="/site.webmanifest">
 <link rel="stylesheet" href="/css/tokens.css" integrity="sha384-Itf54Trzf5oI2KfKtLMVD5Ikb/mLSvU4zq7weAzDxZn8Mw1yrpgQT6NJPxhIVvSP" crossorigin="anonymous">
 <link rel="stylesheet" href="/css/reset.css" integrity="sha384-3zCbmYdHSAzmcExskE/KOLIFEJlmCcRfC46AC/hYgnUUmrb/JWPoCQlSgLpcbl9m" crossorigin="anonymous">
-<link rel="stylesheet" href="/css/buttons.css" integrity="sha384-vS4aZoVxYMM5ElcOrhF9f2SzTJv7ufkbUf9RGXQtDlD+gIXWGoNiO3SrZ53G98G1" crossorigin="anonymous">
-<link rel="stylesheet" href="/css/forms.css" integrity="sha384-zn3ctaqWnsrsMbBzNqkGDG0YrVcSzvzui4ScMAC6g2FUqJxgpVgRU6OERruyjZCz" crossorigin="anonymous">
+<link rel="stylesheet" href="/css/buttons.css" integrity="sha384-Ae/btwQaYc07EnFgdluFM7nVHBdK0Zi4Shqgz9dksWMmd5vssQAdwYesdAzLirRe" crossorigin="anonymous">
+<link rel="stylesheet" href="/css/forms.css" integrity="sha384-SQv7yXAByYpX8O6PK8zykhcqMpQ4MMvKh0ew2Y31EsJJ0dv7KTElEqiDtmD9eiEy" crossorigin="anonymous">
 <link rel="stylesheet" href="/css/layout.css" integrity="sha384-IMK7c5EmIRBMwhqOfEL399dXGUuTk15K/8XMyimjW8dzrP8nCIUx78ULCyUsn5PX" crossorigin="anonymous">
-<link rel="stylesheet" href="/css/components.css" integrity="sha384-0+fo4LxreqgEL1HJ9Ok7bU/84WvrwwNKuJIfNKIPHRSurJ1lwmvfBpMkuzCZh4tc" crossorigin="anonymous">
+<link rel="stylesheet" href="/css/components.css" integrity="sha384-wNwxIg5HitJ2qUy5LW7vTJFHdcARPRdhTWG3rjy53T8ztsWeAhP6kyfPouGgzGBX" crossorigin="anonymous">
 <link rel="stylesheet" href="/css/responsive.css" integrity="sha384-8jyQ18tM4Jgx89fUJN1z9i1EUETnIi1Zswg0oNkCZcumCCiy5nZ34DRCSxTARcvP" crossorigin="anonymous">
-<script defer="" src="/app.js" integrity="sha384-w4K4ByCh5YbAFKCBeGkCYKsIpEe7Vv47v9Fwh5Oi/b610VJKqRTeL+c4VRMrCq8e" crossorigin="anonymous"></script>
+<script defer="" src="/app.js" integrity="sha384-2BnoUpYyMmkHEM8/O7U9YiLQtYAaZzzKPnW9fVZTB736gmzWc+BfVqu0117o3xDR" crossorigin="anonymous"></script>
 <script defer="" src="/boot.js" integrity="sha384-ycRVpsvZdLiwWefLg49x4xYkVH3iy1FFYy5sBZuH+Y/KM/eEAswoRiymFlijU6Xi" crossorigin="anonymous"></script>
 </head>
 <body><header class="site-header"><a href="/" class="brand"><img src="/logo.svg" alt="" class="brand-mark"><span>replybots</span></a><nav class="site-nav"><a href="/#how-it-works" class="nav-link">How it works</a><a href="/#features" class="nav-link">Features</a><a href="/#pricing" class="nav-link">Pricing</a><a href="/demo" class="nav-link">Demo</a><a href="/login" class="btn btn-primary">Sign in</a></nav></header><main class="site-main"><div class="page page-legal"><h1>Privacy Policy</h1><p class="muted">Last updated 22 November 2026.</p><div><section><h2>Metadata-only message logging</h2><p>We do not store the text content of your customers' WhatsApp messages in our database. Inbound and outbound message bodies pass through in memory to generate or dispatch a reply and are not persisted.</p></section><section><h2>What we store</h2><p>Message metadata: channel, direction (inbound or outbound), sender and recipient identifiers, timestamp, and handling outcome (replied or handed off) — never the message body.</p><p>Account records: your Meta account name and optional notification email, business and invoicing details you enter during setup, your WhatsApp Business connection metadata (phone number ID and display number), notification preferences, and your prepaid credit balance and Razorpay payment records.</p></section><section><h2>Third-party processors</h2><p>Meta / WhatsApp: authenticates your sign-in, delivers and receives your WhatsApp Business messages, and powers Meta Embedded Signup.</p><p>Cloudflare: hosts the application and runs Workers AI inference and safety guardrails. Message text sent for reply generation is not used to train models.</p><p>Razorpay: processes prepaid credit payments. We never receive or store your card or bank details.</p></section><section><h2>Retention and deletion</h2><p>Account records, WhatsApp connection details, and message metadata are kept only while your account remains active.</p><p>You can permanently delete your account and associated metadata yourself at any time in /dashboard/settings. Payment records required by tax and accounting law are retained with your account identifier removed.</p><p>We also expose Meta's required /data-deletion callback endpoint for WhatsApp Business data-deletion requests.</p></section><section><h2>Contact</h2><p>Privacy inquiries and deletion requests: support@replybots.io.</p></section></div></div></main><footer class="site-footer"><ul class="footer-links"><li><a href="/demo">Demo</a></li><li><a href="/terms">Terms</a></li><li><a href="/privacy">Privacy</a></li><li><a href="https://replybots.dev">Docs</a></li><li><a href="https://github.com/ananthb/replybots">Source (AGPL-3.0)</a></li></ul><p class="footer-note">Message bodies pass through but are never stored. Only channel, direction, sender, recipient and timestamp are kept. Brought to you by <a href="https://calculon.tech">Calculon Tech</a>.</p></footer></body></html>
