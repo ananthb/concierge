@@ -196,7 +196,7 @@ promptField args =
         , p [ class "hint" ]
             [ text
                 (String.fromInt promptLen
-                    ++ "/600 chars · All bots share the same system prompt and hand off to a human quickly."
+                    ++ "/600 chars · All replies from a bot share the same system prompt."
                 )
             ]
         ]

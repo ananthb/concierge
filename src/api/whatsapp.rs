@@ -209,6 +209,79 @@ pub async fn handle(mut req: Request, env: Env, rest: &[&str]) -> Result<Respons
             super::json(&AccountView::from(&account))
         }
 
+        (Method::Post, [id, "request-code"]) => {
+            let Some(account) = owned(&db, &tenant_id, id).await? else {
+                return super::not_found("WhatsApp number");
+            };
+            let body = req
+                .json::<serde_json::Value>()
+                .await
+                .unwrap_or_else(|_| serde_json::json!({}));
+            let raw_method = super::field(&body, "code_method").to_ascii_uppercase();
+            let code_method = if raw_method == "VOICE" {
+                "VOICE"
+            } else {
+                "SMS"
+            };
+            let payload = serde_json::json!({
+                "code_method": code_method,
+                "language": "en_US"
+            });
+            let url = format!(
+                "https://graph.facebook.com/{}/{}/request_code",
+                crate::META_API_VERSION,
+                urlencoding::encode(&account.phone_number_id)
+            );
+            match graph_post_with_account_token(&env, &account, &url, Some(&payload)).await {
+                Ok(()) => super::json(&serde_json::json!({ "ok": true })),
+                Err(msg) => super::error("meta_error", &msg, 400),
+            }
+        }
+
+        (Method::Post, [id, "verify-code"]) => {
+            let Some(account) = owned(&db, &tenant_id, id).await? else {
+                return super::not_found("WhatsApp number");
+            };
+            let body = match super::read_json(&mut req).await {
+                Ok(b) => b,
+                Err(r) => return r,
+            };
+            let code: String = super::field(&body, "code")
+                .chars()
+                .filter(|c| c.is_ascii_digit())
+                .collect();
+            if code.is_empty() {
+                return super::invalid("Enter the verification code sent to your number.");
+            }
+            let verify_url = format!(
+                "https://graph.facebook.com/{}/{}/verify_code",
+                crate::META_API_VERSION,
+                urlencoding::encode(&account.phone_number_id)
+            );
+            let verify_payload = serde_json::json!({ "code": code });
+            if let Err(msg) =
+                graph_post_with_account_token(&env, &account, &verify_url, Some(&verify_payload))
+                    .await
+            {
+                return super::error("meta_error", &msg, 400);
+            }
+
+            if let Err(msg) = register_and_subscribe(&env, &account).await {
+                return super::error("meta_error", &msg, 400);
+            }
+            super::json(&serde_json::json!({ "ok": true }))
+        }
+
+        (Method::Post, [id, "register"]) => {
+            let Some(account) = owned(&db, &tenant_id, id).await? else {
+                return super::not_found("WhatsApp number");
+            };
+            match register_and_subscribe(&env, &account).await {
+                Ok(()) => super::json(&serde_json::json!({ "ok": true })),
+                Err(msg) => super::error("meta_error", &msg, 400),
+            }
+        }
+
         (Method::Delete, [id]) => {
             if owned(&db, &tenant_id, id).await?.is_none() {
                 return super::not_found("WhatsApp number");
@@ -225,4 +298,142 @@ async fn owned(db: &D1Database, tenant_id: &str, id: &str) -> Result<Option<What
     Ok(get_whatsapp_account(db, id)
         .await?
         .filter(|a| a.tenant_id == tenant_id))
+}
+
+async fn register_and_subscribe(
+    env: &Env,
+    account: &WhatsAppAccount,
+) -> std::result::Result<(), String> {
+    if let Some(waba_id) = account.waba_id.as_deref().filter(|s| !s.trim().is_empty()) {
+        let sub_url = format!(
+            "https://graph.facebook.com/{}/{}/subscribed_apps",
+            crate::META_API_VERSION,
+            urlencoding::encode(waba_id.trim())
+        );
+        let _ = graph_post_with_account_token(env, account, &sub_url, None).await;
+    }
+
+    let reg_url = format!(
+        "https://graph.facebook.com/{}/{}/register",
+        crate::META_API_VERSION,
+        urlencoding::encode(&account.phone_number_id)
+    );
+    let reg_payload = serde_json::json!({
+        "messaging_product": "whatsapp",
+        "pin": "000000"
+    });
+    match graph_post_with_account_token(env, account, &reg_url, Some(&reg_payload)).await {
+        Ok(()) => Ok(()),
+        Err(reg_err) => {
+            let smb_url = format!(
+                "https://graph.facebook.com/{}/{}/smb_app_data",
+                crate::META_API_VERSION,
+                urlencoding::encode(&account.phone_number_id)
+            );
+            let state_payload = serde_json::json!({
+                "messaging_product": "whatsapp",
+                "sync_type": "smb_app_state_sync"
+            });
+            let history_payload = serde_json::json!({
+                "messaging_product": "whatsapp",
+                "sync_type": "history"
+            });
+            if graph_post_with_account_token(env, account, &smb_url, Some(&state_payload))
+                .await
+                .is_ok()
+            {
+                let _ =
+                    graph_post_with_account_token(env, account, &smb_url, Some(&history_payload))
+                        .await;
+                return Ok(());
+            }
+            Err(reg_err)
+        }
+    }
+}
+
+async fn graph_post_with_account_token(
+    env: &Env,
+    account: &WhatsAppAccount,
+    url: &str,
+    payload: Option<&serde_json::Value>,
+) -> std::result::Result<(), String> {
+    let platform_token = env
+        .secret("WHATSAPP_ACCESS_TOKEN")
+        .map(|s| s.to_string().trim().to_string())
+        .unwrap_or_default();
+    let acct_tok = account
+        .auto_reply
+        .access_token
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
+
+    if let Some(tok) = acct_tok {
+        match graph_post_once(url, tok, payload).await {
+            Ok(()) => return Ok(()),
+            Err(err) => {
+                if !platform_token.is_empty() && platform_token != tok {
+                    if let Ok(()) = graph_post_once(url, &platform_token, payload).await {
+                        return Ok(());
+                    }
+                }
+                return Err(err);
+            }
+        }
+    }
+
+    if platform_token.is_empty() {
+        return Err("Missing WhatsApp access token. Reconnect your number first.".to_string());
+    }
+    graph_post_once(url, &platform_token, payload).await
+}
+
+async fn graph_post_once(
+    url: &str,
+    token: &str,
+    payload: Option<&serde_json::Value>,
+) -> std::result::Result<(), String> {
+    let headers = Headers::new();
+    headers
+        .set("Authorization", &format!("Bearer {}", token.trim()))
+        .map_err(|_| "Could not set Authorization header.".to_string())?;
+    let mut init = RequestInit::new();
+    init.with_method(Method::Post);
+    if let Some(body) = payload {
+        headers
+            .set("Content-Type", "application/json")
+            .map_err(|_| "Could not set Content-Type header.".to_string())?;
+        init.with_body(Some(wasm_bindgen::JsValue::from_str(&body.to_string())));
+    }
+    init.with_headers(headers);
+    let req =
+        Request::new_with_init(url, &init).map_err(|_| "Could not build request.".to_string())?;
+    let mut resp = Fetch::Request(req)
+        .send()
+        .await
+        .map_err(|_| "Could not reach Meta Graph API.".to_string())?;
+    if resp.status_code() < 300 {
+        return Ok(());
+    }
+    let body_text = resp.text().await.unwrap_or_default();
+    if let Ok(json_val) = serde_json::from_str::<serde_json::Value>(&body_text) {
+        if let Some(err_obj) = json_val.get("error") {
+            if let Some(user_msg) = err_obj
+                .get("error_user_msg")
+                .and_then(|v| v.as_str())
+                .filter(|s| !s.trim().is_empty())
+            {
+                return Err(user_msg.trim().to_string());
+            }
+            if let Some(msg) = err_obj
+                .get("message")
+                .and_then(|v| v.as_str())
+                .filter(|s| !s.trim().is_empty())
+            {
+                return Err(msg.trim().to_string());
+            }
+        }
+    }
+    Err(format!("Meta API returned HTTP {}.", resp.status_code()))
 }

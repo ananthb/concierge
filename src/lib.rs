@@ -45,6 +45,10 @@ fn add_security_headers(resp: &mut Response, is_dev: bool) -> Result<()> {
     headers.set("X-Frame-Options", "DENY")?;
     headers.set("X-Content-Type-Options", "nosniff")?;
     headers.set("Referrer-Policy", "strict-origin-when-cross-origin")?;
+    headers.set(
+        "Permissions-Policy",
+        "camera=(), microphone=(), geolocation=(), payment=(self \"https://checkout.razorpay.com\")",
+    )?;
     let (img_extra, form_action_extra) = if is_dev {
         (
             " blob:",
@@ -55,10 +59,10 @@ fn add_security_headers(resp: &mut Response, is_dev: bool) -> Result<()> {
     };
     let csp = format!(
         "default-src 'self'; \
-         script-src 'self' https://checkout.razorpay.com https://connect.facebook.net; \
+         script-src 'self' https://checkout.razorpay.com https://connect.facebook.net https://static.cloudflareinsights.com; \
          style-src 'self' 'unsafe-inline'; \
          img-src 'self' data: https:{img_extra}; \
-         connect-src 'self' https://www.facebook.com https://graph.facebook.com https://connect.facebook.net https://*.facebook.com https://api.razorpay.com; \
+         connect-src 'self' https://www.facebook.com https://graph.facebook.com https://connect.facebook.net https://*.facebook.com https://api.razorpay.com https://cloudflareinsights.com https://*.cloudflareinsights.com; \
          frame-src https://www.facebook.com https://*.facebook.com https://api.razorpay.com https://checkout.razorpay.com; \
          base-uri 'self'; \
          form-action 'self'{form_action_extra}; \
@@ -180,15 +184,21 @@ async fn handle_request(req: Request, env: Env, ctx: &Context) -> Result<Respons
         return handlers::health::handle_health(req, env).await;
     }
 
-    if path == "/api" || path.starts_with("/api/") {
-        return api::handle(req, env, path).await;
-    }
-
     if path == "/webhook/razorpay" && method == Method::Post {
         return billing::webhook::handle_razorpay_webhook(req, env).await;
     }
-    if path.starts_with("/webhook/") {
+    if path == "/webhook"
+        || path.starts_with("/webhook/")
+        || path == "/webhooks"
+        || path.starts_with("/webhooks/")
+        || path == "/api/webhook"
+        || path.starts_with("/api/webhook/")
+    {
         return handlers::handle_webhook(req, env, ctx, path, method).await;
+    }
+
+    if path == "/api" || path.starts_with("/api/") {
+        return api::handle(req, env, path).await;
     }
 
     if path == "/data-deletion" {

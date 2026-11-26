@@ -435,6 +435,19 @@ async fn handle_auto_reply(msg: &InboundMessage, db: &D1Database, env: &Env) -> 
             Ok(r) => r,
             Err(e) => {
                 console_log!("AI auto-reply error: {:?}", e);
+                let _ = save_message_raw_action(
+                    db,
+                    &generate_id(),
+                    &msg.channel,
+                    MessageDirection::Outbound,
+                    &msg.recipient,
+                    &msg.sender,
+                    &msg.tenant_id,
+                    &msg.channel_account_id,
+                    Some("ai_error"),
+                    Some(conversation_id.as_str()),
+                )
+                .await;
                 let _ = billing::restore_credit(db, &msg.tenant_id, metered).await;
                 return Ok(());
             }
@@ -490,6 +503,20 @@ async fn handle_auto_reply(msg: &InboundMessage, db: &D1Database, env: &Env) -> 
 
     if let Err(e) = channel::send_reply(env, msg, &reply, config.access_token.as_deref()).await {
         console_log!("Auto-reply send error: {:?}", e);
+        let err_action = format!("send_error: {e}");
+        let _ = save_message_raw_action(
+            db,
+            &generate_id(),
+            &msg.channel,
+            MessageDirection::Outbound,
+            &msg.recipient,
+            &msg.sender,
+            &msg.tenant_id,
+            &msg.channel_account_id,
+            Some(err_action.as_str()),
+            Some(conversation_id.as_str()),
+        )
+        .await;
         let _ = billing::restore_credit(db, &msg.tenant_id, metered).await;
         return Ok(());
     }

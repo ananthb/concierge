@@ -47,6 +47,9 @@ Mutations (`POST`, `PUT`, `DELETE`) require the `X-Replybots-Request: 1` header 
 | `POST` | `/api/wizard/complete` |
 | `GET` | `/api/whatsapp` |
 | `PUT` | `/api/whatsapp` |
+| `POST` | `/api/whatsapp/request-code` |
+| `POST` | `/api/whatsapp/verify-code` |
+| `POST` | `/api/whatsapp/register` |
 | `DELETE` | `/api/whatsapp` |
 | `GET` | `/api/billing` |
 | `GET` | `/api/billing/invoices` |

@@ -34,12 +34,14 @@ pub async fn send_whatsapp_message(
             .with_body(Some(wasm_bindgen::JsValue::from_str(&payload.to_string()))),
     )?;
 
-    let response = Fetch::Request(request).send().await?;
+    let mut response = Fetch::Request(request).send().await?;
 
     if !response.status_code().to_string().starts_with('2') {
+        let status = response.status_code();
+        let err_body = response.text().await.unwrap_or_default();
+        let snippet: String = err_body.chars().take(240).collect();
         return Err(Error::from(format!(
-            "WhatsApp API error: status {}",
-            response.status_code()
+            "WhatsApp API error (HTTP {status}): {snippet}"
         )));
     }
 

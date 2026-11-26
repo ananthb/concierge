@@ -271,6 +271,7 @@
               override_default_response_type: true,
               extras: {
                 feature: 'whatsapp_embedded_signup',
+                featureType: 'whatsapp_business_app_onboarding',
                 version: 2,
                 sessionInfoVersion: '3',
                 setup: {},

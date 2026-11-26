@@ -128,19 +128,19 @@ pub async fn handle_whatsapp_signup(
 
             let app_id = env
                 .var("META_APP_ID")
-                .map(|v| v.to_string())
+                .map(|v| v.to_string().trim().to_string())
                 .unwrap_or_default();
             let app_secret = env
                 .secret("META_APP_SECRET")
-                .map(|s| s.to_string())
+                .map(|s| s.to_string().trim().to_string())
                 .unwrap_or_default();
             let platform_token = env
                 .secret("WHATSAPP_ACCESS_TOKEN")
-                .map(|s| s.to_string())
+                .map(|s| s.to_string().trim().to_string())
                 .unwrap_or_default();
             let fallback_waba_id = env
                 .var("WHATSAPP_WABA_ID")
-                .map(|v| v.to_string())
+                .map(|v| v.to_string().trim().to_string())
                 .unwrap_or_default();
 
             let public_base = env
@@ -182,7 +182,7 @@ pub async fn handle_whatsapp_signup(
                 }
             };
 
-            let user_token = match token_res {
+            let short_token = match token_res {
                 Ok(t) => t,
                 Err(e) => {
                     console_log!("WhatsApp signup token exchange failed: {:?}", e);
@@ -195,6 +195,9 @@ pub async fn handle_whatsapp_signup(
                     );
                 }
             };
+            let user_token = exchange_for_long_lived_token(&short_token, &app_id, &app_secret)
+                .await
+                .unwrap_or(short_token);
 
             let meta_user = fetch_meta_user(&user_token).await;
             let tenant_id = match logged_in_tenant.clone() {
@@ -324,6 +327,18 @@ pub async fn handle_whatsapp_signup(
 
             let account_view = match resolved_phone {
                 Ok((phone_number, phone_number_id)) => {
+                    if !phone_number_id.is_empty() {
+                        let mut registered = false;
+                        if !user_token.trim().is_empty() {
+                            registered = register_phone_number(&phone_number_id, &user_token).await;
+                        }
+                        if !registered
+                            && !platform_token.trim().is_empty()
+                            && platform_token != user_token
+                        {
+                            let _ = register_phone_number(&phone_number_id, &platform_token).await;
+                        }
+                    }
                     let waba_opt = if effective_waba_id.is_empty() {
                         None
                     } else {
@@ -778,6 +793,126 @@ async fn subscribe_waba_app(waba_id: &str, token: &str) -> bool {
     }
 }
 
+async fn register_phone_number(phone_number_id: &str, token: &str) -> bool {
+    let url = format!(
+        "https://graph.facebook.com/{}/{}/register",
+        crate::META_API_VERSION,
+        urlencoding::encode(phone_number_id)
+    );
+    let headers = Headers::new();
+    if headers
+        .set("Authorization", &format!("Bearer {}", token.trim()))
+        .is_err()
+        || headers.set("Content-Type", "application/json").is_err()
+    {
+        return false;
+    }
+    let payload = serde_json::json!({
+        "messaging_product": "whatsapp",
+        "pin": "000000"
+    });
+    let mut init = RequestInit::new();
+    init.with_method(Method::Post)
+        .with_headers(headers)
+        .with_body(Some(wasm_bindgen::JsValue::from_str(&payload.to_string())));
+    let Ok(req) = Request::new_with_init(&url, &init) else {
+        return false;
+    };
+    let registered = match Fetch::Request(req).send().await {
+        Ok(resp) if resp.status_code() < 300 => true,
+        Ok(mut resp) => {
+            let text = resp.text().await.unwrap_or_default();
+            console_log!(
+                "Warning: register on phone_number_id {} returned HTTP {}: {}",
+                phone_number_id,
+                resp.status_code(),
+                text
+            );
+            false
+        }
+        Err(e) => {
+            console_log!(
+                "Warning: register on phone_number_id {} failed: {:?}",
+                phone_number_id,
+                e
+            );
+            false
+        }
+    };
+    if !registered {
+        let smb_ok = sync_smb_app_data(phone_number_id, token).await;
+        if smb_ok {
+            return true;
+        }
+    }
+    registered
+}
+
+async fn sync_smb_app_data(phone_number_id: &str, token: &str) -> bool {
+    let url = format!(
+        "https://graph.facebook.com/{}/{}/smb_app_data",
+        crate::META_API_VERSION,
+        urlencoding::encode(phone_number_id)
+    );
+    let mut any_ok = false;
+    for sync_type in ["smb_app_state_sync", "history"] {
+        let headers = Headers::new();
+        if headers
+            .set("Authorization", &format!("Bearer {}", token.trim()))
+            .is_err()
+            || headers.set("Content-Type", "application/json").is_err()
+        {
+            continue;
+        }
+        let payload = serde_json::json!({
+            "messaging_product": "whatsapp",
+            "sync_type": sync_type
+        });
+        let mut init = RequestInit::new();
+        init.with_method(Method::Post)
+            .with_headers(headers)
+            .with_body(Some(wasm_bindgen::JsValue::from_str(&payload.to_string())));
+        if let Ok(req) = Request::new_with_init(&url, &init) {
+            if let Ok(resp) = Fetch::Request(req).send().await {
+                if resp.status_code() < 300 {
+                    any_ok = true;
+                }
+            }
+        }
+    }
+    any_ok
+}
+
+async fn exchange_for_long_lived_token(
+    short_token: &str,
+    app_id: &str,
+    app_secret: &str,
+) -> Option<String> {
+    if short_token.trim().is_empty() || app_id.trim().is_empty() || app_secret.trim().is_empty() {
+        return None;
+    }
+    let url = format!(
+        "https://graph.facebook.com/{}/oauth/access_token?grant_type=fb_exchange_token&client_id={}&client_secret={}&fb_exchange_token={}",
+        crate::META_API_VERSION,
+        urlencoding::encode(app_id.trim()),
+        urlencoding::encode(app_secret.trim()),
+        urlencoding::encode(short_token.trim())
+    );
+    let mut init = RequestInit::new();
+    init.with_method(Method::Get);
+    let request = Request::new_with_init(&url, &init).ok()?;
+    let mut response = Fetch::Request(request).send().await.ok()?;
+    if response.status_code() != 200 {
+        return None;
+    }
+    let body: serde_json::Value = response.json().await.ok()?;
+    body.get("access_token")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(String::from)
+}
+
 async fn exchange_code(
     code: &str,
     app_id: &str,
@@ -882,7 +1017,20 @@ async fn discover_new_phone(
         .cloned()
         .unwrap_or_default();
 
-    if let Some(phone) = phones.last() {
+    let chosen = phones
+        .iter()
+        .rev()
+        .find(|p| {
+            let disp = p
+                .get("display_phone_number")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .trim();
+            !disp.starts_with("+1 555") && !disp.starts_with("1555") && !disp.starts_with("+1555")
+        })
+        .or_else(|| phones.last());
+
+    if let Some(phone) = chosen {
         let display = phone
             .get("display_phone_number")
             .and_then(|v| v.as_str())
