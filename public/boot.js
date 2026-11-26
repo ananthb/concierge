@@ -169,8 +169,7 @@
           '&config_id=' + encodeURIComponent(opts.configId) +
           '&response_type=code' +
           '&override_default_response_type=true' +
-          '&state=' + encodeURIComponent(opts.state) +
-          '&extras=' + encodeURIComponent('{}');
+          '&state=' + encodeURIComponent(opts.state);
         window.location.assign(url);
       }
 
@@ -271,7 +270,7 @@
               config_id: opts.configId,
               response_type: 'code',
               override_default_response_type: true,
-              extras: {},
+              extras: { setup: {} },
             }
           );
         } catch (e) {
