@@ -22,18 +22,25 @@ wrangler d1 execute replybots --remote --file migrations/0001_create_schema.sql
 
 ## 3. Configure Environment Variables & Secrets
 
-Set runtime variables at deploy time (or in `wrangler.toml`):
+Plaintext variables (`PUBLIC_BASE_URL`, `META_APP_ID`, `WHATSAPP_SIGNUP_CONFIG_ID`, `RAZORPAY_KEY_ID`, `EMAIL_DOMAIN`, `WHATSAPP_WABA_ID`) can be set **either**:
 
-- `PUBLIC_BASE_URL` — e.g. `https://replybots.io`
-- `EMAIL_DOMAIN` — domain for outbound handoff alert emails (e.g. `replybots.io`)
-- `WHATSAPP_WABA_ID` — fallback WhatsApp Business Account ID
+- In the Cloudflare Dashboard under **Workers & Pages → replybots → Settings → Variables and Secrets** (preserved across deploys by `keep_vars = true` in `wrangler.toml`), **or**
+- As **Workers Builds** environment variables (forwarded via `--var` when non-empty by `npm run deploy` / `./scripts/deploy.sh`).
+
+The worker accepts `META_APP_ID`, `WHATSAPP_SIGNUP_CONFIG_ID`, and `RAZORPAY_KEY_ID` as either plaintext variables or secrets (`helpers::env_val`):
+
+- `PUBLIC_BASE_URL` — primary site URL, e.g. `https://replybots.io`
+- `META_APP_ID` — Meta App ID for WhatsApp Embedded Signup
 - `WHATSAPP_SIGNUP_CONFIG_ID` — Meta Embedded Signup configuration ID
+- `RAZORPAY_KEY_ID` — Razorpay key ID
+- `EMAIL_DOMAIN` — domain for outbound handoff alert emails, e.g. `replybots.io` (optional)
+- `WHATSAPP_WABA_ID` — fallback WhatsApp Business Account ID (optional; Embedded Signup supplies each tenant's own WABA ID)
 
-Set secrets via `wrangler secret put`:
+Set secrets via `wrangler secret put` (or in the Cloudflare Dashboard):
 
 - `WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_VERIFY_TOKEN`
-- `META_APP_ID`, `META_APP_SECRET`
-- `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET`
+- `META_APP_SECRET`
+- `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET`
 
 See [Bindings & Environment](reference/bindings-and-env.md) for the full list extracted from `wrangler.toml` and `src/`.
 

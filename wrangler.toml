@@ -1,6 +1,7 @@
 name = "replybots"
 main = "build/index.js"
 compatibility_date = "2024-01-01"
+keep_vars = true
 
 [build]
 # Wraps `worker-build --release` with a rustup + cargo bootstrap
@@ -54,19 +55,27 @@ name = "EMAIL"
 binding = "EVENTS"
 dataset = "replybots_events"
 
+# `keep_vars = true` above preserves Cloudflare Dashboard variables across
+# deploys (`PUBLIC_BASE_URL`, `META_APP_ID`, `WHATSAPP_SIGNUP_CONFIG_ID`,
+# `RAZORPAY_KEY_ID`, etc.) so `wrangler.toml` stays portable for forks.
 [vars]
 ENVIRONMENT = "production"
 
-# Runtime vars and secrets are managed in the Cloudflare dashboard
-# (Workers -> replybots -> Settings -> Variables and Secrets) so this file
-# stays portable for forks. Cloudflare Builds redeploys preserve them.
+# Plaintext variables and secrets can be configured either in the Cloudflare
+# Dashboard (Workers -> replybots -> Settings -> Variables and Secrets,
+# preserved across deploys by `keep_vars = true`) or as Workers Builds
+# environment variables (forwarded when non-empty by `./scripts/deploy.sh`).
+# The worker reads `META_APP_ID`, `WHATSAPP_SIGNUP_CONFIG_ID`, and
+# `RAZORPAY_KEY_ID` from either `[vars]` or Secrets (`helpers::env_val`).
 #
 # Required / optional runtime vars:
 #   PUBLIC_BASE_URL            Primary site URL, e.g. https://replybots.io
+#   META_APP_ID                Meta app ID (WhatsApp Embedded Signup)
+#   WHATSAPP_SIGNUP_CONFIG_ID  Meta Embedded Signup config ID
+#   RAZORPAY_KEY_ID            Razorpay key ID
 #   EMAIL_DOMAIN               Domain outbound handoff emails are sent from, e.g. replybots.io
 #                              (optional — no MX needed, nothing received here)
-#   WHATSAPP_WABA_ID           Fallback WhatsApp Business Account ID
-#   WHATSAPP_SIGNUP_CONFIG_ID  Meta Embedded Signup config ID
+#   WHATSAPP_WABA_ID           Fallback WhatsApp Business Account ID (optional)
 
 [observability.logs]
 enabled = true
@@ -97,9 +106,7 @@ dataset = "replybots_events_preview"
 # Secrets the worker reads (set via `wrangler secret put`):
 #   WHATSAPP_ACCESS_TOKEN      System user token for WhatsApp Graph API calls
 #   WHATSAPP_VERIFY_TOKEN      WhatsApp webhook verification token
-#   META_APP_ID                Meta app ID (WhatsApp Embedded Signup)
 #   META_APP_SECRET            Meta app secret
-#   RAZORPAY_KEY_ID            Razorpay key ID
 #   RAZORPAY_KEY_SECRET        Razorpay key secret
 #   RAZORPAY_WEBHOOK_SECRET    Razorpay webhook secret
 # ============================================================================

@@ -54,10 +54,6 @@ pub trait Component {
         true
     }
 
-    fn ready(&self, env: &Env) -> bool {
-        self.requirements().iter().all(|r| r.satisfied(env))
-    }
-
     fn shallow_check(&self, env: &Env) -> Check {
         let missing: Vec<&'static str> = self
             .requirements()
@@ -105,7 +101,6 @@ impl Component for WhatsAppSignup {
             Requirement::Secret("META_APP_ID"),
             Requirement::Secret("META_APP_SECRET"),
             Requirement::Secret("WHATSAPP_ACCESS_TOKEN"),
-            Requirement::Var("WHATSAPP_WABA_ID"),
             Requirement::Var("WHATSAPP_SIGNUP_CONFIG_ID"),
         ]
     }
@@ -270,15 +265,11 @@ fn rollup(checks: &[Check]) -> Status {
 }
 
 fn secret_set(env: &Env, name: &str) -> bool {
-    env.secret(name)
-        .map(|s| !s.to_string().is_empty())
-        .unwrap_or(false)
+    !crate::helpers::env_val(env, name).is_empty()
 }
 
 fn var_set(env: &Env, name: &str) -> bool {
-    env.var(name)
-        .map(|v| !v.to_string().is_empty())
-        .unwrap_or(false)
+    !crate::helpers::env_val(env, name).is_empty()
 }
 
 fn binding_present(env: &Env, name: &str) -> bool {

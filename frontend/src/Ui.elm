@@ -264,7 +264,11 @@ footer =
             , li [] [ a [ Route.href Route.Terms ] [ text "Terms" ] ]
             , li [] [ a [ Route.href Route.Privacy ] [ text "Privacy" ] ]
             , li [] [ a [ href "https://replybots.dev" ] [ text "Docs" ] ]
+            , li [] [ a [ href "https://github.com/ananthb/replybots" ] [ text "Source (AGPL-3.0)" ] ]
             ]
         , p [ class "footer-note" ]
-            [ text "Message bodies pass through but are never stored. Only channel, direction, sender, recipient and timestamp are kept." ]
+            [ text "Message bodies pass through but are never stored. Only channel, direction, sender, recipient and timestamp are kept. Brought to you by "
+            , a [ href "https://calculon.tech" ] [ text "Calculon Tech" ]
+            , text "."
+            ]
         ]

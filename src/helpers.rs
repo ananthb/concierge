@@ -8,6 +8,16 @@
 
 use worker::*;
 
+/// Read a configuration value from `[vars]` first, falling back to secrets.
+pub fn env_val(env: &worker::Env, name: &str) -> String {
+    env.var(name)
+        .map(|v| v.to_string())
+        .or_else(|_| env.secret(name).map(|s| s.to_string()))
+        .unwrap_or_default()
+        .trim()
+        .to_string()
+}
+
 /// Generate a unique ID
 pub fn generate_id() -> String {
     uuid::Uuid::new_v4().to_string()

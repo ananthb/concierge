@@ -113,14 +113,8 @@ pub async fn handle(mut req: Request, env: Env, rest: &[&str]) -> Result<Respons
                 );
             }
 
-            let key_id = env
-                .secret("RAZORPAY_KEY_ID")
-                .map(|v| v.to_string())
-                .unwrap_or_default();
-            let key_secret = env
-                .secret("RAZORPAY_KEY_SECRET")
-                .map(|v| v.to_string())
-                .unwrap_or_default();
+            let key_id = crate::helpers::env_val(&env, "RAZORPAY_KEY_ID");
+            let key_secret = crate::helpers::env_val(&env, "RAZORPAY_KEY_SECRET");
             if key_id.is_empty() || key_secret.is_empty() {
                 return super::error(
                     "billing_unconfigured",

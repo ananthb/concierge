@@ -52,18 +52,11 @@ impl SignupView {
         db: &D1Database,
         tenant_id: &str,
     ) -> Result<Option<SignupView>> {
-        use crate::handlers::health::Component;
-        if !crate::handlers::health::WhatsAppSignup.ready(env) {
+        let app_id = crate::helpers::env_val(env, "META_APP_ID");
+        let config_id = crate::helpers::env_val(env, "WHATSAPP_SIGNUP_CONFIG_ID");
+        if app_id.is_empty() || config_id.is_empty() {
             return Ok(None);
         }
-        let app_id = env
-            .secret("META_APP_ID")
-            .map(|s| s.to_string())
-            .unwrap_or_default();
-        let config_id = env
-            .var("WHATSAPP_SIGNUP_CONFIG_ID")
-            .map(|v| v.to_string())
-            .unwrap_or_default();
 
         let state = generate_token()?;
         save_signup_state(db, &state, tenant_id, 600).await?;
