@@ -59,14 +59,11 @@ function generateBindingsAndEnv() {
     if (m) wranglerDocs.set(m[1], m[2].trim());
   }
 
-  // Scan src/**/*.rs for .var("..."), .secret("..."), and env_val(..., "...")
+  // Scan src/**/*.rs for .var("...") and .secret("...")
   const varsMap = new Map();
   const secretsMap = new Map();
   const varRe = /\.\s*var\(\s*"([A-Z0-9_]+)"\s*\)/g;
   const secretRe = /\.\s*secret\(\s*"([A-Z0-9_]+)"\s*\)/g;
-  const envValRe = /env_val\(\s*&?\w+\s*,\s*"([A-Z0-9_]+)"\s*\)/g;
-  const secretsSectionIdx = wrangler.indexOf('# Secrets the worker reads');
-  const overridesSectionIdx = wrangler.indexOf('# Optional overrides');
 
   for (const [file, content] of rsContents) {
     for (const m of content.matchAll(varRe)) {
@@ -76,17 +73,6 @@ function generateBindingsAndEnv() {
     for (const m of content.matchAll(secretRe)) {
       if (!secretsMap.has(m[1])) secretsMap.set(m[1], new Set());
       secretsMap.get(m[1]).add(file);
-    }
-    for (const m of content.matchAll(envValRe)) {
-      const k = m[1];
-      const idx = wrangler.indexOf(`#   ${k}`);
-      if (secretsSectionIdx !== -1 && idx > secretsSectionIdx && idx < overridesSectionIdx) {
-        if (!secretsMap.has(k)) secretsMap.set(k, new Set());
-        secretsMap.get(k).add(file);
-      } else {
-        if (!varsMap.has(k)) varsMap.set(k, new Set());
-        varsMap.get(k).add(file);
-      }
     }
   }
 

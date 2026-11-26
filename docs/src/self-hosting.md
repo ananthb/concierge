@@ -27,7 +27,7 @@ Plaintext variables (`PUBLIC_BASE_URL`, `META_APP_ID`, `WHATSAPP_SIGNUP_CONFIG_I
 - In the Cloudflare Dashboard under **Workers & Pages → replybots → Settings → Variables and Secrets** (preserved across deploys by `keep_vars = true` in `wrangler.toml`), **or**
 - As **Workers Builds** environment variables (forwarded via `--var` when non-empty by `npm run deploy` / `./scripts/deploy.sh`).
 
-The worker accepts `META_APP_ID`, `WHATSAPP_SIGNUP_CONFIG_ID`, and `RAZORPAY_KEY_ID` as either plaintext variables or secrets (`helpers::env_val`):
+Environment variables (`[vars]`):
 
 - `PUBLIC_BASE_URL` — primary site URL, e.g. `https://replybots.io`
 - `META_APP_ID` — Meta App ID for WhatsApp Embedded Signup

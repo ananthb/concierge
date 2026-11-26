@@ -65,8 +65,6 @@ ENVIRONMENT = "production"
 # Dashboard (Workers -> replybots -> Settings -> Variables and Secrets,
 # preserved across deploys by `keep_vars = true`) or as Workers Builds
 # environment variables (forwarded when non-empty by `./scripts/deploy.sh`).
-# The worker reads `META_APP_ID`, `WHATSAPP_SIGNUP_CONFIG_ID`, and
-# `RAZORPAY_KEY_ID` from either `[vars]` or Secrets (`helpers::env_val`).
 #
 # Required / optional runtime vars:
 #   PUBLIC_BASE_URL            Primary site URL, e.g. https://replybots.io

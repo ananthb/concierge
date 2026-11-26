@@ -106,10 +106,22 @@ pub async fn handle_whatsapp_signup(
                 return fail(wants_json, "missing_code", "Missing Meta OAuth code.", 400);
             }
 
-            let app_id = crate::helpers::env_val(&env, "META_APP_ID");
-            let app_secret = crate::helpers::env_val(&env, "META_APP_SECRET");
-            let platform_token = crate::helpers::env_val(&env, "WHATSAPP_ACCESS_TOKEN");
-            let fallback_waba_id = crate::helpers::env_val(&env, "WHATSAPP_WABA_ID");
+            let app_id = env
+                .var("META_APP_ID")
+                .map(|v| v.to_string())
+                .unwrap_or_default();
+            let app_secret = env
+                .secret("META_APP_SECRET")
+                .map(|s| s.to_string())
+                .unwrap_or_default();
+            let platform_token = env
+                .secret("WHATSAPP_ACCESS_TOKEN")
+                .map(|s| s.to_string())
+                .unwrap_or_default();
+            let fallback_waba_id = env
+                .var("WHATSAPP_WABA_ID")
+                .map(|v| v.to_string())
+                .unwrap_or_default();
 
             let user_token = match exchange_code(&params.code, &app_id, &app_secret).await {
                 Ok(t) => t,

@@ -52,8 +52,18 @@ impl SignupView {
         db: &D1Database,
         tenant_id: &str,
     ) -> Result<Option<SignupView>> {
-        let app_id = crate::helpers::env_val(env, "META_APP_ID");
-        let config_id = crate::helpers::env_val(env, "WHATSAPP_SIGNUP_CONFIG_ID");
+        let app_id = env
+            .var("META_APP_ID")
+            .map(|v| v.to_string())
+            .unwrap_or_default()
+            .trim()
+            .to_string();
+        let config_id = env
+            .var("WHATSAPP_SIGNUP_CONFIG_ID")
+            .map(|v| v.to_string())
+            .unwrap_or_default()
+            .trim()
+            .to_string();
         if app_id.is_empty() || config_id.is_empty() {
             return Ok(None);
         }
