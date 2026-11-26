@@ -114,7 +114,7 @@ pub async fn handle(mut req: Request, env: Env, rest: &[&str]) -> Result<Respons
             }
 
             let key_id = env
-                .secret("RAZORPAY_KEY_ID")
+                .var("RAZORPAY_KEY_ID")
                 .map(|v| v.to_string())
                 .unwrap_or_default();
             let key_secret = env

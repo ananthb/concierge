@@ -11,7 +11,7 @@ pub enum Status {
     Error,
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Requirement {
     Secret(&'static str),
     Var(&'static str),
@@ -52,10 +52,6 @@ pub trait Component {
 
     fn required(&self) -> bool {
         true
-    }
-
-    fn ready(&self, env: &Env) -> bool {
-        self.requirements().iter().all(|r| r.satisfied(env))
     }
 
     fn shallow_check(&self, env: &Env) -> Check {
@@ -102,10 +98,9 @@ impl Component for WhatsAppSignup {
     }
     fn requirements(&self) -> &'static [Requirement] {
         &[
-            Requirement::Secret("META_APP_ID"),
+            Requirement::Var("META_APP_ID"),
             Requirement::Secret("META_APP_SECRET"),
             Requirement::Secret("WHATSAPP_ACCESS_TOKEN"),
-            Requirement::Var("WHATSAPP_WABA_ID"),
             Requirement::Var("WHATSAPP_SIGNUP_CONFIG_ID"),
         ]
     }
@@ -121,7 +116,7 @@ impl Component for Razorpay {
     }
     fn requirements(&self) -> &'static [Requirement] {
         &[
-            Requirement::Secret("RAZORPAY_KEY_ID"),
+            Requirement::Var("RAZORPAY_KEY_ID"),
             Requirement::Secret("RAZORPAY_KEY_SECRET"),
             Requirement::Secret("RAZORPAY_WEBHOOK_SECRET"),
         ]
@@ -271,13 +266,13 @@ fn rollup(checks: &[Check]) -> Status {
 
 fn secret_set(env: &Env, name: &str) -> bool {
     env.secret(name)
-        .map(|s| !s.to_string().is_empty())
+        .map(|s| !s.to_string().trim().is_empty())
         .unwrap_or(false)
 }
 
 fn var_set(env: &Env, name: &str) -> bool {
     env.var(name)
-        .map(|v| !v.to_string().is_empty())
+        .map(|v| !v.to_string().trim().is_empty())
         .unwrap_or(false)
 }
 
@@ -335,5 +330,23 @@ mod tests {
 
         assert!(AiBinding.required());
         assert!(D1Binding.required());
+
+        assert_eq!(
+            WhatsAppSignup.requirements(),
+            &[
+                Requirement::Var("META_APP_ID"),
+                Requirement::Secret("META_APP_SECRET"),
+                Requirement::Secret("WHATSAPP_ACCESS_TOKEN"),
+                Requirement::Var("WHATSAPP_SIGNUP_CONFIG_ID"),
+            ]
+        );
+        assert_eq!(
+            Razorpay.requirements(),
+            &[
+                Requirement::Var("RAZORPAY_KEY_ID"),
+                Requirement::Secret("RAZORPAY_KEY_SECRET"),
+                Requirement::Secret("RAZORPAY_WEBHOOK_SECRET"),
+            ]
+        );
     }
 }

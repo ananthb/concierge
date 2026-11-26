@@ -107,8 +107,8 @@ pub async fn handle_whatsapp_signup(
             }
 
             let app_id = env
-                .secret("META_APP_ID")
-                .map(|s| s.to_string())
+                .var("META_APP_ID")
+                .map(|v| v.to_string())
                 .unwrap_or_default();
             let app_secret = env
                 .secret("META_APP_SECRET")
