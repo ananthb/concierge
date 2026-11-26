@@ -64,7 +64,7 @@ impl SignupView {
             .unwrap_or_default()
             .trim()
             .to_string();
-        if app_id.is_empty() || config_id.is_empty() {
+        if app_id.is_empty() {
             return Ok(None);
         }
 

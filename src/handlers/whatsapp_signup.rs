@@ -557,38 +557,51 @@ struct MetaUserInfo {
 }
 
 async fn fetch_meta_user(user_token: &str) -> Option<MetaUserInfo> {
-    let url = format!(
-        "https://graph.facebook.com/{}/me?fields=id,name,email&access_token={}",
-        crate::META_API_VERSION,
-        urlencoding::encode(user_token),
-    );
-    let mut init = RequestInit::new();
-    init.with_method(Method::Get);
-    let request = Request::new_with_init(&url, &init).ok()?;
-    let mut response = Fetch::Request(request).send().await.ok()?;
-    if response.status_code() != 200 {
-        return None;
+    for fields in ["id,name,email", "id,name"] {
+        let url = format!(
+            "https://graph.facebook.com/{}/me?fields={}&access_token={}",
+            crate::META_API_VERSION,
+            fields,
+            urlencoding::encode(user_token),
+        );
+        let mut init = RequestInit::new();
+        init.with_method(Method::Get);
+        let Ok(request) = Request::new_with_init(&url, &init) else {
+            continue;
+        };
+        let Ok(mut response) = Fetch::Request(request).send().await else {
+            continue;
+        };
+        if response.status_code() != 200 {
+            continue;
+        }
+        let Ok(body) = response.json::<serde_json::Value>().await else {
+            continue;
+        };
+        let Some(id) = body
+            .get("id")
+            .and_then(|v| v.as_str())
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(String::from)
+        else {
+            continue;
+        };
+        let name = body
+            .get("name")
+            .and_then(|v| v.as_str())
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(String::from);
+        let email = body
+            .get("email")
+            .and_then(|v| v.as_str())
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(|s| s.to_lowercase());
+        return Some(MetaUserInfo { id, name, email });
     }
-    let body: serde_json::Value = response.json().await.ok()?;
-    let id = body
-        .get("id")
-        .and_then(|v| v.as_str())
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .map(String::from)?;
-    let name = body
-        .get("name")
-        .and_then(|v| v.as_str())
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .map(String::from);
-    let email = body
-        .get("email")
-        .and_then(|v| v.as_str())
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .map(|s| s.to_lowercase());
-    Some(MetaUserInfo { id, name, email })
+    None
 }
 
 async fn subscribe_waba_app(waba_id: &str, platform_token: &str) {
