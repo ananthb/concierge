@@ -159,20 +159,6 @@
         app.ports.metaSignupOutcome.send(payload);
       }
 
-      function redirectToOAuth() {
-        cleanup();
-        var redirectUri = window.location.origin + '/whatsapp/signup/callback';
-        var url =
-          'https://www.facebook.com/v21.0/dialog/oauth' +
-          '?client_id=' + encodeURIComponent(opts.appId) +
-          '&redirect_uri=' + encodeURIComponent(redirectUri) +
-          '&config_id=' + encodeURIComponent(opts.configId) +
-          '&response_type=code' +
-          '&override_default_response_type=true' +
-          '&state=' + encodeURIComponent(opts.state);
-        window.location.assign(url);
-      }
-
       function onMessage(event) {
         if (
           event.origin !== 'https://www.facebook.com' &&
@@ -197,7 +183,7 @@
 
       function launch() {
         if (!window.FB) {
-          redirectToOAuth();
+          finish({ status: 'error', message: 'Meta signup SDK failed to initialise.' });
           return;
         }
 
@@ -209,7 +195,7 @@
             version: 'v21.0',
           });
         } catch (e) {
-          redirectToOAuth();
+          finish({ status: 'error', message: 'Could not initialise Meta signup.' });
           return;
         }
 
@@ -274,7 +260,7 @@
             }
           );
         } catch (e) {
-          redirectToOAuth();
+          finish({ status: 'error', message: 'Could not open Meta signup popup.' });
         }
       }
 
@@ -287,7 +273,10 @@
         'https://connect.facebook.net/en_US/sdk.js',
         launch,
         function () {
-          redirectToOAuth();
+          finish({
+            status: 'error',
+            message: 'Could not load Meta signup. Please allow connect.facebook.net and try again.',
+          });
         }
       );
     });
