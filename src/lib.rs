@@ -58,7 +58,7 @@ fn add_security_headers(resp: &mut Response, is_dev: bool) -> Result<()> {
          script-src 'self' https://checkout.razorpay.com https://connect.facebook.net; \
          style-src 'self' 'unsafe-inline'; \
          img-src 'self' data: https:{img_extra}; \
-         connect-src 'self' https://www.facebook.com https://graph.facebook.com https://*.facebook.com https://api.razorpay.com; \
+         connect-src 'self' https://www.facebook.com https://graph.facebook.com https://connect.facebook.net https://*.facebook.com https://api.razorpay.com; \
          frame-src https://www.facebook.com https://*.facebook.com https://api.razorpay.com https://checkout.razorpay.com; \
          base-uri 'self'; \
          form-action 'self'{form_action_extra}; \
