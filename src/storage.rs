@@ -407,6 +407,23 @@ pub async fn get_whatsapp_account_by_phone(
     Ok(row.and_then(|r| r.get("id").and_then(|v| v.as_str()).map(String::from)))
 }
 
+pub async fn get_whatsapp_account_by_waba(
+    db: &D1Database,
+    waba_id: &str,
+) -> Result<Option<String>> {
+    if waba_id.trim().is_empty() {
+        return Ok(None);
+    }
+    let row = db
+        .prepare(
+            "SELECT id FROM whatsapp_accounts WHERE waba_id = ? ORDER BY created_at DESC LIMIT 1",
+        )
+        .bind(&[waba_id.trim().into()])?
+        .first::<serde_json::Value>(None)
+        .await?;
+    Ok(row.and_then(|r| r.get("id").and_then(|v| v.as_str()).map(String::from)))
+}
+
 // ============================================================================
 // Channel Reply Config Abstraction
 // ============================================================================
@@ -515,6 +532,34 @@ pub async fn save_message(
     action_taken: Option<MessageAction>,
     conversation_id: Option<&str>,
 ) -> Result<()> {
+    save_message_raw_action(
+        db,
+        id,
+        channel,
+        direction,
+        sender,
+        recipient,
+        tenant_id,
+        channel_account_id,
+        action_taken.map(|a| a.as_str()),
+        conversation_id,
+    )
+    .await
+}
+
+#[allow(clippy::too_many_arguments)]
+pub async fn save_message_raw_action(
+    db: &D1Database,
+    id: &str,
+    channel: &Channel,
+    direction: MessageDirection,
+    sender: &str,
+    recipient: &str,
+    tenant_id: &str,
+    channel_account_id: &str,
+    action_taken: Option<&str>,
+    conversation_id: Option<&str>,
+) -> Result<()> {
     let stmt = db.prepare(
         "INSERT INTO messages (id, channel, direction, sender, recipient, tenant_id, channel_account_id, action_taken, conversation_id)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -527,9 +572,7 @@ pub async fn save_message(
         recipient.into(),
         tenant_id.into(),
         channel_account_id.into(),
-        action_taken
-            .map(|a| JsValue::from(a.as_str()))
-            .unwrap_or(JsValue::null()),
+        action_taken.map(JsValue::from).unwrap_or(JsValue::null()),
         conversation_id
             .map(JsValue::from)
             .unwrap_or(JsValue::null()),

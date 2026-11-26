@@ -41,6 +41,8 @@ module Api exposing
     , logout
     , post
     , put
+    , registerWhatsAppNumber
+    , requestWhatsAppCode
     , saveBasics
     , saveConversation
     , saveEmail
@@ -52,6 +54,7 @@ module Api exposing
     , stepWizard
     , unitPriceFor
     , updateWhatsApp
+    , verifyWhatsAppCode
     )
 
 {-| The single place that knows the shape of `/api/*`.
@@ -718,6 +721,27 @@ updateWhatsApp id args =
 deleteWhatsApp : String -> (Data () -> msg) -> Cmd msg
 deleteWhatsApp id =
     delete ("/api/whatsapp/" ++ id) (E.object []) (D.succeed ())
+
+
+requestWhatsAppCode : String -> String -> (Data () -> msg) -> Cmd msg
+requestWhatsAppCode id codeMethod =
+    post ("/api/whatsapp/" ++ id ++ "/request-code")
+        (E.object [ ( "code_method", E.string codeMethod ) ])
+        (D.succeed ())
+
+
+verifyWhatsAppCode : String -> String -> (Data () -> msg) -> Cmd msg
+verifyWhatsAppCode id code =
+    post ("/api/whatsapp/" ++ id ++ "/verify-code")
+        (E.object [ ( "code", E.string code ) ])
+        (D.succeed ())
+
+
+registerWhatsAppNumber : String -> (Data () -> msg) -> Cmd msg
+registerWhatsAppNumber id =
+    post ("/api/whatsapp/" ++ id ++ "/register")
+        (E.object [])
+        (D.succeed ())
 
 
 whatsAppDecoder : Decoder WhatsAppAccount

@@ -40,5 +40,5 @@ Default values in `wrangler.toml`:
 | `META_APP_SECRET` | Meta app secret | `src/handlers/data_deletion.rs`, `src/handlers/webhook.rs`, `src/handlers/whatsapp_signup.rs` |
 | `RAZORPAY_KEY_SECRET` | Razorpay key secret | `src/api/billing.rs` |
 | `RAZORPAY_WEBHOOK_SECRET` | Razorpay webhook secret | `src/billing/webhook.rs` |
-| `WHATSAPP_ACCESS_TOKEN` | System user token for WhatsApp Graph API calls | `src/channel/whatsapp.rs`, `src/handlers/whatsapp_signup.rs` |
+| `WHATSAPP_ACCESS_TOKEN` | System user token for WhatsApp Graph API calls | `src/api/whatsapp.rs`, `src/channel/whatsapp.rs`, `src/handlers/whatsapp_signup.rs` |
 | `WHATSAPP_VERIFY_TOKEN` | WhatsApp webhook verification token | `src/handlers/webhook.rs` |

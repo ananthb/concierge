@@ -19,7 +19,8 @@
   X-Frame-Options: DENY
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
-  Content-Security-Policy: default-src 'self'; script-src 'self' https://checkout.razorpay.com https://connect.facebook.net; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https://www.facebook.com https://graph.facebook.com https://connect.facebook.net https://*.facebook.com https://api.razorpay.com; frame-src https://www.facebook.com https://*.facebook.com https://api.razorpay.com https://checkout.razorpay.com; base-uri 'self'; form-action 'self'; object-src 'none'
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(self "https://checkout.razorpay.com")
+  Content-Security-Policy: default-src 'self'; script-src 'self' https://checkout.razorpay.com https://connect.facebook.net https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https://www.facebook.com https://graph.facebook.com https://connect.facebook.net https://*.facebook.com https://api.razorpay.com https://cloudflareinsights.com https://*.cloudflareinsights.com; frame-src https://www.facebook.com https://*.facebook.com https://api.razorpay.com https://checkout.razorpay.com; base-uri 'self'; form-action 'self'; object-src 'none'
 
 # Caching.
 #
