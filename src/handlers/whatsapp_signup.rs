@@ -18,7 +18,7 @@ struct SignupParams {
 struct SignupSuccessView {
     ok: bool,
     destination: &'static str,
-    account: SignupAccountView,
+    account: Option<SignupAccountView>,
 }
 
 #[derive(Serialize)]
@@ -68,6 +68,7 @@ pub async fn handle_whatsapp_signup(
             let db = env.d1("DB")?;
 
             let logged_in_tenant = super::auth::resolve_tenant_id(&req, &db).await;
+            let is_logged_in = logged_in_tenant.is_some();
 
             let params = if !is_post {
                 parse_get_params(&req)?
@@ -80,6 +81,7 @@ pub async fn handle_whatsapp_signup(
             if params.state.is_empty() {
                 return fail(
                     wants_json,
+                    is_logged_in,
                     "invalid_state",
                     "Invalid or expired signup state.",
                     400,
@@ -96,6 +98,7 @@ pub async fn handle_whatsapp_signup(
             if !state_valid {
                 return fail(
                     wants_json,
+                    is_logged_in,
                     "invalid_state",
                     "Invalid or expired signup state.",
                     400,
@@ -103,7 +106,13 @@ pub async fn handle_whatsapp_signup(
             }
 
             if params.code.is_empty() {
-                return fail(wants_json, "missing_code", "Missing Meta OAuth code.", 400);
+                return fail(
+                    wants_json,
+                    is_logged_in,
+                    "missing_code",
+                    "Missing Meta OAuth code.",
+                    400,
+                );
             }
 
             let app_id = env
@@ -123,12 +132,52 @@ pub async fn handle_whatsapp_signup(
                 .map(|v| v.to_string())
                 .unwrap_or_default();
 
-            let user_token = match exchange_code(&params.code, &app_id, &app_secret).await {
+            let public_base = env
+                .var("PUBLIC_BASE_URL")
+                .map(|v| v.to_string())
+                .unwrap_or_default();
+            let base = if !public_base.trim().is_empty() {
+                public_base.trim().trim_end_matches('/').to_string()
+            } else {
+                let u = req.url()?;
+                format!("{}://{}", u.scheme(), u.host_str().unwrap_or(""))
+            };
+            let callback_redirect_uri = format!("{base}/whatsapp/signup/callback");
+
+            let token_res = if is_post {
+                match exchange_code(&params.code, &app_id, &app_secret, None).await {
+                    Ok(t) => Ok(t),
+                    Err(_) => {
+                        exchange_code(
+                            &params.code,
+                            &app_id,
+                            &app_secret,
+                            Some(&callback_redirect_uri),
+                        )
+                        .await
+                    }
+                }
+            } else {
+                match exchange_code(
+                    &params.code,
+                    &app_id,
+                    &app_secret,
+                    Some(&callback_redirect_uri),
+                )
+                .await
+                {
+                    Ok(t) => Ok(t),
+                    Err(_) => exchange_code(&params.code, &app_id, &app_secret, None).await,
+                }
+            };
+
+            let user_token = match token_res {
                 Ok(t) => t,
                 Err(e) => {
                     console_log!("WhatsApp signup token exchange failed: {:?}", e);
                     return fail(
                         wants_json,
+                        is_logged_in,
                         "token_exchange_failed",
                         "Could not exchange Meta authorization code.",
                         502,
@@ -152,6 +201,7 @@ pub async fn handle_whatsapp_signup(
                     let Some(user) = meta_user else {
                         return fail(
                             wants_json,
+                            is_logged_in,
                             "meta_profile_failed",
                             "Could not verify your Meta account.",
                             502,
@@ -195,91 +245,132 @@ pub async fn handle_whatsapp_signup(
                 }
             };
 
-            let tenant_supplied_waba = params.waba_id.clone().filter(|s| !s.is_empty());
+            let mut tenant_supplied_waba = params.waba_id.clone().filter(|s| !s.is_empty());
+            if tenant_supplied_waba.is_none() {
+                tenant_supplied_waba =
+                    discover_waba_from_token(&user_token, &app_id, &app_secret).await;
+            }
             let effective_waba_id = tenant_supplied_waba.clone().unwrap_or(fallback_waba_id);
 
+            let subscribe_token = if platform_token.trim().is_empty() {
+                &user_token
+            } else {
+                &platform_token
+            };
             if let Some(ref waba) = tenant_supplied_waba {
-                subscribe_waba_app(waba, &platform_token).await;
+                subscribe_waba_app(waba, subscribe_token).await;
             }
 
-            let (phone_number, phone_number_id) = if let Some(pnid) = params.phone_number_id {
-                match get_phone_number_details(&effective_waba_id, &pnid, &platform_token).await? {
-                    Some((display_phone, _)) => (display_phone, pnid),
-                    None => {
-                        return fail(
-                            wants_json,
-                            "phone_not_found",
-                            "Could not verify that WhatsApp phone number.",
-                            400,
-                        );
-                    }
+            let resolved_phone = if let Some(pnid) = params.phone_number_id {
+                let mut found = if !platform_token.trim().is_empty() {
+                    get_phone_number_details(&effective_waba_id, &pnid, &platform_token)
+                        .await
+                        .ok()
+                        .flatten()
+                } else {
+                    None
+                };
+                if found.is_none() {
+                    found = get_phone_number_details(&effective_waba_id, &pnid, &user_token)
+                        .await
+                        .ok()
+                        .flatten();
                 }
+                match found {
+                    Some((display_phone, _)) => Ok((display_phone, pnid)),
+                    None => Err((
+                        "phone_not_found",
+                        "Could not verify that WhatsApp phone number.",
+                    )),
+                }
+            } else if effective_waba_id.is_empty() {
+                Err(("missing_waba", "Missing WhatsApp Business Account ID."))
             } else {
-                if effective_waba_id.is_empty() {
-                    return fail(
-                        wants_json,
-                        "missing_waba",
-                        "Missing WhatsApp Business Account ID.",
-                        400,
-                    );
+                let mut found = if !platform_token.trim().is_empty() {
+                    discover_new_phone(&effective_waba_id, &platform_token)
+                        .await
+                        .ok()
+                        .flatten()
+                } else {
+                    None
+                };
+                if found.is_none() {
+                    found = discover_new_phone(&effective_waba_id, &user_token)
+                        .await
+                        .ok()
+                        .flatten();
                 }
-                match discover_new_phone(&effective_waba_id, &platform_token).await? {
-                    Some(result) => result,
-                    None => {
-                        return fail(
-                            wants_json,
-                            "no_phone_numbers",
-                            "No WhatsApp phone numbers found on that account.",
-                            400,
-                        );
-                    }
+                match found {
+                    Some(result) => Ok(result),
+                    None => Err((
+                        "no_phone_numbers",
+                        "No WhatsApp phone numbers found on that account.",
+                    )),
                 }
             };
 
-            let waba_opt = if effective_waba_id.is_empty() {
-                None
-            } else {
-                Some(effective_waba_id)
-            };
-            let existing_account =
-                match get_whatsapp_account_by_phone(&db, &phone_number_id).await? {
-                    Some(id) => get_whatsapp_account(&db, &id).await?,
-                    None => None,
-                };
-            let account = match existing_account {
-                Some(mut existing) if existing.tenant_id == tenant_id => {
-                    existing.phone_number = phone_number;
-                    if let Some(waba) = waba_opt {
-                        existing.waba_id = Some(waba);
-                    }
-                    existing.updated_at = now_iso();
-                    save_whatsapp_account(&db, &existing).await?;
-                    existing
-                }
-                Some(_) => {
-                    return fail(
-                        wants_json,
-                        "phone_in_use",
-                        "That WhatsApp phone number is already connected to another account.",
-                        409,
-                    );
-                }
-                None => {
-                    let now = now_iso();
-                    let created = WhatsAppAccount {
-                        id: generate_id(),
-                        tenant_id: tenant_id.clone(),
-                        name: format!("WhatsApp {}", phone_number),
-                        phone_number,
-                        phone_number_id,
-                        waba_id: waba_opt,
-                        auto_reply: ReplyConfig::default(),
-                        canned_safety: SafetyState::default(),
-                        created_at: now.clone(),
-                        updated_at: now,
+            let account_view = match resolved_phone {
+                Ok((phone_number, phone_number_id)) => {
+                    let waba_opt = if effective_waba_id.is_empty() {
+                        None
+                    } else {
+                        Some(effective_waba_id)
                     };
-                    save_whatsapp_account(&db, &created).await?;
-                    created
+                    let existing_account =
+                        match get_whatsapp_account_by_phone(&db, &phone_number_id).await? {
+                            Some(id) => get_whatsapp_account(&db, &id).await?,
+                            None => None,
+                        };
+                    let account = match existing_account {
+                        Some(mut existing) if existing.tenant_id == tenant_id => {
+                            existing.phone_number = phone_number;
+                            if let Some(waba) = waba_opt {
+                                existing.waba_id = Some(waba);
+                            }
+                            existing.updated_at = now_iso();
+                            save_whatsapp_account(&db, &existing).await?;
+                            existing
+                        }
+                        Some(_) => {
+                            return fail(
+                                wants_json,
+                                is_logged_in,
+                                "phone_in_use",
+                                "That WhatsApp phone number is already connected to another account.",
+                                409,
+                            );
+                        }
+                        None => {
+                            let now = now_iso();
+                            let created = WhatsAppAccount {
+                                id: generate_id(),
+                                tenant_id: tenant_id.clone(),
+                                name: format!("WhatsApp {}", phone_number),
+                                phone_number,
+                                phone_number_id,
+                                waba_id: waba_opt,
+                                auto_reply: ReplyConfig::default(),
+                                canned_safety: SafetyState::default(),
+                                created_at: now.clone(),
+                                updated_at: now,
+                            };
+                            save_whatsapp_account(&db, &created).await?;
+                            created
+                        }
+                    };
+                    Some(SignupAccountView {
+                        id: account.id,
+                        name: account.name,
+                        phone_number: account.phone_number,
+                        phone_number_id: account.phone_number_id,
+                        waba_id: account.waba_id,
+                    })
+                }
+                Err((code, msg)) => {
+                    if is_logged_in {
+                        return fail(wants_json, is_logged_in, code, msg, 400);
+                    }
+                    None
                 }
             };
 
@@ -299,13 +390,7 @@ pub async fn handle_whatsapp_signup(
                 let mut resp = crate::api::json(&SignupSuccessView {
                     ok: true,
                     destination,
-                    account: SignupAccountView {
-                        id: account.id,
-                        name: account.name,
-                        phone_number: account.phone_number,
-                        phone_number_id: account.phone_number_id,
-                        waba_id: account.waba_id,
-                    },
+                    account: account_view,
                 })?;
                 if let Some(cookie) = session_cookie {
                     resp.headers_mut().set("Set-Cookie", &cookie)?;
@@ -402,14 +487,67 @@ async fn parse_form_params(req: &mut Request) -> Result<SignupParams> {
     })
 }
 
-fn fail(wants_json: bool, code: &str, message: &str, status: u16) -> Result<Response> {
+fn fail(
+    wants_json: bool,
+    is_logged_in: bool,
+    code: &str,
+    message: &str,
+    status: u16,
+) -> Result<Response> {
     if wants_json {
         crate::api::error(code, message, status)
     } else {
         let headers = Headers::new();
-        headers.set("Location", &format!("/wizard?error={code}"))?;
+        let target = if is_logged_in { "wizard" } else { "login" };
+        headers.set("Location", &format!("/{target}?error={code}"))?;
         Ok(Response::empty()?.with_status(302).with_headers(headers))
     }
+}
+
+async fn discover_waba_from_token(
+    user_token: &str,
+    app_id: &str,
+    app_secret: &str,
+) -> Option<String> {
+    if app_id.trim().is_empty() || app_secret.trim().is_empty() {
+        return None;
+    }
+    let app_token = format!("{}|{}", app_id.trim(), app_secret.trim());
+    let url = format!(
+        "https://graph.facebook.com/{}/debug_token?input_token={}&access_token={}",
+        crate::META_API_VERSION,
+        urlencoding::encode(user_token),
+        urlencoding::encode(&app_token),
+    );
+    let mut init = RequestInit::new();
+    init.with_method(Method::Get);
+    let request = Request::new_with_init(&url, &init).ok()?;
+    let mut response = Fetch::Request(request).send().await.ok()?;
+    if response.status_code() != 200 {
+        return None;
+    }
+    let body: serde_json::Value = response.json().await.ok()?;
+    extract_waba_from_debug_token(&body)
+}
+
+fn extract_waba_from_debug_token(body: &serde_json::Value) -> Option<String> {
+    let scopes = body
+        .get("data")
+        .and_then(|d| d.get("granular_scopes"))
+        .and_then(|g| g.as_array())?;
+    for entry in scopes {
+        let scope = entry.get("scope").and_then(|s| s.as_str()).unwrap_or("");
+        if scope == "whatsapp_business_management" || scope == "whatsapp_business_messaging" {
+            if let Some(ids) = entry.get("target_ids").and_then(|t| t.as_array()) {
+                for id in ids {
+                    if let Some(s) = id.as_str().map(str::trim).filter(|s| !s.is_empty()) {
+                        return Some(s.to_string());
+                    }
+                }
+            }
+        }
+    }
+    None
 }
 
 struct MetaUserInfo {
@@ -492,14 +630,22 @@ async fn subscribe_waba_app(waba_id: &str, platform_token: &str) {
     }
 }
 
-async fn exchange_code(code: &str, app_id: &str, app_secret: &str) -> Result<String> {
-    let url = format!(
+async fn exchange_code(
+    code: &str,
+    app_id: &str,
+    app_secret: &str,
+    redirect_uri: Option<&str>,
+) -> Result<String> {
+    let mut url = format!(
         "https://graph.facebook.com/{}/oauth/access_token?client_id={}&client_secret={}&code={}",
         crate::META_API_VERSION,
         urlencoding::encode(app_id),
         urlencoding::encode(app_secret),
         urlencoding::encode(code)
     );
+    if let Some(uri) = redirect_uri {
+        url.push_str(&format!("&redirect_uri={}", urlencoding::encode(uri)));
+    }
 
     let mut init = RequestInit::new();
     init.with_method(Method::Get);
@@ -606,4 +752,54 @@ async fn discover_new_phone(
     }
 
     Ok(None)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn extract_waba_from_debug_token_finds_first_shared_waba() {
+        let body = serde_json::json!({
+            "data": {
+                "app_id": "1734605544890765",
+                "is_valid": true,
+                "granular_scopes": [
+                    {
+                        "scope": "public_profile"
+                    },
+                    {
+                        "scope": "whatsapp_business_management",
+                        "target_ids": ["1122334455667788", "9988776655443322"]
+                    },
+                    {
+                        "scope": "whatsapp_business_messaging",
+                        "target_ids": ["9999999999999999"]
+                    }
+                ]
+            }
+        });
+        assert_eq!(
+            extract_waba_from_debug_token(&body),
+            Some("1122334455667788".to_string())
+        );
+
+        let messaging_only = serde_json::json!({
+            "data": {
+                "granular_scopes": [
+                    {
+                        "scope": "whatsapp_business_messaging",
+                        "target_ids": ["  556677889900  "]
+                    }
+                ]
+            }
+        });
+        assert_eq!(
+            extract_waba_from_debug_token(&messaging_only),
+            Some("556677889900".to_string())
+        );
+
+        let empty = serde_json::json!({ "data": { "granular_scopes": [] } });
+        assert_eq!(extract_waba_from_debug_token(&empty), None);
+    }
 }

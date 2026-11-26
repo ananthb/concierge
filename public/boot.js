@@ -159,6 +159,21 @@
         app.ports.metaSignupOutcome.send(payload);
       }
 
+      function redirectToOAuth() {
+        cleanup();
+        var redirectUri = window.location.origin + '/whatsapp/signup/callback';
+        var url =
+          'https://www.facebook.com/v21.0/dialog/oauth' +
+          '?client_id=' + encodeURIComponent(opts.appId) +
+          '&redirect_uri=' + encodeURIComponent(redirectUri) +
+          '&config_id=' + encodeURIComponent(opts.configId) +
+          '&response_type=code' +
+          '&override_default_response_type=true' +
+          '&state=' + encodeURIComponent(opts.state) +
+          '&extras=' + encodeURIComponent('{}');
+        window.location.assign(url);
+      }
+
       function onMessage(event) {
         if (
           event.origin !== 'https://www.facebook.com' &&
@@ -183,7 +198,7 @@
 
       function launch() {
         if (!window.FB) {
-          finish({ status: 'error', message: 'Meta signup SDK failed to initialise.' });
+          redirectToOAuth();
           return;
         }
 
@@ -195,7 +210,7 @@
             version: 'v21.0',
           });
         } catch (e) {
-          finish({ status: 'error', message: 'Could not initialise Meta signup.' });
+          redirectToOAuth();
           return;
         }
 
@@ -256,15 +271,11 @@
               config_id: opts.configId,
               response_type: 'code',
               override_default_response_type: true,
-              extras: {
-                setup: {},
-                featureType: '',
-                sessionInfoVersion: '3',
-              },
+              extras: {},
             }
           );
         } catch (e) {
-          finish({ status: 'error', message: 'Could not open Meta signup popup.' });
+          redirectToOAuth();
         }
       }
 
@@ -277,10 +288,7 @@
         'https://connect.facebook.net/en_US/sdk.js',
         launch,
         function () {
-          finish({
-            status: 'error',
-            message: 'Could not load Meta signup. Please allow connect.facebook.net and try again.',
-          });
+          redirectToOAuth();
         }
       );
     });

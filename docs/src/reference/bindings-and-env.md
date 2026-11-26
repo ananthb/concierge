@@ -28,7 +28,7 @@ Default values in `wrangler.toml`:
 | `DEV_MODE` | Set to "1" or "true" in local dev to stub AI/safety & enable /auth/dev-login | `src/dev_bypass.rs` |
 | `EMAIL_DOMAIN` | Domain outbound handoff emails are sent from, e.g. replybots.io | `src/escalations.rs` |
 | `META_APP_ID` | Meta app ID (WhatsApp Embedded Signup) | `src/api/whatsapp.rs`, `src/handlers/whatsapp_signup.rs` |
-| `PUBLIC_BASE_URL` | Primary site URL, e.g. https://replybots.io | `src/escalations.rs`, `src/handlers/data_deletion.rs`, `src/lib.rs` |
+| `PUBLIC_BASE_URL` | Primary site URL, e.g. https://replybots.io | `src/escalations.rs`, `src/handlers/data_deletion.rs`, `src/handlers/whatsapp_signup.rs`, `src/lib.rs` |
 | `RAZORPAY_KEY_ID` | Razorpay key ID | `src/api/billing.rs` |
 | `WHATSAPP_SIGNUP_CONFIG_ID` | Meta Embedded Signup config ID | `src/api/whatsapp.rs` |
 | `WHATSAPP_WABA_ID` | Fallback WhatsApp Business Account ID (optional) | `src/handlers/whatsapp_signup.rs` |
