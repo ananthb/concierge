@@ -167,7 +167,10 @@
           '?client_id=' + encodeURIComponent(opts.appId) +
           '&redirect_uri=' + encodeURIComponent(redirectUri) +
           '&response_type=code' +
-          '&scope=' + encodeURIComponent('whatsapp_business_management,whatsapp_business_messaging') +
+          '&override_default_response_type=true' +
+          (opts.configId
+            ? '&config_id=' + encodeURIComponent(opts.configId)
+            : '&scope=' + encodeURIComponent('whatsapp_business_management,whatsapp_business_messaging')) +
           '&state=' + encodeURIComponent(opts.state);
         window.location.assign(url);
       }
@@ -216,6 +219,22 @@
         window.addEventListener('message', activeMessageListener);
 
         try {
+          var loginOpts = {
+            response_type: 'code',
+            override_default_response_type: true,
+            extras: {
+              feature: 'whatsapp_embedded_signup',
+              featureType: 'whatsapp_business_app_onboarding',
+              version: 2,
+              sessionInfoVersion: '3',
+              setup: {},
+            },
+          };
+          if (opts.configId) {
+            loginOpts.config_id = opts.configId;
+          } else {
+            loginOpts.scope = 'whatsapp_business_management,whatsapp_business_messaging';
+          }
           window.FB.login(
             function (response) {
               var code =
@@ -265,18 +284,7 @@
                   });
                 });
             },
-            {
-              scope: 'whatsapp_business_management,whatsapp_business_messaging',
-              response_type: 'code',
-              override_default_response_type: true,
-              extras: {
-                feature: 'whatsapp_embedded_signup',
-                featureType: 'whatsapp_business_app_onboarding',
-                version: 2,
-                sessionInfoVersion: '3',
-                setup: {},
-              },
-            }
+            loginOpts
           );
         } catch (e) {
           redirectToOAuth();
