@@ -20,12 +20,13 @@ pub async fn send_reply(
 }
 
 /// Dispatch a typing indicator / read receipt to the matching channel adapter.
+/// Returns `Ok(true)` if the indicator was sent, `Ok(false)` otherwise.
 pub async fn send_typing_indicator(
     env: &Env,
     channel: &Channel,
     metadata: &serde_json::Value,
     account_token: Option<&str>,
-) -> Result<()> {
+) -> Result<bool> {
     match channel {
         Channel::WhatsApp => whatsapp::send_typing_indicator(env, metadata, account_token).await,
     }

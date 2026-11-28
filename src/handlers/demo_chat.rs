@@ -284,7 +284,11 @@ pub async fn handle_demo_chat(mut req: Request, env: Env) -> Result<Response> {
     };
 
     let stripped = prompt::detect_and_strip_handoff(&raw_reply);
-    let mut reply = stripped.reply;
+    let mut reply = if parsed.handoff {
+        prompt::strip_repeated_handoff_notice(&stripped.reply)
+    } else {
+        stripped.reply
+    };
     let mut handed_off = stripped.handoff || parsed.handoff;
 
     if !handed_off && risk::signal(&reply).is_some() {

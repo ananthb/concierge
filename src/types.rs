@@ -211,7 +211,7 @@ pub fn static_rules_safety_text(bot_prompt: &str, rules: &[StaticRule]) -> Strin
 }
 
 pub fn default_wait_seconds() -> u32 {
-    3
+    2
 }
 
 /// Legacy response mode enum retained only for migrating older D1 rows.
@@ -679,6 +679,12 @@ mod tests {
         let ai = ReplyResponse::Ai;
         let s = serde_json::to_string(&ai).unwrap();
         assert_eq!(s, "{\"mode\":\"ai\"}");
+    }
+
+    #[test]
+    fn reply_config_default_wait_seconds_is_two() {
+        assert_eq!(ReplyConfig::default().wait_seconds, 2);
+        assert_eq!(default_wait_seconds(), 2);
     }
 
     #[test]

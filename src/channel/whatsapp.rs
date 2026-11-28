@@ -86,12 +86,13 @@ pub async fn send_reply(
 }
 
 /// Send a WhatsApp read receipt + typing indicator ("...") for an inbound message.
-/// Failures are logged and swallowed so a typing indicator error never aborts a reply.
+/// Returns `Ok(true)` if an indicator request succeeded, `Ok(false)` otherwise.
+/// Failures are swallowed so a typing indicator error never aborts a reply.
 pub async fn send_typing_indicator(
     env: &Env,
     metadata: &serde_json::Value,
     account_token: Option<&str>,
-) -> Result<()> {
+) -> Result<bool> {
     let phone_number_id = metadata
         .get("phone_number_id")
         .and_then(|v| v.as_str())
@@ -103,7 +104,7 @@ pub async fn send_typing_indicator(
         .map(str::trim)
         .unwrap_or("");
     if phone_number_id.is_empty() || message_id.is_empty() {
-        return Ok(());
+        return Ok(false);
     }
 
     for tok in resolve_tokens(env, account_token) {
@@ -111,10 +112,10 @@ pub async fn send_typing_indicator(
             .await
             .is_ok()
         {
-            return Ok(());
+            return Ok(true);
         }
     }
-    Ok(())
+    Ok(false)
 }
 
 #[cfg(test)]
