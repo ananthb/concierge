@@ -20,18 +20,25 @@
       let
         overlays = [ (import rust-overlay) ];
         pkgs = import nixpkgs { inherit system overlays; };
-        rustToolchain = pkgs.rust-bin.stable.latest.default.override {
+        rustToolchain = pkgs.rust-bin.stable.latest.minimal.override {
           extensions = [ "clippy" "rustfmt" ];
           targets = [ "wasm32-unknown-unknown" ];
         };
         craneLib = (crane.mkLib pkgs).overrideToolchain rustToolchain;
 
-        # Include assets/ alongside standard Cargo sources
+        # Include assets/ and public/ alongside standard Cargo sources
         src = pkgs.lib.cleanSourceWith {
           src = ./.;
           filter = path: type:
             (craneLib.filterCargoSources path type)
-            || (builtins.match ".*assets/.*" path != null);
+            || (builtins.match ".*assets/.*" path != null)
+            # build.rs hashes the frontend stylesheets and public/boot.js.
+            # public/app.js is gitignored (so Nix never copies it into the
+            # flake store path) and Elm cannot compile offline inside a
+            # derivation; the crane checks stub an empty public/app.js in
+            # preBuild so build.rs succeeds without weakening its check
+            # outside Nix.
+            || (builtins.match ".*public/.*" path != null);
         };
 
         # Common args for all crane builds
@@ -42,6 +49,13 @@
 
         # Build dependencies separately for caching
         cargoArtifacts = craneLib.buildDepsOnly commonArgs;
+
+        crateCheckArgs = commonArgs // {
+          inherit cargoArtifacts;
+          preBuild = ''
+            touch public/app.js
+          '';
+        };
 
         pre-commit-check = git-hooks.lib.${system}.run {
           src = ./.;
@@ -69,13 +83,10 @@
           inherit pre-commit-check;
 
           # Run cargo test
-          tests = craneLib.cargoTest (commonArgs // {
-            inherit cargoArtifacts;
-          });
+          tests = craneLib.cargoTest crateCheckArgs;
 
           # Run clippy with all warnings as errors
-          clippy = craneLib.cargoClippy (commonArgs // {
-            inherit cargoArtifacts;
+          clippy = craneLib.cargoClippy (crateCheckArgs // {
             cargoClippyExtraArgs = "--all-targets -- -D warnings";
           });
 
@@ -142,6 +153,12 @@
           ];
           shellHook = ''
             ${pre-commit-check.shellHook}
+            # Share build artifacts across git worktrees of this crate instead
+            # of accumulating a multi-GB ./target per worktree. CI caches
+            # ./target explicitly, so leave CARGO_TARGET_DIR unset when CI is set.
+            if [ -z "''${CI:-}" ]; then
+              export CARGO_TARGET_DIR="''${XDG_CACHE_HOME:-$HOME/.cache}/cargo-target/replybots"
+            fi
             export PLAYWRIGHT_BROWSERS_PATH=${pkgs.playwright-driver.browsers}
             export PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS=true
             # `dev` runs the local server with the management bypass +
