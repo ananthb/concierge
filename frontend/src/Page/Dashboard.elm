@@ -174,11 +174,10 @@ type Msg
     | CancelDisconnect
     | ConfirmDisconnect String
     | DisconnectedWhatsApp (Api.Data ())
-    | OpenVerify String
     | CloseVerify
     | SetVerifyCode String
     | RequestVerifyCode String String
-    | RequestedVerifyCode (Api.Data ())
+    | RequestedVerifyCode (Api.Data Bool)
     | SubmitVerifyCode String
     | RegisterPhone String
     | VerifiedPhone (Api.Data ())
@@ -422,16 +421,6 @@ update msg model =
                 _ ->
                     ( model, Cmd.none )
 
-        OpenVerify id ->
-            ( { model
-                | verifying = Just { id = id, code = "" }
-                , confirmDisconnect = Nothing
-                , editing = Nothing
-                , notice = Nothing
-              }
-            , Cmd.none
-            )
-
         CloseVerify ->
             ( { model | verifying = Nothing }, Cmd.none )
 
@@ -441,13 +430,41 @@ update msg model =
             )
 
         RequestVerifyCode id method ->
-            ( { model | saving = True, notice = Nothing }
+            let
+                existingCode =
+                    case model.verifying of
+                        Just v ->
+                            if v.id == id then
+                                v.code
+
+                            else
+                                ""
+
+                        Nothing ->
+                            ""
+            in
+            ( { model
+                | saving = True
+                , verifying = Just { id = id, code = existingCode }
+                , confirmDisconnect = Nothing
+                , editing = Nothing
+                , notice = Nothing
+              }
             , Api.requestWhatsAppCode id method RequestedVerifyCode
             )
 
         RequestedVerifyCode result ->
             case result of
-                Success () ->
+                Success True ->
+                    ( { model
+                        | saving = False
+                        , verifying = Nothing
+                        , notice = Just ( "success", "WhatsApp number verified and registered on Cloud API." )
+                      }
+                    , Api.getWhatsApp GotChannels
+                    )
+
+                Success False ->
                     ( { model
                         | saving = False
                         , notice = Just ( "success", "Verification code requested from Meta. Enter the 6-digit code below." )
@@ -1022,54 +1039,80 @@ accountCard model botPresets account =
                             ]
 
                       else
-                        case model.verifying of
-                            Just v ->
-                                if v.id == account.id then
-                                    verifyPanel model account v.code
+                        div []
+                            [ if account.phoneStatus == "needs_activation" then
+                                Ui.banner "info" "This number is verified with Meta and ready to activate on Cloud API."
 
-                                else
+                              else
+                                text ""
+                            , case model.verifying of
+                                Just v ->
+                                    if v.id == account.id && account.phoneStatus == "needs_verification" then
+                                        verifyPanel model account v.code
+
+                                    else
+                                        botCardActions model account
+
+                                Nothing ->
                                     botCardActions model account
-
-                            Nothing ->
-                                botCardActions model account
+                            ]
                     ]
         ]
 
 
 botCardActions : Model -> Api.WhatsAppAccount -> Html Msg
 botCardActions model account =
-    div [ class "card-actions" ]
-        [ Ui.button
-            { label = "Edit bot"
-            , onClick = EditReply account.id account.reply
-            , primary = False
-            , busy = False
-            }
-        , Ui.button
-            { label = "Verify number"
-            , onClick = OpenVerify account.id
-            , primary = False
-            , busy = model.saving
-            }
-        , Ui.button
-            { label =
-                if account.reply.enabled then
-                    "Pause"
+    let
+        statusAction =
+            if account.phoneStatus == "needs_activation" then
+                [ Ui.button
+                    { label = "Activate number"
+                    , onClick = RegisterPhone account.id
+                    , primary = True
+                    , busy = model.saving
+                    }
+                ]
 
-                else
-                    "Resume"
-            , onClick = ToggleBotEnabled account
-            , primary = False
-            , busy = model.saving
-            }
-        , Html.button
-            [ class "btn btn-danger"
-            , Html.Attributes.type_ "button"
-            , Html.Attributes.disabled model.saving
-            , onClick (AskDisconnect account.id)
-            ]
-            [ text "Disconnect" ]
-        ]
+            else if account.phoneStatus == "needs_verification" then
+                [ Ui.button
+                    { label = "Send verification code"
+                    , onClick = RequestVerifyCode account.id "SMS"
+                    , primary = True
+                    , busy = model.saving
+                    }
+                ]
+
+            else
+                []
+    in
+    div [ class "card-actions" ]
+        (statusAction
+            ++ [ Ui.button
+                    { label = "Edit bot"
+                    , onClick = EditReply account.id account.reply
+                    , primary = False
+                    , busy = False
+                    }
+               , Ui.button
+                    { label =
+                        if account.reply.enabled then
+                            "Pause"
+
+                        else
+                            "Resume"
+                    , onClick = ToggleBotEnabled account
+                    , primary = False
+                    , busy = model.saving
+                    }
+               , Html.button
+                    [ class "btn btn-danger"
+                    , Html.Attributes.type_ "button"
+                    , Html.Attributes.disabled model.saving
+                    , onClick (AskDisconnect account.id)
+                    ]
+                    [ text "Disconnect" ]
+               ]
+        )
 
 
 verifyPanel : Model -> Api.WhatsAppAccount -> String -> Html Msg
@@ -1079,32 +1122,20 @@ verifyPanel model account code =
             { id = "verify-code-" ++ account.id
             , label = "6-digit verification code"
             , value = code
-            , hint = "Request an SMS or phone call from Meta to verify ownership of this phone number, then enter the 6-digit code to activate it on WhatsApp Cloud API."
+            , hint = "Enter the 6-digit code sent by Meta to verify ownership and activate this number on WhatsApp Cloud API."
             , required = False
             , onInput = SetVerifyCode
             }
         , div [ class "card-actions" ]
             [ Ui.button
-                { label = "Send SMS code"
-                , onClick = RequestVerifyCode account.id "SMS"
-                , primary = False
-                , busy = model.saving
-                }
-            , Ui.button
-                { label = "Call with code"
-                , onClick = RequestVerifyCode account.id "VOICE"
-                , primary = False
-                , busy = model.saving
-                }
-            , Ui.button
                 { label = "Verify & activate"
                 , onClick = SubmitVerifyCode account.id
                 , primary = True
                 , busy = model.saving
                 }
             , Ui.button
-                { label = "Register on Cloud API"
-                , onClick = RegisterPhone account.id
+                { label = "Call with code instead"
+                , onClick = RequestVerifyCode account.id "VOICE"
                 , primary = False
                 , busy = model.saving
                 }

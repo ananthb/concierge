@@ -386,6 +386,120 @@ test.describe('authenticated wizard and dashboard', () => {
     await expect(app(page).locator('#handoff_email')).not.toBeChecked();
     expect(consoleErrors, consoleErrors.join('\n')).toEqual([]);
   });
+
+  test('dashboard bot card shows single next-action UI based on phone_status', async ({
+    page,
+    consoleErrors,
+  }) => {
+    await devLogin(page.request, `dash-status-${Date.now()}@local.test`);
+
+    await page.route('**/api/bootstrap', async (route) => {
+      const resp = await route.fetch();
+      const json = await resp.json();
+      if (json.session) {
+        json.session.destination = 'dashboard';
+        json.session.onboarding_step = null;
+      }
+      await route.fulfill({ response: resp, json });
+    });
+
+    let accounts = [
+      {
+        id: 'wa-conn',
+        name: 'Connected Bot',
+        phone_number: '+91 98200 11111',
+        phone_number_id: 'pn-conn',
+        waba_id: 'waba-1',
+        phone_status: 'connected',
+        reply: { enabled: true, bot_prompt: 'Hello!', rules: [], wait_seconds: 0 },
+        canned_safety_status: 'approved',
+        created_at: '2026-11-28T00:00:00Z',
+      },
+      {
+        id: 'wa-act',
+        name: 'Activation Bot',
+        phone_number: '+91 98200 22222',
+        phone_number_id: 'pn-act',
+        waba_id: 'waba-1',
+        phone_status: 'needs_activation',
+        reply: { enabled: true, bot_prompt: 'Hello!', rules: [], wait_seconds: 0 },
+        canned_safety_status: 'approved',
+        created_at: '2026-11-28T00:00:00Z',
+      },
+      {
+        id: 'wa-ver',
+        name: 'Verification Bot',
+        phone_number: '+91 98200 33333',
+        phone_number_id: 'pn-ver',
+        waba_id: 'waba-1',
+        phone_status: 'needs_verification',
+        reply: { enabled: true, bot_prompt: 'Hello!', rules: [], wait_seconds: 0 },
+        canned_safety_status: 'approved',
+        created_at: '2026-11-28T00:00:00Z',
+      },
+    ];
+
+    await page.route('**/api/whatsapp', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ accounts, signup: null, bot_presets: [] }),
+      });
+    });
+    await page.route('**/api/whatsapp/wa-act/register', async (route) => {
+      accounts = accounts.map((a) =>
+        a.id === 'wa-act' ? { ...a, phone_status: 'connected' } : a,
+      );
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ ok: true }),
+      });
+    });
+    await page.route('**/api/whatsapp/wa-ver/request-code', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ ok: true }),
+      });
+    });
+    await page.route('**/api/whatsapp/wa-ver/verify-code', async (route) => {
+      accounts = accounts.map((a) =>
+        a.id === 'wa-ver' ? { ...a, phone_status: 'connected' } : a,
+      );
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ ok: true }),
+      });
+    });
+
+    await page.goto('/dashboard');
+    await expect(app(page).getByRole('heading', { name: 'Connected Bot' })).toBeVisible();
+    await expect(app(page).getByRole('button', { name: 'Verify number' })).toHaveCount(0);
+
+    const connCard = app(page).locator('.card', { hasText: 'Connected Bot' });
+    await expect(connCard.getByRole('button', { name: 'Activate number' })).toHaveCount(0);
+    await expect(connCard.getByRole('button', { name: 'Send verification code' })).toHaveCount(0);
+
+    const actCard = app(page).locator('.card', { hasText: 'Activation Bot' });
+    await expect(
+      actCard.getByText('This number is verified with Meta and ready to activate on Cloud API.'),
+    ).toBeVisible();
+    await actCard.getByRole('button', { name: 'Activate number' }).click();
+    await expect(actCard.getByRole('button', { name: 'Activate number' })).toHaveCount(0);
+
+    const verCard = app(page).locator('.card', { hasText: 'Verification Bot' });
+    await verCard.getByRole('button', { name: 'Send verification code' }).click();
+    await expect(verCard.locator('#verify-code-wa-ver')).toBeVisible();
+    await expect(verCard.getByRole('button', { name: 'Call with code instead' })).toBeVisible();
+    await verCard.locator('#verify-code-wa-ver').fill('123456');
+    await verCard.getByRole('button', { name: 'Verify & activate' }).click();
+    await expect(verCard.locator('#verify-code-wa-ver')).toHaveCount(0);
+    await expect(verCard.getByRole('button', { name: 'Send verification code' })).toHaveCount(0);
+
+    expect(consoleErrors, consoleErrors.join('\n')).toEqual([]);
+  });
 });
 
 test.describe('mobile ergonomics', () => {

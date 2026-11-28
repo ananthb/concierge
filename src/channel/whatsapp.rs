@@ -40,6 +40,20 @@ pub fn parse_inbound(change: &WebhookChange, account: &WhatsAppAccount) -> Vec<I
         .collect()
 }
 
+fn resolve_tokens(env: &Env, account_token: Option<&str>) -> Vec<String> {
+    let mut tokens = Vec::new();
+    if let Some(tok) = account_token.map(str::trim).filter(|s| !s.is_empty()) {
+        tokens.push(tok.to_string());
+    }
+    if let Ok(secret) = env.secret("WHATSAPP_ACCESS_TOKEN") {
+        let platform = secret.to_string().trim().to_string();
+        if !platform.is_empty() && !tokens.iter().any(|t| t == &platform) {
+            tokens.push(platform);
+        }
+    }
+    tokens
+}
+
 /// Send a reply via WhatsApp.
 pub async fn send_reply(
     env: &Env,
@@ -48,36 +62,59 @@ pub async fn send_reply(
     body: &str,
     account_token: Option<&str>,
 ) -> Result<()> {
-    let platform_token = env
-        .secret("WHATSAPP_ACCESS_TOKEN")
-        .map(|s| s.to_string())
-        .unwrap_or_default();
-
     let phone_number_id = metadata
         .get("phone_number_id")
         .and_then(|v| v.as_str())
         .unwrap_or("");
+    let tokens = resolve_tokens(env, account_token);
+    let Some((first, rest)) = tokens.split_first() else {
+        return crate::whatsapp::send_whatsapp_message("", phone_number_id, to, body).await;
+    };
 
-    let acct_tok = account_token.map(str::trim).filter(|s| !s.is_empty());
-    if let Some(tok) = acct_tok {
+    let mut last_err =
+        match crate::whatsapp::send_whatsapp_message(first, phone_number_id, to, body).await {
+            Ok(()) => return Ok(()),
+            Err(e) => e,
+        };
+    for tok in rest {
         match crate::whatsapp::send_whatsapp_message(tok, phone_number_id, to, body).await {
             Ok(()) => return Ok(()),
-            Err(e) => {
-                if !platform_token.trim().is_empty() && platform_token.trim() != tok {
-                    return crate::whatsapp::send_whatsapp_message(
-                        platform_token.trim(),
-                        phone_number_id,
-                        to,
-                        body,
-                    )
-                    .await;
-                }
-                return Err(e);
-            }
+            Err(e) => last_err = e,
         }
     }
+    Err(last_err)
+}
 
-    crate::whatsapp::send_whatsapp_message(platform_token.trim(), phone_number_id, to, body).await
+/// Send a WhatsApp read receipt + typing indicator ("...") for an inbound message.
+/// Failures are logged and swallowed so a typing indicator error never aborts a reply.
+pub async fn send_typing_indicator(
+    env: &Env,
+    metadata: &serde_json::Value,
+    account_token: Option<&str>,
+) -> Result<()> {
+    let phone_number_id = metadata
+        .get("phone_number_id")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .unwrap_or("");
+    let message_id = metadata
+        .get("message_id")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .unwrap_or("");
+    if phone_number_id.is_empty() || message_id.is_empty() {
+        return Ok(());
+    }
+
+    for tok in resolve_tokens(env, account_token) {
+        if crate::whatsapp::send_whatsapp_typing_indicator(&tok, phone_number_id, message_id)
+            .await
+            .is_ok()
+        {
+            return Ok(());
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]
