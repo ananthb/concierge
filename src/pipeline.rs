@@ -19,19 +19,10 @@ pub async fn process_inbound(msg: &InboundMessage, env: &Env) -> Result<()> {
         console_log!("Failed to log inbound message: {:?}", e);
     }
 
-    let reply_cfg = get_channel_reply_config(&db, &msg.channel, &msg.channel_account_id).await?;
-    let wait = reply_cfg.as_ref().map(|c| c.wait_seconds).unwrap_or(0);
-    if let Some(ref cfg) = reply_cfg {
-        if cfg.enabled {
-            let _ = channel::send_typing_indicator(
-                env,
-                &msg.channel,
-                &msg.raw_metadata,
-                cfg.access_token.as_deref(),
-            )
-            .await;
-        }
-    }
+    let wait = get_channel_reply_config(&db, &msg.channel, &msg.channel_account_id)
+        .await?
+        .map(|c| c.wait_seconds)
+        .unwrap_or(0);
 
     if wait == 0 {
         process_inbound_immediate(msg, env).await?;
@@ -433,16 +424,6 @@ async fn handle_auto_reply(msg: &InboundMessage, db: &D1Database, env: &Env) -> 
             .map(|m| (m.role.as_wire().to_string(), m.content.clone()))
             .collect();
 
-        if config.wait_seconds > 0 {
-            let _ = channel::send_typing_indicator(
-                env,
-                &msg.channel,
-                &msg.raw_metadata,
-                config.access_token.as_deref(),
-            )
-            .await;
-        }
-
         let raw_reply = match ai::generate_chat_reply(env, &system_prompt, &history).await {
             Ok(r) => r,
             Err(e) => {
@@ -483,6 +464,9 @@ async fn handle_auto_reply(msg: &InboundMessage, db: &D1Database, env: &Env) -> 
     }
 
     let in_handoff_mode = matches!(handoff_mode, HandoffMode::HoldingPattern);
+    if use_ai && in_handoff_mode {
+        reply = crate::prompt::strip_repeated_handoff_notice(&reply);
+    }
     if use_ai && !in_handoff_mode && !new_handoff {
         if let Some(reason) = crate::risk::signal(&reply) {
             console_log!(
@@ -511,6 +495,18 @@ async fn handle_auto_reply(msg: &InboundMessage, db: &D1Database, env: &Env) -> 
                 console_log!("Failed to log withheld draft: {:?}", e);
             }
         }
+    }
+
+    if channel::send_typing_indicator(
+        env,
+        &msg.channel,
+        &msg.raw_metadata,
+        config.access_token.as_deref(),
+    )
+    .await
+    .unwrap_or(false)
+    {
+        sleep_seconds(1).await;
     }
 
     if let Err(e) = channel::send_reply(env, msg, &reply, config.access_token.as_deref()).await {
