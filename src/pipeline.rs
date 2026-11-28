@@ -420,19 +420,12 @@ async fn handle_auto_reply(msg: &InboundMessage, db: &D1Database, env: &Env) -> 
     let (mut reply, mut new_handoff, mut risk_reason) = if let Some(idx) = matched_rule_idx {
         (effective_rules[idx].reply_text.clone(), false, None)
     } else {
-        let brand_name = onboarding
-            .as_ref()
-            .map(|o| o.business.name.trim())
-            .filter(|name| !name.is_empty())
-            .unwrap_or_else(|| info.account_name.trim());
         let system_prompt = match handoff_mode {
             HandoffMode::Silent => unreachable!("Silent handoff returned earlier"),
             HandoffMode::HoldingPattern => {
                 crate::prompt::wrap(crate::prompt::HOLDING_PATTERN_MIDDLE)
             }
-            HandoffMode::None => {
-                crate::prompt::compose_bot_system_prompt(brand_name, effective_bot_prompt)
-            }
+            HandoffMode::None => crate::prompt::compose_bot_system_prompt(effective_bot_prompt),
         };
 
         let history: Vec<(String, String)> = session_messages
