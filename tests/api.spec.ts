@@ -425,7 +425,8 @@ test.describe('authenticated tenant flows', () => {
       expect(typeof preset.id).toBe('string');
       expect(typeof preset.label).toBe('string');
       expect(typeof preset.tag).toBe('string');
-      expect(typeof preset.prompt).toBe('string');
+      expect(preset.business_name).toBe('Nutmeg & Crumb');
+      expect(preset.prompt).toContain('Nutmeg & Crumb');
     }
 
     // 6. Account deletion requires matching email and destroys session

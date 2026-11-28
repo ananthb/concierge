@@ -34,10 +34,10 @@ pub struct BotPresetView {
     pub id: &'static str,
     pub label: &'static str,
     pub tag: &'static str,
-    pub business_name: &'static str,
-    pub prompt: &'static str,
-    pub rules: &'static [crate::prompt::PresetRule],
-    pub opener: &'static str,
+    pub business_name: String,
+    pub prompt: String,
+    pub rules: Vec<StaticRule>,
+    pub opener: String,
 }
 
 #[derive(Serialize)]
@@ -108,17 +108,20 @@ struct ListView {
     bot_presets: Vec<BotPresetView>,
 }
 
-fn bot_presets() -> Vec<BotPresetView> {
+fn bot_presets_for(business_name: &str) -> Vec<BotPresetView> {
     crate::prompt::BOT_PERSONAS
         .iter()
-        .map(|p| BotPresetView {
-            id: p.id,
-            label: p.label,
-            tag: p.tag,
-            business_name: p.business_name,
-            prompt: p.prompt,
-            rules: p.rules,
-            opener: p.opener,
+        .map(|p| {
+            let personalized = p.personalize_for(business_name);
+            BotPresetView {
+                id: p.id,
+                label: p.label,
+                tag: p.tag,
+                business_name: personalized.business_name,
+                prompt: personalized.prompt,
+                rules: personalized.rules,
+                opener: personalized.opener,
+            }
         })
         .collect()
 }
@@ -134,6 +137,7 @@ pub async fn handle(mut req: Request, env: Env, rest: &[&str]) -> Result<Respons
     match (method, rest) {
         (Method::Get, []) => {
             let accounts = list_whatsapp_accounts(&db, &tenant_id).await?;
+            let onboarding = get_onboarding(&db, &tenant_id).await.unwrap_or_default();
             let mut views = Vec::with_capacity(accounts.len());
             for account in &accounts {
                 let mut view = AccountView::from(account);
@@ -143,7 +147,7 @@ pub async fn handle(mut req: Request, env: Env, rest: &[&str]) -> Result<Respons
             super::json(&ListView {
                 accounts: views,
                 signup: SignupView::resolve(&env, &db, &tenant_id).await?,
-                bot_presets: bot_presets(),
+                bot_presets: bot_presets_for(&onboarding.business.name),
             })
         }
 
@@ -178,7 +182,8 @@ pub async fn handle(mut req: Request, env: Env, rest: &[&str]) -> Result<Respons
                     return super::invalid("Bot prompt must be 600 characters or fewer.");
                 }
                 account.auto_reply.bot_prompt = if bp.is_empty() {
-                    crate::prompt::default_bot_prompt()
+                    let onboarding = get_onboarding(&db, &tenant_id).await.unwrap_or_default();
+                    crate::prompt::default_bot_prompt_for(&onboarding.business.name)
                 } else {
                     bp
                 };

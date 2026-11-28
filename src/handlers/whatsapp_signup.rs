@@ -395,6 +395,8 @@ pub async fn handle_whatsapp_signup(
                             );
                         }
                         None => {
+                            let onboarding =
+                                get_onboarding(&db, &tenant_id).await.unwrap_or_default();
                             let now = now_iso();
                             let created = WhatsAppAccount {
                                 id: generate_id(),
@@ -404,6 +406,9 @@ pub async fn handle_whatsapp_signup(
                                 phone_number_id,
                                 waba_id: waba_opt,
                                 auto_reply: ReplyConfig {
+                                    bot_prompt: crate::prompt::default_bot_prompt_for(
+                                        &onboarding.business.name,
+                                    ),
                                     access_token: token_opt,
                                     ..ReplyConfig::default()
                                 },

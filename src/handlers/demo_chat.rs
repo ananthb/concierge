@@ -265,7 +265,7 @@ pub async fn handle_demo_chat(mut req: Request, env: Env) -> Result<Response> {
     let system_prompt = if parsed.handoff {
         prompt::wrap(prompt::HOLDING_PATTERN_MIDDLE)
     } else {
-        prompt::compose_bot_system_prompt(&resolved.business_name, &resolved.bot_prompt)
+        prompt::compose_bot_system_prompt(&resolved.bot_prompt)
     };
 
     let mut chat_history: Vec<(String, String)> = parsed

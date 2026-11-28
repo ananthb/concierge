@@ -66,6 +66,7 @@ pub async fn handle(mut req: Request, env: Env, rest: &[&str]) -> Result<Respons
                 return super::invalid("Pick the entity type you're registered as.");
             }
 
+            let old_business_name = state.business.name.clone();
             let content_hash = sha256_hex(&name);
             let verdict = safety::classify_text(&env, &name).await;
             state.business = BusinessInfo {
@@ -83,6 +84,24 @@ pub async fn handle(mut req: Request, env: Env, rest: &[&str]) -> Result<Respons
 
             state.step = advance(state.step, OnboardingStep::Channels);
             save_onboarding(&db, &tenant_id, &state).await?;
+
+            let old_default = crate::prompt::default_bot_prompt_for(&old_business_name);
+            let new_default = crate::prompt::default_bot_prompt_for(&state.business.name);
+            if new_default != old_default || old_business_name.trim().is_empty() {
+                let accounts = list_whatsapp_accounts(&db, &tenant_id).await?;
+                for mut account in accounts {
+                    if (account.auto_reply.bot_prompt == crate::prompt::DEFAULT_BOT_PROMPT
+                        || account.auto_reply.bot_prompt == old_default)
+                        && account.auto_reply.bot_prompt != new_default
+                    {
+                        account.auto_reply.bot_prompt = new_default.clone();
+                        account.canned_safety = SafetyState::default();
+                        account.updated_at = crate::helpers::now_iso();
+                        save_whatsapp_account(&db, &account).await?;
+                    }
+                }
+            }
+
             view(&env, &db, &tenant_id, &state).await
         }
 

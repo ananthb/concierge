@@ -430,7 +430,6 @@ pub async fn get_whatsapp_account_by_waba(
 
 /// Reply config + safety verdict for any channel account.
 pub struct ChannelReplyInfo {
-    pub account_name: String,
     pub config: ReplyConfig,
     pub canned_safety: SafetyState,
 }
@@ -446,7 +445,6 @@ pub async fn get_channel_reply_info(
             Ok(get_whatsapp_account(db, account_id)
                 .await?
                 .map(|a| ChannelReplyInfo {
-                    account_name: a.name,
                     config: a.auto_reply,
                     canned_safety: a.canned_safety,
                 }))

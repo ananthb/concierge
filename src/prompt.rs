@@ -217,6 +217,84 @@ pub fn default_bot_prompt() -> String {
     DEFAULT_BOT_PROMPT.to_string()
 }
 
+/// Replace `demo_name` (and known short variants) with `business_name` when non-empty.
+pub fn personalize_preset_text(text: &str, demo_name: &str, business_name: &str) -> String {
+    let trimmed = business_name.trim();
+    if trimmed.is_empty() {
+        return text.to_string();
+    }
+    let mut out = text.replace(demo_name, trimmed);
+    if demo_name == "QuickFix Home Plumbing" {
+        out = out.replace("QuickFix Plumbing", trimmed);
+    }
+    out
+}
+
+/// Build the default `"user"` prompt for a new Reply Bot, substituting
+/// `business_name` in place of the demo business name when non-empty.
+pub fn default_bot_prompt_for(business_name: &str) -> String {
+    let out = personalize_preset_text(DEFAULT_BOT_PROMPT, "Nutmeg & Crumb Bakery", business_name);
+    if out.chars().count() <= MAX_BOT_PROMPT {
+        out
+    } else {
+        DEFAULT_BOT_PROMPT.to_string()
+    }
+}
+
+/// A `BotPersona` personalized for a specific business name.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PersonalizedPersona {
+    pub business_name: String,
+    pub prompt: String,
+    pub rules: Vec<crate::types::StaticRule>,
+    pub opener: String,
+}
+
+impl BotPersona {
+    /// Substitute `business_name` (when non-empty) across this persona's prompt,
+    /// static rule replies, and opener while keeping the prompt within `MAX_BOT_PROMPT`.
+    pub fn personalize_for(&self, business_name: &str) -> PersonalizedPersona {
+        let trimmed = business_name.trim();
+        if trimmed.is_empty() {
+            return PersonalizedPersona {
+                business_name: self.business_name.to_string(),
+                prompt: self.prompt.to_string(),
+                rules: self
+                    .rules
+                    .iter()
+                    .map(|r| crate::types::StaticRule {
+                        match_rule: r.match_rule.to_string(),
+                        reply_text: r.reply_text.to_string(),
+                    })
+                    .collect(),
+                opener: self.opener.to_string(),
+            };
+        }
+
+        let prompt_candidate = personalize_preset_text(self.prompt, self.business_name, trimmed);
+        let prompt = if prompt_candidate.chars().count() <= MAX_BOT_PROMPT {
+            prompt_candidate
+        } else {
+            self.prompt.to_string()
+        };
+        let rules = self
+            .rules
+            .iter()
+            .map(|r| crate::types::StaticRule {
+                match_rule: r.match_rule.to_string(),
+                reply_text: personalize_preset_text(r.reply_text, self.business_name, trimmed),
+            })
+            .collect();
+        let opener = personalize_preset_text(self.opener, self.business_name, trimmed);
+        PersonalizedPersona {
+            business_name: trimmed.to_string(),
+            prompt,
+            rules,
+            opener,
+        }
+    }
+}
+
 /// Look up a built-in bot persona by `id`.
 pub fn find_bot_persona(id: &str) -> Option<&'static BotPersona> {
     let key = id.trim();
@@ -233,32 +311,24 @@ pub fn wrap(custom: &str) -> String {
     }
 }
 
-/// Compose the full system prompt for a Reply Bot by wrapping `brand_name`
-/// and the bot's single `"user"` prompt inside the shared `PREAMBLE` and
-/// `POSTAMBLE`. Falls back to `DEFAULT_BOT_PROMPT` if `bot_prompt` is blank.
-pub fn compose_bot_system_prompt(brand_name: &str, bot_prompt: &str) -> String {
-    let brand = brand_name.trim();
-    let instructions = {
-        let trimmed = bot_prompt.trim();
-        if trimmed.is_empty() {
-            DEFAULT_BOT_PROMPT
-        } else {
-            trimmed
-        }
-    };
-    let middle = if brand.is_empty() {
-        format!("Instructions:\n{instructions}")
+/// Compose the full system prompt for a Reply Bot by wrapping the bot's
+/// single `"user"` prompt inside the shared `PREAMBLE` and `POSTAMBLE`.
+/// Falls back to `DEFAULT_BOT_PROMPT` if `bot_prompt` is blank.
+pub fn compose_bot_system_prompt(bot_prompt: &str) -> String {
+    let trimmed = bot_prompt.trim();
+    let instructions = if trimmed.is_empty() {
+        DEFAULT_BOT_PROMPT
     } else {
-        format!("Business: {brand}.\nInstructions:\n{instructions}")
+        trimmed
     };
-    wrap(&middle)
+    wrap(instructions)
 }
 
 /// Build the system prompt for a landing-page demo persona using the shared
 /// system prompt envelope and that persona's single `"user"` prompt.
 #[cfg(test)]
 pub fn demo_system_prompt(persona: &BotPersona) -> String {
-    compose_bot_system_prompt(persona.business_name, persona.prompt)
+    compose_bot_system_prompt(persona.prompt)
 }
 
 #[cfg(test)]
@@ -339,17 +409,17 @@ mod tests {
     }
 
     #[test]
-    fn compose_bot_system_prompt_wraps_brand_and_prompt() {
-        let out = compose_bot_system_prompt("Nutmeg & Crumb", "Answer store hours briefly.");
+    fn compose_bot_system_prompt_wraps_prompt_only() {
+        let out = compose_bot_system_prompt("Answer store hours briefly.");
         assert!(out.starts_with(PREAMBLE));
         assert!(out.ends_with(POSTAMBLE));
-        assert!(out.contains("Business: Nutmeg & Crumb."));
+        assert!(!out.contains("Business:"));
         assert!(out.contains("Answer store hours briefly."));
     }
 
     #[test]
     fn compose_bot_system_prompt_falls_back_to_default_when_blank() {
-        let out = compose_bot_system_prompt("   ", "   ");
+        let out = compose_bot_system_prompt("   ");
         assert!(out.starts_with(PREAMBLE));
         assert!(out.ends_with(POSTAMBLE));
         assert!(!out.contains("Business:"));
@@ -357,13 +427,45 @@ mod tests {
     }
 
     #[test]
-    fn demo_system_prompt_uses_persona_prompt_and_business() {
+    fn demo_system_prompt_uses_persona_prompt() {
         let persona = find_bot_persona("orders").unwrap();
         let out = demo_system_prompt(persona);
         assert!(out.starts_with(PREAMBLE));
         assert!(out.ends_with(POSTAMBLE));
-        assert!(out.contains("ClearSmile Dental"));
+        assert!(!out.contains("Business:"));
         assert!(out.contains(persona.prompt));
+    }
+
+    #[test]
+    fn default_bot_prompt_for_substitutes_business_name() {
+        assert_eq!(default_bot_prompt_for(""), DEFAULT_BOT_PROMPT);
+        assert_eq!(default_bot_prompt_for("   "), DEFAULT_BOT_PROMPT);
+
+        let custom = default_bot_prompt_for("  Sunrise Cafe  ");
+        assert!(custom.contains("Sunrise Cafe"));
+        assert!(!custom.contains("Nutmeg & Crumb Bakery"));
+        assert!(custom.chars().count() <= MAX_BOT_PROMPT);
+
+        let too_long = "X".repeat(200);
+        assert_eq!(default_bot_prompt_for(&too_long), DEFAULT_BOT_PROMPT);
+    }
+
+    #[test]
+    fn persona_personalize_for_replaces_demo_names_in_prompt_rules_and_opener() {
+        let plumbing = find_bot_persona("after-hours").unwrap();
+        let unchanged = plumbing.personalize_for("   ");
+        assert_eq!(unchanged.business_name, "QuickFix Home Plumbing");
+        assert_eq!(unchanged.prompt, plumbing.prompt);
+        assert_eq!(unchanged.rules[0].reply_text, plumbing.rules[0].reply_text);
+
+        let personalized = plumbing.personalize_for("Metro Services");
+        assert_eq!(personalized.business_name, "Metro Services");
+        assert!(personalized.prompt.contains("Metro Services"));
+        assert!(!personalized.prompt.contains("QuickFix"));
+        assert!(personalized.rules[0].reply_text.contains("Metro Services"));
+        assert!(!personalized.rules[0].reply_text.contains("QuickFix"));
+        assert!(personalized.opener.contains("Metro Services"));
+        assert!(!personalized.opener.contains("QuickFix"));
     }
 
     #[test]
