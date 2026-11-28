@@ -648,6 +648,7 @@ type alias WhatsAppAccount =
     , name : String
     , phoneNumberId : String
     , displayPhoneNumber : String
+    , phoneStatus : String
     , reply : ReplyConfig
     }
 
@@ -723,11 +724,11 @@ deleteWhatsApp id =
     delete ("/api/whatsapp/" ++ id) (E.object []) (D.succeed ())
 
 
-requestWhatsAppCode : String -> String -> (Data () -> msg) -> Cmd msg
+requestWhatsAppCode : String -> String -> (Data Bool -> msg) -> Cmd msg
 requestWhatsAppCode id codeMethod =
     post ("/api/whatsapp/" ++ id ++ "/request-code")
         (E.object [ ( "code_method", E.string codeMethod ) ])
-        (D.succeed ())
+        (D.oneOf [ D.field "auto_activated" D.bool, D.succeed False ])
 
 
 verifyWhatsAppCode : String -> String -> (Data () -> msg) -> Cmd msg
@@ -746,11 +747,12 @@ registerWhatsAppNumber id =
 
 whatsAppDecoder : Decoder WhatsAppAccount
 whatsAppDecoder =
-    D.map5 WhatsAppAccount
+    D.map6 WhatsAppAccount
         (D.field "id" D.string)
         (D.field "name" D.string)
         (D.field "phone_number_id" D.string)
         (D.oneOf [ D.field "display_phone_number" D.string, D.field "phone_number" D.string ])
+        (D.oneOf [ D.field "phone_status" D.string, D.succeed "connected" ])
         (D.field "reply" replyDecoder)
 
 

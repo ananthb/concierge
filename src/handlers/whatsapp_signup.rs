@@ -259,10 +259,29 @@ pub async fn handle_whatsapp_signup(
                 }
             };
 
+            let app_token = if !app_id.trim().is_empty() && !app_secret.trim().is_empty() {
+                format!("{}|{}", app_id.trim(), app_secret.trim())
+            } else {
+                String::new()
+            };
+
             let mut tenant_supplied_waba = params.waba_id.clone().filter(|s| !s.is_empty());
+            let mut pre_discovered_phone: Option<(String, String)> = None;
             if tenant_supplied_waba.is_none() {
-                tenant_supplied_waba =
-                    discover_waba_from_token(&user_token, &app_id, &app_secret).await;
+                let discovered_wabas = discover_all_wabas_from_token(&user_token, &app_token).await;
+                if discovered_wabas.len() > 1 {
+                    let (chosen_waba, chosen_phone) = select_best_waba(
+                        &discovered_wabas,
+                        params.phone_number_id.as_deref(),
+                        &user_token,
+                        &platform_token,
+                    )
+                    .await;
+                    tenant_supplied_waba = Some(chosen_waba);
+                    pre_discovered_phone = chosen_phone;
+                } else {
+                    tenant_supplied_waba = discovered_wabas.into_iter().next();
+                }
             }
             let effective_waba_id = tenant_supplied_waba.clone().unwrap_or(fallback_waba_id);
 
@@ -302,14 +321,13 @@ pub async fn handle_whatsapp_signup(
             } else if effective_waba_id.is_empty() {
                 Err(("missing_waba", "Missing WhatsApp Business Account ID."))
             } else {
-                let mut found = if !user_token.trim().is_empty() {
-                    discover_new_phone(&effective_waba_id, &user_token)
+                let mut found = pre_discovered_phone;
+                if found.is_none() && !user_token.trim().is_empty() {
+                    found = discover_new_phone(&effective_waba_id, &user_token)
                         .await
                         .ok()
-                        .flatten()
-                } else {
-                    None
-                };
+                        .flatten();
+                }
                 if found.is_none() && !platform_token.trim().is_empty() {
                     found = discover_new_phone(&effective_waba_id, &platform_token)
                         .await
@@ -542,18 +560,21 @@ fn fail(
     }
 }
 
-async fn discover_waba_from_token(
-    user_token: &str,
-    app_id: &str,
-    app_secret: &str,
-) -> Option<String> {
-    if !app_id.trim().is_empty() && !app_secret.trim().is_empty() {
-        let app_token = format!("{}|{}", app_id.trim(), app_secret.trim());
+fn push_unique_id(out: &mut Vec<String>, id: &str) {
+    let trimmed = id.trim();
+    if !trimmed.is_empty() && !out.iter().any(|existing| existing == trimmed) {
+        out.push(trimmed.to_string());
+    }
+}
+
+async fn discover_all_wabas_from_token(user_token: &str, app_token: &str) -> Vec<String> {
+    let mut wabas = Vec::new();
+    if !app_token.trim().is_empty() {
         let url = format!(
             "https://graph.facebook.com/{}/debug_token?input_token={}&access_token={}",
             crate::META_API_VERSION,
             urlencoding::encode(user_token),
-            urlencoding::encode(&app_token),
+            urlencoding::encode(app_token.trim()),
         );
         let mut init = RequestInit::new();
         init.with_method(Method::Get);
@@ -561,8 +582,11 @@ async fn discover_waba_from_token(
             if let Ok(mut response) = Fetch::Request(request).send().await {
                 if response.status_code() == 200 {
                     if let Ok(body) = response.json::<serde_json::Value>().await {
-                        if let Some(waba) = extract_waba_from_debug_token(&body) {
-                            return Some(waba);
+                        for id in extract_all_wabas_from_debug_token(&body) {
+                            push_unique_id(&mut wabas, &id);
+                        }
+                        if !wabas.is_empty() {
+                            return wabas;
                         }
                     }
                 }
@@ -595,49 +619,41 @@ async fn discover_waba_from_token(
         let Ok(body) = response.json::<serde_json::Value>().await else {
             continue;
         };
-        if let Some(waba) = extract_waba_from_businesses(&body) {
-            return Some(waba);
+        for id in extract_all_wabas_from_businesses(&body) {
+            push_unique_id(&mut wabas, &id);
         }
     }
 
-    None
+    wabas
 }
 
-fn extract_waba_from_businesses(body: &serde_json::Value) -> Option<String> {
-    let first_id = |arr: &Vec<serde_json::Value>| -> Option<String> {
-        for item in arr {
-            if let Some(id) = item
-                .get("id")
-                .and_then(|v| v.as_str())
-                .map(str::trim)
-                .filter(|s| !s.is_empty())
-            {
-                return Some(id.to_string());
-            }
+fn collect_ids(arr: &[serde_json::Value], out: &mut Vec<String>) {
+    for item in arr {
+        if let Some(id) = item.get("id").and_then(|v| v.as_str()) {
+            push_unique_id(out, id);
         }
-        None
-    };
+    }
+}
+
+fn extract_all_wabas_from_businesses(body: &serde_json::Value) -> Vec<String> {
+    let mut out = Vec::new();
 
     if let Some(wabas) = body
         .get("whatsapp_business_accounts")
         .and_then(|w| w.get("data"))
         .and_then(|d| d.as_array())
     {
-        if let Some(id) = first_id(wabas) {
-            return Some(id);
-        }
+        collect_ids(wabas, &mut out);
     }
 
     if let Some(businesses) = body.get("data").and_then(|d| d.as_array()) {
-        if let Some(id) = first_id(businesses) {
-            // When querying /me/assigned_whatsapp_business_accounts, `data` is the WABA list itself
-            let has_nested = businesses.iter().any(|b| {
-                b.get("owned_whatsapp_business_accounts").is_some()
-                    || b.get("client_whatsapp_business_accounts").is_some()
-            });
-            if !has_nested {
-                return Some(id);
-            }
+        // When querying /me/assigned_whatsapp_business_accounts, `data` is the WABA list itself
+        let has_nested = businesses.iter().any(|b| {
+            b.get("owned_whatsapp_business_accounts").is_some()
+                || b.get("client_whatsapp_business_accounts").is_some()
+        });
+        if !has_nested {
+            collect_ids(businesses, &mut out);
         }
         for biz in businesses {
             for key in [
@@ -649,9 +665,7 @@ fn extract_waba_from_businesses(body: &serde_json::Value) -> Option<String> {
                     .and_then(|w| w.get("data"))
                     .and_then(|d| d.as_array())
                 {
-                    if let Some(id) = first_id(wabas) {
-                        return Some(id);
-                    }
+                    collect_ids(wabas, &mut out);
                 }
             }
         }
@@ -668,34 +682,46 @@ fn extract_waba_from_businesses(body: &serde_json::Value) -> Option<String> {
                 .and_then(|w| w.get("data"))
                 .and_then(|d| d.as_array())
             {
-                if let Some(id) = first_id(wabas) {
-                    return Some(id);
-                }
+                collect_ids(wabas, &mut out);
             }
         }
     }
 
-    None
+    out
 }
 
-fn extract_waba_from_debug_token(body: &serde_json::Value) -> Option<String> {
-    let scopes = body
+#[cfg(test)]
+fn extract_waba_from_businesses(body: &serde_json::Value) -> Option<String> {
+    extract_all_wabas_from_businesses(body).into_iter().next()
+}
+
+fn extract_all_wabas_from_debug_token(body: &serde_json::Value) -> Vec<String> {
+    let mut out = Vec::new();
+    let Some(scopes) = body
         .get("data")
         .and_then(|d| d.get("granular_scopes"))
-        .and_then(|g| g.as_array())?;
+        .and_then(|g| g.as_array())
+    else {
+        return out;
+    };
     for entry in scopes {
         let scope = entry.get("scope").and_then(|s| s.as_str()).unwrap_or("");
         if scope == "whatsapp_business_management" || scope == "whatsapp_business_messaging" {
             if let Some(ids) = entry.get("target_ids").and_then(|t| t.as_array()) {
                 for id in ids {
-                    if let Some(s) = id.as_str().map(str::trim).filter(|s| !s.is_empty()) {
-                        return Some(s.to_string());
+                    if let Some(s) = id.as_str() {
+                        push_unique_id(&mut out, s);
                     }
                 }
             }
         }
     }
-    None
+    out
+}
+
+#[cfg(test)]
+fn extract_waba_from_debug_token(body: &serde_json::Value) -> Option<String> {
+    extract_all_wabas_from_debug_token(body).into_iter().next()
 }
 
 struct MetaUserInfo {
@@ -989,15 +1015,72 @@ async fn get_phone_number_details(
     }
 }
 
-async fn discover_new_phone(
-    waba_id: &str,
-    platform_token: &str,
-) -> Result<Option<(String, String)>> {
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct PhoneCandidate {
+    display_phone_number: String,
+    id: String,
+    is_non_test: bool,
+    is_verified_or_connected: bool,
+}
+
+fn is_non_test_phone(display_phone_number: &str) -> bool {
+    let disp = display_phone_number.trim();
+    !disp.starts_with("+1 555") && !disp.starts_with("1555") && !disp.starts_with("+1555")
+}
+
+fn pick_best_phone(phones: &[serde_json::Value]) -> Option<PhoneCandidate> {
+    let candidates: Vec<PhoneCandidate> = phones
+        .iter()
+        .rev()
+        .filter_map(|p| {
+            let id = p
+                .get("id")
+                .and_then(|v| v.as_str())
+                .map(str::trim)
+                .filter(|s| !s.is_empty())?
+                .to_string();
+            let display = p
+                .get("display_phone_number")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let status = p
+                .get("status")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .trim()
+                .to_ascii_uppercase();
+            let code_ver = p
+                .get("code_verification_status")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .trim()
+                .to_ascii_uppercase();
+            let is_non_test = is_non_test_phone(&display);
+            let is_verified_or_connected = status == "CONNECTED" || code_ver == "VERIFIED";
+            Some(PhoneCandidate {
+                display_phone_number: display,
+                id,
+                is_non_test,
+                is_verified_or_connected,
+            })
+        })
+        .collect();
+
+    candidates
+        .iter()
+        .find(|c| c.is_non_test && c.is_verified_or_connected)
+        .or_else(|| candidates.iter().find(|c| c.is_non_test))
+        .or_else(|| candidates.first())
+        .cloned()
+}
+
+async fn fetch_waba_phones(waba_id: &str, token: &str) -> Result<Vec<serde_json::Value>> {
     let url = format!(
-        "https://graph.facebook.com/{}/{}/phone_numbers?fields=display_phone_number,id&access_token={}",
+        "https://graph.facebook.com/{}/{}/phone_numbers?fields=display_phone_number,id,status,code_verification_status,platform_type&access_token={}",
         crate::META_API_VERSION,
         urlencoding::encode(waba_id),
-        urlencoding::encode(platform_token)
+        urlencoding::encode(token)
     );
 
     let mut init = RequestInit::new();
@@ -1011,43 +1094,81 @@ async fn discover_new_phone(
     }
 
     let body: serde_json::Value = response.json().await?;
-    let phones = body
+    Ok(body
         .get("data")
         .and_then(|d| d.as_array())
         .cloned()
-        .unwrap_or_default();
+        .unwrap_or_default())
+}
 
-    let chosen = phones
-        .iter()
-        .rev()
-        .find(|p| {
-            let disp = p
-                .get("display_phone_number")
-                .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .trim();
-            !disp.starts_with("+1 555") && !disp.starts_with("1555") && !disp.starts_with("+1555")
-        })
-        .or_else(|| phones.last());
+async fn fetch_waba_phones_with_fallback(
+    waba_id: &str,
+    user_token: &str,
+    platform_token: &str,
+) -> Option<Vec<serde_json::Value>> {
+    if !user_token.trim().is_empty() {
+        if let Ok(phones) = fetch_waba_phones(waba_id, user_token).await {
+            return Some(phones);
+        }
+    }
+    if !platform_token.trim().is_empty() && platform_token.trim() != user_token.trim() {
+        if let Ok(phones) = fetch_waba_phones(waba_id, platform_token).await {
+            return Some(phones);
+        }
+    }
+    None
+}
 
-    if let Some(phone) = chosen {
-        let display = phone
-            .get("display_phone_number")
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_string();
-        let id = phone
-            .get("id")
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_string();
+async fn select_best_waba(
+    wabas: &[String],
+    target_phone_number_id: Option<&str>,
+    user_token: &str,
+    platform_token: &str,
+) -> (String, Option<(String, String)>) {
+    let mut fallback_non_test: Option<(String, Option<(String, String)>)> = None;
+    let mut fallback_any: Option<(String, Option<(String, String)>)> = None;
 
-        if !id.is_empty() {
-            return Ok(Some((display, id)));
+    for waba_id in wabas {
+        let Some(phones) =
+            fetch_waba_phones_with_fallback(waba_id, user_token, platform_token).await
+        else {
+            continue;
+        };
+
+        if let Some(target_pnid) = target_phone_number_id {
+            let matches = phones.iter().any(|p| {
+                p.get("id").and_then(|v| v.as_str()).map(str::trim) == Some(target_pnid.trim())
+            });
+            if matches {
+                return (waba_id.clone(), None);
+            }
+            continue;
+        }
+
+        if let Some(best) = pick_best_phone(&phones) {
+            let pair = Some((best.display_phone_number.clone(), best.id.clone()));
+            if best.is_non_test && best.is_verified_or_connected {
+                return (waba_id.clone(), pair);
+            }
+            if best.is_non_test && fallback_non_test.is_none() {
+                fallback_non_test = Some((waba_id.clone(), pair));
+            } else if fallback_any.is_none() {
+                fallback_any = Some((waba_id.clone(), pair));
+            }
         }
     }
 
-    Ok(None)
+    fallback_non_test
+        .or(fallback_any)
+        .unwrap_or_else(|| (wabas[0].clone(), None))
+}
+
+async fn discover_new_phone(
+    waba_id: &str,
+    platform_token: &str,
+) -> Result<Option<(String, String)>> {
+    let phones = fetch_waba_phones(waba_id, platform_token).await?;
+    Ok(pick_best_phone(&phones).map(|c| (c.display_phone_number, c.id)))
 }
 
 #[cfg(test)]
@@ -1070,7 +1191,7 @@ mod tests {
                     },
                     {
                         "scope": "whatsapp_business_messaging",
-                        "target_ids": ["9999999999999999"]
+                        "target_ids": ["9999999999999999", "1122334455667788"]
                     }
                 ]
             }
@@ -1078,6 +1199,14 @@ mod tests {
         assert_eq!(
             extract_waba_from_debug_token(&body),
             Some("1122334455667788".to_string())
+        );
+        assert_eq!(
+            extract_all_wabas_from_debug_token(&body),
+            vec![
+                "1122334455667788".to_string(),
+                "9988776655443322".to_string(),
+                "9999999999999999".to_string(),
+            ]
         );
 
         let messaging_only = serde_json::json!({
@@ -1106,7 +1235,10 @@ mod tests {
                 {
                     "id": "biz-1",
                     "owned_whatsapp_business_accounts": {
-                        "data": [{ "id": "waba-owned-1" }]
+                        "data": [{ "id": "waba-owned-1" }, { "id": "waba-owned-2" }]
+                    },
+                    "client_whatsapp_business_accounts": {
+                        "data": [{ "id": "waba-client-1" }, { "id": "waba-owned-1" }]
                     }
                 }
             ]
@@ -1114,6 +1246,14 @@ mod tests {
         assert_eq!(
             extract_waba_from_businesses(&biz),
             Some("waba-owned-1".to_string())
+        );
+        assert_eq!(
+            extract_all_wabas_from_businesses(&biz),
+            vec![
+                "waba-owned-1".to_string(),
+                "waba-owned-2".to_string(),
+                "waba-client-1".to_string(),
+            ]
         );
 
         let direct = serde_json::json!({
@@ -1126,5 +1266,51 @@ mod tests {
             extract_waba_from_businesses(&direct),
             Some("waba-direct-1".to_string())
         );
+    }
+
+    #[test]
+    fn pick_best_phone_prefers_verified_or_connected_non_test_number() {
+        let phones = vec![
+            serde_json::json!({
+                "id": "pn-verified",
+                "display_phone_number": "+91 98200 11223",
+                "status": "PENDING",
+                "code_verification_status": "VERIFIED"
+            }),
+            serde_json::json!({
+                "id": "pn-unverified-newer",
+                "display_phone_number": "+91 98200 99999",
+                "status": "PENDING",
+                "code_verification_status": "NOT_VERIFIED"
+            }),
+            serde_json::json!({
+                "id": "pn-test-connected",
+                "display_phone_number": "+1 555 123 4567",
+                "status": "CONNECTED",
+                "code_verification_status": "VERIFIED"
+            }),
+        ];
+        let best = pick_best_phone(&phones).unwrap();
+        assert_eq!(best.id, "pn-verified");
+        assert!(best.is_non_test);
+        assert!(best.is_verified_or_connected);
+
+        let unverified_only = vec![
+            serde_json::json!({
+                "id": "pn-test",
+                "display_phone_number": "+1 555 000 0000",
+                "status": "CONNECTED"
+            }),
+            serde_json::json!({
+                "id": "pn-real",
+                "display_phone_number": "+91 98200 99999",
+                "status": "PENDING",
+                "code_verification_status": "NOT_VERIFIED"
+            }),
+        ];
+        let best_unverified = pick_best_phone(&unverified_only).unwrap();
+        assert_eq!(best_unverified.id, "pn-real");
+        assert!(best_unverified.is_non_test);
+        assert!(!best_unverified.is_verified_or_connected);
     }
 }

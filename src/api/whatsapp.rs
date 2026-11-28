@@ -15,6 +15,7 @@ pub struct AccountView {
     pub phone_number: String,
     pub phone_number_id: String,
     pub waba_id: Option<String>,
+    pub phone_status: String,
     pub reply: ReplyView,
     pub canned_safety_status: String,
     pub created_at: String,
@@ -87,6 +88,7 @@ impl From<&WhatsAppAccount> for AccountView {
             phone_number: a.phone_number.clone(),
             phone_number_id: a.phone_number_id.clone(),
             waba_id: a.waba_id.clone(),
+            phone_status: "connected".to_string(),
             reply: ReplyView {
                 enabled: a.auto_reply.enabled,
                 bot_prompt: a.auto_reply.bot_prompt.clone(),
@@ -132,8 +134,14 @@ pub async fn handle(mut req: Request, env: Env, rest: &[&str]) -> Result<Respons
     match (method, rest) {
         (Method::Get, []) => {
             let accounts = list_whatsapp_accounts(&db, &tenant_id).await?;
+            let mut views = Vec::with_capacity(accounts.len());
+            for account in &accounts {
+                let mut view = AccountView::from(account);
+                view.phone_status = resolve_phone_status(&env, account).await;
+                views.push(view);
+            }
             super::json(&ListView {
-                accounts: accounts.iter().map(AccountView::from).collect(),
+                accounts: views,
                 signup: SignupView::resolve(&env, &db, &tenant_id).await?,
                 bot_presets: bot_presets(),
             })
@@ -234,7 +242,16 @@ pub async fn handle(mut req: Request, env: Env, rest: &[&str]) -> Result<Respons
             );
             match graph_post_with_account_token(&env, &account, &url, Some(&payload)).await {
                 Ok(()) => super::json(&serde_json::json!({ "ok": true })),
-                Err(msg) => super::error("meta_error", &msg, 400),
+                Err(msg) => {
+                    if msg.to_ascii_lowercase().contains("already verified")
+                        && register_and_subscribe(&env, &account).await.is_ok()
+                    {
+                        return super::json(
+                            &serde_json::json!({ "ok": true, "auto_activated": true }),
+                        );
+                    }
+                    super::error("meta_error", &msg, 400)
+                }
             }
         }
 
@@ -436,4 +453,172 @@ async fn graph_post_once(
         }
     }
     Err(format!("Meta API returned HTTP {}.", resp.status_code()))
+}
+
+fn phone_status_fields(body: &serde_json::Value) -> (String, String, String, bool) {
+    let str_field = |key: &str| {
+        body.get(key)
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .trim()
+            .to_ascii_uppercase()
+    };
+    let status = str_field("status");
+    let code_verification_status = str_field("code_verification_status");
+    let platform_type = str_field("platform_type");
+    let is_on_biz_app = body
+        .get("is_on_biz_app")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    (
+        status,
+        code_verification_status,
+        platform_type,
+        is_on_biz_app,
+    )
+}
+
+fn should_auto_heal_phone(body: &serde_json::Value) -> bool {
+    let (status, code_verification_status, _, is_on_biz_app) = phone_status_fields(body);
+    status != "CONNECTED" && (code_verification_status == "VERIFIED" || is_on_biz_app)
+}
+
+fn classify_phone_status(body: &serde_json::Value) -> &'static str {
+    let (status, code_verification_status, platform_type, is_on_biz_app) =
+        phone_status_fields(body);
+    if status == "CONNECTED" && (platform_type == "CLOUD_API" || is_on_biz_app) {
+        return "connected";
+    }
+    if code_verification_status == "VERIFIED" || is_on_biz_app {
+        return "needs_activation";
+    }
+    if code_verification_status == "NOT_VERIFIED" || code_verification_status == "EXPIRED" {
+        return "needs_verification";
+    }
+    "connected"
+}
+
+async fn graph_get_phone_status(phone_number_id: &str, token: &str) -> Option<serde_json::Value> {
+    let url = format!(
+        "https://graph.facebook.com/{}/{}?fields=status,code_verification_status,platform_type,is_on_biz_app",
+        crate::META_API_VERSION,
+        urlencoding::encode(phone_number_id.trim())
+    );
+    let headers = Headers::new();
+    headers
+        .set("Authorization", &format!("Bearer {}", token.trim()))
+        .ok()?;
+    let mut init = RequestInit::new();
+    init.with_method(Method::Get).with_headers(headers);
+    let req = Request::new_with_init(&url, &init).ok()?;
+    let mut resp = Fetch::Request(req).send().await.ok()?;
+    if resp.status_code() != 200 {
+        return None;
+    }
+    resp.json::<serde_json::Value>().await.ok()
+}
+
+/// Query Meta Graph API for the phone number's current verification/registration state.
+/// Returns `"connected"`, `"needs_activation"`, or `"needs_verification"`.
+/// Falls back to `"connected"` when tokens are absent or Graph API is unreachable.
+async fn resolve_phone_status(env: &Env, account: &WhatsAppAccount) -> String {
+    if account.phone_number_id.trim().is_empty() {
+        return "connected".to_string();
+    }
+
+    let platform_token = env
+        .secret("WHATSAPP_ACCESS_TOKEN")
+        .map(|s| s.to_string().trim().to_string())
+        .unwrap_or_default();
+    let acct_tok = account
+        .auto_reply
+        .access_token
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
+
+    let mut body = None;
+    if let Some(tok) = acct_tok {
+        body = graph_get_phone_status(&account.phone_number_id, tok).await;
+    }
+    if body.is_none() && !platform_token.is_empty() && Some(platform_token.as_str()) != acct_tok {
+        body = graph_get_phone_status(&account.phone_number_id, &platform_token).await;
+    }
+
+    let Some(json_body) = body else {
+        return "connected".to_string();
+    };
+
+    if should_auto_heal_phone(&json_body) && register_and_subscribe(env, account).await.is_ok() {
+        return "connected".to_string();
+    }
+
+    classify_phone_status(&json_body).to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn phone_status_connected_cloud_api() {
+        let body = serde_json::json!({
+            "status": "CONNECTED",
+            "code_verification_status": "VERIFIED",
+            "platform_type": "CLOUD_API",
+            "is_on_biz_app": false
+        });
+        assert!(!should_auto_heal_phone(&body));
+        assert_eq!(classify_phone_status(&body), "connected");
+    }
+
+    #[test]
+    fn phone_status_connected_biz_app_coexistence() {
+        let body = serde_json::json!({
+            "status": "CONNECTED",
+            "code_verification_status": "NOT_VERIFIED",
+            "platform_type": "NOT_APPLICABLE",
+            "is_on_biz_app": true
+        });
+        assert!(!should_auto_heal_phone(&body));
+        assert_eq!(classify_phone_status(&body), "connected");
+    }
+
+    #[test]
+    fn phone_status_verified_but_pending_triggers_auto_heal_and_needs_activation() {
+        let body = serde_json::json!({
+            "status": "PENDING",
+            "code_verification_status": "VERIFIED",
+            "platform_type": "NOT_APPLICABLE",
+            "is_on_biz_app": false
+        });
+        assert!(should_auto_heal_phone(&body));
+        assert_eq!(classify_phone_status(&body), "needs_activation");
+    }
+
+    #[test]
+    fn phone_status_not_verified_or_expired_needs_verification() {
+        for cvs in ["NOT_VERIFIED", "EXPIRED"] {
+            let body = serde_json::json!({
+                "status": "PENDING",
+                "code_verification_status": cvs,
+                "platform_type": "NOT_APPLICABLE",
+                "is_on_biz_app": false
+            });
+            assert!(!should_auto_heal_phone(&body));
+            assert_eq!(classify_phone_status(&body), "needs_verification");
+        }
+    }
+
+    #[test]
+    fn phone_status_biz_app_disconnected_triggers_auto_heal_and_needs_activation() {
+        let body = serde_json::json!({
+            "status": "DISCONNECTED",
+            "code_verification_status": "NOT_VERIFIED",
+            "platform_type": "NOT_APPLICABLE",
+            "is_on_biz_app": true
+        });
+        assert!(should_auto_heal_phone(&body));
+        assert_eq!(classify_phone_status(&body), "needs_activation");
+    }
 }

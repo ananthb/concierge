@@ -18,3 +18,15 @@ pub async fn send_reply(
         }
     }
 }
+
+/// Dispatch a typing indicator / read receipt to the matching channel adapter.
+pub async fn send_typing_indicator(
+    env: &Env,
+    channel: &Channel,
+    metadata: &serde_json::Value,
+    account_token: Option<&str>,
+) -> Result<()> {
+    match channel {
+        Channel::WhatsApp => whatsapp::send_typing_indicator(env, metadata, account_token).await,
+    }
+}
